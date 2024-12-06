@@ -5,6 +5,12 @@ VisualStudioVersion = 17.12.35527.113 d17.12
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.API", "Agrovesto.Backend.API\Agrovesto.Backend.API.csproj", "{ABD8F10D-6A79-4D12-86A7-71522016A63E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Core", "Agrovesto.Backend.Core\Agrovesto.Backend.Core.csproj", "{293BA9D5-4875-4CD8-A9C3-4911286797C4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Infrastructure", "Agrovesto.Backend.Infrastructure\Agrovesto.Backend.Infrastructure.csproj", "{9924CE8B-935F-4100-B192-DDC51C1E0A21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Tests", "Agrovesto.Backend.Tests\Agrovesto.Backend.Tests.csproj", "{AFCCBCB3-9456-4F50-8415-C2E60757CE30}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +21,18 @@ Global
 		{ABD8F10D-6A79-4D12-86A7-71522016A63E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{ABD8F10D-6A79-4D12-86A7-71522016A63E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{ABD8F10D-6A79-4D12-86A7-71522016A63E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{293BA9D5-4875-4CD8-A9C3-4911286797C4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{293BA9D5-4875-4CD8-A9C3-4911286797C4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{293BA9D5-4875-4CD8-A9C3-4911286797C4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{293BA9D5-4875-4CD8-A9C3-4911286797C4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AFCCBCB3-9456-4F50-8415-C2E60757CE30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AFCCBCB3-9456-4F50-8415-C2E60757CE30}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AFCCBCB3-9456-4F50-8415-C2E60757CE30}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AFCCBCB3-9456-4F50-8415-C2E60757CE30}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
