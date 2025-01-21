@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNet.Identity.EntityFramework;
+﻿
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
-    public class User : IdentityUser<string>
+    public class User : IdentityUser
     {
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }
