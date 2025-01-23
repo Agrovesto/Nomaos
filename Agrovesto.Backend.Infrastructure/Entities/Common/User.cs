@@ -15,16 +15,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? Pin { get; set; } 
         public string? Password { get; set; }         
         public UserType UserType { get; set; }
-        public string? WalletId { get; set; }
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? CreatedBy { get; set; }
         public DateTimeOffset? DateModified { get; set; }
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
-        public string? Bvn { get; set; }
-        public string? DOB { get; set; }
-        public string? NIN { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; }
     }
     public enum UserType

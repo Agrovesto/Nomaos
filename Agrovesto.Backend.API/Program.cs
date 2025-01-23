@@ -1,4 +1,5 @@
 using Agrovesto.Backend.Infrastructure.DB;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +9,7 @@ builder.Services.AddDbContext<DataContext>(options =>
                   Configuration.GetConnectionString("DefaultConnection"), b => b.MigrationsAssembly("API")));
 
 
-builder.Services.AddHangfire(x => x.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
+//builder.Services.AddHangfire(x => x.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 
 builder.Services.AddControllers();
