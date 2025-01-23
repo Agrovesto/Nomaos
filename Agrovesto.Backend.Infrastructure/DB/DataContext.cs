@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.Entities.Common;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -10,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
-    public class DataContext :IdentityDbContext<User>
+    public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions options): base(options)
         {
@@ -22,5 +23,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
             
             base.OnModelCreating(modelBuilder);
         }
+        public DbSet<Business> Businesses { get; set; }
+        public DbSet<BusinessWorker> BusinessWorkers { get; set; }  
+        public DbSet<SubAccount> SubAccounts { get; set; }
+        public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
     }
 }

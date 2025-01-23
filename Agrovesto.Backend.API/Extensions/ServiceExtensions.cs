@@ -1,6 +1,11 @@
 ﻿using Agrovesto.Backend.Core;
+using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -9,9 +14,18 @@ namespace Agrovesto.Backend.API.Extensions
         public static void AddAppServices(this IServiceCollection services,
             IConfiguration configuration)
         {
+            services.AddSingleton<TimeProvider>(TimeProvider.System);
+            services.AddDataProtection();
+
+
+
             services.AddScoped<IHttpService, HttpService>();
+            services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
             services.AddSingleton<ILogService, SerilogService>();
 
+
+            services.AddScoped<IRoleRepository, RoleRepository>();
+            services.AddScoped<IRoleManager, RoleManager>();
         }
     }
 }

@@ -15,6 +15,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long BusinessId { get; set; }
         [Required]
         public string BusinessCode { get; set; }
+        public string UserId { get; set; }
         public string BusinessName { get; set; }
         public string ContactEmail { get; set; }
         public string SupportEmail { get; set; }

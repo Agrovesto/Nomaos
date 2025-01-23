@@ -7,8 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Interfaces\Managers\" />
-    <Folder Include="Interfaces\Repositories\" />
     <Folder Include="Exceptions\" />
     <Folder Include="RequestModels\" />
   </ItemGroup>

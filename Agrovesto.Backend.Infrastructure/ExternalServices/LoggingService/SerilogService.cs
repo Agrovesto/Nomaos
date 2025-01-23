@@ -26,6 +26,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
 
             var logConfig = new LoggerConfiguration()
                 .Enrich.FromLogContext()
+                
                 //.WriteTo.File();
              .WriteTo.Elasticsearch(elasticOptions); //TODO: rewrite to file
 

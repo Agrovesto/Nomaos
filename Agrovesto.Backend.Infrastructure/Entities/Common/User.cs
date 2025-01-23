@@ -18,10 +18,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? CreatedBy { get; set; }
-        public DateTimeOffset? DateModified { get; set; }
+        public DateTimeOffset? DateModified { get; set; } = DateTimeOffset.Now;
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
-        public DateTimeOffset? LastLoginDate { get; set; }
+        public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
     }
     public enum UserType
     {
@@ -31,6 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         Cooperative,
         Agent,
         Suppliers,
+        Processors,
         Agrovesto,
     }
 }

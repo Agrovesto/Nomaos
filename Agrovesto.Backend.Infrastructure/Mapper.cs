@@ -1,5 +1,8 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -26,7 +29,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessCode = model.BusinessCode,
                 BusinessEmail = model.BusinessEmail,
                 BusinessName = model.BusinessName,
-                BusinessStatus = model.Status.ToString(),
+                BusinessStatus = model.BusinessStatus.ToString(),
                 ContactEmail = model.ContactEmail,
                 DisputeEmail = model.DisputeEmail,
                 PhoneNumber = model.PhoneNumber,
@@ -34,8 +37,6 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessId = model.BusinessId,
                 Category = model.Category.ToString(),
                 Website = model.Website,
-                SwitchCategoryRequest = model.Request.ToString(),
-                BusinessTypeId = model.BusinessTypeId,
                 BVN = model.BVN,
                 NIN = model.NIN,
                 
@@ -58,14 +59,13 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessCode = entity.BusinessCode,
                 BusinessEmail = entity.BusinessEmail,
                 BusinessName = entity.BusinessName,
-                Status = entity.BusinessStatus.ToEnum<BusinessStatus>(),
+                BusinessStatus = entity.BusinessStatus.ToEnum<BusinessStatus>(),
                 ContactEmail = entity.ContactEmail,
                 DisputeEmail = entity.DisputeEmail,
                 PhoneNumber = entity.PhoneNumber,
                 Category = entity.Category.ToEnum<Category>(),
                 SupportEmail = entity.SupportEmail,
                 Website = entity.Website,
-                KycCategory = entity.KycCategory,
                 BVN = entity.BVN,
                 NIN = entity.NIN,
             };
@@ -80,9 +80,8 @@ namespace Agrovesto.Backend.Infrastructure
             return new BusinessWorker
             {
                 BusinessId = model.BusinessId,
-                IsOwner = model.IsOwner,
                 UserId = model.UserId,
-                UserBusinessId = model.UserBusinessId,
+                BusinessWorkerId = model.BusinessWorkerId,
             };
         }
 
@@ -95,15 +94,44 @@ namespace Agrovesto.Backend.Infrastructure
 
             return new BusinessWorkerModel
             {
-                
-                UserBusinessId = entity.UserBusinessId,
+
+                BusinessWorkerId = entity.BusinessWorkerId,
                 BusinessId = entity.BusinessId,
-                IsOwner = entity.IsOwner,
                 UserId = entity.UserId,
             };
         }
 
+
+
         #endregion Business
 
+        public static Role Map(this RoleModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new Role
+            {
+                Descriptions = model.RoleDescription,
+                Name = model.RoleName
+            };
+        }
+
+        public static RoleModel Map(this Role entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new RoleModel
+            {
+
+                RoleDescription = entity.Descriptions,
+                RoleName = entity.Name
+            };
+        }
     }
 }
