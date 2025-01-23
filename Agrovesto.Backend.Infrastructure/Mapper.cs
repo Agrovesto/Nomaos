@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure
 
             return new Business
             {
-                
+
                 Address = model.Address,
 
                 BusinessCode = model.BusinessCode,
@@ -38,8 +38,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessTypeId = model.BusinessTypeId,
                 BVN = model.BVN,
                 NIN = model.NIN,
-                RegistrationTypeId = model.RegistrationTypeId,
-                BusinessCategoryType = model.BusinessCategoryType.ToString()
+                
             };
         }
 
@@ -66,13 +65,9 @@ namespace Agrovesto.Backend.Infrastructure
                 Category = entity.Category.ToEnum<Category>(),
                 SupportEmail = entity.SupportEmail,
                 Website = entity.Website,
-                Request = entity.SwitchCategoryRequest.ToEnum<SwitchCategoryRequest>(),
-                BusinessTypeId = entity.BusinessTypeId,
                 KycCategory = entity.KycCategory,
                 BVN = entity.BVN,
                 NIN = entity.NIN,
-                RegistrationTypeId = entity.RegistrationTypeId,
-                BusinessCategoryType = entity.BusinessCategoryType.ToEnum<BusinessCategoryType>(),
             };
         }
         public static BusinessWorker Map(this BusinessWorkerModel model)
