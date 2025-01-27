@@ -19,8 +19,8 @@ namespace Agrovesto.Backend.Core.CoreUtils
         public string Code { get; set; }
         public bool Succeeded { get; set; }
         public string Message { get; set; }
-        public List<T> Data { get; set; }
-        public int Count { get => Data.Count; }
+        public T Data { get; set; }
+        public int Count { get; set; }
 
     }
     public class AgrovestoResponse<T> where T : class//: Response

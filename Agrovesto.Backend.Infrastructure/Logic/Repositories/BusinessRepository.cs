@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +11,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
-    public class BusinessRepository
+    public class BusinessRepository :IBusinessRepository
     {
         private readonly DataContext _context;
         public BusinessRepository(DataContext context)
@@ -25,6 +26,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             await _context.SaveChangesAsync();
             return business.Map();
         }
+
+        public async Task<BusinessModel> GetBusinessAsync(string businessName)
+        {
+            var business = await _context.Set<Business>()
+                .FirstOrDefaultAsync(x =>  x.BusinessName == businessName && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
+            if (business == null)
+            {
+                return null;
+            }
+            return business.Map();
+        }
+
+
 
     }
 }

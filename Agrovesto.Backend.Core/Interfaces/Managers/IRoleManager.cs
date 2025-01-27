@@ -11,5 +11,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IRoleManager
     {
         Task<AgrovestoResponse<RoleModel>> CreateRoleAsync(RoleModel model);
+        Task<Response<RoleModel>> GetRoleByIdAsync(string roleId);
+        Task<PagedListResponse<List<RoleModel>>> GetRolesAsync();
     }
 }

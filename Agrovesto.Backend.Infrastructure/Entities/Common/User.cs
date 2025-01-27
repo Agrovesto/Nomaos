@@ -13,8 +13,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }
         public string? Pin { get; set; } 
+        public string? PinEncrypt { get; set; }
         public string? Password { get; set; }         
-        public UserType UserType { get; set; }
+        public string UserType { get; set; }
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? CreatedBy { get; set; }
@@ -23,15 +24,5 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
     }
-    public enum UserType
-    {
-        Individual,
-        Business,
-        Farmer,
-        Cooperative,
-        Agent,
-        Suppliers,
-        Processors,
-        Agrovesto,
-    }
+
 }

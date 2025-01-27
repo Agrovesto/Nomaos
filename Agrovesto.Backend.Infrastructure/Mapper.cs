@@ -105,6 +105,7 @@ namespace Agrovesto.Backend.Infrastructure
 
         #endregion Business
 
+        #region RoleMgt
         public static Role Map(this RoleModel model)
         {
             if (model == null)
@@ -133,5 +134,61 @@ namespace Agrovesto.Backend.Infrastructure
                 RoleName = entity.Name
             };
         }
+        #endregion RoleMgt
+
+
+        #region Admin Mgt
+        public static User Map(this UserModel model)
+        {
+            if(model == null)
+            {
+                return null;
+            }
+
+            return new User
+            {
+                OTP = model.OTP,
+                Salt = model.Salt,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                DateModified = model.DateModified,
+                Email= model.Email,
+                LastLoginDate = model.LastLoginDate,
+                ModifiedBy = model.ModifiedBy,
+                Password= model.Password,
+                PhoneNumber= model.PhoneNumber,
+                Pin= model.Pin,
+                UserName=model.Email,
+                //UserType=model.UserType.ToString()
+               UserType= Enum.GetName(typeof(UserType), model.UserType)
+            };
+        }
+
+        public static UserModel Map(this User entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new UserModel
+            {
+                OTP = entity.OTP,
+                Salt = entity.Salt,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn = entity.CreatedOn,
+                DateModified = entity.DateModified,
+                Email = entity.Email,
+                LastLoginDate = entity.LastLoginDate,
+                ModifiedBy = entity.ModifiedBy,
+                Password = entity.Password,
+                PhoneNumber = entity.PhoneNumber,
+                Pin = entity.Pin,
+                UserType = entity.UserType.ToEnum<UserType>(),
+                IsActive = entity.IsActive,
+                Id = entity.Id,
+            };
+        }
+        #endregion Mgt
     }
 }

@@ -1,33 +1,76 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Net.Http.Headers;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net.Http.Headers;
 
 namespace Agrovesto.Backend.API.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    //  [Authorize]
+    // [ValidateModelFilter]
     public class BaseController : ControllerBase
     {
-        private static readonly string[] Summaries = new[]
+        public string Token
         {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
+            get
+            {
+                var token = HttpContext.Request.Headers[HeaderNames.Authorization];
+                if (!AuthenticationHeaderValue.TryParse(token, out var headerValue))
+                    return string.Empty;
+                var parameter = headerValue.Parameter;
+                return parameter;
+            }
+        }
+        //public string FilterToken(HttpRequest httpRequest)
+        //{
+        //    string token = httpRequest.Headers["Authorization"];
+        //    if (string.IsNullOrEmpty(token))
+        //    {
+        //        return null;
+        //    }
+        //    token = token.Replace("Bearer", "");
+        //    token = token.Replace("bearer", "");
+        //    return token.Trim();
+        //}
+        //public string Token()
+        //{
+        //    return Request.FilterToken();
+        //}
 
-        private readonly ILogger<BaseController> _logger;
-
-        public BaseController(ILogger<BaseController> logger)
+        public string CurrentUserRole
         {
-            _logger = logger;
+            get
+            {
+                if (string.IsNullOrEmpty(Token)) return null;
+                JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
+                JwtSecurityToken jst = handler.ReadJwtToken(Token);
+
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "Role");
+                if (claims == null)
+                {
+                    return null;
+                }
+                return claims.Value;
+            }
         }
 
-        [HttpGet(Name = "GetWeatherForecast")]
-        public IEnumerable<WeatherForecast> Get()
+
+        public string CurrentUserId
         {
-            return Enumerable.Range(1, 5).Select(index => new WeatherForecast
+            get
             {
-                Date = DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                TemperatureC = Random.Shared.Next(-20, 55),
-                Summary = Summaries[Random.Shared.Next(Summaries.Length)]
-            })
-            .ToArray();
+                if (string.IsNullOrEmpty(Token)) return null;
+                JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
+                JwtSecurityToken jst = handler.ReadJwtToken(Token);
+
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "sub");
+                if (claims == null)
+                {
+                    return null;
+                }
+                return claims.Value;
+
+            }
         }
     }
 }
