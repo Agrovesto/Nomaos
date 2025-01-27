@@ -26,6 +26,7 @@ namespace Agrovesto.Backend.API.Extensions
 
             services.AddScoped<IRoleRepository, RoleRepository>();
             services.AddScoped<IRoleManager, RoleManager>();
+            services.AddScoped<IAuthenticationRepository, AuthenticationRepository>();
         }
     }
 }

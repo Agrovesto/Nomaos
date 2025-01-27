@@ -24,9 +24,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpPost("create")]
-        public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel,
-            [RegularExpression(ValidationRegex.General)][MaxLength(50)] 
-        [FromQuery]string? userId)
+        public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
         {
             // var isAdmin = User.Claims.ToArray();
             // if (!isAdmin) throw new BadRequestException("Not Authorized");
@@ -36,7 +34,37 @@ namespace Agrovesto.Backend.API.Controllers
                 Message = "",
                 Result = data.Result,
                
-            }); ;
+            }); 
+        }
+
+        [HttpGet("roles")]
+        public async Task<IActionResult> GetRoles()
+        {
+            // var isAdmin = User.Claims.ToArray();
+            // if (!isAdmin) throw new BadRequestException("Not Authorized");
+            var data = await _roleManager.GetRolesAsync();
+            return Ok(new PagedListResponse<List<RoleModel>>()
+            {
+                Message = "",
+              Data= data.Data,
+              Count= data.Count
+
+            });
+        }
+
+
+        [HttpGet("role/{roleId}")]
+        public async Task<IActionResult> GetRole(string roleId)
+        {
+            // var isAdmin = User.Claims.ToArray();
+            // if (!isAdmin) throw new BadRequestException("Not Authorized");
+            var data = await _roleManager.GetRoleByIdAsync(roleId);
+            return Ok(new Response<RoleModel>()
+            {
+                Message = "",
+                Data = data.Data
+
+            });
         }
     }
 }

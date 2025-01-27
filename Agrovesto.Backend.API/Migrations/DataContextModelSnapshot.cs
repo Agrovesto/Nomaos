@@ -308,6 +308,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("Pin")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PinEncrypt")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Salt")
                         .HasColumnType("nvarchar(max)");
 
@@ -321,8 +324,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<int>("UserType")
-                        .HasColumnType("int");
+                    b.Property<string>("UserType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
