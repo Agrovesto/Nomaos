@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
@@ -6,7 +7,7 @@ using System.Net.Http.Headers;
 namespace Agrovesto.Backend.API.Controllers
 {
     [ApiController]
-    //  [Authorize]
+    [Authorize]
     // [ValidateModelFilter]
     public class BaseController : ControllerBase
     {
