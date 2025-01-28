@@ -129,7 +129,7 @@ namespace Agrovesto.Backend.Infrastructure
 
             return new RoleModel
             {
-
+                RoleId= entity.Id,
                 RoleDescription = entity.Descriptions,
                 RoleName = entity.Name
             };
