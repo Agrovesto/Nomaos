@@ -15,9 +15,6 @@ builder.Services.AddDbContext<DataContext>(options =>
               options.UseSqlServer(builder.
                   Configuration.GetConnectionString("DefaultConnection"), b => b.MigrationsAssembly("Agrovesto.Backend.API")));
 
-
-//builder.Services.AddHangfire(x => x.UseSqlServerStorage(builder.Configuration.GetConnectionString("DefaultConnection")));
-
 builder.Services.AddIdentity<User, Role>(opt =>
 {
     opt.SignIn.RequireConfirmedAccount = true;
