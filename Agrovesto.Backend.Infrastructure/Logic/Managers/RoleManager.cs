@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -17,13 +18,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     {
         private readonly UserManager<User> _userManager;
         private readonly RoleManager<Role> _roleManager;
-        public RoleManager(UserManager<User> userManager, RoleManager<Role> roleManager)
+        private readonly DataContext _context;
+        public RoleManager(UserManager<User> userManager, RoleManager<Role> roleManager,
+            DataContext context)
         {
             _userManager = userManager;
             _roleManager = roleManager;
+            _context = context;
         }
 
+        #region business
+        public async Task<AgrovestoResponse<RoleModel>> BusinesCreateRoleAsync(string userId, RoleModel model)
+        {
+            var business = await _context.Businesses.Where(x => x.UserId == userId).FirstOrDefaultAsync();
+            if (business == null) { throw new Exception($"Business not found"); }
+            var role = new Role
+            {
+                Name = model.RoleName,
+                NormalizedName = model.RoleName.ToUpper(),
+                BusinessId = business.BusinessId,
+                Descriptions = model.RoleDescription
+            };
 
+            var result = await _roleManager.CreateAsync(role);
+        
+            if (result.Succeeded)
+            {
+                return new AgrovestoResponse<RoleModel>()
+                {
+                    Message = $"Role '{model.RoleName}' added.",
+                    Result = role.Map()
+                };
+            }
+            else
+            {
+                return new AgrovestoResponse<RoleModel>()
+                {
+                    Message = $"Role '{result.Errors}' added.",
+                    Result = null
+                };
+            }
+        }
+
+        public async Task<PagedListResponse<List<RoleModel>>> GetRolesByBusinessAsync(string userId)
+        {
+            var business = await _context.Businesses.Where(x => x.UserId == userId).FirstOrDefaultAsync();
+            if (business == null) { throw new Exception($"Business not found"); }
+
+            var roles = await _roleManager.Roles.Where(r => r.BusinessId == business.BusinessId).ToListAsync();
+            var roleMap = roles.Select(x => x.Map()).ToList();
+            return new PagedListResponse<List<RoleModel>>
+            {
+                Data = roleMap,
+                Code = "00",
+                Message = "",
+                Count = roleMap.Count,
+                Succeeded = true,
+            };
+        }
+
+        public async Task<bool> AssignRoleToBusinessUserAsync(string userId, string roleName, long businessId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            var role = await _roleManager.FindByNameAsync(roleName);
+
+            if (user == null || role == null || role.BusinessId != businessId)
+                return false;
+
+            var result = await _userManager.AddToRoleAsync(user, role.Name);
+            return result.Succeeded;
+        }
+        #endregion business
+
+        #region globalAdmin
         public async Task<AgrovestoResponse<RoleModel>> CreateRoleAsync(RoleModel model)
         {
             if (await _roleManager.RoleExistsAsync(model.RoleName))
@@ -85,5 +152,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Succeeded = true,
             };
         }
+
+        #endregion globalAdmin
     }
 }
