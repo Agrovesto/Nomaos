@@ -22,6 +22,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
+        public string? Name { get; set; }
 
     }
     public enum UserType
@@ -34,6 +35,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         Suppliers,
         Processors,
         Agrovesto,
+        Buyer
     }
     public class LoginModel
     {

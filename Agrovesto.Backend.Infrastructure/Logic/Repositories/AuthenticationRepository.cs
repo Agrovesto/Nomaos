@@ -202,5 +202,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             }
         }
+
+        public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
+        {
+            try
+            {
+                var fetchuser = await _userManager.FindByNameAsync(model.Email);
+                byte[] salt = EncryptionUtil.GetSalt();
+                model.Salt = Convert.ToBase64String(salt);
+                User entity = model.Map();
+                entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
+                entity.IsActive = true;
+                if (fetchuser == null)
+                {
+                    entity.Id = Guid.NewGuid().ToString();
+                    entity.UserType = Enum.GetName(typeof(UserType), model.UserType);
+                    var createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
+                    if (!createUser.Succeeded) throw new Exception($"Could not create business for {model.Name} {entity.UserType}");
+                    entity = await _userManager.FindByNameAsync(entity.Email);
+
+                    var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+                    createUser = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
+
+                    // var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
+
+                    //var mailUtil = new MailUtilities(_configuration);
+                    //mailUtil.SendWelcomeEmail(model);
+
+                    return (entity.Map(), true, "Success");
+
+                }
+                else
+                {
+                    return (model, false, "Business User already Exist, Kindly contact administrator");
+                }
+            }
+            catch (Exception ex)
+            {
+                return (model, false, ex.Message);
+
+            }
+        }
+   
+        public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if(user == null) return (null, false, "No record found");
+            return (user.Map(), true, "Retrieved Successfully");
+        }
     }
 }

@@ -10,6 +10,13 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class BusinessRegistrationArgs
+    {
+        public UserType UserType { get; set; }
+        public string RoleName { get; set; }
+        public string UserId { get; set; }
+        public string DefaultPassword { get; set; }
+    }
     public class BusinessModel :Model
     {
         [Range(int.MinValue, int.MaxValue)]
@@ -67,9 +74,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public Category Category { get; set; } = Category.Not_Live;
         public ICollection<BusinessWorkerModel> BusinessWorkers { get; set; } = new List<BusinessWorkerModel>();
 
-       //   public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
-                                                                                              //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
-
+        //   public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
+        //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
+        public string BusinessLogo { get; set; }
     }
     public enum BusinessStatus
     {

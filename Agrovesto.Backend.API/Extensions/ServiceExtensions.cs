@@ -18,15 +18,22 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddDataProtection();
 
 
+            services.AddLogging(config => config.AddConsole());
+
+            services.AddHttpContextAccessor();
 
             services.AddScoped<IHttpService, HttpService>();
             services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
             services.AddSingleton<ILogService, SerilogService>();
-
-
+           
+            services.AddScoped<IBusinessRepository, BusinessRepository>();
             services.AddScoped<IRoleRepository, RoleRepository>();
-            services.AddScoped<IRoleManager, RoleManager>();
             services.AddScoped<IAuthenticationRepository, AuthenticationRepository>();
+           
+
+            services.AddScoped<IBusinessManager, BusinessManager>();
+            services.AddScoped<IRoleManager, RoleManager>();
+
         }
     }
 }

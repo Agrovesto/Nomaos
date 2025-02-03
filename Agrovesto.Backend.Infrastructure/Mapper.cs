@@ -39,7 +39,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Website = model.Website,
                 BVN = model.BVN,
                 NIN = model.NIN,
-                
+                BusinessLogo = model.BusinessLogo,
+                KycCategory= Enum.GetName(typeof(Category), model.Category),
             };
         }
 
@@ -67,6 +68,7 @@ namespace Agrovesto.Backend.Infrastructure
                 SupportEmail = entity.SupportEmail,
                 Website = entity.Website,
                 BVN = entity.BVN,
+                BusinessLogo = entity.BusinessLogo,
                 NIN = entity.NIN,
             };
         }
@@ -159,6 +161,7 @@ namespace Agrovesto.Backend.Infrastructure
                 PhoneNumber= model.PhoneNumber,
                 Pin= model.Pin,
                 UserName=model.Email,
+                Name =model.Name,
                 //UserType=model.UserType.ToString()
                UserType= Enum.GetName(typeof(UserType), model.UserType)
             };

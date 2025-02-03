@@ -6,72 +6,106 @@ using System.Net.Http.Headers;
 
 namespace Agrovesto.Backend.API.Controllers
 {
-    [ApiController]
-    [Authorize]
+    //[ApiController]
+    //[Authorize]
     // [ValidateModelFilter]
     public class BaseController : ControllerBase
     {
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        public BaseController(IHttpContextAccessor httpContextAccessor)
+        {
+            _httpContextAccessor = httpContextAccessor;
+        }
+
         public string Token
         {
             get
             {
-                var token = HttpContext.Request.Headers[HeaderNames.Authorization];
+                var token = _httpContextAccessor.HttpContext?.Request.Headers[HeaderNames.Authorization];
                 if (!AuthenticationHeaderValue.TryParse(token, out var headerValue))
                     return string.Empty;
-                var parameter = headerValue.Parameter;
-                return parameter;
+                return headerValue.Parameter;
             }
         }
-        //public string FilterToken(HttpRequest httpRequest)
-        //{
-        //    string token = httpRequest.Headers["Authorization"];
-        //    if (string.IsNullOrEmpty(token))
-        //    {
-        //        return null;
-        //    }
-        //    token = token.Replace("Bearer", "");
-        //    token = token.Replace("bearer", "");
-        //    return token.Trim();
-        //}
-        //public string Token()
-        //{
-        //    return Request.FilterToken();
-        //}
 
         public string CurrentUserRole
         {
             get
             {
                 if (string.IsNullOrEmpty(Token)) return null;
-                JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
-                JwtSecurityToken jst = handler.ReadJwtToken(Token);
+                var handler = new JwtSecurityTokenHandler();
+                var jst = handler.ReadJwtToken(Token);
 
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "Role");
-                if (claims == null)
-                {
-                    return null;
-                }
-                return claims.Value;
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase));
+                return claims?.Value;
             }
         }
-
 
         public string CurrentUserId
         {
             get
             {
                 if (string.IsNullOrEmpty(Token)) return null;
-                JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
-                JwtSecurityToken jst = handler.ReadJwtToken(Token);
+                var handler = new JwtSecurityTokenHandler();
+                var jst = handler.ReadJwtToken(Token);
 
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "sub");
-                if (claims == null)
-                {
-                    return null;
-                }
-                return claims.Value;
-
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
+                return claims?.Value;
             }
         }
     }
+
+    //public class BaseController : ControllerBase
+    //{
+
+    //    public string Token
+    //    {
+    //        get
+    //        {
+    //            var token = HttpContext.Request.Headers[HeaderNames.Authorization];
+    //            if (!AuthenticationHeaderValue.TryParse(token, out var headerValue))
+    //                return string.Empty;
+    //            var parameter = headerValue.Parameter;
+    //            return parameter;
+    //        }
+    //    }
+
+
+    //    public string CurrentUserRole
+    //    {
+    //        get
+    //        {
+    //            if (string.IsNullOrEmpty(Token)) return null;
+    //            JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
+    //            JwtSecurityToken jst = handler.ReadJwtToken(Token);
+
+    //            var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "Role");
+    //            if (claims == null)
+    //            {
+    //                return null;
+    //            }
+    //            return claims.Value;
+    //        }
+    //    }
+
+
+    //    public string CurrentUserId
+    //    {
+    //        get
+    //        {
+    //            if (string.IsNullOrEmpty(Token)) return null;
+    //            JwtSecurityTokenHandler handler = new JwtSecurityTokenHandler();
+    //            JwtSecurityToken jst = handler.ReadJwtToken(Token);
+
+    //            var claims = jst.Claims.FirstOrDefault(x => x.Type.ToLower() == "sub");
+    //            if (claims == null)
+    //            {
+    //                return null;
+    //            }
+    //            return claims.Value;
+
+    //        }
+    //    }
+    //}
 }

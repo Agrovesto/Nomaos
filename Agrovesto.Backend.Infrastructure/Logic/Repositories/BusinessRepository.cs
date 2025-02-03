@@ -18,6 +18,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<int> BusinessCount()
+        {
+            return await _context.Set<Business>().CountAsync();
+        }
         public async Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId)
         {
             Business business = businessModel.Map();
@@ -27,10 +31,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return business.Map();
         }
 
+
+        public async Task<BusinessWorkerModel> CreateBusinessWorker(BusinessWorkerModel bWorker)
+        {
+            BusinessWorker businessWorker = bWorker.Map();
+            await _context.AddAsync(businessWorker);
+            await _context.SaveChangesAsync();
+
+            return businessWorker.Map();
+        }
+
+
         public async Task<BusinessModel> GetBusinessAsync(string businessName)
         {
             var business = await _context.Set<Business>()
                 .FirstOrDefaultAsync(x =>  x.BusinessName == businessName && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
+            if (business == null)
+            {
+                return null;
+            }
+            return business.Map();
+        }
+
+
+        public async Task<BusinessModel> GetBusinessByUserIdAsync(string userId)
+        {
+            var business = await _context.Set<Business>()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
             if (business == null)
             {
                 return null;
