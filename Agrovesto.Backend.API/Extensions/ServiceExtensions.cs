@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 
@@ -29,10 +30,15 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IBusinessRepository, BusinessRepository>();
             services.AddScoped<IRoleRepository, RoleRepository>();
             services.AddScoped<IAuthenticationRepository, AuthenticationRepository>();
+            services.AddScoped<IWalletProviderRepository, WalletProviderRepository>();
            
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
+            services.AddScoped<IWalletProviderManager, WalletProviderManager>();
+
+
+            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
 
         }
     }
