@@ -29,6 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string BusinessStatus { get; set; }
         public string Category { get; set; }
         public string KycCategory { get; set; }
+        public string BusinessLogo { get; set; }
         /*
          This map to business categories in the UI
          */

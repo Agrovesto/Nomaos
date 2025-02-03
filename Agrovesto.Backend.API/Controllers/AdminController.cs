@@ -12,13 +12,13 @@ using Microsoft.AspNetCore.Http.HttpResults;
 
 namespace Agrovesto.Backend.API.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
+    [Route("api/Admin")]
+    //[ApiController]
     //[ApiExplorerSettings(IgnoreApi = true)]
     public class AdminController : BaseController
     {
         private readonly IAuthenticationRepository _authenticationRepository;
-        public AdminController(IAuthenticationRepository authenticationRepository)
+        public AdminController(IHttpContextAccessor httpContextAccessor,IAuthenticationRepository authenticationRepository) :base (httpContextAccessor)
         {
             _authenticationRepository = authenticationRepository;
         }
@@ -102,5 +102,8 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+    
+    
+    
     }
 }

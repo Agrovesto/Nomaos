@@ -9,7 +9,10 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
 {
     public interface IBusinessRepository
     {
+        Task<int> BusinessCount();
         Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId);
+        Task<BusinessWorkerModel> CreateBusinessWorker(BusinessWorkerModel bWorker);
         Task<BusinessModel> GetBusinessAsync(string businessName);
+        Task<BusinessModel> GetBusinessByUserIdAsync(string userId);
     }
 }
