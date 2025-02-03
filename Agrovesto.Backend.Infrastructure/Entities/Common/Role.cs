@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,5 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         /// </summary>
         public virtual ICollection<IdentityRoleClaim<string>> Claims { get; set; } = new List<IdentityRoleClaim<string>>();
 
+        public long? BusinessId { get; set; }
+        public Business Business { get; set; }
     }
 }

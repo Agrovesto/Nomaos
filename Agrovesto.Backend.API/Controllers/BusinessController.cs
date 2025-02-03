@@ -13,9 +13,12 @@ namespace Agrovesto.Backend.API.Controllers
     public class BusinessController : BaseController
     {
         private readonly IBusinessManager _businessManager;
-        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager) : base (httpContextAccessor)
+
+        private readonly IRoleManager _roleManager;
+        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, IRoleManager roleManager) : base (httpContextAccessor)
         {
             _businessManager = businessManager;
+            _roleManager = roleManager;
         }
 
         [HttpPost("onboard-business")]
@@ -63,7 +66,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || ( isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || ( !isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
 
 
             try
@@ -99,6 +102,38 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+        [HttpPost("create-role")]
+        public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
+        {
+            var isAdmin = CurrentUserRole;
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+
+            var data = await _roleManager.BusinesCreateRoleAsync(CurrentUserId, roleModel);
+            return Ok(new AgrovestoResponse<RoleModel>()
+            {
+                Message = "",
+                Result = data.Result,
+
+            });
+        }
+
+        [HttpGet("roles")]
+        public async Task<IActionResult> GetRoles()
+        {
+            var isAdmin = CurrentUserRole;
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+
+            var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
+            return Ok(new PagedListResponse<List<RoleModel>>()
+            {
+                Message = "",
+                Data = data.Data,
+                Count = data.Count
+
+            });
+        }
+
+
 
     }
 }
