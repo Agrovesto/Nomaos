@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -37,8 +38,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
         public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
-      //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
-    
+                                                                                              //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
+        public ICollection<User> users { get; set; } = new List<User>();
     }
 
 }

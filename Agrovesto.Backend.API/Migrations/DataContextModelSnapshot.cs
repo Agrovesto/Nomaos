@@ -216,6 +216,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<long?>("BusinessId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
@@ -234,6 +237,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BusinessId");
+
                     b.HasIndex("NormalizedName")
                         .IsUnique()
                         .HasDatabaseName("RoleNameIndex")
@@ -249,6 +254,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
+
+                    b.Property<long?>("BusinessId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
@@ -337,6 +345,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BusinessId");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -485,6 +495,22 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", "Business")
+                        .WithMany()
+                        .HasForeignKey("BusinessId");
+
+                    b.Navigation("Business");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.User", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", null)
+                        .WithMany("users")
+                        .HasForeignKey("BusinessId");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", null)
@@ -549,6 +575,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("BusinessWorkers");
 
                     b.Navigation("SubAccounts");
+
+                    b.Navigation("users");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>

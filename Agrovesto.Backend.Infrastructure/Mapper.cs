@@ -13,6 +13,66 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+
+        #region walletProvider
+        public static WalletProvider Map(this WalletProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new WalletProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                WalletProviderParameters = model.WalletProviderParameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static WalletProviderModel Map(this WalletProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WalletProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                WalletProviderParameters = entity.WalletProviderParameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<ProviderStatus>()
+            };
+        }
+        public static WalletProviderParameter Map(this WalletProviderParameterModel model)
+        {
+            return new WalletProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                WalletProviderProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = model.Env.ToString()
+            };
+        }
+        public static WalletProviderParameterModel Map(this WalletProviderParameter model)
+        {
+            return new WalletProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.WalletProviderProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+
+
+        #endregion walletProvider
         #region Business
         public static Business Map(this BusinessModel model)
         {
