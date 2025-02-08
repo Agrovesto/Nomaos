@@ -28,6 +28,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? Bvn { get; set; }
         public string? DOB { get; set; }
         public string? NIN { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
     }
 
     //when user signsup

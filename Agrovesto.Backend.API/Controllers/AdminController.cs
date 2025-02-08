@@ -9,18 +9,24 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.CoreUtils;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Core.Interfaces.Managers;
 
 namespace Agrovesto.Backend.API.Controllers
 {
-    [Route("api/Admin")]
+    [Route("api/admin")]
     //[ApiController]
     //[ApiExplorerSettings(IgnoreApi = true)]
     public class AdminController : BaseController
     {
         private readonly IAuthenticationRepository _authenticationRepository;
-        public AdminController(IHttpContextAccessor httpContextAccessor,IAuthenticationRepository authenticationRepository) :base (httpContextAccessor)
+        private readonly IWalletProviderManager _walletProvider;
+        public AdminController(IHttpContextAccessor httpContextAccessor,
+            IWalletProviderManager walletProvider,
+            IAuthenticationRepository authenticationRepository) :base (httpContextAccessor)
         {
             _authenticationRepository = authenticationRepository;
+            _walletProvider = walletProvider;
         }
 
         [HttpPost("create-admin")]
@@ -102,8 +108,67 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-    
-    
-    
+
+
+        #region wallet
+        [HttpPost("wallet")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+        public async Task<IActionResult> CreateWalletProvider([FromBody] WalletProviderModel model)
+        {
+            return Ok(new Response<WalletProviderModel>
+            {
+                Succeeded = true,
+                Data = await _walletProvider.CreateProvider(model)
+            });
+        }
+        //[Authorize(Roles = "Admin")]
+        [HttpGet("wallet/parameters/{id}/{Env}")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetWalletParameters(long id, string Env)
+        {
+            var result = await _walletProvider.GetParametersByProvider(id, Env);
+            return Ok(new Response<WalletProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Updates parameter
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        //  [Authorize(Roles = "Admin")]
+
+        [HttpPost("wallet/parameters")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 422)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+        public async Task<IActionResult> UpdateWalletParameters([FromBody] WalletProviderModel model)
+        {
+
+            var result = await _walletProvider.UpdateProviderParameter(model);
+
+
+            return Ok(new Response<WalletProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+
+        #endregion
+
+
     }
 }

@@ -10,6 +10,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
     public interface ICafeOneWalletService
     {
         Task<WalletResponseData> AgrovestoToUserWalletTransfer(string accountNumber, decimal amount, string reference, string Env);
+        Task<WalletResponseData> CreateBusinessUserWallet(string WalletName, string Env, string agrovestoUserId);
         Task<CafeoneDataModel> CreateCustomer(CafeoneCustomerRequest model, string Env);
         Task<WalletResponseData> CreateCustomerWallet(string userId, string WalletName, string Env);
         Task<WalletResponseData> CreateWallet(string WalletName, string Env);

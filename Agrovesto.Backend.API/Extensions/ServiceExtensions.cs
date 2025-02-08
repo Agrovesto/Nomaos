@@ -31,11 +31,13 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IRoleRepository, RoleRepository>();
             services.AddScoped<IAuthenticationRepository, AuthenticationRepository>();
             services.AddScoped<IWalletProviderRepository, WalletProviderRepository>();
+            services.AddScoped<IWalletRepository, WalletRepository>();
            
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
             services.AddScoped<IWalletProviderManager, WalletProviderManager>();
+            services.AddScoped<IWalletManager, WalletManager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();

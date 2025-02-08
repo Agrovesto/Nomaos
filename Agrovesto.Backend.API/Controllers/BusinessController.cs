@@ -15,10 +15,13 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IBusinessManager _businessManager;
 
         private readonly IRoleManager _roleManager;
-        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, IRoleManager roleManager) : base (httpContextAccessor)
+        private readonly IWalletManager _walletManager;
+        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, 
+            IRoleManager roleManager, IWalletManager walletManager) : base (httpContextAccessor)
         {
             _businessManager = businessManager;
             _roleManager = roleManager;
+            _walletManager = walletManager;
         }
 
         [HttpPost("onboard-business")]
@@ -117,6 +120,22 @@ namespace Agrovesto.Backend.API.Controllers
             });
         }
 
+
+        [HttpPost("update-profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery]ParameterArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            args.UserId = CurrentUserId;
+
+            var data = await _walletManager.UpdateBusinessProfile(model, args);
+            return Ok(new AgrovestoResponse<SubAccountModel>()
+            {
+                Message = "",
+                Result = data,
+
+            });
+        }
         [HttpGet("roles")]
         public async Task<IActionResult> GetRoles()
         {

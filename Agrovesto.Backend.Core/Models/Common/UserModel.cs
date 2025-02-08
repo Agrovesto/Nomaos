@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public enum UserType
     {
-        Individual,
+        User,
         Business,
         Farmer,
         Cooperative,

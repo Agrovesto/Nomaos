@@ -1,0 +1,110 @@
+﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
+{
+    public  class WalletRepository : IWalletRepository
+    {
+        private readonly DataContext _context;
+        public WalletRepository(DataContext context)
+        {
+            _context = context;
+        }
+        public async Task<SubAccountModel> CreateSubAccount(SubAccountModel model)
+        {
+            SubAccount entity = model.Map();
+            _context.Set<SubAccount>().Add(entity);
+
+            int count = await _context.SaveChangesAsync();
+            if (count < 1)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+        public async Task<SubAccountModel> UpdateSubAccount(SubAccountModel model)
+        {
+            var account = await _context.Set<SubAccount>().Where(x => x.UserId == model.UserId).FirstOrDefaultAsync();
+           
+            if (account == null)
+            {
+                return null;
+            }
+            account.BankAccount = model.BankAccount;
+            account.BankName = model.BankName;
+            account.Bvn = model.Bvn;
+            account.DOB = model.DOB;
+            account.FirstName = model.FirstName;
+            account.LastName = model.LastName;
+            account.WalletCode = model.WalletCode;
+            account.IsMainAccount = false;
+            account.NIN = model.NIN;
+            account.Status = model.Status;
+            account.SubAccountName = model.SubAccountName;  
+            
+
+            await _context.SaveChangesAsync();
+            return account.Map();
+        }
+
+        public async Task<SubAccountModel> GetSubAccount(string userId)
+        {
+            var entity = await _context.Set<SubAccount>()
+
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+            if (entity == null)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+        public async Task<SterlingBankWalletModel> CreateSterlingWallet(SterlingBankWalletModel model)
+        {
+            SterlingBankWallet entity = model.Map();
+            _context.Set<SterlingBankWallet>().Add(entity);
+
+            int count = await _context.SaveChangesAsync();
+            if (count < 1)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+        public async Task<SterlingBankWalletModel[]> GetSterlingWallets()
+        {
+            SterlingBankWallet[] entities = await _context.Set<SterlingBankWallet>()
+
+                .OrderBy(x => x.CreatedOn).ToArrayAsync();
+
+            return entities.Select(x => x.Map()).ToArray();
+        }
+
+       
+
+        public async Task<SterlingBankWalletModel> GetSterlingWallet(string agrovestoUserId)
+        {
+            SterlingBankWallet entity = await _context.Set<SterlingBankWallet>()
+
+                .FirstOrDefaultAsync(x => x.AgrovestoUserId == agrovestoUserId);
+            if (entity == null)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+    }
+}

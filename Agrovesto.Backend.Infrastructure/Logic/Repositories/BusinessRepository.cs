@@ -53,6 +53,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return business.Map();
         }
 
+        public async Task<BusinessModel> GetBusinessByCodeAsync(string businessCode)
+        {
+            var business = await _context.Set<Business>()
+                .FirstOrDefaultAsync(x => x.BusinessCode == businessCode && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
+            if (business == null)
+            {
+                return null;
+            }
+            return business.Map();
+        }
 
         public async Task<BusinessModel> GetBusinessByUserIdAsync(string userId)
         {
@@ -65,6 +75,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return business.Map();
         }
 
+        public async Task<BusinessModel> GetBusinessByIdAsync(long businessId)
+        {
+            var business = await _context.Set<Business>()
+                .FirstOrDefaultAsync(x => x.BusinessId == businessId && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
+            if (business == null)
+            {
+                return null;
+            }
+            return business.Map();
+        }
 
 
     }

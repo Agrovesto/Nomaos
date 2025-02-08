@@ -15,6 +15,106 @@ namespace Agrovesto.Backend.Infrastructure
     {
 
         #region walletProvider
+
+
+        public static SubAccount Map(this SubAccountModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new SubAccount()
+            {
+                DOB= model.DOB,
+                Status = model.Status,
+                SubAccountName = model.SubAccountName,
+                BankAccount = model.BankAccount,
+                BankName = model.BankName,
+                BusinessId = model.BusinessId,
+                Bvn = model.Bvn,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                IsMainAccount = model.IsMainAccount,
+                NIN = model.NIN,
+                PhoneNumber = model.PhoneNumber,
+                UserId = model.UserId,
+                WalletCode = model.WalletCode,
+                FirstName = model.FirstName,
+                LastName = model.LastName,
+            };
+        }
+
+        public static SubAccountModel Map(this SubAccount entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new SubAccountModel()
+            {
+                DOB = entity.DOB,
+                Status = entity.Status,
+                SubAccountId = entity.SubAccountId,
+                SubAccountName = entity.SubAccountName,
+                BankAccount = entity.BankAccount,
+                BankName = entity.BankName,
+                BusinessId = entity.BusinessId,
+                Bvn = entity.Bvn,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn = entity.CreatedOn,
+                IsMainAccount = entity.IsMainAccount,
+                NIN = entity.NIN,
+                PhoneNumber = entity.PhoneNumber,
+                UserId = entity.UserId,
+                WalletCode = entity.WalletCode,
+                FirstName = entity.FirstName,
+                LastName = entity.LastName,
+            };
+        }
+
+        public static SterlingBankWallet Map(this SterlingBankWalletModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new SterlingBankWallet()
+            {
+               WalletId = model.WalletId,
+               AccountNumber = model.AccountNumber,
+               AgrovestoUserId = model.AgrovestoUserId,
+               CreatedOn = model.CreatedOn,
+               InternalAccountId = model.InternalAccountId,
+               IsABusinessAccount = model.IsABusinessAccount,
+               LedgerAccountNumber = model.LedgerAccountNumber,
+               OrganizationId = model.OrganizationId,
+               OwnerId = model.OwnerId,
+               UserId = model.UserId,
+            };
+        }
+
+        public static SterlingBankWalletModel Map(this SterlingBankWallet entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new SterlingBankWalletModel()
+            {
+                WalletId = entity.WalletId,
+                AccountNumber = entity.AccountNumber,
+                AgrovestoUserId = entity.AgrovestoUserId,
+                CreatedOn = entity.CreatedOn,
+                InternalAccountId = entity.InternalAccountId,
+                IsABusinessAccount = entity.IsABusinessAccount,
+                LedgerAccountNumber = entity.LedgerAccountNumber,
+                OrganizationId = entity.OrganizationId,
+                OwnerId = entity.OwnerId,
+                UserId = entity.UserId,
+            };
+        }
+
+
         public static WalletProvider Map(this WalletProviderModel model)
         {
             if (model == null)
@@ -130,6 +230,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BVN = entity.BVN,
                 BusinessLogo = entity.BusinessLogo,
                 NIN = entity.NIN,
+                UserId = entity.UserId
             };
         }
         public static BusinessWorker Map(this BusinessWorkerModel model)

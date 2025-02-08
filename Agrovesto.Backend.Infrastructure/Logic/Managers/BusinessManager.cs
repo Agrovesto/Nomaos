@@ -21,12 +21,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IBusinessRepository _businessRepository;
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly DataContext _context;
+        private readonly IWalletRepository _walletRepository;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
-            DataContext context)
+            DataContext context, IWalletRepository walletRepository)
         {
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
             _context = context;
+            _walletRepository = walletRepository;
+
         }
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
@@ -144,6 +147,63 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     //send email to user to reset their password
                     return newBusinessWorker;
+                }
+                catch (Exception ex)
+                {
+
+                    await dbTransaction.RollbackAsync();
+
+                    throw new Exception(ex.Message);
+                }
+            }
+        }
+
+
+        public async Task<UserModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+
+            if (business == null) { throw new Exception($"Business does not exist"); }
+
+            using (var dbTransaction = _context.Database.BeginTransaction())
+            {
+                try
+                {
+                    var registrationMode = new UserModel
+                    {
+                        Email = model.Email,
+                        Name = model.Name,
+                        Password = model.Password,
+                        PhoneNumber = model.PhoneNumber,
+                        UserType = UserType.User,
+                        CreatedBy = args.UserId,
+                        CreatedOn = DateTimeOffset.Now,
+
+                    };
+                    var registerUser = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from default to user*/);
+                    if (!registerUser.status)
+                    {
+                        throw new Exception($"Could not register user");
+                    }
+
+                    var subaccount = new SubAccountModel
+                    {
+                        BusinessId = business.BusinessId,
+                        UserId= registerUser.model.Id,
+                        FirstName = model.Name,
+                        LastName = model.Name,
+                        PhoneNumber= model.PhoneNumber,
+                    };
+                    var createSubAccount = await _walletRepository.CreateSubAccount(subaccount);
+                   //create subaccount
+
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+
+                    //send email to user to reset their password
+                    return registerUser.model;
                 }
                 catch (Exception ex)
                 {

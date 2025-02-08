@@ -11,7 +11,7 @@ using Agrovesto.Backend.Core.CoreUtils;
 
 namespace Agrovesto.Backend.API.Controllers
 {
-    [Route("api/[controller]")]
+    [Route("api/role")]
    // [ApiController]
     public class RoleController : ControllerBase
     { 
