@@ -16,6 +16,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string RoleName { get; set; }
         public string UserId { get; set; }
         public string DefaultPassword { get; set; }
+        public string businessCode { get; set; }
     }
     public class BusinessModel :Model
     {
@@ -77,6 +78,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         //   public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
         //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
         public string BusinessLogo { get; set; }
+        public string? UserId { get; set; }
     }
     public enum BusinessStatus
     {

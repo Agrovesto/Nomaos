@@ -218,7 +218,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     entity.Id = Guid.NewGuid().ToString();
                     entity.UserType = Enum.GetName(typeof(UserType), model.UserType);
                     var createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
-                    if (!createUser.Succeeded) throw new Exception($"Could not create business for {model.Name} {entity.UserType}");
+                    if (!createUser.Succeeded) throw new Exception($"Could not create account for {model.Name} {entity.UserType}");
                     entity = await _userManager.FindByNameAsync(entity.Email);
 
                     var uniqueRole = await _roleManager.FindByNameAsync(roleName);
