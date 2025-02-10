@@ -25,5 +25,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Bvn { get; set; }
         public string? DOB { get; set; }
         public string? NIN { get; set; }
+        public SubAccountType SubAccountType { get; set; }  
+    }
+    public enum SubAccountType
+    {
+        Farmer,
+        Cooperative,
+        Agent,
+        Trader,
+        Processor,
+        Buyer,
+        Business
+
+
     }
 }

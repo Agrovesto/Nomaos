@@ -59,5 +59,27 @@ namespace Agrovesto.Backend.API.Controllers
             });
         }
 
+
+        //[AllowAnonymous]
+        //[HttpGet("userTypes")]
+        //[ProducesResponseType(200)]
+        //[ProducesResponseType(400)]
+        //[ProducesResponseType(422)]
+        //[ProducesResponseType(500)]
+        //public async Task<IActionResult> GetUserTypes([FromQuery] string env)
+        //{
+
+        //    var sendRequest= 
+
+        //    var request = await _cafeOneWalletService.GetBanks(env);
+        //    return Ok(new Response<List<CafeOneBankData>>()
+        //    {
+        //        Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+        //        Succeeded = request != null,
+        //        Message = request == null ? "Failed" : "Success",
+        //        Data = request != null ? request : null
+        //    });
+        //}
+
     }
 }

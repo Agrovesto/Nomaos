@@ -41,6 +41,8 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = model.WalletCode,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
+                SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType)
+              
             };
         }
 
@@ -69,6 +71,7 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = entity.WalletCode,
                 FirstName = entity.FirstName,
                 LastName = entity.LastName,
+                SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
             };
         }
 

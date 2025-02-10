@@ -12,11 +12,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class BusinessRegistrationArgs
     {
-        public UserType UserType { get; set; }
+        public string UserType { get; set; }
         public string RoleName { get; set; }
         public string UserId { get; set; }
         public string DefaultPassword { get; set; }
         public string businessCode { get; set; }
+        public string SubAccountType { get; set; }
     }
     public class BusinessModel :Model
     {
