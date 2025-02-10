@@ -30,6 +30,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? NIN { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
+        public string SubAccountType { get; set; }
     }
 
     //when user signsup

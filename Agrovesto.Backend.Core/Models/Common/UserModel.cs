@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -23,18 +24,31 @@ namespace Agrovesto.Backend.Core.Models.Common
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string? Name { get; set; }
-
+        public string Location { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string? Gender { get; set; }
+        public string? DateOfBirth { get; set; }
     }
     public enum UserType
     {
+        [Description("User")]
         User,
+        [Description("Business")]
         Business,
+        [Description("Farmer")]
         Farmer,
+        [Description("Cooperative")]
         Cooperative,
+        [Description("Agent")]
         Agent,
+        [Description("Suppliers")]
         Suppliers,
+        [Description("Processors")]
         Processors,
+        [Description("Agrovesto")]
         Agrovesto,
+        [Description("Buyer")]
         Buyer
     }
     public class LoginModel
