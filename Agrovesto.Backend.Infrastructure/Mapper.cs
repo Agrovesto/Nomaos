@@ -13,6 +13,131 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        #region userMgt
+        public static FarmerModel Map(this Farmer entities)
+        {
+            if (entities == null) { return null; }
+            return new FarmerModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.PhoneNumber,
+              UserId = entities.UserId,
+                OnBoardedOn = entities.OnBoardedOn,
+
+                DateOfBirth = entities.DateOfBirth,
+                Gender = entities.Gender,
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+                State = entities.State,
+                Lga=entities.Lga,
+                OnboardedByUserId = entities.OnboardedByUserId,
+            };
+        }
+
+        public static Farmer Map(this FarmerModel model)
+        {
+            if (model == null) { return null; }
+            return new Farmer
+            {
+                //Id = model.Id,
+                Location = model.Location,
+                Name = model.Name,
+                Email = model.Email,
+              UserId = model.UserId,
+                OnBoardedOn = model.OnBoardedOn,
+               BelongToBusinessCode=model.BelongToBusinessCode,
+               State = model.State, 
+               Lga=model.Lga,   
+               OnboardedByUserId=model.OnboardedByUserId,
+               PhoneNumber=model.PhoneNumber,
+                DateOfBirth = model.DateOfBirth,
+                Gender = model.Gender
+            };
+        }
+
+        public static CooperativeModel Map(this Cooperative entities)
+        {
+            if (entities == null) { return null; }
+            return new CooperativeModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.ContactPerson,
+                UserId = entities.UserId,
+                OnBoardedOn = entities.OnBoardedOn,
+                State = entities.State,
+                Lga = entities.Lga,
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+                ContactPerson = entities.ContactPerson,
+            };
+        }
+
+        public static Cooperative Map(this CooperativeModel model)
+        {
+            if (model == null) { return null; }
+            return new Cooperative
+            {
+               // Id = model.Id,
+                Location = model.Location,
+                Name = model.Name,
+                Email = model.Email,
+                ContactPerson = model.PhoneNumber,
+                UserId = model.UserId,
+                State = model.State,
+                Lga = model.Lga,
+                BelongToBusinessCode=model.BelongToBusinessCode
+                ,
+                PhoneNumber = model.PhoneNumber,
+                OnBoardedOn = model.OnBoardedOn,
+            };
+        }
+
+
+        public static AgentModel Map(this Agent entities)
+        {
+            if (entities == null) { return null; }
+            return new AgentModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.PhoneNumber,
+                UserId = entities.UserId,
+                OnBoardedOn = entities.OnBoardedOn,
+                State = entities.State,
+                Lga = entities.Lga,
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+                
+            };
+        }
+
+        public static Agent Map(this AgentModel model)
+        {
+            if (model == null) { return null; }
+            return new Agent
+            {
+                // Id = model.Id,
+                Location = model.Location,
+                Name = model.Name,
+                Email = model.Email,
+                UserId = model.UserId,
+                State = model.State,
+                Lga = model.Lga,
+                BelongToBusinessCode = model.BelongToBusinessCode
+                ,
+                PhoneNumber = model.PhoneNumber,
+                OnBoardedOn = model.OnBoardedOn,
+                
+            };
+        }
+
+
+        #endregion userMgt
 
         #region walletProvider
 
@@ -301,7 +426,6 @@ namespace Agrovesto.Backend.Infrastructure
             };
         }
         #endregion RoleMgt
-
 
         #region Admin Mgt
         public static User Map(this UserModel model)
