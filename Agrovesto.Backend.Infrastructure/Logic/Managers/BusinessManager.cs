@@ -24,14 +24,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly DataContext _context;
         private readonly IWalletRepository _walletRepository;
+        private readonly IFarmerRepository _farmerRepository;
+        private readonly IAgentRepository _agentRepository;
+        private readonly ICooperativeRepository _cooperativeRepository;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
-            DataContext context, IWalletRepository walletRepository)
+            DataContext context, IWalletRepository walletRepository, IFarmerRepository farmerRepository,
+            IAgentRepository agentRepository, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
             _context = context;
             _walletRepository = walletRepository;
-
+            _farmerRepository = farmerRepository;
+            _agentRepository = agentRepository;
+            _cooperativeRepository = cooperativeRepository;
         }
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
@@ -202,7 +208,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //create subaccount
                     if (subaccount.SubAccountType == SubAccountType.Cooperative)
                     {
-                        var cooperative = new Cooperative
+                        var cooperative = new CooperativeModel
                         {
                             BelongToBusinessCode = business.BusinessCode,
                             State = model.State,
@@ -216,10 +222,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             UserId = registerUser.model.Id
                         };
                         //create cooperative profile
+                        var createCoop = await _cooperativeRepository.CreateCooperative(cooperative);
+
                     }
                     else if (subaccount.SubAccountType == SubAccountType.Agent)
                     {
-                        var agent = new Agent
+                        var agent = new AgentModel
                         {
                             BelongToBusinessCode = business.BusinessCode,
                             State = model.State,
@@ -232,6 +240,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             UserId = registerUser.model.Id,                            
                         };
                         //create agent profile
+                        var createAgent = await _agentRepository.CreateAgent(agent);
                     }
                     else if (subaccount.SubAccountType == SubAccountType.Farmer)
                     {
@@ -239,7 +248,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         //create farmer profile user the loggedin user
                         
-                        var farmer = new Farmer
+                        var farmer = new FarmerModel
                         {
                             OnboardedByUserId = args.UserId, //if it's null, refactor to use our userId  
                             BelongToBusinessCode= business.BusinessCode,
@@ -252,9 +261,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             OnBoardedOn = DateTimeOffset.Now,
                             PhoneNumber = model.PhoneNumber,
                             UserId= registerUser.model.Id,
-                            DateOfBirth= GetYearOfBirth(int.Parse(model.DateOfBirth))
+                            DateOfBirth= GetYearOfBirth(int.Parse(model.DateOfBirth)),
+
                         };
                         //create farmer
+                        var createFarmer = await _farmerRepository.CreateFarmer(farmer);
                     }
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
