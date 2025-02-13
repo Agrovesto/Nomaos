@@ -40,8 +40,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Descriptions = model.RoleDescription
             };
 
-            var result = await _roleManager.CreateAsync(role);
-        
+             var result=await _roleManager.CreateAsync(role);
+            //await _context.AddAsync(role);
+            //await _context.SaveChangesAsync();
+            //var result = 
             if (result.Succeeded)
             {
                 return new AgrovestoResponse<RoleModel>()

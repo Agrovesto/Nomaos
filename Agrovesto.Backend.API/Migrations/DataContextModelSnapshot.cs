@@ -89,6 +89,14 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("BusinessCodeSignage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BusinessCodeSignageSalt")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("BusinessEmail")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -192,6 +200,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("IsAssignedToAgentId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Lga")
                         .IsRequired()
@@ -418,7 +429,6 @@ namespace Agrovesto.Backend.API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("AccountNumber")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AgrovestoUserId")
@@ -429,22 +439,18 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("InternalAccountId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsABusinessAccount")
                         .HasColumnType("bit");
 
                     b.Property<string>("LedgerAccountNumber")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OrganizationId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OwnerId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserId")
@@ -452,7 +458,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("WalletId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");

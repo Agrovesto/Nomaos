@@ -73,6 +73,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 ContactPerson = entities.ContactPerson,
+                IsAssignedToAgentId = entities.IsAssignedToAgentId,
             };
         }
 
@@ -91,6 +92,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Lga = model.Lga,
                 BelongToBusinessCode=model.BelongToBusinessCode
                 ,
+                IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
             };
@@ -329,6 +331,32 @@ namespace Agrovesto.Backend.Infrastructure
                 NIN = model.NIN,
                 BusinessLogo = model.BusinessLogo,
                 KycCategory= Enum.GetName(typeof(Category), model.Category),
+                BusinessCodeSignage = model.BusinessCodeSignage,
+                BusinessCodeSignageSalt= model.BusinessCodeSignageSalt
+            };
+        }
+
+        public static BusinessLoadModel ViewMap(this BusinessModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new BusinessLoadModel
+            {
+
+                Address = model.Address,
+
+                BusinessCode = model.BusinessCode,
+                BusinessEmail = model.BusinessEmail,
+                BusinessName = model.BusinessName,
+               
+                PhoneNumber = model.PhoneNumber,               
+                Website = model.Website,
+                
+                BusinessLogo = model.BusinessLogo,
+               
             };
         }
 
@@ -358,7 +386,9 @@ namespace Agrovesto.Backend.Infrastructure
                 BVN = entity.BVN,
                 BusinessLogo = entity.BusinessLogo,
                 NIN = entity.NIN,
-                UserId = entity.UserId
+                UserId = entity.UserId,
+                BusinessCodeSignage = entity.BusinessCodeSignage,
+                BusinessCodeSignageSalt=entity.BusinessCodeSignageSalt
             };
         }
         public static BusinessWorker Map(this BusinessWorkerModel model)

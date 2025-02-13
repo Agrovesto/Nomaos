@@ -20,6 +20,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BelongToBusinessCode { get; set; }  //which business
 
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-
+        public long IsAssignedToAgentId { get; set; }
     }
 }

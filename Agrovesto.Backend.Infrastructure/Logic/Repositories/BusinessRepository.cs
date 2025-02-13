@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId)
         {
             Business business = businessModel.Map();
+            byte[] salt = EncryptionUtil.GetSalt();
+            business.BusinessCodeSignageSalt = Convert.ToBase64String(salt);
+            business.BusinessCodeSignage = business.BusinessCode.EncryptTransactionPin(salt);
+
             business.UserId = userId;
             _context.Set<Business>().Add(business);
             await _context.SaveChangesAsync();
@@ -46,6 +51,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var business = await _context.Set<Business>()
                 .FirstOrDefaultAsync(x =>  x.BusinessName == businessName && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
+            if (business == null)
+            {
+                return null;
+            }
+            return business.Map();
+        }
+        public async Task<BusinessModel> GetBusinessBySinageSaltAsync(string signagesalt)
+        {
+            var business = await _context.Set<Business>()
+                .FirstOrDefaultAsync(x => x.BusinessCodeSignageSalt == signagesalt && x.BusinessStatus != BusinessStatus.Deactivated.ToString());
             if (business == null)
             {
                 return null;

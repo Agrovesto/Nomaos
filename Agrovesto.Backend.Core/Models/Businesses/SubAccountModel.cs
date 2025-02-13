@@ -11,6 +11,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long SubAccountId { get; set; }
         public string UserId { get; set; }
         public string? BankAccount { get; set; }
+        public string? Email { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public string? BankName { get; set; }

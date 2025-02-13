@@ -7,6 +7,16 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class ForgotPasswordModel
+    {
+        public string Username { get; set; }
+    }
+    public class PasswordResetModel
+    {
+        public string Token { get; set; }
+        public string Username { get; set; }
+        public string Password { get; set; }
+    }
     public class UserModel
     {
         public string? Id { get; set; }
@@ -14,7 +24,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string PhoneNumber { get; set; }
         public string? Pin { get; set; }
         public string? Password { get; set; }
-        public string Email { get; set; }
+        public string? Email { get; set; }
         public UserType UserType { get; set; }
         public string? OTP { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
@@ -29,6 +39,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Lga { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
+
+        public string? Bvn { get; set; }
+        public string? NIN { get; set; }
+        public string? BankAccount { get; set; }
+        public string? BankName { get; set; }
     }
     public enum UserType
     {
@@ -60,6 +75,25 @@ namespace Agrovesto.Backend.Core.Models.Common
         public LoginType LoginMethod { get; set; }
     }
 
+
+    public class TokenModel
+    {
+        public string Token { get; set; }
+        public TokenType TokenType { get; set; }
+        public DateTimeOffset ExpiresOn { get; set; }
+        public string Id { get; set; }
+        public bool TwoFactorEnabled { get; set; }
+        public double ExpiresIn {  get; set; }
+        public List<string> Roles { get; set; }
+    }
+
+    public enum TokenType
+    {
+        AccessToken,
+        IdToken,
+        RefreshToken
+            
+    }
     public enum LoginType
     {
         Password,
