@@ -51,8 +51,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
 
                 var request = await _httpService.Post($"{@params.Url}/wallet/create", content, headers);
-                request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+              
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
                 if (response.StatusCode == 200)
                 {
@@ -149,7 +150,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         public async Task<CafeoneDataModel> CreateCustomer(CafeoneCustomerRequest model, string Env)
         {
             var @params = await RetrieveParams(Env);
-            DateTime date = DateTime.ParseExact(model.dob, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            DateTime date = DateTime.ParseExact(model.dob, "dd-MM-yyyy", CultureInfo.InvariantCulture);
             string dobOfBirth = date.ToString("dd-MM-yyyy");
             model.dob = dobOfBirth;
 
@@ -166,8 +167,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
 
                 var request = await _httpService.Post($"{@params.Url}/customers", content, headers);
-                request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+               
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel>(readResponse);
                 if (response.StatusCode == 200)
                 {

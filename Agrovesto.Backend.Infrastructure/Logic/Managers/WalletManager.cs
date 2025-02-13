@@ -84,6 +84,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             model.CreatedOn = DateTimeOffset.Now;
                             model.BusinessId = business.BusinessId;
 
+                            model.Status = BusinessStatus.Live.ToString();
                             var createSubaccount = await _walletRepository.CreateSubAccount(model);
 
                         }
@@ -107,6 +108,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         }
 
+        public async Task<SubAccountModel> CreateSubAccount(SubAccountModel model)
+        {
+            return await _walletRepository.CreateSubAccount(model);
+        }
 
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
@@ -129,7 +134,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         lastName = model.LastName,
                         dob = model.DOB,
                         bvnNumber = model.Bvn,
-                        email = business.BusinessEmail,
+                        email = model.Email,
                         nin = model.NIN
                     }, args.Env);
 

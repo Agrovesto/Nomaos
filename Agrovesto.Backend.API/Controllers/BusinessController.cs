@@ -28,7 +28,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery]BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+          //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
             try
@@ -98,7 +98,7 @@ namespace Agrovesto.Backend.API.Controllers
             //}
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
@@ -140,16 +140,30 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> GetRoles()
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
-
-            var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
-            return Ok(new PagedListResponse<List<RoleModel>>()
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) return StatusCode(403, new Response<string>
             {
-                Message = "",
-                Data = data.Data,
-                Count = data.Count
-
+                Message = "Forbidden",//"An unexpected error occurred. Please contact your administrator.",
+                Succeeded = false,
             });
+            try
+            {
+                var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
+                return Ok(new PagedListResponse<List<RoleModel>>()
+                {
+                    Message = "",
+                    Data = data.Data,
+                    Count = data.Count
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
 
