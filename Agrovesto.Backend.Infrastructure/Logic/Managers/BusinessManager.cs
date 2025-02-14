@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -9,6 +10,8 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,9 +32,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IFarmerRepository _farmerRepository;
         private readonly IAgentRepository _agentRepository;
         private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly ILogger<BusinessManager> _log;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
-            IAgentRepository agentRepository, ICooperativeRepository cooperativeRepository)
+            IAgentRepository agentRepository,
+                 ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
@@ -40,6 +45,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _farmerRepository = farmerRepository;
             _agentRepository = agentRepository;
             _cooperativeRepository = cooperativeRepository;
+            _log = log;
         }
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
@@ -70,7 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         Name = business.BusinessName,
                         Password = args.DefaultPassword,
                         PhoneNumber = business.PhoneNumber,
-                        UserType = UserType.Business,
+                        UserType = Enum.GetName(typeof(UserType), UserType.Business),//UserType.Business,
                         CreatedBy = args.UserId,
                         CreatedOn = DateTimeOffset.Now,
 
@@ -137,7 +143,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         Name = bWorker.FullName,
                         Password = args.DefaultPassword,
                         PhoneNumber = bWorker.PhoneNumber,
-                        UserType = UserType.Business,
+                        UserType = Enum.GetName(typeof(UserType), UserType.Business),
+                        //UserType.Business,
                         CreatedBy = args.UserId,
                         CreatedOn = DateTimeOffset.Now,
 
@@ -326,6 +333,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
+        public async Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId)
+        {
+            return await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
+        }
+        public async Task<AgentModel> ViewAgentAssignedToCooperative( long cooperativeId)
+        {
+            return await _cooperativeRepository.ViewAgentAssignedToCooperative(cooperativeId);
+        }
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -389,13 +404,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         // Helper method to register a user
         private async Task<UserModel> RegisterUserAsync(UserModel model, BusinessRegistrationArgs args)
         {
+           
             var user = new UserModel
             {
                 Email = model.Email,
                 Name = model.Name,
                 Password = model.Password,
                 PhoneNumber = model.PhoneNumber,
-                UserType = args.UserType.ToEnum<UserType>(),
+                UserType = Enum.GetName(typeof(UserType), args.UserType),//args.UserType.ToEnum<UserType>(),
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
                 Pin= model.Pin
@@ -536,5 +552,161 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             int yearOfBirth = currentYear - age;
             return yearOfBirth.ToString();
         }
+
+        public async Task<PagedListResponse<List<AgentModel>>> GetAgentsByBusinessCode(string userId,
+            ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var agent = await _agentRepository.GetAgentsByBusinessCode(business.BusinessCode, query);
+                if (agent == null) return new PagedListResponse<List<AgentModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<AgentModel>>
+                {
+                    Succeeded = true,
+                    Data = agent,
+                    Count = agent.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
+        public async Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByBusinessCode(string userId,
+          ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var agent = await _cooperativeRepository.GetCooperativesByBusinessCode(business.BusinessCode, query);
+                if (agent == null) return new PagedListResponse<List<CooperativeModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<CooperativeModel>>
+                {
+                    Succeeded = true,
+                    Data = agent,
+                    Count = agent.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId,
+                ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var agent = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
+                if (agent == null) return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = agent,
+                    Count = agent.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
+        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId,
+                ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var cooperative = await _cooperativeRepository.GetCooperativeDetailByUserId(userId);
+
+                if (cooperative == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var agent = await _farmerRepository.GetFarmersByOnboardedUserId(cooperative.UserId, query);
+                if (agent == null) return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = agent,
+                    Count = agent.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
     }
 }

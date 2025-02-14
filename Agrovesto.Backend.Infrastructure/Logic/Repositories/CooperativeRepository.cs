@@ -60,18 +60,78 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode)
+     
+        public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
         {
 
-            var cooperative = await _context.Cooperatives.Where(x=>x.BelongToBusinessCode == businessCode).ToListAsync();
-            if (cooperative.Count > 0)
+            var agents = await _context.Cooperatives
+                .AsNoTracking()
+                .Where(s
+                =>
+                (!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                 || s.Lga.Contains(query.Location))) &&
+                s.BelongToBusinessCode == businessCode)
+                .OrderByDescending(s => s.OnBoardedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s.Map()).ToListAsync();
+
+
+            if (agents.Count > 0)
             {
-                return cooperative.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+                return agents;
             }
             return null;
         }
 
-       
+
+        public async Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query)
+        {
+
+            var cooperatives = await _context.Cooperatives
+                .AsNoTracking()
+                .Where(s
+                =>
+                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                // || s.Lga.Contains(query.Location))) &&
+                s.IsAssignedToAgentId == AgentId)
+                .OrderByDescending(s => s.OnBoardedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s.Map()).ToListAsync();
+
+
+            if (cooperatives.Count > 0)
+            {
+                return cooperatives;
+            }
+            return null;
+        }
+
+        public async Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId)
+        {
+            var cooperative = await _context.Cooperatives.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
+            if (cooperative == null) return null;
+            cooperative.IsAssignedToAgentId = agentId;
+            cooperative.HasbeenAssignedAgent = true;
+            await _context.SaveChangesAsync();
+
+            return cooperative.Map();
+        }
+
+        public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
+        {
+            var agent =
+                await (from c in _context.Cooperatives
+                       join a in _context.Agents
+                       on c.IsAssignedToAgentId equals a.Id
+                       where c.Id == cooperativeId
+                       select a).FirstOrDefaultAsync();
+
+            if (agent != null) { return agent.Map(); }
+            return null;
+            
+        }
     }
 }
 

@@ -102,51 +102,7 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
         }
-        [HttpPost("register")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Register([FromBody] UserModel model, [FromQuery]BusinessRegistrationArgs args)
-        {
-
-            try
-            {
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-                var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null)
-                {
-                    await _businessManager.UpdateUserAccountProfile(registerUser, args, registerUser.UserId);
-                }
-
-                return Ok(new Response<SubAccountModel>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = "Successful",
-                    Data = registerUser
-                });
-
-
-            }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
-
-            //    });
-            //}
-            catch (Exception ex)
-            {
-                return StatusCode(500, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
-
-        }
-
-        [HttpPost("forgot-password")]
+         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
         {
             var request = await _authenticationRepository.ForgotPassword(model.Username);

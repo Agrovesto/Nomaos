@@ -10,6 +10,14 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+
+    public class ListQueryParams
+    {
+        public int PageNumber { get; set; } = 0;
+        public int PageSize { get; set; } = 10;
+        public string? Location { get; set; }
+        public string? UserId { get; set; }
+    }
     public class BusinessRegistrationArgs
     {
         public string UserType { get; set; }
