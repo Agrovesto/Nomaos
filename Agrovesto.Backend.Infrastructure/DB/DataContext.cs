@@ -34,6 +34,12 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Agent> Agents { get; set; }
         public DbSet<Cooperative> Cooperatives { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
+        public DbSet<FarmPlotDetails> FarmPlotDetails { get; set; }
+        public DbSet<Warehouse> Warehouses { get; set; }
+        public DbSet<WarehouseInputInventory> WarehouseInputInventories { get; set; }
+        public DbSet<WarehouseUser> WarehouseUsers { get; set; }
+        public DbSet<Bundle> Bundles { get; set; }
+        public DbSet<BundleItems> BundleItems { get; set; }
 
 
     }
