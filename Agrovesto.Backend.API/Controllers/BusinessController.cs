@@ -15,17 +15,20 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IBusinessManager _businessManager;
 
         private readonly IRoleManager _roleManager;
-        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, IRoleManager roleManager) : base (httpContextAccessor)
+        private readonly IWalletManager _walletManager;
+        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, 
+            IRoleManager roleManager, IWalletManager walletManager) : base (httpContextAccessor)
         {
             _businessManager = businessManager;
             _roleManager = roleManager;
+            _walletManager = walletManager;
         }
 
         [HttpPost("onboard-business")]
         public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery]BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+          //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
             try
@@ -95,7 +98,7 @@ namespace Agrovesto.Backend.API.Controllers
             //}
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
@@ -117,20 +120,50 @@ namespace Agrovesto.Backend.API.Controllers
             });
         }
 
+
+        [HttpPost("update-profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery]ParameterArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            args.UserId = CurrentUserId;
+
+            var data = await _walletManager.UpdateBusinessProfile(model, args);
+            return Ok(new AgrovestoResponse<SubAccountModel>()
+            {
+                Message = "",
+                Result = data,
+
+            });
+        }
         [HttpGet("roles")]
         public async Task<IActionResult> GetRoles()
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
-
-            var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
-            return Ok(new PagedListResponse<List<RoleModel>>()
+            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) return StatusCode(403, new Response<string>
             {
-                Message = "",
-                Data = data.Data,
-                Count = data.Count
-
+                Message = "Forbidden",//"An unexpected error occurred. Please contact your administrator.",
+                Succeeded = false,
             });
+            try
+            {
+                var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
+                return Ok(new PagedListResponse<List<RoleModel>>()
+                {
+                    Message = "",
+                    Data = data.Data,
+                    Count = data.Count
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
 

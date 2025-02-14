@@ -17,11 +17,66 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
     {
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IHttpService _httpService;
-        public CafeOneWalletService(IHttpService httpService, IWalletProviderRepository providerRepo)
+        private readonly IWalletRepository _walletRepository;
+        public CafeOneWalletService(IHttpService httpService, IWalletProviderRepository providerRepo, IWalletRepository walletRepository)
         {
             _providerRepo = providerRepo;
             _httpService = httpService;
+            _walletRepository = walletRepository;
         }
+
+        public async Task<WalletResponseData> CreateBusinessUserWallet(string WalletName, string Env, string agrovestoUserId)
+        {
+            var @params = await RetrieveParams(Env);
+
+            var retrieveBusinessWalletDetail = await _walletRepository.GetSterlingWallet(agrovestoUserId);
+            if(retrieveBusinessWalletDetail == null) { throw new Exception($"could not retreive business information"); }
+            var model = new
+            {
+                organizationId = @params.OrganizationId,
+                ownerId = retrieveBusinessWalletDetail.OwnerId,
+                accountName = WalletName,
+                currency = "NGN"
+            };
+            try
+            {
+                var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
+
+
+                var headers = new Dictionary<string, string>
+                {
+                    { "x-api-key",  $"{@params.SecretKey}"},
+                    { "Authorization",  $"Bearer {token.AccessToken}"}
+                };
+                var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
+
+                var request = await _httpService.Post($"{@params.Url}/wallet/create", content, headers);
+                var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+              
+                var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
+                if (response.StatusCode == 200)
+                {
+
+                    return response.Data;
+                }
+                else
+                {
+                    return new WalletResponseData();
+                }
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                //  _logService.Error(ex, $"Flutterwave Initiate Payment Api Error: {errorMsg}");
+                return new WalletResponseData
+                {
+
+                };
+            }
+        }
+
         public async Task<WalletResponseData> CreateWallet(string WalletName, string Env)
         {
             var @params = await RetrieveParams(Env);
@@ -95,7 +150,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         public async Task<CafeoneDataModel> CreateCustomer(CafeoneCustomerRequest model, string Env)
         {
             var @params = await RetrieveParams(Env);
-            DateTime date = DateTime.ParseExact(model.dob, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+            DateTime date = DateTime.ParseExact(model.dob, "dd-MM-yyyy", CultureInfo.InvariantCulture);
             string dobOfBirth = date.ToString("dd-MM-yyyy");
             model.dob = dobOfBirth;
 
@@ -112,8 +167,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
 
                 var request = await _httpService.Post($"{@params.Url}/customers", content, headers);
-                request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+               
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel>(readResponse);
                 if (response.StatusCode == 200)
                 {

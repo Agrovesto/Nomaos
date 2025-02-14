@@ -31,6 +31,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletProvider> WalletProviders { get; set; }
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }
+        public DbSet<Agent> Agents { get; set; }
+        public DbSet<Cooperative> Cooperatives { get; set; }
+        public DbSet<Farmer> Farmers { get; set; }
 
 
     }

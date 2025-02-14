@@ -25,6 +25,30 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             //Environment.GetEnvironmentVariable("NAME_OF_THE_ENVIRONMENT_VARIABLE_FOR_YOUR_SENDGRID_KEY");
 
         }
+        public static async Task SendDynamicForgotPasswordMail(MailBody model)
+        {
+            var emailMessage = MailHelper.CreateSingleTemplateEmail(
+                new EmailAddress("info@agrovesto.com", "Agrovesto"),
+                new EmailAddress(model.To, model.ToName),
+                "d-48e35e82727e4148adba1953ed51a5c6",
+                new
+                {
+                    name = model.ToName,
+                    // email=model.To,
+                    token = model.Token
+                });
+
+
+            var _sendGridClient = new SendGridClient(RetrieveAPIKey());
+
+            var response = await _sendGridClient.SendEmailAsync(emailMessage);
+
+            if (response.StatusCode != HttpStatusCode.Accepted)
+            {
+                await response.Body.ReadAsStringAsync();
+            }
+
+        }
         public static async Task DynamicBusinessOnboarding(WelcomeMailBody model)
         {
             var key = AppSettingsHelper.Setting("SendGrid:key");
@@ -40,7 +64,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                        accountOfficer =model.AccountOfficer,
                        phoneNumber =model.PhoneNumber,
                        email = model.Email,
-                       propagateUrl =model.PropagateUrl
+                       propagateUrl =model.PropagateUrl,
+                       logincred = model.logincred
                    });
 
             emailMessage = AddBcc(emailMessage);
@@ -76,7 +101,14 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
         }
     }
-
+    public class MailBody
+    {
+        public string To { get; set; }
+        public string Subject { get; set; }
+        public string Body { get; set; }
+        public string ToName { get; set; }
+        public string Token { get; set; }
+    }
     public class WelcomeMailBody
     {
         public string To { get; set; }
@@ -87,6 +119,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         public string PhoneNumber { get; set; }
         public string Email { get; set; }
         public string PropagateUrl { get; set; }
+        public string logincred { get; set; }
     }
 
 }

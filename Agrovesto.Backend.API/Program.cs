@@ -20,9 +20,9 @@ builder.Services.AddDbContext<DataContext>(options =>
 builder.Services.AddIdentity<User, Role>(opt =>
 {
     opt.SignIn.RequireConfirmedAccount = true;
-    opt.User.RequireUniqueEmail = true;
+   // opt.User.RequireUniqueEmail = true;
     opt.Password.RequireDigit = false;
-    opt.Password.RequiredLength = 6;
+    opt.Password.RequiredLength = 4;
     opt.Password.RequireNonAlphanumeric = false;
     opt.Password.RequireUppercase = false;
     opt.Password.RequireLowercase = false;

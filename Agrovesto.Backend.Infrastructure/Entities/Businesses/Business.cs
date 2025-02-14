@@ -16,17 +16,21 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long BusinessId { get; set; }
         [Required]
         public string BusinessCode { get; set; }
+        [Required]
+        public string BusinessCodeSignage { get; set; }
+        [Required]
+        public string BusinessCodeSignageSalt { get; set; }
         public string UserId { get; set; }
         public string BusinessName { get; set; }
         public string ContactEmail { get; set; }
-        public string SupportEmail { get; set; }
-        public string DisputeEmail { get; set; }
+        public string? SupportEmail { get; set; }
+        public string? DisputeEmail { get; set; }
         public string BusinessEmail { get; set; }
         public string PhoneNumber { get; set; }
         public string Address { get; set; }
-        public string Website { get; set; }
-        public string BVN { get; set; }
-        public string NIN { get; set; }
+        public string? Website { get; set; }
+        public string? BVN { get; set; }
+        public string? NIN { get; set; }
         public string BusinessStatus { get; set; }
         public string Category { get; set; }
         public string KycCategory { get; set; }
