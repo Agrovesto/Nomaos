@@ -13,6 +13,259 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        #region FarmMgt
+        public static FarmPlotDetailsModel Map(this FarmPlotDetails entity)
+        {
+            if(entity == null)
+            {
+                return null;
+            }
+            return new FarmPlotDetailsModel
+            {
+                FarmState = entity.FarmState,
+                FarmerId = entity.FarmerId,
+                FarmerName = entity.FarmerName,
+                FarmLga = entity.FarmLga,
+                FarmLocation = entity.FarmLocation,
+                Id = entity.Id,
+                Latitude1 = entity.Latitude1,
+                Latitude2 = entity.Latitude2,
+                Latitude3 = entity.Latitude3,
+                Latitude4 = entity.Latitude4,
+                Longitude1 = entity.Longitude1,
+                Longitude2 = entity.Longitude2,
+                Longitude3 = entity.Longitude3, 
+                Longitude4 = entity.Longitude4 ,
+
+                CoordinateTakenBy = entity.CoordinateTakenBy,
+                CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
+            };
+        }
+
+        public static FarmPlotDetails Map(this FarmPlotDetailsModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmPlotDetails
+            {
+                FarmState = model.FarmState,
+                FarmerId = model.FarmerId,
+                FarmerName = model.FarmerName,
+                FarmLga = model.FarmLga,
+                FarmLocation = model.FarmLocation,
+                Latitude1 = model.Latitude1,
+                Latitude2 = model.Latitude2,
+                Latitude3 = model.Latitude3,
+                Latitude4 = model.Latitude4,
+                Longitude1 = model.Longitude1,
+                Longitude2 = model.Longitude2,
+                Longitude3 = model.Longitude3,
+                Longitude4 = model.Longitude4,
+                CoordinateTakenBy = model.CoordinateTakenBy,
+                CoordinateTakenByUserId = model.CoordinateTakenByUserId,
+            };
+        }
+        #endregion FarmMgt
+
+        #region Bundle
+        public static BundleModel Map(this Bundle entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new BundleModel
+            {
+                Description = entity.Description,
+                TotalBundlePackageDisbursed = entity.TotalBundlePackageDisbursed,
+                BundlePrice = entity.BundlePrice,
+                Id = entity.Id,
+                Name = entity.Name,
+                TotalBundlePackagePacked = entity.TotalBundlePackagePacked,
+                TotalBundlePackageRequested = entity.TotalBundlePackageRequested,
+                AvailableBundlePackagePacked = entity.AvailableBundlePackagePacked,
+            };
+        }
+
+        public static Bundle Map(this BundleModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Bundle
+            {
+                Description = model.Description,
+                TotalBundlePackageDisbursed = model.TotalBundlePackageDisbursed,
+                BundlePrice = model.BundlePrice,
+             
+                Name = model.Name,
+                TotalBundlePackagePacked = model.TotalBundlePackagePacked,
+                TotalBundlePackageRequested = model.TotalBundlePackageRequested,
+                AvailableBundlePackagePacked = model.AvailableBundlePackagePacked,
+            };
+        }
+
+        public static BundleItemsModel Map (this BundleItems entity)
+        {
+            if(entity == null)
+            {
+                return null;
+            }
+            return new BundleItemsModel
+            {
+                BundleId = entity.BundleId,
+                Id = entity.Id,
+                Name=entity.Name,
+                Unit=entity.Unit,
+                WarehouseInputInventoryId = entity.WarehouseInputInventoryId,
+            };
+        }
+
+        public static BundleItems Map(this BundleItemsModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new BundleItems
+            {
+                BundleId = model.BundleId,
+                Name = model.Name,
+                Unit = model.Unit,
+                WarehouseInputInventoryId = model.WarehouseInputInventoryId,
+            };
+        }
+        #endregion Bundle
+
+        #region warehouse
+
+        public static WarehouseUserModel Map(this WarehouseUser entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WarehouseUserModel
+            {
+                State = entity.State,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                Id = entity.Id,
+                Lga = entity.Lga,
+                Location = entity.Location,
+                Name = entity.Name,
+                PhoneNumber = entity.PhoneNumber,
+            };
+        }
+
+        public static WarehouseUser Map(this WarehouseUserModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new WarehouseUser
+            {
+                State = model.State,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                Lga = model.Lga,
+                Location = model.Location,
+                Name = model.Name,
+                PhoneNumber = model.PhoneNumber,
+            };
+        }
+        public static WarehouseInputInventoryModel Map(this WarehouseInputInventory entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WarehouseInputInventoryModel
+            {
+                IsAvailable = entity.IsAvailable,
+                Size = entity.Size,
+                InventoryStockedOn = entity.InventoryStockedOn,
+                UnitStockedUp = entity.UnitStockedUp,
+                Brand = entity.Brand,
+                Id = entity.Id,
+                InputDescription = entity.InputDescription,
+                InputName = entity.InputName,
+                ManagedByUserId = entity.ManagedByUserId,
+                ModifiedOn = entity.ModifiedOn,
+                Price = entity.Price,
+                Type = entity.Type,
+                Unit = entity.Unit,
+                UnitBalance = entity.UnitBalance,
+                UnitDepleted = entity.UnitDepleted,
+            };
+        }
+
+        public static WarehouseInputInventory Map(this WarehouseInputInventoryModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new WarehouseInputInventory
+            {
+                IsAvailable = model.IsAvailable,
+                Size = model.Size,
+                InventoryStockedOn = model.InventoryStockedOn,
+                UnitStockedUp = model.UnitStockedUp,
+                Brand = model.Brand,
+                InputDescription = model.InputDescription,
+                InputName = model.InputName,
+                ManagedByUserId = model.ManagedByUserId,
+                ModifiedOn = model.ModifiedOn,
+                Price = model.Price,
+                Type = model.Type,
+                Unit = model.Unit,
+                UnitBalance = model.UnitBalance,
+                UnitDepleted = model.UnitDepleted,
+            };
+        }
+
+        public static Warehouse Map(this WarehouseModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Warehouse
+            {
+                HasbeenAssignedManager = model.HasbeenAssignedManager,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                CreatedOn = model.CreatedOn,
+                Lga = model.Lga,
+                State = model.State,
+                Location = model.Location,
+                ManagedByUserId = model.ManagedByUserId,
+                Name = model.Name,
+            };
+        }
+
+        public static WarehouseModel Map(this Warehouse entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WarehouseModel
+            {
+                HasbeenAssignedManager = entity.HasbeenAssignedManager,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                CreatedOn = entity.CreatedOn,
+                Lga = entity.Lga,
+                State = entity.State,
+                Location = entity.Location,
+                ManagedByUserId = entity.ManagedByUserId,
+                Name = entity.Name,
+                Id = entity.Id
+            };
+        }
+        #endregion warehouse
         #region userMgt
         public static FarmerModel Map(this Farmer entities)
         {
@@ -24,14 +277,14 @@ namespace Agrovesto.Backend.Infrastructure
                 Name = entities.Name,
                 Email = entities.Email,
                 PhoneNumber = entities.PhoneNumber,
-              UserId = entities.UserId,
+                UserId = entities.UserId,
                 OnBoardedOn = entities.OnBoardedOn,
 
                 DateOfBirth = entities.DateOfBirth,
                 Gender = entities.Gender,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 State = entities.State,
-                Lga=entities.Lga,
+                Lga = entities.Lga,
                 OnboardedByUserId = entities.OnboardedByUserId,
             };
         }
@@ -45,13 +298,13 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = model.Location,
                 Name = model.Name,
                 Email = model.Email,
-              UserId = model.UserId,
+                UserId = model.UserId,
                 OnBoardedOn = model.OnBoardedOn,
-               BelongToBusinessCode=model.BelongToBusinessCode,
-               State = model.State, 
-               Lga=model.Lga,   
-               OnboardedByUserId=model.OnboardedByUserId,
-               PhoneNumber=model.PhoneNumber,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                State = model.State,
+                Lga = model.Lga,
+                OnboardedByUserId = model.OnboardedByUserId,
+                PhoneNumber = model.PhoneNumber,
                 DateOfBirth = model.DateOfBirth,
                 Gender = model.Gender
             };
@@ -83,7 +336,7 @@ namespace Agrovesto.Backend.Infrastructure
             if (model == null) { return null; }
             return new Cooperative
             {
-               // Id = model.Id,
+                // Id = model.Id,
                 Location = model.Location,
                 Name = model.Name,
                 Email = model.Email,
@@ -91,12 +344,12 @@ namespace Agrovesto.Backend.Infrastructure
                 UserId = model.UserId,
                 State = model.State,
                 Lga = model.Lga,
-                BelongToBusinessCode=model.BelongToBusinessCode
+                BelongToBusinessCode = model.BelongToBusinessCode
                 ,
                 IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
-                HasbeenAssignedAgent=model.HasbeenAssignedAgent
+                HasbeenAssignedAgent = model.HasbeenAssignedAgent
             };
         }
 
@@ -116,7 +369,7 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
-                
+
             };
         }
 
@@ -136,7 +389,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
-                
+
             };
         }
 
@@ -154,7 +407,7 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new SubAccount()
             {
-                DOB= model.DOB,
+                DOB = model.DOB,
                 Status = model.Status,
                 SubAccountName = model.SubAccountName,
                 BankAccount = model.BankAccount,
@@ -171,7 +424,7 @@ namespace Agrovesto.Backend.Infrastructure
                 FirstName = model.FirstName,
                 LastName = model.LastName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType)
-              
+
             };
         }
 
@@ -212,16 +465,16 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new SterlingBankWallet()
             {
-               WalletId = model.WalletId,
-               AccountNumber = model.AccountNumber,
-               AgrovestoUserId = model.AgrovestoUserId,
-               CreatedOn = model.CreatedOn,
-               InternalAccountId = model.InternalAccountId,
-               IsABusinessAccount = model.IsABusinessAccount,
-               LedgerAccountNumber = model.LedgerAccountNumber,
-               OrganizationId = model.OrganizationId,
-               OwnerId = model.OwnerId,
-               UserId = model.UserId,
+                WalletId = model.WalletId,
+                AccountNumber = model.AccountNumber,
+                AgrovestoUserId = model.AgrovestoUserId,
+                CreatedOn = model.CreatedOn,
+                InternalAccountId = model.InternalAccountId,
+                IsABusinessAccount = model.IsABusinessAccount,
+                LedgerAccountNumber = model.LedgerAccountNumber,
+                OrganizationId = model.OrganizationId,
+                OwnerId = model.OwnerId,
+                UserId = model.UserId,
             };
         }
 
@@ -332,9 +585,9 @@ namespace Agrovesto.Backend.Infrastructure
                 BVN = model.BVN,
                 NIN = model.NIN,
                 BusinessLogo = model.BusinessLogo,
-                KycCategory= Enum.GetName(typeof(Category), model.Category),
+                KycCategory = Enum.GetName(typeof(Category), model.Category),
                 BusinessCodeSignage = model.BusinessCodeSignage,
-                BusinessCodeSignageSalt= model.BusinessCodeSignageSalt
+                BusinessCodeSignageSalt = model.BusinessCodeSignageSalt
             };
         }
 
@@ -353,12 +606,12 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessCode = model.BusinessCode,
                 BusinessEmail = model.BusinessEmail,
                 BusinessName = model.BusinessName,
-               
-                PhoneNumber = model.PhoneNumber,               
+
+                PhoneNumber = model.PhoneNumber,
                 Website = model.Website,
-                
+
                 BusinessLogo = model.BusinessLogo,
-               
+
             };
         }
 
@@ -390,7 +643,7 @@ namespace Agrovesto.Backend.Infrastructure
                 NIN = entity.NIN,
                 UserId = entity.UserId,
                 BusinessCodeSignage = entity.BusinessCodeSignage,
-                BusinessCodeSignageSalt=entity.BusinessCodeSignageSalt
+                BusinessCodeSignageSalt = entity.BusinessCodeSignageSalt
             };
         }
         public static BusinessWorker Map(this BusinessWorkerModel model)
@@ -428,6 +681,9 @@ namespace Agrovesto.Backend.Infrastructure
 
         #endregion Business
 
+
+        #region FarmerSalesMgt
+        #endregion FarmerSalesMgt
         #region RoleMgt
         public static Role Map(this RoleModel model)
         {
@@ -452,7 +708,7 @@ namespace Agrovesto.Backend.Infrastructure
 
             return new RoleModel
             {
-                RoleId= entity.Id,
+                RoleId = entity.Id,
                 RoleDescription = entity.Descriptions,
                 RoleName = entity.Name
             };
@@ -462,7 +718,7 @@ namespace Agrovesto.Backend.Infrastructure
         #region Admin Mgt
         public static User Map(this UserModel model)
         {
-            if(model == null)
+            if (model == null)
             {
                 return null;
             }
@@ -474,16 +730,16 @@ namespace Agrovesto.Backend.Infrastructure
                 CreatedBy = model.CreatedBy,
                 CreatedOn = model.CreatedOn,
                 DateModified = model.DateModified,
-                Email= model.Email,
+                Email = model.Email,
                 LastLoginDate = model.LastLoginDate,
                 ModifiedBy = model.ModifiedBy,
-                Password= model.Password,
-                PhoneNumber= model.PhoneNumber,
-                Pin= model.Pin,
-                UserName=model.Email,
-                Name =model.Name,
+                Password = model.Password,
+                PhoneNumber = model.PhoneNumber,
+                Pin = model.Pin,
+                UserName = model.Email,
+                Name = model.Name,
                 //UserType=model.UserType.ToString()
-               UserType= Enum.GetName(typeof(UserType), model.UserType)
+                UserType = Enum.GetName(typeof(UserType), model.UserType)
             };
         }
 
@@ -507,11 +763,12 @@ namespace Agrovesto.Backend.Infrastructure
                 Password = entity.Password,
                 PhoneNumber = entity.PhoneNumber,
                 Pin = entity.Pin,
-                UserType = entity.UserType.ToEnum<UserType>(),
+                UserType = Enum.GetName(typeof(UserType), entity.UserType),//entity.UserType.ToEnum<UserType>(),
                 IsActive = entity.IsActive,
                 Id = entity.Id,
             };
         }
         #endregion Mgt
+    
     }
 }

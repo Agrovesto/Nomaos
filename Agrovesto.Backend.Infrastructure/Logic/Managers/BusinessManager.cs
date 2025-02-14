@@ -365,7 +365,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         break;
 
                     case SubAccountType.Cooperative:
+                        //create first as cooperative
                         await CreateCooperativeProfileAsync(model, business, registeredUser.Id);
+                        args.UserId = registeredUser.Id;
+                        //then create user as a farmer as well
+                        await CreateFarmerProfileAsync(model, args, business, registeredUser.Id, subaccount);
+
                         break;
 
                     case SubAccountType.Farmer:

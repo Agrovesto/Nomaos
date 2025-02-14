@@ -1,43 +1,39 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-    public class BundleSubscriptionPerFarmer
+    public class Bundle
     {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
-        public long BundlePackageId { get; set; }
-        public long FarmerId { get; set; }
-        public long RequestedQuantity { get; set; }
-        public long ReceivedQuantity { get; set; }
-        public long DisbursedQuantity { get; set; }
-
-    }
-
-    public class BundlePackage
-    {
         public string Name { get; set; }
-        public long Id { get; set; }
         public string Description { get; set; }
-        public decimal BundlePackageCost { get; set; }
+        public List<BundleItems> BundlePackage { get; set; }
+        public long TotalBundlePackagePacked { get; set; }
+        public long AvailableBundlePackagePacked { get; set; }
+        public long TotalBundlePackageRequested { get; set; } //requested bundle must not be more than available bundle quantity
+        public long TotalBundlePackageDisbursed { get; set; }
+        public decimal BundlePrice { get; set; }
     }
 
-    public class BundleInventory
+    public class BundleItems
     {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
-        public string BundleState { get; set; }
-        public string BundleLga { get; set; }
-        public string BundleLocation { get; set; }
-        public long BundlePackageId { get; set; }
-        public string BundleSentFrom { get; set; }
-        public long TotalBundlePackageForBundleIdReceived { get; set; } //total received for each package
-        public long TotalBundlePackageForBundleIdSent { get; set; } //sent from head office
-        public long TotalBundlePackageForBundleIdDelivered { get; set; } //delivered by who the company sent
-        public long TotalBundlePackageForBundleIdRequestedByFarmer { get; set; }
-        public long TotalBundlePackageForBundleIdDisbursedToFarmer { get; set; }
+        public string Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
+        public long Unit { get; set; }
+        public long WarehouseInputInventoryId { get; set; } //i. bunlde item must exist in the warehouse
+        public long BundleId { get; set; }
+        public virtual Bundle Bundle { get; set; }
     }
 
+    //when creating a bunlde, foreach unit in bundle items, remove from the warehouseinventory the 
 }
