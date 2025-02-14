@@ -80,24 +80,87 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-        public async Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId)
+        //public async Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId)
+        //{
+        //    var farmer = await _context.Farmers.Where(x=>x.OnboardedByUserId == userId).ToListAsync();
+        //    if (farmer.Count > 0)
+        //    {
+        //        return farmer.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+        //    }
+        //    return null;
+        //}
+
+        public async Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query)
         {
-            var farmer = await _context.Farmers.Where(x=>x.OnboardedByUserId == userId).ToListAsync();
-            if (farmer.Count > 0)
+
+            var farmers = await _context.Farmers
+                .AsNoTracking()
+                .Where(s
+                =>
+                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                // || s.Lga.Contains(query.Location))) &&
+                s.OnboardedByUserId == userId)
+                .OrderByDescending(s => s.OnBoardedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s.Map()).ToListAsync();
+
+
+            if (farmers.Count > 0)
             {
-                return farmer.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+                return farmers;
             }
             return null;
         }
-        public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode)
+
+
+
+        public async Task<List<FarmerModel>> GetFarmersByAgent(string userId, ListQueryParams query)
         {
-            var farmer = await _context.Farmers.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
-            if (farmer.Count > 0)
+
+            var cooperatives = await (from a in _context.Agents
+                                      join c in _context.Cooperatives
+                                      on a.Id equals c.IsAssignedToAgentId
+                                      select c).ToListAsync();
+
+            var farmers = from f in _context.Farmers
+                          join c in cooperatives
+                          on f.OnboardedByUserId equals c.UserId
+                          select f;
+
+            var res = await farmers.ToListAsync();
+            if (res.Count > 0)
             {
-                return farmer.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+                return res.Select(f => f.Map()).ToList();
+            }
+
+
+            return null;
+        }
+
+        public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
+        {
+
+            var farmers = await _context.Farmers
+                .AsNoTracking()
+                .Where(s
+                =>
+                (!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                 || s.Lga.Contains(query.Location))) &&
+                s.BelongToBusinessCode == businessCode)
+                .OrderByDescending(s => s.OnBoardedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s.Map()).ToListAsync();
+
+
+            if (farmers.Count > 0)
+            {
+                return farmers;
             }
             return null;
         }
+
     }
 }
 
