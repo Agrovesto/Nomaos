@@ -13,7 +13,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> GetFarmerById(long Id);
         Task<FarmerModel> GetFarmerByUserId(string userId);
         Task<List<FarmerModel>> GetFarmers();
-        Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode);
-        Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId);
+        Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query);
+        Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query);
     }
 }

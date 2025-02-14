@@ -74,6 +74,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 ContactPerson = entities.ContactPerson,
                 IsAssignedToAgentId = entities.IsAssignedToAgentId,
+                HasbeenAssignedAgent = entities.HasbeenAssignedAgent
             };
         }
 
@@ -95,6 +96,7 @@ namespace Agrovesto.Backend.Infrastructure
                 IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
+                HasbeenAssignedAgent=model.HasbeenAssignedAgent
             };
         }
 
