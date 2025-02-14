@@ -12,13 +12,28 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class BusinessRegistrationArgs
     {
-        public UserType UserType { get; set; }
+        public string UserType { get; set; }
         public string RoleName { get; set; }
-        public string UserId { get; set; }
-        public string DefaultPassword { get; set; }
+        public string? UserId { get; set; }
+        public string? DefaultPassword { get; set; }
+        public string businessCode { get; set; }
+        public string SubAccountType { get; set; }
+        public string Env { get; set; }
     }
+    public class BusinessLoadModel
+    {
+        public string BusinessCode { get; set; }
+        public string BusinessName { get; set; }
+        public string PhoneNumber { get; set; }
+        public string BusinessEmail { get; set; }
+        public string BusinessLogo { get; set; }
+        public string Address { get; set; }
+        public string Website { get; set; }
+    }
+
     public class BusinessModel :Model
     {
+        public string? BusinessCodeSignageSalt { get; set; }
         [Range(int.MinValue, int.MaxValue)]
         public long BusinessId { get; set; }
         [RegularExpression(ValidationRegex.BusinessCode)]
@@ -77,6 +92,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         //   public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
         //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
         public string BusinessLogo { get; set; }
+        public string? UserId { get; set; }
+        public string? BusinessCodeSignage { get; set; }
     }
     public enum BusinessStatus
     {

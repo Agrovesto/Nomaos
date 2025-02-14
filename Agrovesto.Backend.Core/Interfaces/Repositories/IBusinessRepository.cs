@@ -13,6 +13,9 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId);
         Task<BusinessWorkerModel> CreateBusinessWorker(BusinessWorkerModel bWorker);
         Task<BusinessModel> GetBusinessAsync(string businessName);
+        Task<BusinessModel> GetBusinessByCodeAsync(string businessCode);
+        Task<BusinessModel> GetBusinessByIdAsync(long businessId);
+        Task<BusinessModel> GetBusinessBySinageSaltAsync(string signagesalt);
         Task<BusinessModel> GetBusinessByUserIdAsync(string userId);
     }
 }

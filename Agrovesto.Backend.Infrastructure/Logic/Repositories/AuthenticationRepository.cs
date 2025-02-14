@@ -2,11 +2,14 @@
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
@@ -34,7 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context; _signInManager = signInManager;
             _configuration = config;
         }
-        public async Task<(bool Status, string Message)> Login(LoginModel model )
+        public async Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model )
         {
             User user = new User();
             try
@@ -46,10 +49,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (user == null)
                     {
                         await _userManager.AccessFailedAsync(user);
-                        return (false, "Invalid username or password"); }
+                        return (false, "Invalid username or password", null); }
                     var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
                     if (!checkPassword) { await _userManager.AccessFailedAsync(user); 
-                        return (false, "Invalid username or password"); }
+                        return (false, "Invalid username or password", null); }
 
                 }
                 else
@@ -57,7 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     user = await FindByPhoneNumberAsync(model.phonenumber);
                     if (string.IsNullOrEmpty(user.Salt))
                     {
-                        return (false, "Could not login user. Contact administrator");
+                        return (false, "Could not login user. Contact administrator", null);
 
                     }
                     byte[] salt = Convert.FromBase64String(user.Salt);
@@ -66,7 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!userPin)
                     {
                         await _userManager.AccessFailedAsync(user);
-                        return (false, "Invalid pin"); 
+                        return (false, "Invalid pin", null); 
                     }
                     //var result = await _signInManager.CheckPasswordSignInAsync(user, transPin, lockoutOnFailure: true);
                     //if (!result.Succeeded) { return (false, "Invalid pin"); }
@@ -92,7 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim(JwtRegisteredClaimNames.Aud, _configuration["JWT:Audience"]),
                 new Claim(JwtRegisteredClaimNames.Exp, DateTime.Now.AddDays(1).ToString()),
              //   new Claim("WalletId", userWallet.WalletId.ToString()),
-                new Claim("Role", userRole.FirstOrDefault()),
+                new Claim("Role", string.Join(',' ,userRole)),
                 new Claim("UserType", user.UserType),
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
@@ -112,12 +115,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                             signingCredentials: new SigningCredentials(signinKey, SecurityAlgorithms.HmacSha256));
                 var token = new JwtSecurityTokenHandler().WriteToken(securityToken);
-                return (true, token);
+
+
+                var response = new TokenModel
+                {
+                    ExpiresOn = DateTime.Now.AddDays(1),
+                    Roles = userRole.ToList(),
+                    Token= token,
+                    TokenType = TokenType.AccessToken,
+                };
+                return (true, "Successful", response);
             }
             catch(Exception ex)
             {
                 await _userManager.AccessFailedAsync(user);
-                return (false, ex.Message);
+                return (false, ex.Message, null);
             }
          
         
@@ -174,6 +186,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.IsActive = true;
                 if (fetchuser == null)
                 {
+                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber).FirstOrDefaultAsync();
+                    if (getuserPhone != null)
+                    {
+                        return (model, false, "A user with the same phone number exists on the system");
+                    }
                     entity.Id = Guid.NewGuid().ToString();
                     entity.UserType = Enum.GetName(typeof(UserType), model.UserType);
                     var createUser = await _userManager.CreateAsync(entity, model.Password);
@@ -205,8 +222,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
+            IdentityResult createUser = new IdentityResult();
             try
             {
+                model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
                 var fetchuser = await _userManager.FindByNameAsync(model.Email);
                 byte[] salt = EncryptionUtil.GetSalt();
                 model.Salt = Convert.ToBase64String(salt);
@@ -215,10 +234,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.IsActive = true;
                 if (fetchuser == null)
                 {
+                    var getuserPhone = await _context.Users.Where(x=>x.PhoneNumber== model.PhoneNumber).FirstOrDefaultAsync();
+                    if (getuserPhone != null)
+                    {
+                        return (model, false, "A user with the same phone number exists on the system");
+                    }
                     entity.Id = Guid.NewGuid().ToString();
                     entity.UserType = Enum.GetName(typeof(UserType), model.UserType);
-                    var createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
-                    if (!createUser.Succeeded) throw new Exception($"Could not create business for {model.Name} {entity.UserType}");
+                    
+                    if (string.IsNullOrEmpty(model.Password))
+                    {
+                        createUser = await _userManager.CreateAsync(entity);
+                    }
+                    else
+                    {
+                        createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
+                    }
+                    
+                    if (!createUser.Succeeded) throw new Exception($"Could not create account for {model.Name} {entity.UserType}");
                     entity = await _userManager.FindByNameAsync(entity.Email);
 
                     var uniqueRole = await _roleManager.FindByNameAsync(roleName);
@@ -250,5 +283,61 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if(user == null) return (null, false, "No record found");
             return (user.Map(), true, "Retrieved Successfully");
         }
+
+        public async Task<(bool Status, string Message)> ForgotPassword(string username)
+        {
+            var user = await _userManager.FindByEmailAsync(username);
+            if (user != null)
+            {
+                var generatedToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+                var tokenGeneratedByte = Encoding.UTF8.GetBytes(generatedToken);
+
+                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
+                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?email={user.Email}&token={encodedToken}";
+
+
+                var message = $"Please have your password reset by <a href='{callbackUrl}'>clicking here</a>.";
+
+                //send mail to user
+                var mailRequest = new MailBody
+                {
+                    To = user.Email,
+                    ToName = user.UserName,
+                    Subject = "Password Reset",
+                    Body = callbackUrl,
+                    Token = callbackUrl,
+                };
+
+                var mailUtil =  SendGridService.SendDynamicForgotPasswordMail(mailRequest);
+                
+                return (true, encodedToken);
+            }
+            return (false, "Invalid username");
+        }
+
+
+
+        public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
+        {
+            var userExist = await _userManager.FindByEmailAsync(model.Username);
+            if (userExist != null)
+            {
+                var decodedBytes = WebEncoders.Base64UrlDecode(model.Token);
+                model.Token = Encoding.UTF8.GetString(decodedBytes);
+                var resetPassword = await _userManager.ResetPasswordAsync(userExist, model.Token, model.Password);
+                if (resetPassword.Succeeded)
+                {
+                    return (true, resetPassword.Succeeded.ToString());
+                }
+                else
+                {
+                    return (false, resetPassword.Errors.ToString());
+                }
+
+            }
+            return (false, "Invalid username");
+        }
+
+
     }
 }
