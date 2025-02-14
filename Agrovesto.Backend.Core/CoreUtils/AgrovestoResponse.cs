@@ -21,6 +21,8 @@ namespace Agrovesto.Backend.Core.CoreUtils
         public string Message { get; set; }
         public T Data { get; set; }
         public int Count { get; set; }
+        public int PageSize { get; set; }
+        public int PageNumber { get; set; }
 
     }
     public class AgrovestoResponse<T> where T : class//: Response

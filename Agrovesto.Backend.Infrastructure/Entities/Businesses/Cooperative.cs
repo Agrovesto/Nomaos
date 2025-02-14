@@ -26,5 +26,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public long IsAssignedToAgentId { get; set; }
+        public bool HasbeenAssignedAgent { get; set; }
     }
 }

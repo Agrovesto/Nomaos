@@ -61,15 +61,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<List<AgentModel>> GetAgentsByBusinessCode(string businessCode)
+        public async Task<List<AgentModel>> GetAgentsByBusinessCode(string businessCode, ListQueryParams query)
         {
 
-            var Agent = await _context.Agents.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
-            if (Agent.Count > 0)
+            var agents = await _context.Agents
+                .AsNoTracking()
+                .Where(s
+                =>
+                 (!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                 || s.Lga.Contains(query.Location))) &&
+                s.BelongToBusinessCode == businessCode)
+                .OrderByDescending(s => s.OnBoardedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s.Map()).ToListAsync();
+
+
+            if(agents.Count > 0)
             {
-                return Agent.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+                return agents;
             }
             return null;
+
+            //var Agent = await _context.Agents.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
+            //if (agents.Count > 0)
+            //{
+            //    return Agent.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
+            //}
+            //return null;
         }
 
 
