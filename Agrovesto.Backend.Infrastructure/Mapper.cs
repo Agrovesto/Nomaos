@@ -36,7 +36,9 @@ namespace Agrovesto.Backend.Infrastructure
                 Longitude2 = entity.Longitude2,
                 Longitude3 = entity.Longitude3, 
                 Longitude4 = entity.Longitude4 ,
-
+                AreaInDegress = entity.AreaInDegress,
+                AreaInSqMetre = entity.AreaInSqMetre,
+                AreaInHectare = entity.AreaInHectare,
                 CoordinateTakenBy = entity.CoordinateTakenBy,
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
             };
@@ -63,6 +65,10 @@ namespace Agrovesto.Backend.Infrastructure
                 Longitude2 = model.Longitude2,
                 Longitude3 = model.Longitude3,
                 Longitude4 = model.Longitude4,
+
+                AreaInDegress = model.AreaInDegress,
+                AreaInSqMetre = model.AreaInSqMetre,
+                AreaInHectare = model.AreaInHectare,
                 CoordinateTakenBy = model.CoordinateTakenBy,
                 CoordinateTakenByUserId = model.CoordinateTakenByUserId,
             };

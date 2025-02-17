@@ -10,6 +10,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -89,7 +90,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     var newBusiness = await _businessRepository.CreateBusiness(business, registerBusiness.model.Id);
 
-
+                    
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
 
@@ -97,6 +98,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //send email to business about sucessful onboarding
                     //DynamicBusinessOnboarding
                     var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
+
                     var propagationUrl = AppSettingsHelper.Setting("propagation:url");
                     newBusiness.BusinessCodeSignageSalt = HttpUtility.UrlEncode(newBusiness.BusinessCodeSignageSalt);
                     var mailRequest = new WelcomeMailBody
@@ -147,6 +149,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         //UserType.Business,
                         CreatedBy = args.UserId,
                         CreatedOn = DateTimeOffset.Now,
+                        BusinessId =  business.BusinessId
 
                     };
                     var registerBusinessWorker = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from businesses*/);
@@ -177,148 +180,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-
-        /** public async Task<UserModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
-         {
-             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-
-             if (business == null) { throw new Exception($"Business does not exist"); }
-
-             using (var dbTransaction = _context.Database.BeginTransaction())
-             {
-                 try
-                 {
-                     args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : business.UserId;
-                     var registrationMode = new UserModel
-                     {
-                         Email = model.Email,
-                         Name = model.Name,
-                         Password = model.Password,
-                         PhoneNumber = model.PhoneNumber,
-                         UserType = args.UserType.ToEnum<UserType>(),//UserType.User,
-                         CreatedBy = args.UserId,
-                         CreatedOn = DateTimeOffset.Now,
-
-                     };
-                     var registerUser = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName rolename should be roles from default to user);
-                     if (!registerUser.status)
-                     {
-                         throw new Exception($"Could not register user");
-                     }
-
-                     var subaccount = new SubAccountModel
-                     {
-                         BusinessId = business.BusinessId,
-                         UserId = registerUser.model.Id,
-                         FirstName = model.Name,
-                         LastName = model.Name,
-                         SubAccountType = args.SubAccountType.ToEnum<SubAccountType>(),
-                         PhoneNumber = model.PhoneNumber,
-                         DOB = model.DateOfBirth,
-                         Bvn = model.Bvn,
-                         NIN = model.NIN,
-                         BankAccount = model.BankAccount,
-                         BankName = model.BankName,
-                         CreatedBy = args.UserId,
-                         CreatedOn = DateTimeOffset.Now,
-                         IsMainAccount = false,
-                         
-                     };
-
-                     var createSubAccount = await _walletManager.CreateSubAccount(subaccount);
-                     //create subaccount
-                     if (subaccount.SubAccountType == SubAccountType.Agent)
-                     {
-                         var agent = new AgentModel
-                         {
-                             BelongToBusinessCode = business.BusinessCode,
-                             State = model.State,
-                             Lga = model.Lga,
-                             Email = model.Email,
-                             Location = model.Location,
-                             Name = model.Name,
-                             OnBoardedOn = DateTimeOffset.Now,
-                             PhoneNumber = model.PhoneNumber,
-                             UserId = registerUser.model.Id,
-                         };
-                         //create agent profile
-                         var createAgent = await _agentRepository.CreateAgent(agent);
-                     } 
-                     else if (subaccount.SubAccountType == SubAccountType.Cooperative)
-                     {
-                         var cooperative = new CooperativeModel
-                         {
-                             BelongToBusinessCode = business.BusinessCode,
-                             State = model.State,
-                             Lga = model.Lga,
-                             ContactPerson = "",
-                             Email = model.Email,
-                             Location = model.Location,
-                             Name = model.Name,
-                             OnBoardedOn = DateTimeOffset.Now,
-                             PhoneNumber = model.PhoneNumber,
-                             UserId = registerUser.model.Id
-                         };
-                         //create cooperative profile
-                         var createCoop = await _cooperativeRepository.CreateCooperative(cooperative);
-
-                     }
-                     else if (subaccount.SubAccountType == SubAccountType.Farmer)
-                     {
-                         //get agent or cooperative user loggedin profile
-
-                         //create farmer profile user the loggedin user
-                         
-                         var farmer = new FarmerModel
-                         {
-                             OnboardedByUserId = args.UserId, //if it's null, refactor to use our userId  
-                             BelongToBusinessCode= business.BusinessCode,
-                             Email = model.Email,
-                             Gender = model.Gender,
-                             State = model.State,
-                             Lga = model.Lga,
-                             Location = model.Location,
-                             Name = model.Name,
-                             OnBoardedOn = DateTimeOffset.Now,
-                             PhoneNumber = model.PhoneNumber,
-                             UserId= registerUser.model.Id,
-                             DateOfBirth= GetYearOfBirth(int.Parse(model.DateOfBirth)),
-
-                         };
-                         //create farmer
-                         var createFarmer = await _farmerRepository.CreateFarmer(farmer);
-
-                         var createFarmerWallet = await _walletManager.UpdateUserProfile(createSubAccount, new ParameterArgs
-                         {
-                             UserId= registerUser.model.Id,
-                             Env= args.Env
-                         });
-
-                     }
-                 
-                     
-                     await _context.SaveChangesAsync();
-                     await dbTransaction.CommitAsync();
-
-
-                     //send email to user to reset their password
-                     return registerUser.model;
-                 }
-                 catch (Exception ex)
-                 {
-
-                     await dbTransaction.RollbackAsync();
-
-                     throw new Exception(ex.Message);
-                 }
-             }
-         }
-        
-        
-         **/
-        public async Task<BusinessLoadModel> GetBusinessBySinageSaltAsync(string businessCode,string signagesalt)
+        public async Task<BusinessLoadModel> GetBusinessBySinageSaltAsync(string businessCode, string signagesalt)
         {
-           
+
             var getbusiness = await _businessRepository.GetBusinessBySinageSaltAsync(signagesalt);
             byte[] salt = Convert.FromBase64String(getbusiness.BusinessCodeSignageSalt);
             string code = businessCode.HashSecret(salt);
@@ -337,7 +201,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
         }
-        public async Task<AgentModel> ViewAgentAssignedToCooperative( long cooperativeId)
+        public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             return await _cooperativeRepository.ViewAgentAssignedToCooperative(cooperativeId);
         }
@@ -351,7 +215,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
             try
             {
-              
+
                 var registeredUser = await RegisterUserAsync(model, args);
                 if (registeredUser is null)
                     throw new Exception("Could not register user");
@@ -409,7 +273,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         // Helper method to register a user
         private async Task<UserModel> RegisterUserAsync(UserModel model, BusinessRegistrationArgs args)
         {
-           
+
             var user = new UserModel
             {
                 Email = model.Email,
@@ -419,7 +283,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 UserType = Enum.GetName(typeof(UserType), args.UserType),//args.UserType.ToEnum<UserType>(),
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
-                Pin= model.Pin
+                Pin = model.Pin
             };
             //send mail
 
@@ -446,7 +310,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
                 IsMainAccount = false,
-                Status= BusinessStatus.Registered.ToString()
+                Status = BusinessStatus.Registered.ToString()
             };
 
             return await _walletManager.CreateSubAccount(subaccount);
@@ -494,8 +358,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         // Helper method to create a farmer profile and update wallet
         private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount)
         {
-            if (string.IsNullOrEmpty(model.Email)) { 
-                model.Email = GenerateEmail(model.Name, business.BusinessEmail); 
+            if (string.IsNullOrEmpty(model.Email))
+            {
+                model.Email = GenerateEmail(model.Name, business.BusinessEmail);
             }
             var farmer = new FarmerModel
             {
@@ -513,9 +378,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 DateOfBirth = model.DateOfBirth
             };
 
-            var farer =await _farmerRepository.CreateFarmer(farmer);
-           
-          
+            var farer = await _farmerRepository.CreateFarmer(farmer);
+
+
         }
         private static string GenerateEmail(string fullName, string domain)
         {

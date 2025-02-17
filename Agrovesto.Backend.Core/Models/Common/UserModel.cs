@@ -45,6 +45,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? NIN { get; set; }
         public string? BankAccount { get; set; }
         public string? BankName { get; set; }
+        public long BusinessId { get; set; }
     }
     public enum UserType
     {
