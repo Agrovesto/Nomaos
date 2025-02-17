@@ -230,6 +230,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 byte[] salt = EncryptionUtil.GetSalt();
                 model.Salt = Convert.ToBase64String(salt);
                 User entity = model.Map();
+                
                 entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
                 entity.IsActive = true;
                 if (fetchuser == null)

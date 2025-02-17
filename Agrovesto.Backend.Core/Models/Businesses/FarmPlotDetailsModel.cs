@@ -11,7 +11,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public long Id { get; set; }
         public long FarmerId { get; set; }
-        public string FarmerName { get; set; }
+        public string? FarmerName { get; set; }
         public double Latitude1 { get; set; }
         public double Longitude1 { get; set; }
         public double Latitude2 { get; set; }
@@ -24,6 +24,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string FarmState { get; set; }
         public string FarmLga { get; set; }
         public string CoordinateTakenBy {  get; set; }
-        public long CoordinateTakenByUserId { get; set; }
+        public string CoordinateTakenByUserId { get; set; }
+        public double AreaInDegress { get; set; }
+        public double AreaInSqMetre { get; set; }
+        public double AreaInHectare { get; set; }
+
+        public string? BelongToBusinessCode { get; set; }
     }
 }

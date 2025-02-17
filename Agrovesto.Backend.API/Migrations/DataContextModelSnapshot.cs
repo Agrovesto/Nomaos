@@ -311,12 +311,26 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<double>("AreaInDegress")
+                        .HasColumnType("float");
+
+                    b.Property<double>("AreaInHectare")
+                        .HasColumnType("float");
+
+                    b.Property<double>("AreaInSqMetre")
+                        .HasColumnType("float");
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("CoordinateTakenBy")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("CoordinateTakenByUserId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("CoordinateTakenByUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FarmLga")
                         .IsRequired()

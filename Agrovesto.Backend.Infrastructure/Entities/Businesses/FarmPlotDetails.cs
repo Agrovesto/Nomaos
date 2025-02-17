@@ -24,6 +24,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string FarmLga { get; set; }
 
         public string CoordinateTakenBy { get; set; }
-        public long CoordinateTakenByUserId { get; set; }
+        public string CoordinateTakenByUserId { get; set; }
+        public double AreaInDegress { get; set; }
+        public double AreaInSqMetre { get; set; }
+        public double AreaInHectare { get; set; }
+        public string BelongToBusinessCode { get; set; }
+      
     }
 }
