@@ -17,16 +17,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int PageSize { get; set; } = 10;
         public string? Location { get; set; }
         public string? UserId { get; set; }
+        public long warehouseId { get; set; }
     }
     public class BusinessRegistrationArgs
     {
-        public string UserType { get; set; }
-        public string RoleName { get; set; }
+        public string? UserType { get; set; }
+        public string? RoleName { get; set; }
         public string? UserId { get; set; }
         public string? DefaultPassword { get; set; }
-        public string businessCode { get; set; }
-        public string SubAccountType { get; set; }
-        public string Env { get; set; }
+        public string? businessCode { get; set; }
+        public string? SubAccountType { get; set; }
+        public string? Env { get; set; }
+        public long WarehouseId { get; set; }
     }
     public class BusinessLoadModel
     {

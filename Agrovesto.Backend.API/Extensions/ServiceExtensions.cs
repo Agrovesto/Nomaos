@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IAgentRepository, AgentRepository>();
             services.AddScoped<ICooperativeRepository, CooperativeRepository>();
             services.AddScoped<IFarmPlotDetailRepository, FarmPlotDetailRepository>();
+            services.AddScoped<IWarehouseManagementRepository, WarehouseManagementRepository>();
            
 
             services.AddScoped<IBusinessManager, BusinessManager>();
@@ -43,6 +44,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IWalletProviderManager, WalletProviderManager>();
             services.AddScoped<IWalletManager, WalletManager>();
             services.AddScoped<IFarmPlotDetailsManager, FarmPlotDetailsManager>();
+            services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();

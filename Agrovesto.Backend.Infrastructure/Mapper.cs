@@ -92,6 +92,10 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalBundlePackagePacked = entity.TotalBundlePackagePacked,
                 TotalBundlePackageRequested = entity.TotalBundlePackageRequested,
                 AvailableBundlePackagePacked = entity.AvailableBundlePackagePacked,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn = entity.CreatedOn,
+                BundlePackage = entity.BundlePackage.Select(x => x.Map()).ToList(),
             };
         }
 
@@ -106,7 +110,10 @@ namespace Agrovesto.Backend.Infrastructure
                 Description = model.Description,
                 TotalBundlePackageDisbursed = model.TotalBundlePackageDisbursed,
                 BundlePrice = model.BundlePrice,
-             
+             BelongToBusinessCode   = model.BelongToBusinessCode,
+             CreatedBy = model.CreatedBy,
+             CreatedOn = model.CreatedOn,
+             BundlePackage = model.BundlePackage.Select(x=>x.Map()).ToList(),
                 Name = model.Name,
                 TotalBundlePackagePacked = model.TotalBundlePackagePacked,
                 TotalBundlePackageRequested = model.TotalBundlePackageRequested,
@@ -163,6 +170,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = entity.Location,
                 Name = entity.Name,
                 PhoneNumber = entity.PhoneNumber,
+                UserId = entity.UserId,
+                WarehouseId = entity.WarehouseId
             };
         }
 
@@ -180,6 +189,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = model.Location,
                 Name = model.Name,
                 PhoneNumber = model.PhoneNumber,
+                UserId = model.UserId,
+                WarehouseId = model.WarehouseId
             };
         }
         public static WarehouseInputInventoryModel Map(this WarehouseInputInventory entity)
@@ -202,9 +213,11 @@ namespace Agrovesto.Backend.Infrastructure
                 ModifiedOn = entity.ModifiedOn,
                 Price = entity.Price,
                 Type = entity.Type,
-                Unit = entity.Unit,
+                UnitAdded = entity.UnitAdded,
                 UnitBalance = entity.UnitBalance,
                 UnitDepleted = entity.UnitDepleted,
+                BelongToBusinessCode=entity.BelongToBusinessCode,
+                WarehouseId = entity.WarehouseId
             };
         }
 
@@ -227,9 +240,11 @@ namespace Agrovesto.Backend.Infrastructure
                 ModifiedOn = model.ModifiedOn,
                 Price = model.Price,
                 Type = model.Type,
-                Unit = model.Unit,
+                UnitAdded = model.UnitAdded,
                 UnitBalance = model.UnitBalance,
                 UnitDepleted = model.UnitDepleted,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                WarehouseId = model.WarehouseId
             };
         }
 
@@ -249,6 +264,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = model.Location,
                 ManagedByUserId = model.ManagedByUserId,
                 Name = model.Name,
+                Capacity = model.Capacity,
             };
         }
 
@@ -268,7 +284,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = entity.Location,
                 ManagedByUserId = entity.ManagedByUserId,
                 Name = entity.Name,
-                Id = entity.Id
+                Id = entity.Id,
+                Capacity = entity.Capacity
             };
         }
         #endregion warehouse

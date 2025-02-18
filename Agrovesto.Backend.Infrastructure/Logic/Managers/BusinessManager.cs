@@ -270,7 +270,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Env = args.Env
             });
         }
-        // Helper method to register a user
+      
         private async Task<UserModel> RegisterUserAsync(UserModel model, BusinessRegistrationArgs args)
         {
 
@@ -291,7 +291,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return result.status ? result.model : null;
         }
 
-        // Helper method to create a subaccount
+
         private async Task<SubAccountModel> CreateSubAccountAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId)
         {
             var subaccount = new SubAccountModel
@@ -316,7 +316,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return await _walletManager.CreateSubAccount(subaccount);
         }
 
-        // Helper method to create an agent profile
+       
         private async Task CreateAgentProfileAsync(UserModel model, BusinessModel business, string userId)
         {
             var agent = new AgentModel
@@ -335,7 +335,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await _agentRepository.CreateAgent(agent);
         }
 
-        // Helper method to create a cooperative profile
         private async Task CreateCooperativeProfileAsync(UserModel model, BusinessModel business, string userId)
         {
             var cooperative = new CooperativeModel
@@ -355,7 +354,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await _cooperativeRepository.CreateCooperative(cooperative);
         }
 
-        // Helper method to create a farmer profile and update wallet
+    
         private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount)
         {
             if (string.IsNullOrEmpty(model.Email))

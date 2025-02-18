@@ -81,8 +81,19 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("AvailableBundlePackagePacked")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("BundlePrice")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -540,10 +551,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Capacity")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<bool>("HasbeenAssignedManager")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
                     b.Property<string>("Lga")
@@ -578,6 +596,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Brand")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -603,9 +625,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("ModifiedOn")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("Price")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Size")
                         .IsRequired()
@@ -615,7 +636,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("Unit")
+                    b.Property<long>("UnitAdded")
                         .HasColumnType("bigint");
 
                     b.Property<long>("UnitBalance")
@@ -625,6 +646,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<long>("UnitStockedUp")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("WarehouseId")
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
@@ -663,6 +687,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("State")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("WarehouseId")
+                        .HasColumnType("bigint");
 
                     b.HasKey("Id");
 
