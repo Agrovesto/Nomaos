@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset CreatedOn { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
+        public string Capacity { get; set; }
         public long ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
         public string BelongToBusinessCode { get; set; }
@@ -32,9 +33,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string InputDescription { get; set; }
         public string Type { get; set; }
         public string Brand { get; set; }
-        public string Price { get; set; }
+        public decimal Price { get; set; }
         public string Size { get; set; }
-        public long Unit { get; set; }
+        public long UnitAdded { get; set; }
         public long UnitStockedUp { get; set; }
         public long UnitDepleted { get; set; }
         public long UnitBalance { get; set; }
@@ -42,6 +43,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset InventoryStockedOn { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset ModifiedOn { get; set; }
         public string ManagedByUserId { get; set; }
+        public string BelongToBusinessCode { get; set; }
+        public long WarehouseId { get; set; }
     }
     public class WarehouseUserModel
     {
@@ -54,5 +57,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Lga { get; set; }
         public string PhoneNumber { get; set; }
         public string BelongToBusinessCode { get; set; }
+        public string UserId { get; set; }
+        public long WarehouseId { get; set; }
+    }
+
+    public class InputUpdateModel
+    {
+        public long InputId { get; set; }
+        public long UnitsToAdd { get; set; }
+        public long UnitsToRemove { get; set;}
     }
 }

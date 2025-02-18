@@ -21,6 +21,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long TotalBundlePackageRequested { get; set; } //requested bundle must not be more than available bundle quantity
         public long TotalBundlePackageDisbursed { get; set; }
         public decimal BundlePrice { get; set; }
+        public string CreatedBy { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+        public string BelongToBusinessCode { get; set; }
     }
 
     public class BundleItems
