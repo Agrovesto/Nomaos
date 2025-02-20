@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Capacity { get; set; }
         public long ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
-        public string BelongToBusinessCode { get; set; }
+        public string? BelongToBusinessCode { get; set; }
     }
 
     public class WarehouseInputInventoryModel
@@ -42,8 +42,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool IsAvailable { get; set; }
         public DateTimeOffset InventoryStockedOn { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset ModifiedOn { get; set; }
-        public string ManagedByUserId { get; set; }
-        public string BelongToBusinessCode { get; set; }
+        public string? ManagedByUserId { get; set; }
+        public string? BelongToBusinessCode { get; set; }
         public long WarehouseId { get; set; }
     }
     public class WarehouseUserModel
@@ -56,8 +56,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
         public string PhoneNumber { get; set; }
-        public string BelongToBusinessCode { get; set; }
-        public string UserId { get; set; }
+        public string? BelongToBusinessCode { get; set; }
+        public string? UserId { get; set; }
         public long WarehouseId { get; set; }
     }
 

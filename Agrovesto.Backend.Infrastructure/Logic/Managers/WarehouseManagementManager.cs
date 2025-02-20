@@ -45,7 +45,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 model.BelongToBusinessCode = args.businessCode;
+                model.CreatedOn = DateTimeOffset.Now;
 
+                var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
+                if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
+                
                 var createWarehouse = await _repository.CreateWarehouse(model);
 
                 await _context.SaveChangesAsync();
@@ -173,6 +177,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (warehouse == null) throw new Exception("Could not retrieve warehouse");
                 model.BelongToBusinessCode = args.businessCode;
                 model.WarehouseId = warehouse.Id;
+                model.UserId = args.UserId;
+                //model.c = DateTimeOffset.Now;
+
+
+                var manager = await _repository.GetWarehousesManagerByBusiness(model.BelongToBusinessCode);
+                if (manager.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State && x.PhoneNumber == model.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");
+
+
                 var createWarehouseManager = await _repository.CreateWarehouseManager(model);
 
                 warehouse.HasbeenAssignedManager = true;
@@ -341,8 +353,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
             try
             {
+                var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
                 model.BelongToBusinessCode = args.businessCode;
                 model.WarehouseId = args.WarehouseId;
+                model.ManagedByUserId = warehouse.UserId;
+                var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, model.WarehouseId);
+                if (input.Any(x => x.InputName == model.InputName && x.Brand == model.Brand)) throw new Exception($"The warehouse already have same stock of input");
+
 
                 var createWarehouse = await _repository.CreateAsync(model);
 
@@ -506,6 +523,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
                 model.CreatedBy = args.UserId;
                 model.BelongToBusinessCode = business.BusinessCode;
+
+                var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
+                if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
+
                 var createBundle = await _repository.CreateBundle(model);
 
                 await _context.SaveChangesAsync();
@@ -519,6 +540,82 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new Exception($"{ex.Message}", ex);
             }
         }
+
+        public async Task<PagedListResponse<List<BundleModel>>> GetBundlesByBusiness(string userId,
+     ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var business = !string.IsNullOrEmpty(query.businessCode)
+       ? await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+       : await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                
+                var bundles = await _repository.GetBundleByBusiness(business.BusinessCode);
+                if (bundles == null) return new PagedListResponse<List<BundleModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<BundleModel>>
+                {
+                    Succeeded = true,
+                    Data = bundles,
+                    Count = bundles.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        public async Task<Response<BundleModel>> GetBundle(string userId, long bundleId)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var bundle = await _repository.GetBundleByIdAsync(business.BusinessCode, bundleId);
+                if (bundle == null) return new Response<BundleModel>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<BundleModel>
+                {
+                    Succeeded = true,
+                    Data = bundle,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
         #endregion bundlemgt
 
 

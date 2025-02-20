@@ -15,6 +15,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel data);
         Task<(bool status, WarehouseUserModel data)> CreateWarehouseManager(WarehouseUserModel data);
         Task<bool> DepleteAsync(long id, long unitsToDeplete);
+        Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness);
+        Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId);
         Task<WarehouseInputInventoryModel> GetByIdAsync(string belongToBusiness, long id);
         Task<List<WarehouseInputInventoryModel>> GetInputByWarehouse(string belongToBusiness, long warehouseId);
         Task<WarehouseModel> GetWarehouseByBusiness(string belongToBusiness, long warehouseId);

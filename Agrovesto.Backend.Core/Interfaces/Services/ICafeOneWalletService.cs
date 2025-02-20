@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
         Task<CafeOneWalletProvider> GetWalletbyId(string walletId, string env);
         Task<AccountResolutionResolutionResponseData> ResolveUserAccount(string accountNumber, string bankCode, string Env);
         Task<WalletResponseData> UserWalletToAgrovestoTransfer(string reference, string ownerId, decimal amount, string fromAccount, string Env);
+        Task<CafeOnWalletResponse<WalletTransferResult>> UserWalletToBusinessWalletTransfer(WalletToWalletTransferRequest request);
         Task<CafeOneExternalTransferResponse> UserWalletToExternalBankTransfer(ExternalBankTransferModel extmodel, string Env);
 
     }
