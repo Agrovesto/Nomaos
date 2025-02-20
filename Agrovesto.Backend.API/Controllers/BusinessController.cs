@@ -215,7 +215,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetAgentsByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
                 {
@@ -254,7 +254,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
                 {
@@ -293,7 +293,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
                 {

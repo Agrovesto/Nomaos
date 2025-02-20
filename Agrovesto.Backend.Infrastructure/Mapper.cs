@@ -76,6 +76,72 @@ namespace Agrovesto.Backend.Infrastructure
         #endregion FarmMgt
 
         #region Bundle
+        public static BundleSubscriptionInterestModel Map(this BundleSubscriptionInterest entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new BundleSubscriptionInterestModel
+            {
+               OfficerInChargeUserId = entity.OfficerInChargeUserId,
+               CreatedOn = entity.CreatedOn,
+               CommissionPercentage = entity.CommissionPercentage,
+               CommissionPrice = entity.CommissionPrice,
+               EquityPlusCommission = entity.EquityPlusCommission,
+               ShouldAddCommission = entity.ShouldAddCommission,
+               PaymentStatus = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),
+              EquityPaymentBalanceDeficit=entity.EquityPaymentBalanceDeficit,
+              ExpectedEquityPricePerBundle=entity.ExpectedEquityPricePerBundle,
+              ExpectedTotalEquityPrice=entity.ExpectedTotalEquityPrice,
+              FarmerName= entity.FarmerName,
+              PaymentDate= entity.PaymentDate,
+              FarmerUserId= entity.FarmerUserId,
+              InterestedBundleId= entity.InterestedBundleId,
+              InterestedBundleName= entity.InterestedBundleName,
+              IsCommissionPaidOut= entity.IsCommissionPaidOut,
+              Id= entity.Id,
+              QuantityOfInterest= entity.QuantityOfInterest,
+              TotalEquityPaid=entity.TotalEquityPaid,
+              TotalQuantityPaidFor= entity.TotalQuantityPaidFor,
+              BelongToBusinessCode= entity.BelongToBusinessCode
+            };
+        }
+
+        public static BundleSubscriptionInterest Map(this BundleSubscriptionInterestModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new BundleSubscriptionInterest
+            {
+               PaymentStatus= Enum.GetName(typeof(EquityPaymentStatus), model.PaymentStatus),
+                OfficerInChargeUserId = model.OfficerInChargeUserId,
+                CreatedOn = model.CreatedOn,
+                CommissionPercentage = model.CommissionPercentage,
+                CommissionPrice = model.CommissionPrice,
+                EquityPlusCommission = model.EquityPlusCommission,
+                ShouldAddCommission = model.ShouldAddCommission,
+                EquityPaymentBalanceDeficit = model.EquityPaymentBalanceDeficit,
+                ExpectedEquityPricePerBundle = model.ExpectedEquityPricePerBundle,
+                ExpectedTotalEquityPrice = model.ExpectedTotalEquityPrice,
+                FarmerName = model.FarmerName,
+                PaymentDate = model.PaymentDate,
+                FarmerUserId = model.FarmerUserId,
+                InterestedBundleId = model.InterestedBundleId,
+                InterestedBundleName = model.InterestedBundleName,
+                IsCommissionPaidOut = model.IsCommissionPaidOut,
+                QuantityOfInterest = model.QuantityOfInterest,
+                TotalEquityPaid = model.TotalEquityPaid,
+                TotalQuantityPaidFor = model.TotalQuantityPaidFor,
+                BelongToBusinessCode=model.BelongToBusinessCode
+            };
+        }
+
+
+
+
         public static BundleModel Map(this Bundle entity)
         {
             if (entity == null)
@@ -96,6 +162,9 @@ namespace Agrovesto.Backend.Infrastructure
                 CreatedBy = entity.CreatedBy,
                 CreatedOn = entity.CreatedOn,
                 BundlePackage = entity.BundlePackage.Select(x => x.Map()).ToList(),
+                BundleEquityPlusCommission = entity.BundleEquityPlusCommission,
+                CommissionPrice = entity.CommissionPrice,
+                ShouldAddCommission = entity.ShouldAddCommission,
             };
         }
 
@@ -118,6 +187,9 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalBundlePackagePacked = model.TotalBundlePackagePacked,
                 TotalBundlePackageRequested = model.TotalBundlePackageRequested,
                 AvailableBundlePackagePacked = model.AvailableBundlePackagePacked,
+                BundleEquityPlusCommission = model.BundleEquityPlusCommission,
+                CommissionPrice = model.CommissionPrice,
+                ShouldAddCommission = model.ShouldAddCommission,
             };
         }
 

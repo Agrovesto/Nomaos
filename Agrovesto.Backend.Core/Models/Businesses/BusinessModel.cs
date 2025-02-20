@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Location { get; set; }
         public string? UserId { get; set; }
         public long warehouseId { get; set; }
+        public string? businessCode { get; set; }
     }
     public class BusinessRegistrationArgs
     {

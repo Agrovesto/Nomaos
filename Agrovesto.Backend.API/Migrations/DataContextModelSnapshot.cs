@@ -85,7 +85,13 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("BundleEquityPlusCommission")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("BundlePrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CommissionPrice")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("CreatedBy")
@@ -102,6 +108,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("ShouldAddCommission")
+                        .HasColumnType("bit");
 
                     b.Property<long>("TotalBundlePackageDisbursed")
                         .HasColumnType("bigint");
@@ -143,6 +152,85 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("BundleId");
 
                     b.ToTable("BundleItems");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleSubscriptionInterest", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<double>("CommissionPercentage")
+                        .HasColumnType("float");
+
+                    b.Property<decimal>("CommissionPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("EquityPaymentBalanceDeficit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("EquityPlusCommission")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExpectedEquityPricePerBundle")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExpectedTotalEquityPrice")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("FarmerName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("InterestedBundleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("InterestedBundleName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsCommissionPaidOut")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("OfficerInChargeUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("PaymentDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PaymentStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("QuantityOfInterest")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("ShouldAddCommission")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("TotalEquityPaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("TotalQuantityPaidFor")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BundleSubscriptionInterests");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", b =>

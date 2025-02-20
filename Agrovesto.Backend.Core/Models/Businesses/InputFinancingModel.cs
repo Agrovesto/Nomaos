@@ -29,9 +29,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public enum EquityPaymentStatus
     {
+        Initial,
         Pending,
         Partial_Payment,
-        Paid
+        Paid,
+        Failed
 
     }
     public enum InputFinancingStatus

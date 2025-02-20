@@ -10,8 +10,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class BundleModel
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+       
         public long Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
@@ -21,9 +20,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalBundlePackageDisbursed { get; set; }
         public decimal BundlePrice { get; set; }
         public long AvailableBundlePackagePacked { get; set; }
-        public string CreatedBy { get; set; }
+        public string? CreatedBy { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
-        public string BelongToBusinessCode { get; set; }
+        public string? BelongToBusinessCode { get; set; }
+
+        public bool ShouldAddCommission { get; set; }
+        public decimal CommissionPrice { get; set; }
+        public decimal BundleEquityPlusCommission { get; set; }
 
     }
 

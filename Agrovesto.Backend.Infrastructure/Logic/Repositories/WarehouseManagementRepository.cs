@@ -114,6 +114,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         #endregion warehousemgt
 
+        #region BundleManagement
         public async Task<BundleModel> CreateBundle(BundleModel model)
         {
             var bundle = new Bundle
@@ -142,15 +143,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return bundle.Map();
         }
 
+
+        public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
+        {
+            var bundles = await _context.Bundles.Include(b=>b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
+            ).ToListAsync();
+            if (bundles == null) { throw new Exception("No record found"); }
+
+            return bundles.Select(x => x.Map()).ToList();
+        }
+
+        public async Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId)
+        {
+            var bundle = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
+         && x.Id == bundleId).FirstOrDefaultAsync();
+            if (bundle == null) { throw new Exception("No record found"); }
+
+            return bundle.Map();
+        }
+        #endregion BundleManagement
         #region inputmgt
         public async Task<WarehouseInputInventoryModel> CreateAsync(WarehouseInputInventoryModel inventory)
         {
             var entity = inventory.Map();
+            entity.UnitBalance = inventory.UnitStockedUp;
             entity.IsAvailable = true;
             _context.Add(entity);
             await _context.SaveChangesAsync();
             return entity.Map();
         }
+
 
         //public async Task<WarehouseInputInventoryModel> UpdateAsync(WarehouseInputInventoryModel inventory)
         //{
@@ -198,7 +220,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             inventory.ModifiedOn = DateTimeOffset.Now;
 
             if (inventory.UnitBalance == 0) { inventory.IsAvailable = false; }
-            _context.Set<WarehouseInputInventory>().Update(inventory);
+         //   _context.Set<WarehouseInputInventory>().Update(inventory);
             await _context.SaveChangesAsync();
             return true;
         }
@@ -209,11 +231,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (inventory == null ||  unitstoadd == 0) return false;
 
             inventory.UnitAdded += unitstoadd;
-            inventory.UnitBalance -= unitstoadd;
+            inventory.UnitBalance += unitstoadd;
             inventory.ModifiedOn = DateTimeOffset.Now;
 
             if (inventory.UnitBalance > 0) { inventory.IsAvailable = true; }
-            _context.Set<WarehouseInputInventory>().Update(inventory);
+            //_context.Set<WarehouseInputInventory>().Update(inventory);
             await _context.SaveChangesAsync();
             return true;
         }

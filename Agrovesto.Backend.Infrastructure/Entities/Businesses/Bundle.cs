@@ -24,6 +24,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string CreatedBy { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string BelongToBusinessCode { get; set; }
+        //add bundle equity fee
+        //add optional commission fee to bundle equity fee
+        public bool ShouldAddCommission { get; set; }
+        public decimal CommissionPrice { get; set; }
+        public decimal BundleEquityPlusCommission { get; set; }
     }
 
     public class BundleItems
