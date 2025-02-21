@@ -833,8 +833,9 @@ namespace Agrovesto.Backend.Infrastructure
                 Pin = model.Pin,
                 UserName = model.Email,
                 Name = model.Name,
+                UserType= model.UserType,
                 //UserType=model.UserType.ToString()
-                UserType = Enum.GetName(typeof(UserType), model.UserType)
+               // UserType = Enum.GetName(typeof(UserType), model.UserType)
             };
         }
 
@@ -858,7 +859,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Password = entity.Password,
                 PhoneNumber = entity.PhoneNumber,
                 Pin = entity.Pin,
-                UserType = Enum.GetName(typeof(UserType), entity.UserType),//entity.UserType.ToEnum<UserType>(),
+                UserType= entity.UserType,
+                //UserType = Enum.GetName(typeof(UserType), entity.UserType),//entity.UserType.ToEnum<UserType>(),
                 IsActive = entity.IsActive,
                 Id = entity.Id,
             };

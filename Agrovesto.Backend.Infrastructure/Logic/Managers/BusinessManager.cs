@@ -280,7 +280,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Name = model.Name,
                 Password = model.Password,
                 PhoneNumber = model.PhoneNumber,
-                UserType = Enum.GetName(typeof(UserType), args.UserType),//args.UserType.ToEnum<UserType>(),
+                UserType = args.UserType,//Enum.GetName(typeof(UserType), args.UserType),//args.UserType.ToEnum<UserType>(),
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
                 Pin = model.Pin

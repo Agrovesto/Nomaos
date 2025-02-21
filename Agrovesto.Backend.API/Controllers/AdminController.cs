@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                var createUser = await _authenticationRepository.RegisterAdmin(model, "Admin");
+                var createUser = await _authenticationRepository.RegisterAdmin(model, model.UserType);
 
                 return Ok(new Response<(UserModel model, bool status, string message)>()
                 {

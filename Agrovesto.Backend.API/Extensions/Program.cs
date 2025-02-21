@@ -92,6 +92,21 @@ builder.Services.AddSwaggerGen(option =>
     });
 });
 
+var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(
+        builder =>
+        {
+            builder
+                   .WithOrigins(corsOrigins)
+                   .AllowAnyMethod()
+                   .AllowCredentials()
+                   .AllowAnyHeader()
+                   .SetIsOriginAllowedToAllowWildcardSubdomains()
+                   .Build();
+        });
+});
 
 var app = builder.Build();
 
@@ -103,7 +118,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Agrovesto Enterprise Platform ");
+    c.DocumentTitle = "Agrovesto Enterprise Platform";
+    //  c.RoutePrefix = "/docs";
 
+});
+app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
 
