@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System;
 using System.Collections.Generic;
@@ -44,4 +45,15 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
     }
+    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    //{
+    //    public DataContext CreateDbContext(string[] args)
+    //    {
+    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+    //        optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_paasdev;User Id=db_a971fc_paasdev_admin;Password=Agro144828@");
+
+    //        return new DataContext(optionsBuilder.Options);
+    //    }
+    //}
+
 }

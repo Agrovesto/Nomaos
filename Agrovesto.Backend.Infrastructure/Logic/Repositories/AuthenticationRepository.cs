@@ -192,13 +192,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         return (model, false, "A user with the same phone number exists on the system");
                     }
                     entity.Id = Guid.NewGuid().ToString();
-                    entity.UserType = Enum.GetName(typeof(UserType), model.UserType);
+                    entity.UserType = model.UserType;//Enum.GetName(typeof(UserType), model.UserType);
                     var createUser = await _userManager.CreateAsync(entity, model.Password);
                     if (!createUser.Succeeded) throw new Exception("Could not create user");
                     entity = await _userManager.FindByNameAsync(entity.Email);
 
                     var uniqueRole = await _roleManager.FindByNameAsync(roleName);
-                    createUser = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
+                    //if(uniqueRole == null)
+                    //{
+                    // var role=   await _roleManager.CreateAsync(new Role
+                    //    {
+                    //        Descriptions =null,
+                    //        BusinessId= model.BusinessId,
+                    //        Name= roleName
+                    //    });
+                    //    if (role.Succeeded)
+                    //    {
+
+                    //        await _userManager.AddToRoleAsync(entity, roleName);
+                    //    }
+                    //}
+                    //else
+                    //{
+                        createUser = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
+
+                  //  }
 
                     // var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
 
