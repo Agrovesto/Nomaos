@@ -11,7 +11,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     {
         Task<(bool Status, string Message)> ForgotPassword(string username);
         Task<(UserModel model, bool status, string message)> GetUserById(string userId);
-        Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model);
+        Task<(List<UserViewModel> model, bool status, string message)> GetUsersAsync();
+        Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model, string businessCode, string header);
         Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);

@@ -104,7 +104,10 @@ namespace Agrovesto.Backend.Infrastructure
               QuantityOfInterest= entity.QuantityOfInterest,
               TotalEquityPaid=entity.TotalEquityPaid,
               TotalQuantityPaidFor= entity.TotalQuantityPaidFor,
-              BelongToBusinessCode= entity.BelongToBusinessCode
+              BelongToBusinessCode= entity.BelongToBusinessCode,
+              Reference= entity.Reference,
+                Location= entity.Location,
+              CooperativeId= entity.CooperativeId  
             };
         }
 
@@ -135,7 +138,10 @@ namespace Agrovesto.Backend.Infrastructure
                 QuantityOfInterest = model.QuantityOfInterest,
                 TotalEquityPaid = model.TotalEquityPaid,
                 TotalQuantityPaidFor = model.TotalQuantityPaidFor,
-                BelongToBusinessCode=model.BelongToBusinessCode
+                BelongToBusinessCode=model.BelongToBusinessCode,
+                Reference= model.Reference,
+                Location = model.Location,
+                CooperativeId = model.CooperativeId,
             };
         }
 
@@ -165,6 +171,8 @@ namespace Agrovesto.Backend.Infrastructure
                 BundleEquityPlusCommission = entity.BundleEquityPlusCommission,
                 CommissionPrice = entity.CommissionPrice,
                 ShouldAddCommission = entity.ShouldAddCommission,
+                BundleEquityPrice= entity.BundleEquityPrice,
+                
             };
         }
 
@@ -190,6 +198,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
                 CommissionPrice = model.CommissionPrice,
                 ShouldAddCommission = model.ShouldAddCommission,
+                BundleEquityPrice=model.BundleEquityPrice
             };
         }
 
@@ -635,7 +644,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ParameterId = model.ParameterId,
                 WalletProviderProviderId = model.ProviderId,
                 Value = model.Value,
-                Env = model.Env.ToString()
+                Env = Enum.GetName(typeof(Env), model.Env)//model.Env.ToString()
             };
         }
         public static WalletProviderParameterModel Map(this WalletProviderParameter model)
@@ -811,6 +820,34 @@ namespace Agrovesto.Backend.Infrastructure
         #endregion RoleMgt
 
         #region Admin Mgt
+        public static UserViewModel ViewMap(this UserModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new UserViewModel
+            {
+               
+              
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,                
+                Email = model.Email,
+                LastLoginDate = model.LastLoginDate,               
+                PhoneNumber = model.PhoneNumber,
+                Name = model.Name,
+                UserType = model.UserType,
+                BusinessCode = model.BusinessCode,
+                //Gender=model.Gender,
+                //DateOfBirth=model.DateOfBirth,
+                Id=model.Id,
+                IsActive=model.IsActive,
+                //Lga=model.Lga,
+                //Location=model.Location,
+                //State=model.State
+            };
+        }
         public static User Map(this UserModel model)
         {
             if (model == null)
@@ -834,6 +871,7 @@ namespace Agrovesto.Backend.Infrastructure
                 UserName = model.Email,
                 Name = model.Name,
                 UserType= model.UserType,
+                BusinessCode    =model.BusinessCode
                 //UserType=model.UserType.ToString()
                // UserType = Enum.GetName(typeof(UserType), model.UserType)
             };
@@ -863,6 +901,8 @@ namespace Agrovesto.Backend.Infrastructure
                 //UserType = Enum.GetName(typeof(UserType), entity.UserType),//entity.UserType.ToEnum<UserType>(),
                 IsActive = entity.IsActive,
                 Id = entity.Id,
+                Name = entity.Name,
+                BusinessCode=entity.BusinessCode
             };
         }
         #endregion Mgt

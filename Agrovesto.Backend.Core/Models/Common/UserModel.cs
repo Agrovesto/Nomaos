@@ -17,6 +17,24 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Username { get; set; }
         public string Password { get; set; }
     }
+    public class UserViewModel
+    {
+        public DateTimeOffset? LastLoginDate { get; set; }
+        public string? Id { get; set; }
+        public string PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string UserType { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } 
+        public string? CreatedBy { get; set; }
+        public bool IsActive { get; set; }
+        public string? Name { get; set; }
+        //public string Location { get; set; }
+        //public string State { get; set; }
+        //public string Lga { get; set; }
+        //public string? Gender { get; set; }
+        //public string? DateOfBirth { get; set; }
+        public string BusinessCode { get; set; }
+    }
     public class UserModel
     {
         public string? Id { get; set; }
@@ -35,9 +53,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string? Name { get; set; }
-        public string Location { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
 
@@ -45,7 +63,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? NIN { get; set; }
         public string? BankAccount { get; set; }
         public string? BankName { get; set; }
-        public long BusinessId { get; set; }
+        public string? BusinessCode { get; set; }
     }
     public enum UserType
     {

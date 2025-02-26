@@ -143,7 +143,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                                                                .FirstOrDefaultAsync(y => y.ProviderId == model.ProviderId);
 
                         WalletProviderParameter[] creates = model.WalletProviderParameters
-                                                   .Where(x => (x.ParamStatus == ParameterStatus.Create) && (x.Key != null || x.Value != null || x.Description != null))
+                                                   .Where(x =>  (x.Key != null || x.Value != null || x.Description != null))
                                                    .Select(x => x.Map())
                                                    .ToArray();
 
@@ -151,14 +151,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         _context.AddRange(createList);
                         await _context.SaveChangesAsync();
 
-                        WalletProviderParameter[] removeList = model.WalletProviderParameters.Where(x => (x.ParamStatus == ParameterStatus.Remove) && (x.ParameterId != 0))
-                        .Select(x => x.Map()).ToArray();
-                        _context.RemoveRange(removeList);
-                        await _context.SaveChangesAsync();
+                        //WalletProviderParameter[] removeList = model.WalletProviderParameters.Where(x =>
+                        //(x.ParamStatus == ParameterStatus.Remove) && (x.ParameterId != 0))
+                        //.Select(x => x.Map()).ToArray();
+                        //_context.RemoveRange(removeList);
+                        //await _context.SaveChangesAsync();
 
-                        WalletProviderParameter[] updates = model.WalletProviderParameters.Where(x => x.ParamStatus == ParameterStatus.Update).Select(x => x.Map()).ToArray();
-                        _context.UpdateRange(updates);
-                        await _context.SaveChangesAsync();
+                        //WalletProviderParameter[] updates = model.WalletProviderParameters.Where(x => x.ParamStatus == ParameterStatus.Update).Select(x => x.Map()).ToArray();
+                        //_context.UpdateRange(updates);
+                        //await _context.SaveChangesAsync();
 
                         transaction.Commit();
 

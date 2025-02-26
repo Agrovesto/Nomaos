@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
@@ -26,6 +27,21 @@ namespace Agrovesto.Backend.API.Controllers
     
         public async Task<IActionResult> UpdateFarmPlotDetails([FromBody] FarmPlotDetailsModel model, [FromQuery] BusinessRegistrationArgs args)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
 
             try
             {
@@ -45,15 +61,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -87,15 +103,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>

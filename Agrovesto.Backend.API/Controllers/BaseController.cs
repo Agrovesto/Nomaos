@@ -17,7 +17,15 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _httpContextAccessor = httpContextAccessor;
         }
-
+        public string DomainHeader
+        {
+            get
+            {
+                var header = _httpContextAccessor.HttpContext?.Request.Headers["Domain"];
+                if (string.IsNullOrEmpty(header)) return string.Empty;
+                return header;
+            }
+        }
         public string Token
         {
             get

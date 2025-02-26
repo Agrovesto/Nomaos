@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -18,6 +19,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public BusinessRepository(DataContext context)
         {
             _context = context;
+        }
+        public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
+        {
+            var query = await (from b in _context.BusinessWorkers
+                               join u in _context.Users
+                               on b.UserId equals u.Id
+                               where b.BusinessId == businessId
+                               orderby  b.CreatedOn
+                               select new BusinessWorkerModel
+                               {
+                                   BusinessId = businessId,
+                                   BusinessWorkerId= b.BusinessWorkerId,
+                                   Email=u.Email,
+                                   FullName=u.Name,
+                                   PhoneNumber=u.PhoneNumber,
+                                   UserId=u.Id
+                               }).ToListAsync();           
+
+
+            if (query.Count > 0)
+            {
+                return query;
+            }
+            return null;
         }
         public async Task<int> BusinessCount()
         {
@@ -45,7 +70,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return businessWorker.Map();
         }
-
+   
+        public async Task<List<BusinessModel>> GetBusinessesAsync(ListQueryParams query)
+        {
+            var business = await _context.Set<Business>().Include(b =>b.BusinessWorkers)
+                .AsNoTracking()
+                .OrderByDescending(b=>b.CreatedOn)
+                 .Skip(query.PageNumber)
+                .Take(query.PageSize)
+              .Select(s => new BusinessModel
+              {
+                  TotalStaffCount= s.BusinessWorkers.Count,
+                  BusinessName=s.BusinessName,
+                  BusinessLogo=s.BusinessLogo,
+                  BusinessStatus= s.BusinessStatus.ToEnum<BusinessStatus>(),
+                  Address=s.Address,
+                  BusinessEmail= s.BusinessEmail,
+                  BusinessCode=s.BusinessCode,
+                  PhoneNumber=s.PhoneNumber,
+                  BusinessId=s.BusinessId,
+                  Website=s.Website,
+                  UserId=s.UserId,
+              }).ToListAsync();
+            if (business == null)
+            {
+                return null;
+            }
+            return business;
+        }
 
         public async Task<BusinessModel> GetBusinessAsync(string businessName)
         {

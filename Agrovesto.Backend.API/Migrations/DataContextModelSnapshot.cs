@@ -88,6 +88,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("BundleEquityPlusCommission")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("BundleEquityPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("BundlePrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -172,6 +175,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("CommissionPrice")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<long>("CooperativeId")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
 
@@ -205,11 +211,15 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsCommissionPaidOut")
                         .HasColumnType("bit");
 
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("OfficerInChargeUserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTimeOffset>("PaymentDate")
+                    b.Property<DateTimeOffset?>("PaymentDate")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("PaymentStatus")
@@ -218,6 +228,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<long>("QuantityOfInterest")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Reference")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("ShouldAddCommission")
                         .HasColumnType("bit");
@@ -876,6 +889,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<int>("AccessFailedCount")
                         .HasColumnType("int");
+
+                    b.Property<string>("BusinessCode")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<long?>("BusinessId")
                         .HasColumnType("bigint");
