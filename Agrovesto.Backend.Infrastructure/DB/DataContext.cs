@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 {
     public class DataContext :IdentityDbContext<User,Role, string>
     {
-        public DataContext(DbContextOptions options): base(options)
+        public DataContext(DbContextOptions<DataContext> options): base(options)
         {
             
         }

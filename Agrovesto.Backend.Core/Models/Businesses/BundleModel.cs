@@ -10,7 +10,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class BundleModel
     {
-       
+
+        public decimal BundleEquityPrice { get; set; }
         public long Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }

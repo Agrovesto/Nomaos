@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal EquityPaymentBalanceDeficit { get; set; }
         public long TotalQuantityPaidFor { get; set; }
         public string PaymentStatus { get; set; }
-        public DateTimeOffset PaymentDate { get; set; }
+        public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
         public decimal EquityPlusCommission { get; set; }
         public bool IsCommissionPaidOut { get; set; }//has Agrovesto commission been paid
@@ -32,9 +32,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool ShouldAddCommission { get; set; }
         public decimal CommissionPrice { get; set; }
         public double CommissionPercentage { get; set; }
-
+        public string? Reference { get; set; }
         public string OfficerInChargeUserId { get; set; }
         public string BelongToBusinessCode { get; set; }
+        public string Location { get; set; }
 
+        public long CooperativeId { get; set; }
     }
 }

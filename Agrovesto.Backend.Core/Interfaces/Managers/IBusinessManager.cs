@@ -17,9 +17,12 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<BusinessWorkerModel> CreateBusinessWorkerAsync(BusinessWorkerModel bWorker, BusinessRegistrationArgs args);
         Task<PagedListResponse<List<AgentModel>>> GetAgentsByBusinessCode(string userId, ListQueryParams query);
         Task<BusinessLoadModel> GetBusinessBySinageSaltAsync(string businessCode, string signagesalt);
+        Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query);
         Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByBusinessCode(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffbyBusiness(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode);
         Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
     }

@@ -26,7 +26,21 @@ namespace Agrovesto.Backend.API.Controllers
         {
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
 
             try
             {
@@ -34,7 +48,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var bundle = await _warehouseManagementManager.CreateBundleAsync(model, args);
                 return Ok(new Response<BundleModel>()
                 {
-                    Code = ( bundle != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+                    Code = (bundle != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
 
                     Succeeded = true,
@@ -44,15 +58,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -70,7 +84,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId //: CurrentUserId;
-               
+
                 var result = await _warehouseManagementManager.GetBundlesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<BundleModel>>()
                 {
@@ -150,14 +164,28 @@ namespace Agrovesto.Backend.API.Controllers
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
 
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId ??= CurrentUserId;
                 var createWarehouse = await _warehouseManagementManager.CreateWarehouse(model, args);
                 return Ok(new Response<WarehouseModel>()
                 {
-                    Code =(createWarehouse.status && createWarehouse.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+                    Code = (createWarehouse.status && createWarehouse.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
 
                     Succeeded = createWarehouse.status,
@@ -167,15 +195,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -192,7 +220,21 @@ namespace Agrovesto.Backend.API.Controllers
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
 
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId = CurrentUserId;
@@ -209,15 +251,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -275,14 +317,14 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-            
+
                 var result = await _warehouseManagementManager.GetWarehouseByBusiness(CurrentUserId, id);
                 return Ok(new Response<WarehouseModel>()
                 {
                     Data = result.Data,
                     Message = result.Message,
                     Succeeded = result.Succeeded,
-                   
+
                     Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -353,7 +395,21 @@ namespace Agrovesto.Backend.API.Controllers
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
 
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId ??= CurrentUserId;
@@ -372,15 +428,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -476,6 +532,21 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("stock-warehouse-input")]
         public async Task<IActionResult> CreateInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId ??= CurrentUserId;
@@ -516,6 +587,21 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("add-more-input")]
         public async Task<IActionResult> AddMore([FromBody] InputUpdateModel model, [FromQuery] BusinessRegistrationArgs args)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId ??= CurrentUserId;
@@ -555,6 +641,21 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("deplete-input")]
         public async Task<IActionResult> DepleteFromInput([FromBody] InputUpdateModel model, [FromQuery] BusinessRegistrationArgs args)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId ??= CurrentUserId;

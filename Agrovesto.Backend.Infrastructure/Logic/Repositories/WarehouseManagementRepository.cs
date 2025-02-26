@@ -135,7 +135,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 TotalBundlePackagePacked = 0,
                 AvailableBundlePackagePacked = 0,
                 TotalBundlePackageRequested = 0,
-                TotalBundlePackageDisbursed = 0
+                TotalBundlePackageDisbursed = 0,
+                BundleEquityPrice = model.BundleEquityPrice
             };
             _context.Set<Bundle>().Add(bundle);
             await _context.SaveChangesAsync();

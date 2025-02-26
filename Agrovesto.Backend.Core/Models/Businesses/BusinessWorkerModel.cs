@@ -10,7 +10,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class BusinessWorkerModel
     {
         public long BusinessWorkerId { get; set; }
-        public string UserId { get; set; }
+        public string? UserId { get; set; }
 
         public long BusinessId { get; set; }
         public string Email { get; set; }
