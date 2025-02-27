@@ -5,11 +5,13 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -64,40 +66,47 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             args.UserId ??= business.UserId;
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            (bool status, FarmPlotDetailsModel data) update = new(false, new FarmPlotDetailsModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
             {
-                var farmer = await _farmerRepository.GetFarmerById(model.FarmerId);
-                if(farmer == null) throw new Exception("Farmer does not exist");
-                var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
-                if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
-                var getAreaInDegrees = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2, 
-                                                         model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var farmer = await _farmerRepository.GetFarmerById(model.FarmerId);
+                    if (farmer == null) throw new Exception("Farmer does not exist");
+                    var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
+                    if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
+                    var getAreaInDegrees = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2,
+                                                             model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
 
-                var getAreaInSqMetre = ConvertDegreesToSquareMeters(getAreaInDegrees);
-                var getAreaInHectare = ConvertDegreesToSquareMeters(getAreaInSqMetre);
-                model.AreaInDegress = getAreaInDegrees;
-                model.AreaInSqMetre = getAreaInSqMetre;
-                model.AreaInHectare = getAreaInHectare;
-                model.BelongToBusinessCode = business.BusinessCode;
-                model.FarmerName = farmer.Name;
-                model.CoordinateTakenByUserId = args.UserId;
-                model.CoordinateTakenBy = getUserCred.model.Name;
+                    var getAreaInSqMetre = ConvertDegreesToSquareMeters(getAreaInDegrees);
+                    var getAreaInHectare = ConvertDegreesToSquareMeters(getAreaInSqMetre);
+                    model.AreaInDegress = getAreaInDegrees;
+                    model.AreaInSqMetre = getAreaInSqMetre;
+                    model.AreaInHectare = getAreaInHectare;
+                    model.BelongToBusinessCode = business.BusinessCode;
+                    model.FarmerName = farmer.Name;
+                    model.CoordinateTakenByUserId = args.UserId;
+                    model.CoordinateTakenBy = getUserCred.model.Name;
 
-               var update= await _farmPlotDetailRepository.UpdateFarmerFarmPlot(model);
-                
+                   update = await _farmPlotDetailRepository.UpdateFarmerFarmPlot(model);
 
 
-                  await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-              
-                       return update.data;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    return update.data;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return update.data;
         }
 
         public async Task<FarmPlotDetailsModel> GetFarmDetailByFarmer(long farmerId)

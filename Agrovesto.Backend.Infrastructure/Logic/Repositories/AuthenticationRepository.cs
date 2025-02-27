@@ -43,7 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             User user = new User();
             if (string.IsNullOrEmpty(header)) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
-          
+
             try
             {
                 IList<string> userRole = new List<string>();
@@ -52,8 +52,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (header.Contains("IsAgrovesto"))
                     {
                         user = await _userManager.FindByNameAsync(model.Username);
-                    }                   
-                    else if(header.Contains("IsBusiness"))
+                    }
+                    else if (header.Contains("IsBusiness"))
                     {
                         if (string.IsNullOrEmpty(businessCode))
                         {
@@ -65,7 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     {
                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
                     }
-                
+
                     if (user == null)
                     {
 
@@ -268,14 +268,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
-            IdentityResult createUser = new IdentityResult();
+            IdentityResult createUser = new IdentityResult(); model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
+            var fetchuser = await _userManager.FindByNameAsync(model.Email);
+            byte[] salt = EncryptionUtil.GetSalt();
+            model.Salt = Convert.ToBase64String(salt);
+            User entity = model.Map();
+
+            //var strategy = _context.Database.CreateExecutionStrategy();
+            //await strategy.ExecuteAsync(async () =>
+            //{
+
+            //    using (var dbTransaction = _context.Database.BeginTransaction()) 
+            //    {
             try
             {
-                model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
-                var fetchuser = await _userManager.FindByNameAsync(model.Email);
-                byte[] salt = EncryptionUtil.GetSalt();
-                model.Salt = Convert.ToBase64String(salt);
-                User entity = model.Map();
 
                 entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
                 entity.IsActive = true;
@@ -324,11 +330,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             catch (Exception ex)
             {
-
+                //await dbTransaction.RollbackAsync();
                 return (model, false, ex.Message);
 
             }
         }
+    
+            //});
+
+            //return (entity.Map(), true, "Success");
+        //}
 
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
         {

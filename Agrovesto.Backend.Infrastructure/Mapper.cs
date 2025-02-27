@@ -390,6 +390,7 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 OnboardedByUserId = entities.OnboardedByUserId,
+                BelongToCooperativeId = entities.BelongToCooperativeId
             };
         }
 
@@ -410,7 +411,8 @@ namespace Agrovesto.Backend.Infrastructure
                 OnboardedByUserId = model.OnboardedByUserId,
                 PhoneNumber = model.PhoneNumber,
                 DateOfBirth = model.DateOfBirth,
-                Gender = model.Gender
+                Gender = model.Gender,
+                BelongToCooperativeId= model.BelongToCooperativeId
             };
         }
 

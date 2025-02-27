@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -40,27 +41,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            (bool status, WarehouseModel data) createWarehouse = new(false, new WarehouseModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                model.BelongToBusinessCode = args.businessCode;
-                model.CreatedOn = DateTimeOffset.Now;
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    model.BelongToBusinessCode = args.businessCode;
+                    model.CreatedOn = DateTimeOffset.Now;
 
-                var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
-                if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
-                
-                var createWarehouse = await _repository.CreateWarehouse(model);
+                    var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
+                    if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouse;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                  createWarehouse = await _repository.CreateWarehouse(model);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouse;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouse;
         }
 
 
@@ -71,23 +78,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             args.UserId ??= business.UserId;
             if (model.Id == 0) throw new Exception("Warehouse to be updated needs to be selected");
+            (bool status, WarehouseModel data) createWarehouse = new(false, new WarehouseModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                model.BelongToBusinessCode = args.businessCode;
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    model.BelongToBusinessCode = args.businessCode;
 
-                var createWarehouse = await _repository.UpdateWarehouse(model);
+                    createWarehouse = await _repository.UpdateWarehouse(model);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouse;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouse;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouse;
         }
 
 
@@ -169,37 +182,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            (bool status, WarehouseUserModel data) createWarehouseManager = new(false, new WarehouseUserModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                var warehouse = await _repository.GetWarehouseByBusiness(business.BusinessCode, args.WarehouseId);
-                if (warehouse == null) throw new Exception("Could not retrieve warehouse");
-                model.BelongToBusinessCode = args.businessCode;
-                model.WarehouseId = warehouse.Id;
-                model.UserId = args.UserId;
-                //model.c = DateTimeOffset.Now;
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var warehouse = await _repository.GetWarehouseByBusiness(business.BusinessCode, args.WarehouseId);
+                    if (warehouse == null) throw new Exception("Could not retrieve warehouse");
+                    model.BelongToBusinessCode = args.businessCode;
+                    model.WarehouseId = warehouse.Id;
+                    model.UserId = args.UserId;
+                    //model.c = DateTimeOffset.Now;
 
 
-                var manager = await _repository.GetWarehousesManagerByBusiness(model.BelongToBusinessCode);
-                if (manager.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State && x.PhoneNumber == model.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");
+                    var manager = await _repository.GetWarehousesManagerByBusiness(model.BelongToBusinessCode);
+                    if (manager.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State && x.PhoneNumber == model.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");
 
 
-                var createWarehouseManager = await _repository.CreateWarehouseManager(model);
+                     createWarehouseManager = await _repository.CreateWarehouseManager(model);
 
-                warehouse.HasbeenAssignedManager = true;
-                warehouse.ManagedByUserId = createWarehouseManager.data.Id;
-                await _repository.UpdateWarehouse(warehouse);
+                    warehouse.HasbeenAssignedManager = true;
+                    warehouse.ManagedByUserId = createWarehouseManager.data.Id;
+                    await _repository.UpdateWarehouse(warehouse);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouseManager;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouseManager;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouseManager;
         }
         public async Task<(bool status, WarehouseUserModel data)> UpdateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args)
         {
@@ -208,25 +227,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             args.UserId ??= business.UserId;
             if (model.Id == 0) throw new Exception("Warehouse to be updated needs to be selected");
+            (bool status, WarehouseUserModel data) updateWarehouseManager = new(false, new WarehouseUserModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                model.BelongToBusinessCode = args.businessCode;
 
-                var updateWarehouseManager = await _repository.UpdateWarehouseManager(model);
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    model.BelongToBusinessCode = args.businessCode;
 
-                
+                    updateWarehouseManager = await _repository.UpdateWarehouseManager(model);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return updateWarehouseManager;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return updateWarehouseManager;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return updateWarehouseManager;
         }
 
 
@@ -349,29 +375,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            WarehouseInputInventoryModel createWarehouse =  new WarehouseInputInventoryModel();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
-                model.BelongToBusinessCode = args.businessCode;
-                model.WarehouseId = args.WarehouseId;
-                model.ManagedByUserId = warehouse.UserId;
-                var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, model.WarehouseId);
-                if (input.Any(x => x.InputName == model.InputName && x.Brand == model.Brand)) throw new Exception($"The warehouse already have same stock of input");
+
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
+                    model.BelongToBusinessCode = args.businessCode;
+                    model.WarehouseId = args.WarehouseId;
+                    model.ManagedByUserId = warehouse.UserId;
+                    var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, model.WarehouseId);
+                    if (input.Any(x => x.InputName == model.InputName && x.Brand == model.Brand)) throw new Exception($"The warehouse already have same stock of input");
 
 
-                var createWarehouse = await _repository.CreateAsync(model);
+                     createWarehouse = await _repository.CreateAsync(model);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouse;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouse;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouse;
         }
         public async Task<bool> AddMoreInputToStock(InputUpdateModel model, BusinessRegistrationArgs args)
         {
@@ -379,23 +412,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            var createWarehouse = false;
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
 
 
-                var createWarehouse = await _repository.AddMoreAsync(model.InputId, model.UnitsToAdd);
+                     createWarehouse = await _repository.AddMoreAsync(model.InputId, model.UnitsToAdd);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouse;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouse;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouse;
         }
 
 
@@ -405,23 +444,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            var createWarehouse = false;
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
 
 
-                var createWarehouse = await _repository.DepleteAsync(model.InputId, model.UnitsToRemove);
+                     createWarehouse = await _repository.DepleteAsync(model.InputId, model.UnitsToRemove);
 
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createWarehouse;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createWarehouse;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createWarehouse;
         }
 
 
@@ -508,37 +553,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            var createBundle = new BundleModel(); ;
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-                // Validate that each item has a valid WarehouseInputInventoryId
-                foreach (var item in model.BundlePackage)
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    if (item.WarehouseInputInventoryId <= 0)
-                        throw new ArgumentException($"Invalid inventory ID for item: {item.Name}");
-                    var getInputInventory = await _repository.GetByIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
-                    if (getInputInventory == null || getInputInventory.IsAvailable == false)
-                        throw new ArgumentException($"This item does not exist: {item.Name}");
+                    // Validate that each item has a valid WarehouseInputInventoryId
+                    foreach (var item in model.BundlePackage)
+                    {
+                        if (item.WarehouseInputInventoryId <= 0)
+                            throw new ArgumentException($"Invalid inventory ID for item: {item.Name}");
+                        var getInputInventory = await _repository.GetByIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
+                        if (getInputInventory == null || getInputInventory.IsAvailable == false)
+                            throw new ArgumentException($"This item does not exist: {item.Name}");
+                    }
+                    model.CreatedBy = args.UserId;
+                    model.BelongToBusinessCode = business.BusinessCode;
+
+                    var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
+                    if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
+
+                     createBundle = await _repository.CreateBundle(model);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return createBundle;
+
                 }
-                model.CreatedBy = args.UserId;
-                model.BelongToBusinessCode = business.BusinessCode;
-
-                var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
-                if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
-
-                var createBundle = await _repository.CreateBundle(model);
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                return createBundle;
-
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return createBundle;
         }
 
         public async Task<PagedListResponse<List<BundleModel>>> GetBundlesByBusiness(string userId,
