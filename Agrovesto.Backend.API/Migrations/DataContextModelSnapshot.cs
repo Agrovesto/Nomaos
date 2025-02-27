@@ -35,7 +35,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Lga")
@@ -374,7 +373,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("HasbeenAssignedAgent")
@@ -503,6 +501,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("BelongToBusinessCode")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("BelongToCooperativeId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("DateOfBirth")
                         .HasColumnType("nvarchar(max)");

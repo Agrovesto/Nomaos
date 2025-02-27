@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? UserId { get; set; }
         public long warehouseId { get; set; }
         public string? businessCode { get; set; }
+        public long CooperativeId { get; set; }
     }
     public class BusinessRegistrationArgs
     {

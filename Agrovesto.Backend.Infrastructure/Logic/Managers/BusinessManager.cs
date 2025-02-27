@@ -173,52 +173,60 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var business = await _businessRepository.GetBusinessByUserIdAsync(user.model.Id);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
+            BusinessWorkerModel newBusinessWorker = new BusinessWorkerModel();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            using (var dbTransaction = _context.Database.BeginTransaction())
+            await strategy.ExecuteAsync(async () =>
             {
-                try
+
+                using (var dbTransaction = _context.Database.BeginTransaction())
                 {
-
-
-                    var registrationMode = new UserModel
+                    try
                     {
-                        Email = bWorker.Email,
-                        Name = bWorker.FullName,
-                        Password = args.DefaultPassword,
-                        PhoneNumber = bWorker.PhoneNumber,
-                        UserType = Enum.GetName(typeof(UserType), UserType.Business),
-                        //UserType.Business,
-                        CreatedBy = args.UserId,
-                        CreatedOn = DateTimeOffset.Now,
-                        BusinessCode =  business.BusinessCode
 
-                    };
-                    var registerBusinessWorker = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from businesses*/);
-                    if (!registerBusinessWorker.status)
-                    {
-                        throw new Exception(registerBusinessWorker.message);
+
+                        var registrationMode = new UserModel
+                        {
+                            Email = bWorker.Email,
+                            Name = bWorker.FullName,
+                            Password = args.DefaultPassword,
+                            PhoneNumber = bWorker.PhoneNumber,
+                            UserType = Enum.GetName(typeof(UserType), UserType.Business),
+                            //UserType.Business,
+                            CreatedBy = args.UserId,
+                            CreatedOn = DateTimeOffset.Now,
+                            BusinessCode = business.BusinessCode
+
+                        };
+                        var registerBusinessWorker = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from businesses*/);
+                        if (!registerBusinessWorker.status)
+                        {
+                            throw new Exception(registerBusinessWorker.message);
+                        }
+
+                        bWorker.BusinessId = business.BusinessId;
+                        bWorker.UserId = registerBusinessWorker.model.Id;
+                         newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+
+
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+
+
+                        //send email to user to reset their password
+                        return newBusinessWorker;
                     }
+                    catch (Exception ex)
+                    {
 
-                    bWorker.BusinessId = business.BusinessId;
-                    bWorker.UserId = registerBusinessWorker.model.Id;
-                    var newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+                        await dbTransaction.RollbackAsync();
 
-
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-
-
-                    //send email to user to reset their password
-                    return newBusinessWorker;
+                        throw new Exception(ex.Message);
+                    }
                 }
-                catch (Exception ex)
-                {
-
-                    await dbTransaction.RollbackAsync();
-
-                    throw new Exception(ex.Message);
-                }
-            }
+              
+            });
+            return newBusinessWorker;
         }
 
         public async Task<BusinessLoadModel> GetBusinessBySinageSaltAsync(string businessCode, string signagesalt)
@@ -253,62 +261,74 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            SubAccountModel subaccount = new SubAccountModel();
+          
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-            try
+            await strategy.ExecuteAsync(async () =>
             {
-
-                var registeredUser = await RegisterUserAsync(model, args);
-                if (!registeredUser.status)
-                    throw new Exception($"Could not register user {registeredUser.message}");
-
-                var subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-
-                switch (subaccount.SubAccountType)
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    case SubAccountType.Agent:
-                        await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
-                        break;
 
-                    case SubAccountType.Cooperative:
-                        //create first as cooperative
-                        await CreateCooperativeProfileAsync(model, business, registeredUser.model.Id);
-                        args.UserId = registeredUser.model.Id;
-                        //then create user as a farmer as well
-                        await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount);
+                    var registeredUser = await RegisterUserAsync(model, args);
+                    if (!registeredUser.status)
+                        throw new Exception($"Could not register user {registeredUser.message}");
 
-                        break;
+                    subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
+                  
 
-                    case SubAccountType.Farmer:
-                        await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount);
-                        break;
+                    switch (subaccount.SubAccountType)
+                    {
+                        case SubAccountType.Agent:
+                            await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
+                            break;
+
+                        case SubAccountType.Cooperative:
+                            model.Id = registeredUser.model.Id;
+                                //create first as cooperative
+                            var coop=    await CreateCooperativeProfileAsync(model, business, args.UserId);
+                            args.UserId = registeredUser.model.Id;
+                            //then create user as a farmer as well
+
+                            await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
+
+                            break;
+
+                        case SubAccountType.Farmer:
+                            model.Id = registeredUser.model.Id;
+                            await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
+                            break;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    //using(var newTransaction = await _context.Database.BeginTransactionAsync())
+                    //{
+                    //    await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
+                    //    {
+                    //        UserId = registeredUser.Id,
+                    //        Env = args.Env
+                    //    });
+                    //    await newTransaction.CommitAsync();
+                    //}
+                    subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
+                   subaccount.UserId = registeredUser.model.Id;
+                    return subaccount;
                 }
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                //using(var newTransaction = await _context.Database.BeginTransactionAsync())
-                //{
-                //    await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
-                //    {
-                //        UserId = registeredUser.Id,
-                //        Env = args.Env
-                //    });
-                //    await newTransaction.CommitAsync();
-                //}
-                subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
-                return subaccount;
-            }
-            catch (Exception ex)
-            {
-                await dbTransaction.RollbackAsync();
-                throw new Exception($"{ex.Message}", ex);
-            }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return subaccount;
         }
         public async Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
         {
             await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
             {
-                UserId = userId,
+                UserId = subaccount.UserId,
                 Env = args.Env
             });
         }
@@ -379,27 +399,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await _agentRepository.CreateAgent(agent);
         }
 
-        private async Task CreateCooperativeProfileAsync(UserModel model, BusinessModel business, string userId)
+        private async Task<(bool status, CooperativeModel model)> CreateCooperativeProfileAsync(UserModel model, BusinessModel business, string userId)
         {
+            var getUserType = await _authenticationRepository.GetUserById(userId);
+            var isAssignedagent = false;
+            var agent = new AgentModel();
+            if (getUserType.model.UserType == Enum.GetName(typeof(UserType), UserType.Agent))
+            {
+                isAssignedagent = true;
+                agent = await _agentRepository.GetAgentDetailByUserId(userId);
+             
+            }
             var cooperative = new CooperativeModel
             {
                 BelongToBusinessCode = business.BusinessCode,
                 State = model.State,
                 Lga = model.Lga,
-                ContactPerson = string.Empty,
+                ContactPerson = model.Name,//string.Empty,
                 Email = model.Email,
                 Location = model.Location,
                 Name = model.Name,
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
-                UserId = userId
+                UserId = model.Id,
+                IsAssignedToAgentId= agent.Id,
+                HasbeenAssignedAgent=isAssignedagent
             };
 
-            await _cooperativeRepository.CreateCooperative(cooperative);
+         return  await _cooperativeRepository.CreateCooperative(cooperative);
         }
 
     
-        private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount)
+        private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount,
+            long cooperativeId)
         {
             if (string.IsNullOrEmpty(model.Email))
             {
@@ -417,8 +449,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Name = model.Name,
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
-                UserId = userId,
-                DateOfBirth = model.DateOfBirth
+                UserId = model.Id,
+                DateOfBirth = model.DateOfBirth,
+                BelongToCooperativeId= cooperativeId
             };
 
             var farer = await _farmerRepository.CreateFarmer(farmer);
@@ -540,6 +573,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
+
         public async Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByBusinessCode(string userId,
           ListQueryParams query)
         {
@@ -692,7 +726,81 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
+        public async Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId,
+       ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
 
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var cooperative = await _cooperativeRepository.GetCooperativeByAgent(agent.Id, query);
+                if (cooperative == null) return new PagedListResponse<List<CooperativeModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<CooperativeModel>>
+                {
+                    Succeeded = true,
+                    Data = cooperative,
+                    Count = cooperative.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+    //    public async Task<PagedListResponse<List<CooperativeModel>>> GetFarmersByCooperative(string userId,
+
+    //  ListQueryParams query)
+    //    {
+    //        try
+    //        {
+    //            query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+    //            var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+
+    //            if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+    //            var cooperative = await _cooperativeRepository.GetCooperativeByAgent(agent.Id, query);
+    //            if (cooperative == null) return new PagedListResponse<List<CooperativeModel>>
+    //            {
+    //                Succeeded = true,
+    //                Data = null,
+    //                Count = 0,
+    //                Message = "No Record Found"
+    //            };
+    //            return new PagedListResponse<List<CooperativeModel>>
+    //            {
+    //                Succeeded = true,
+    //                Data = cooperative,
+    //                Count = cooperative.Count,
+    //                Message = "Retrieved Successfulluy"
+    //            };
+    //        }
+    //        catch (BaseException ex)
+    //        {
+    //            _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+    //            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+    //        }
+    //        catch (Exception ex)
+    //        {
+    //            throw new NotFoundException($"No Record Found");
+    //        }
+    //    }
 
     }
 }

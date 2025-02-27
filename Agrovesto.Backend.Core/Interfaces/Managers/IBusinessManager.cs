@@ -11,6 +11,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
 {
     public interface IBusinessManager
     {
+        Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId,
+       ListQueryParams query);
         Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId);
         Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args);
         Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args);
