@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
         {
             var query = await (from b in _context.BusinessWorkers

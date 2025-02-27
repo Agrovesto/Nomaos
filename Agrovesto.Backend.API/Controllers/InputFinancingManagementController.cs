@@ -141,7 +141,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateInterest([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -198,7 +198,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> ConfirmPayment([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
 

@@ -17,6 +17,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode)
+        {
+            var metrics = new BusinessEntitiesMetrics
+            {
+                TotalAgents = await _context.Agents.CountAsync(a => a.BelongToBusinessCode == businessCode),
+                TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == businessCode),
+                TotalFarmer = await _context.Farmers.CountAsync(f => f.BelongToBusinessCode == businessCode),
+                TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode)
+            };
+
+            return metrics;
+        }
 
         public string GetYearOfBirth(int age)
         {
@@ -132,6 +144,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (res.Count > 0)
             {
                 return res.Select(f => f.Map()).ToList();
+            }
+
+
+            return null;
+        }
+
+
+        public async Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query)
+        {
+
+            var farmers = await (from a in _context.Farmers
+                                      join c in _context.Cooperatives
+                                      on a.BelongToCooperativeId equals c.Id
+                                      where a.BelongToCooperativeId == Id
+                                      select a).ToListAsync();
+
+           
+
+            if (farmers.Count > 0)
+            {
+                return farmers.Select(f => f.Map()).ToList();
             }
 
 

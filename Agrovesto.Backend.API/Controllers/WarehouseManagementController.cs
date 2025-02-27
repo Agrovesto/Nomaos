@@ -25,7 +25,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -162,7 +162,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateWarehouse([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
             {
@@ -218,7 +218,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> UpdateWarehouseInformation([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
             {
@@ -393,7 +393,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> UpdateWarehouseManager([FromBody] WarehouseUserModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
             {

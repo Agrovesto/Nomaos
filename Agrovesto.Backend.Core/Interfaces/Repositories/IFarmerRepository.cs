@@ -10,10 +10,13 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     public interface IFarmerRepository
     {
         Task<(bool status, FarmerModel data)> CreateFarmer(FarmerModel data);
+        Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode);
         Task<FarmerModel> GetFarmerById(long Id);
         Task<FarmerModel> GetFarmerByUserId(string userId);
         Task<List<FarmerModel>> GetFarmers();
+        Task<List<FarmerModel>> GetFarmersByAgent(string userId, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query);
+        Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query);
     }
 }

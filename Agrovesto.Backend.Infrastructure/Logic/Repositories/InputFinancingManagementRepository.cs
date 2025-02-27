@@ -20,8 +20,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
-        //indicate interest
-
+        public async Task<SubscriptionMetrics> FarmerBundleSubscriptions(string businessCode)
+        {
+            var query = await _context.BundleSubscriptionInterests
+                .Where(w => w.BelongToBusinessCode == businessCode)
+        .GroupBy(b => 1) // Group everything together to get overall counts
+        .Select(g => new SubscriptionMetrics
+        {
+            TotalActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
+            PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) || 
+            b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
+            PartialPaymentSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
+        })
+        .FirstOrDefaultAsync(); // We expect a single object as output
+            if(query == null) { return null; }
+            return query;
+        }
+        public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode)
+        {
+            var query = await _context.BundleSubscriptionInterests
+                .Where(w=>w.BelongToBusinessCode == businessCode)
+                .GroupBy(b => b.InterestedBundleName) // Assuming BundleName represents the bundle type
+                .Select(g => new BundleSubscriptionSummary
+                {
+                    BundleName = g.Key,
+                    TotalSubscribers = g.Count() // Count number of farmers subscribed to each bundle
+                })
+                .ToListAsync();
+            if (query.Count == 0) { return null; }
+            return query;
+        }
         public async Task<(bool status, BundleSubscriptionInterestModel data)> CreateInputFinancingInterestThroughBundle(BundleSubscriptionInterestModel data)
         {
             var entity = data.Map();
@@ -35,7 +63,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId && x.PaymentStatus != EquityPaymentStatus.Paid.ToString()).ToListAsync();
 
-            if(!interest.Any()) { return null; }
+            if (!interest.Any()) { return null; }
 
             return interest.Select(x => x.Map()).ToList();
         }
@@ -69,15 +97,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
 
-            if(interest != null)
+            if (interest != null)
             {
                 interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.PaymentStatus);
                 interest.PaymentDate = model.PaymentDate;
-                interest.IsCommissionPaidOut= model.IsCommissionPaidOut;
+                interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
                 interest.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
                 interest.TotalEquityPaid = model.TotalEquityPaid;
                 interest.Reference = model.Reference;
-                
+
 
                 await _context.SaveChangesAsync();
             }

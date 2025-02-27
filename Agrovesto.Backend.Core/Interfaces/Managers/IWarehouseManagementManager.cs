@@ -24,6 +24,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
            Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagerByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagersByBusiness(string userId, long warehouseId, ListQueryParams query);
+        Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId);
         Task<WarehouseInputInventoryModel> StockUpInput(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseModel data)> UpdateWarehouse(WarehouseModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseUserModel data)> UpdateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args);

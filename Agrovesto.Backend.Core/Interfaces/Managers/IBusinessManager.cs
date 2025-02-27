@@ -27,5 +27,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode);
         Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
+        Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(string userId, ListQueryParams query);
+        Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsync(ListQueryParams query);
     }
 }
