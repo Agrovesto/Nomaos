@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -35,6 +36,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
         #region warehousemgt
+        public async Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(userId) ;
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var warehouse = await _repository.GetWarehouseSummaryByBusiness(business.BusinessCode);
+                if (warehouse == null) return new Response<List<WarehouseSummaryMetrics>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<List<WarehouseSummaryMetrics>>
+                {
+                    Succeeded = true,
+                    Data = warehouse,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
         public async Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel model, BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)

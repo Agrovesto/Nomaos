@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
@@ -45,6 +46,74 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _cafeOneWalletService = cafeOneWalletService;
             _configuration = config;
             _walletRepository = walletRepository;
+        }
+        //FarmerBundleSubscriptionInterests
+        public async Task<Response<SubscriptionMetrics>> FarmerBundleSubscriptions(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var subscription = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
+                if (subscription == null) return new Response<SubscriptionMetrics>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<SubscriptionMetrics>
+                {
+                    Succeeded = true,
+                    Data = subscription,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<Response<List<BundleSubscriptionSummary>>> GetBundleSubscriptionAnalysisByBusiness(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var subscription = await _repository.FarmerBundleSubscriptionInterests(business.BusinessCode);
+                if (subscription == null) return new Response<List<BundleSubscriptionSummary>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<List<BundleSubscriptionSummary>>
+                {
+                    Succeeded = true,
+                    Data = subscription,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
         }
 
         public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByBusiness(BusinessRegistrationArgs args)

@@ -20,6 +20,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
@@ -763,44 +764,112 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
-    //    public async Task<PagedListResponse<List<CooperativeModel>>> GetFarmersByCooperative(string userId,
+        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId,
 
-    //  ListQueryParams query)
-    //    {
-    //        try
-    //        {
-    //            query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-    //            var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+      ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
 
-    //            if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-    //            var cooperative = await _cooperativeRepository.GetCooperativeByAgent(agent.Id, query);
-    //            if (cooperative == null) return new PagedListResponse<List<CooperativeModel>>
-    //            {
-    //                Succeeded = true,
-    //                Data = null,
-    //                Count = 0,
-    //                Message = "No Record Found"
-    //            };
-    //            return new PagedListResponse<List<CooperativeModel>>
-    //            {
-    //                Succeeded = true,
-    //                Data = cooperative,
-    //                Count = cooperative.Count,
-    //                Message = "Retrieved Successfulluy"
-    //            };
-    //        }
-    //        catch (BaseException ex)
-    //        {
-    //            _log.LogError($"Error retrieving Agents: {ex.Message}");
+                var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
+                if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = farmers,
+                    Count = farmers.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
 
-    //            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-    //        }
-    //        catch (Exception ex)
-    //        {
-    //            throw new NotFoundException($"No Record Found");
-    //        }
-    //    }
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(string userId,
 
+      ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+               
+                var farmers = await _farmerRepository.GetFarmersByCooperativeId(query.CooperativeId, query);
+                if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = farmers,
+                    Count = farmers.Count,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsync(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsync(business.BusinessCode);
+                if (bizEntities == null) return new Response<BusinessEntitiesMetrics>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<BusinessEntitiesMetrics>
+                {
+                    Succeeded = true,
+                    Data = bizEntities,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
     }
 }

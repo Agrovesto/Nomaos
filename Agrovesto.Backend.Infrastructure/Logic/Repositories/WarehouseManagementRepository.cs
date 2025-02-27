@@ -34,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<(bool status, WarehouseModel data)> UpdateWarehouse(WarehouseModel data)
         {
             var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == data.BelongToBusinessCode && x.Id == data.Id).FirstOrDefaultAsync();
-           if (warehouse == null) { throw new Exception("No record found"); }
+            if (warehouse == null) { throw new Exception("No record found"); }
             warehouse.ManagedByUserId = data.ManagedByUserId;
             warehouse.HasbeenAssignedManager = data.HasbeenAssignedManager;
             warehouse.Capacity = data.Capacity;
@@ -45,10 +45,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness)
         {
-            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness ).ToListAsync();
+            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness).ToListAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
 
-            return warehouse.Select(x=>x.Map()).ToList();
+            return warehouse.Select(x => x.Map()).ToList();
         }
 
         public async Task<WarehouseModel> GetWarehouseByBusiness(string belongToBusiness, long warehouseId)
@@ -115,6 +115,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         #endregion warehousemgt
 
         #region BundleManagement
+
+        public async Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode)
+        {
+            var query = await _context.Warehouses
+     .Where(w => w.BelongToBusinessCode == businessCode)
+     .Select(w => new WarehouseSummaryMetrics
+     {
+          WarehouseName= w.Name,
+         Location = w.Location,
+         StockSummary = _context.WarehouseInputInventories
+             .Where(wi => wi.WarehouseId == w.Id)
+             .GroupBy(wi => wi.InputName) 
+             .Select(g => new WarehouseSummary
+             {
+                 InputName = g.Key,
+                 Stocklevel = g.Sum(wi => wi.UnitBalance),
+                 InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
+             })
+             .ToList()
+     })
+     .ToListAsync();
+            if(query.Count == 0) { return null; }
+            return query;
+        }
         public async Task<BundleModel> CreateBundle(BundleModel model)
         {
             var bundle = new Bundle
@@ -127,11 +151,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Name = i.Name,
                     Unit = i.Unit,
                     WarehouseInputInventoryId = i.WarehouseInputInventoryId,
-                    
+
                 }).ToList(),
-                BelongToBusinessCode=model.BelongToBusinessCode,
-                CreatedBy=model.CreatedBy,
-                CreatedOn= DateTimeOffset.Now,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = DateTimeOffset.Now,
                 TotalBundlePackagePacked = 0,
                 AvailableBundlePackagePacked = 0,
                 TotalBundlePackageRequested = 0,
@@ -147,7 +171,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
         {
-            var bundles = await _context.Bundles.Include(b=>b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
+            var bundles = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
             ).ToListAsync();
             if (bundles == null) { throw new Exception("No record found"); }
 
@@ -191,11 +215,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<WarehouseInputInventoryModel>> GetInputByWarehouse(string belongToBusiness, long warehouseId)
         {
-            var input = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness 
+            var input = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness
             && x.WarehouseId == warehouseId).ToListAsync();
             if (input == null) { throw new Exception("No record found"); }
 
-            return input.Select(x=>x.Map()).ToList();
+            return input.Select(x => x.Map()).ToList();
         }
 
         public async Task<WarehouseInputInventoryModel> GetByIdAsync(string belongToBusiness, long id)
@@ -221,7 +245,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             inventory.ModifiedOn = DateTimeOffset.Now;
 
             if (inventory.UnitBalance == 0) { inventory.IsAvailable = false; }
-         //   _context.Set<WarehouseInputInventory>().Update(inventory);
+            //   _context.Set<WarehouseInputInventory>().Update(inventory);
             await _context.SaveChangesAsync();
             return true;
         }
@@ -229,7 +253,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<bool> AddMoreAsync(long id, long unitstoadd)
         {
             var inventory = await _context.Set<WarehouseInputInventory>().FindAsync(id);
-            if (inventory == null ||  unitstoadd == 0) return false;
+            if (inventory == null || unitstoadd == 0) return false;
 
             inventory.UnitAdded += unitstoadd;
             inventory.UnitBalance += unitstoadd;
