@@ -18,25 +18,231 @@ namespace Agrovesto.Backend.API.Controllers
 
         private readonly IRoleManager _roleManager;
         private readonly IWalletManager _walletManager;
-        public BusinessController(IHttpContextAccessor httpContextAccessor,IBusinessManager businessManager, 
-            IRoleManager roleManager, IWalletManager walletManager) : base (httpContextAccessor)
+        private readonly IWarehouseManagementManager _warehouseManagementManager;
+        private readonly IInputFinancingManagement _inputFinancingManagement;
+        public BusinessController(IHttpContextAccessor httpContextAccessor, IBusinessManager businessManager,
+            IWarehouseManagementManager warehouseManagementManager, IInputFinancingManagement inputFinancingManagement,
+            IRoleManager roleManager, IWalletManager walletManager) : base(httpContextAccessor)
         {
             _businessManager = businessManager;
             _roleManager = roleManager;
             _walletManager = walletManager;
+            _inputFinancingManagement = inputFinancingManagement;
+            _warehouseManagementManager = warehouseManagementManager;
         }
+
+        #region dashboard
+        //
+        [HttpGet("warehouse/input-disbursement/summary")]
+        public async Task<IActionResult> GetWarehouseInputTransit([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId);
+                return Ok(new Response<List<WarehouseInputTransitModel>> ()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        //user summary metrics
+        [HttpGet("users/summary")]
+        public async Task<IActionResult> GetBusinessEntitiesMetricsAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessEntitiesMetricsAsync(query);
+                return Ok(new Response<BusinessEntitiesMetrics>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        //bundle subscription summary metrics
+        [HttpGet("bundle-subscription/summary")]
+        public async Task<IActionResult> FarmerBundleSubscriptions([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _inputFinancingManagement.FarmerBundleSubscriptions(query);
+                return Ok(new Response<SubscriptionMetrics>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("bundle-subscription-interest/analysis")]
+        public async Task<IActionResult> GetBundleSubscriptionAnalysisByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _inputFinancingManagement.GetBundleSubscriptionAnalysisByBusiness(query);
+                return Ok(new Response<List<BundleSubscriptionSummary>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("warehouse/stocks/summary")]
+        public async Task<IActionResult> GetWarehouseSummaryByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId);
+                return Ok(new Response<List<WarehouseSummaryMetrics>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,                    
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        #endregion dashboard
+
         [HttpPost("register")]
         [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] UserModel model, [FromQuery] BusinessRegistrationArgs args)
         {
 
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
                 if (registerUser != null)
                 {
-                    await _businessManager.UpdateUserAccountProfile(registerUser, args, registerUser.UserId);
+                    await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
 
                 return Ok(new Response<SubAccountModel>()
@@ -49,18 +255,18 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
@@ -70,52 +276,120 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("onboard-business")]
-        public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery]BusinessRegistrationArgs args)
+        public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-          //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+            //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId = CurrentUserId;
                 var createMerchant = await _businessManager.CreateBusiness(model, args);
 
-                return Ok(new Response<BusinessModel>()
+                return Ok(new Response<string>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = "Successful",
-                    Data = createMerchant
+                    Data = $"{createMerchant.BusinessName} Successfully Onboarded"
                 });
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
                 });
             }
         }
-        [HttpPost("create-worker")]
+        [HttpGet("staffs")] //accessed by agrovesto
+        public async Task<IActionResult> GetWorkersByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetStaffByBusinessCode(query.businessCode);
+                return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpPost("create-staff")]
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || ( !isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
 
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 args.UserId = CurrentUserId;
@@ -131,15 +405,15 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
@@ -153,37 +427,107 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
-            var data = await _roleManager.BusinesCreateRoleAsync(CurrentUserId, roleModel);
-            return Ok(new AgrovestoResponse<RoleModel>()
+            if (!ModelState.IsValid)
             {
-                Message = "",
-                Result = data.Result,
 
-            });
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var data = await _roleManager.BusinesCreateRoleAsync(CurrentUserId, roleModel);
+                return Ok(new AgrovestoResponse<RoleModel>()
+                {
+                    Message = "",
+                    Result = data.Result,
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
         [HttpPost("update-profile")]
-        public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery]ParameterArgs args)
+        public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery] ParameterArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) throw new Exception("Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             args.UserId = CurrentUserId;
-
-            var data = await _walletManager.UpdateBusinessProfile(model, args);
-            return Ok(new AgrovestoResponse<SubAccountModel>()
+            if (!ModelState.IsValid)
             {
-                Message = "",
-                Result = data,
 
-            });
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                
+                var data = await _walletManager.UpdateBusinessProfile(model, args);
+                return Ok(new AgrovestoResponse<SubAccountModel>()
+                {
+                    Message = "",
+                    Result = data,
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
         [HttpGet("roles")]
         public async Task<IActionResult> GetRoles()
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("MerchantAdmin"))) return StatusCode(403, new Response<string>
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) return StatusCode(403, new Response<string>
             {
                 Message = "Forbidden",//"An unexpected error occurred. Please contact your administrator.",
                 Succeeded = false,
@@ -208,15 +552,90 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+        [HttpGet("business-staff")] //acessed by business
+        public async Task<IActionResult> GetStaffsByBusinessCode([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetStaffbyBusiness(query.UserId, query);
+                return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
         [HttpGet("agents")]
         public async Task<IActionResult> GetAgentsByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetAgentsByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("businesses")]
+        public async Task<IActionResult> GetBusinessesAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessesAsync(query);
+                return Ok(new PagedListResponse<List<BusinessModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -253,7 +672,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
                 {
@@ -285,14 +704,54 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
 
-        } 
+        }
+         [HttpGet("cooperatives-byagent")]
+        public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetCooperativesByAgent(query.UserId, query);
+                return Ok(new PagedListResponse<List<CooperativeModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        
+        
         [HttpGet("farmers")]
-      
+
         public async Task<IActionResult> GetFarmersByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
             {
-                query.UserId = string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
                 {
@@ -337,8 +796,8 @@ namespace Agrovesto.Backend.API.Controllers
                     Data = result,
                     Message = "Retrieved",
                     Succeeded = true,
-                   
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success 
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
             }
             catch (BaseException ex)
@@ -363,8 +822,23 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("assign-agent")]
-        public async Task<IActionResult> AssignAgentToCooperative([FromQuery]long agentId, [FromQuery] long cooperativeId)
+        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] long agentId, [FromQuery] long cooperativeId)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             try
             {
                 var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
@@ -397,6 +871,82 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        [HttpGet("farmers-byagent")]
+        public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
+                return Ok(new PagedListResponse<List<FarmerModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("farmers-bycooperative")]
+        public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmersByCooperativeId(query.UserId, query);
+                return Ok(new PagedListResponse<List<FarmerModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
     }
 }

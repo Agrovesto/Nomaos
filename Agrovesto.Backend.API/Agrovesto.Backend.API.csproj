@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>596e2db0-2117-4cf4-be03-a1339cde8bad</UserSecretsId>
     <DockerDefaultTargetOS>Windows</DockerDefaultTargetOS>
+
+	  <AspNetCoreHostingModel>OutOfProcess</AspNetCoreHostingModel>
   </PropertyGroup>
 
   <ItemGroup>

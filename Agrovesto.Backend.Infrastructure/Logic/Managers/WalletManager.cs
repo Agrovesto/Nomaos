@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Individuals;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -38,74 +39,78 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var business = await _businessRepository.GetBusinessByUserIdAsync(args.UserId);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            using (var dbTransaction = _context.Database.BeginTransaction())
+            await strategy.ExecuteAsync(async () =>
             {
-                try
+                using (var dbTransaction = _context.Database.BeginTransaction())
                 {
-                    var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
+                    try
                     {
-                        phoneNumber = model.PhoneNumber,
-                        firstName = model.FirstName,
-                        lastName = model.LastName,
-                        dob = model.DOB,
-                        bvnNumber = model.Bvn,
-                        email = business.BusinessEmail,
-                        nin = model.NIN
-                    }, args.Env);
-
-                    //if successful, create subaccount
-                    if (createCustomer != null)
-                    {
-                        var createCustomerWallet = await _cafeOneWalletService.CreateWallet(
-                            business.BusinessName, args.Env);
-
-                        if (createCustomerWallet != null)
+                        var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
                         {
-                            var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                            phoneNumber = model.PhoneNumber,
+                            firstName = model.FirstName,
+                            lastName = model.LastName,
+                            dob = model.DOB,
+                            bvnNumber = model.Bvn,
+                            email = business.BusinessEmail,
+                            nin = model.NIN
+                        }, args.Env);
+
+                        //if successful, create subaccount
+                        if (createCustomer != null)
+                        {
+                            var createCustomerWallet = await _cafeOneWalletService.CreateWallet(
+                                business.BusinessName, args.Env);
+
+                            if (createCustomerWallet != null)
                             {
-                                AccountNumber= createCustomerWallet.AccountNumber,
-                                AgrovestoUserId =args.UserId,
-                                CreatedOn = DateTime.UtcNow,
-                                InternalAccountId = createCustomerWallet.InternalAccountId,
-                                IsABusinessAccount = true,
-                                LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
-                                OrganizationId = createCustomer.OrganizationId,
-                                OwnerId= createCustomer.UserId,
-                                UserId = createCustomer.UserId,
-                                WalletId= createCustomerWallet.WalletId,
-                            });
+                                var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                                {
+                                    AccountNumber = createCustomerWallet.AccountNumber,
+                                    AgrovestoUserId = args.UserId,
+                                    CreatedOn = DateTime.UtcNow,
+                                    InternalAccountId = createCustomerWallet.InternalAccountId,
+                                    IsABusinessAccount = true,
+                                    LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
+                                    OrganizationId = createCustomer.OrganizationId,
+                                    OwnerId = createCustomer.UserId,
+                                    UserId = createCustomer.UserId,
+                                    WalletId = createCustomerWallet.WalletId,
+                                });
 
-                            model.WalletCode = createCustomerWallet.WalletId;
-                            model.SubAccountName = $"{model.FirstName} {model.LastName}";
-                            model.UserId = args.UserId;
-                            model.IsMainAccount = true;
-                            model.CreatedBy = business.BusinessName;
-                            model.CreatedOn = DateTimeOffset.Now;
-                            model.BusinessId = business.BusinessId;
+                                model.WalletCode = createCustomerWallet.WalletId;
+                                model.SubAccountName = $"{model.FirstName} {model.LastName}";
+                                model.UserId = args.UserId;
+                                model.IsMainAccount = true;
+                                model.CreatedBy = business.BusinessName;
+                                model.CreatedOn = DateTimeOffset.Now;
+                                model.BusinessId = business.BusinessId;
 
-                            model.Status = BusinessStatus.Live.ToString();
-                            var createSubaccount = await _walletRepository.CreateSubAccount(model);
+                                model.Status = BusinessStatus.Live.ToString();
+                                var createSubaccount = await _walletRepository.CreateSubAccount(model);
 
+                            }
                         }
+
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+
+
+                        //send email to business on their wallet creation
+                        return model;
                     }
+                    catch (Exception ex)
+                    {
 
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
+                        await dbTransaction.RollbackAsync();
 
-
-                    //send email to business on their wallet creation
-                    return model;
+                        throw new Exception(ex.Message);
+                    }
                 }
-                catch (Exception ex)
-                {
-
-                    await dbTransaction.RollbackAsync();
-
-                    throw new Exception(ex.Message);
-                }
-            }
-
+            });
+            return model;
         }
 
         public async Task<SubAccountModel> CreateSubAccount(SubAccountModel model)
@@ -116,79 +121,84 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
 
-            var user = await _walletRepository.GetSubAccount(args.UserId);
+            var user = await _walletRepository.GetSubAccount(model.UserId);
 
             var business = await _businessRepository.GetBusinessByIdAsync(user.BusinessId);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            using (var dbTransaction = _context.Database.BeginTransaction())
+            await strategy.ExecuteAsync(async () =>
             {
-                try
+                using (var dbTransaction = _context.Database.BeginTransaction())
                 {
-                 
-                    var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
+                    try
                     {
-                        phoneNumber = model.PhoneNumber,
-                        firstName = model.FirstName,
-                        lastName = model.LastName,
-                        dob = model.DOB,
-                        bvnNumber = model.Bvn,
-                        email = model.Email,
-                        nin = model.NIN
-                    }, args.Env);
 
-                    //if successful, create subaccount
-                    if (createCustomer != null)
-                    {
-                        var createCustomerWallet = await _cafeOneWalletService.CreateBusinessUserWallet(
-                            $"{model.FirstName} {model.LastName}", args.Env, business.UserId);
+                        var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
+                        {
+                            phoneNumber = model.PhoneNumber,
+                            firstName = model.FirstName,
+                            lastName = model.LastName,
+                            dob = model.DOB,
+                            bvnNumber = model.Bvn,
+                            email = model.Email,
+                            nin = model.NIN
+                        }, args.Env);
 
-                        if (createCustomerWallet != null)
-                        {                            
-                            model.WalletCode = createCustomerWallet.WalletId;
-                            model.SubAccountName = $"{model.FirstName} {model.LastName}";
-                            model.UserId = args.UserId;
-                            model.IsMainAccount = true;
-                            model.CreatedBy = business.BusinessName;
-                            model.CreatedOn = DateTimeOffset.Now;
-                          //  model.BusinessId = business.BusinessId;
+                        //if successful, create subaccount
+                        if (createCustomer != null)
+                        {
+                            var createCustomerWallet = await _cafeOneWalletService.CreateBusinessUserWallet(
+                                $"{model.FirstName} {model.LastName}", args.Env, business.UserId);
 
-                            var createSubaccount = await _walletRepository.UpdateSubAccount(model);
-                            var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                            if (createCustomerWallet != null)
                             {
-                                AccountNumber = createCustomerWallet.AccountNumber,
-                                AgrovestoUserId = args.UserId,
-                                CreatedOn = DateTime.UtcNow,
-                                InternalAccountId = createCustomerWallet.InternalAccountId,
-                                IsABusinessAccount = true,
-                                LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
-                                OrganizationId = createCustomer.OrganizationId,
-                                OwnerId = createCustomer.UserId,
-                                UserId = createCustomer.UserId,
-                                WalletId = createCustomerWallet.WalletId,
-                            });
+                                model.WalletCode = createCustomerWallet.WalletId;
+                                model.SubAccountName = $"{model.FirstName} {model.LastName}";
+                                model.UserId = args.UserId;
+                                model.IsMainAccount = true;
+                                model.CreatedBy = business.BusinessName;
+                                model.CreatedOn = DateTimeOffset.Now;
+                               // model.SubAccountType = Enum.GetName(typeof(SubAccountType), model.s)
+                                //  model.BusinessId = business.BusinessId;
+
+                                var createSubaccount = await _walletRepository.UpdateSubAccount(model);
+                                var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                                {
+                                    AccountNumber = createCustomerWallet.AccountNumber,
+                                    AgrovestoUserId = args.UserId,
+                                    CreatedOn = DateTime.UtcNow,
+                                    InternalAccountId = createCustomerWallet.InternalAccountId,
+                                    IsABusinessAccount = true,
+                                    LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
+                                    OrganizationId = createCustomer.OrganizationId,
+                                    OwnerId = createCustomer.UserId,
+                                    UserId = createCustomer.UserId,
+                                    WalletId = createCustomerWallet.WalletId,
+                                });
+
+                            }
 
                         }
 
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+
+
+                        //send email to business on their wallet creation
+                        return model;
                     }
+                    catch (Exception ex)
+                    {
 
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
+                        await dbTransaction.RollbackAsync();
 
-
-                    //send email to business on their wallet creation
-                    return model;
+                        throw new Exception(ex.Message);
+                    }
                 }
-                catch (Exception ex)
-                {
-
-                    await dbTransaction.RollbackAsync();
-
-                    throw new Exception(ex.Message);
-                }
-            }
-
+            });
+            return model;
         }
     }
 }

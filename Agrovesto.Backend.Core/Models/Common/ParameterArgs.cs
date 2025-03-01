@@ -8,7 +8,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 {
     public class ParameterArgs
     {
-        public string UserId { get; set; }
+        public string? UserId { get; set; }
         public string Env {  get; set; }
     }
    

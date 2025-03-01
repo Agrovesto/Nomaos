@@ -1,8 +1,10 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -17,7 +19,7 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IBusinessManager _businessManager;
-        public AuthenticationController(IHttpContextAccessor httpContextAccessor, IAuthenticationRepository authenticationRepository, 
+        public AuthenticationController(IHttpContextAccessor httpContextAccessor, IAuthenticationRepository authenticationRepository,
             IBusinessManager businessManager) : base(httpContextAccessor)
         {
             _authenticationRepository = authenticationRepository;
@@ -25,13 +27,29 @@ namespace Agrovesto.Backend.API.Controllers
         }
         [HttpPost("login")]
         [AllowAnonymous]
-        public async Task<IActionResult> Login([FromBody] LoginModel model)
+        public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery]string? businessCode)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            var isAgrovesto = DomainHeader;
             try
             {
-                var createUser = await _authenticationRepository.Login(model);
+                var createUser = await _authenticationRepository.Login(model, businessCode, isAgrovesto);
 
-                return Ok(new Response<TokenModel> ()
+                return Ok(new Response<TokenModel>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = createUser.Status,
@@ -41,18 +59,18 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
@@ -60,9 +78,9 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
         [HttpGet("business")]
-        public async Task<IActionResult> LoadBusiness([FromQuery]string businessCode, [FromQuery]string signage)
+        public async Task<IActionResult> LoadBusiness([FromQuery] string businessCode, [FromQuery] string signage)
         {
-            if(businessCode == null || signage == null) return StatusCode(403, new Response<string>
+            if (businessCode == null || signage == null) return StatusCode(403, new Response<string>
             {
                 Message = "Could not load page",//"An unexpected error occurred. Please contact your administrator.",
                 Succeeded = false,
@@ -83,18 +101,18 @@ namespace Agrovesto.Backend.API.Controllers
 
 
             }
-            //catch (BaseException ex)
-            //{
-            //    return StatusCode((int)ex.HttpStatusCode, new ValidationResponse<string>
-            //    {
-            //        Message = ex.ExceptionMessage,
-            //        Succeeded = false,
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
-            //    });
-            //}
+                });
+            }
             catch (Exception ex)
             {
-                return StatusCode(500, new Response<string>
+                return StatusCode(400, new Response<string>
                 {
                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
                     Succeeded = false,
@@ -102,15 +120,74 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
         }
-         [HttpPost("forgot-password")]
+        [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
         {
-            var request = await _authenticationRepository.ForgotPassword(model.Username);
-            return Ok(request.Message);
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                var request = await _authenticationRepository.ForgotPassword(model.Username);
+                return Ok(new Response<string>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request.Message
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword(PasswordResetModel model)
         {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try { 
             var resetPasswordRequest = await _authenticationRepository.ResetPassword(model);
             if (resetPasswordRequest.Status)
             {
@@ -132,7 +209,24 @@ namespace Agrovesto.Backend.API.Controllers
                     Data = resetPasswordRequest
                 });
             }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
     }
