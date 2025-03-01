@@ -18,7 +18,15 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int PendingSubscribers { get; set; }
         public int PartialPaymentSubscribers { get; set; }
     }
-
+    public class WarehouseInputTransitModel
+    {
+        public string TrackingId { get; set; }
+        public string Status { get; set; }
+        public string From { get; set; }
+        public string To { get; set; }
+        public DateTimeOffset? DateShipped { get; set; }
+        public DateTimeOffset? DateReceived { get; set; }
+    }
     public class BusinessEntitiesMetrics
     {
         public long TotalWarehouse { get; set; }

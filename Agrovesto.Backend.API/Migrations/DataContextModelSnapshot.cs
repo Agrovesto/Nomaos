@@ -706,6 +706,14 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("DeliveredTo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InputComingFrom")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("InputDescription")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -714,7 +722,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTimeOffset>("InventoryStockedOn")
+                    b.Property<DateTimeOffset?>("InventoryStockedOn")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<bool>("IsAvailable")
@@ -724,13 +732,26 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTimeOffset>("ModifiedOn")
+                    b.Property<DateTimeOffset?>("ModifiedOn")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("ReceivedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Reference")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("Shipmentdate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Size")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("TransitStatus")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

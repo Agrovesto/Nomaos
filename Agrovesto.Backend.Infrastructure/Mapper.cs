@@ -298,7 +298,12 @@ namespace Agrovesto.Backend.Infrastructure
                 UnitBalance = entity.UnitBalance,
                 UnitDepleted = entity.UnitDepleted,
                 BelongToBusinessCode=entity.BelongToBusinessCode,
-                WarehouseId = entity.WarehouseId
+                WarehouseId = entity.WarehouseId,
+                InputComingFrom=entity.InputComingFrom,
+                TransitStatus = entity.TransitStatus.ToEnum<InputTransitStatus>(),
+                DeliveredTo=entity.DeliveredTo,
+                ReceivedBy=entity.ReceivedBy,
+                Reference=entity.Reference
             };
         }
 
@@ -325,7 +330,12 @@ namespace Agrovesto.Backend.Infrastructure
                 UnitBalance = model.UnitBalance,
                 UnitDepleted = model.UnitDepleted,
                 BelongToBusinessCode = model.BelongToBusinessCode,
-                WarehouseId = model.WarehouseId
+                WarehouseId = model.WarehouseId,
+                InputComingFrom = model.InputComingFrom,
+                TransitStatus= Enum.GetName(typeof(InputTransitStatus), model.TransitStatus),
+                DeliveredTo=model.DeliveredTo,
+                ReceivedBy = model.ReceivedBy,
+                Reference= model.Reference
             };
         }
 

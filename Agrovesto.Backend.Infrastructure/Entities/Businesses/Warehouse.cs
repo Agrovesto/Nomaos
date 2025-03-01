@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -42,12 +43,17 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long UnitBalance { get; set; }
 
         public bool IsAvailable { get; set; }
-        public DateTimeOffset InventoryStockedOn { get; set; } = DateTimeOffset.Now;
-        public DateTimeOffset ModifiedOn { get; set; }
+        public DateTimeOffset? InventoryStockedOn { get; set; } //= DateTimeOffset.Now;
+        public DateTimeOffset? ModifiedOn { get; set; }
+        public DateTimeOffset? Shipmentdate { get; set; }
         public string ManagedByUserId { get; set; }
         public string BelongToBusinessCode { get; set; }
         public long WarehouseId { get; set; }
-
+        public string InputComingFrom { get; set; }
+        public string TransitStatus { get; set; }
+        public string DeliveredTo { get; set; }
+        public string? ReceivedBy { get; set; }
+        public string? Reference { get; set; }
     }
     public class WarehouseUser
     {

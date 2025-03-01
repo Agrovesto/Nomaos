@@ -115,7 +115,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         #endregion warehousemgt
 
         #region BundleManagement
+        public async Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode)
+        {
+            var query = await _context.WarehouseInputInventories
+    .Where(w => w.BelongToBusinessCode == businessCode)
+    .Select(w => new WarehouseInputTransitModel
+    {
+        To=w.DeliveredTo,
+        From=w.InputComingFrom,
+        Status=w.TransitStatus,
+        TrackingId= w.Reference,
+        DateReceived=w.InventoryStockedOn,
+        DateShipped=w.Shipmentdate
 
+    }).ToListAsync();
+
+            if (query.Count == 0) { return null; }
+            return query;
+        }
         public async Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode)
         {
             var query = await _context.Warehouses
@@ -222,7 +239,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return input.Select(x => x.Map()).ToList();
         }
 
-        public async Task<WarehouseInputInventoryModel> GetByIdAsync(string belongToBusiness, long id)
+        public async Task<WarehouseInputInventoryModel> GetInputBYIdAsync(string belongToBusiness, long id)
         {
             var warehouse = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == id).FirstOrDefaultAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
@@ -233,6 +250,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WarehouseInputInventory> GetByInputNameAsync(string inputName)
         {
             return await _context.Set<WarehouseInputInventory>().FirstOrDefaultAsync(i => i.InputName == inputName);
+        }
+        public async Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date)
+        {
+            var warehouse = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == Id).FirstOrDefaultAsync();
+            if (warehouse == null) { throw new Exception("No record found"); }
+           if( !string.IsNullOrEmpty(receivedBy)) {
+                warehouse.InventoryStockedOn = date;
+            }else { warehouse.Shipmentdate = date; }
+            warehouse.ReceivedBy = receivedBy;
+            
+            warehouse.TransitStatus = status;
+            await _context.SaveChangesAsync();
+
+            return true;
         }
 
         public async Task<bool> DepleteAsync(long id, long unitsToDeplete)
