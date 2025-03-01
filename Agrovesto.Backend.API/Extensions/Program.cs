@@ -13,14 +13,30 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
+//builder.Services.AddDbContext<DataContext>(options =>
+
+//              options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
+//                  b => b.MigrationsAssembly("Agrovesto.Backend.API"))
+
+//              );
+
 builder.Services.AddDbContext<DataContext>(options =>
-              options.UseSqlServer(builder.
-                  Configuration.GetConnectionString("DefaultConnection"), b => b.MigrationsAssembly("Agrovesto.Backend.API")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
+        }));
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
     opt.SignIn.RequireConfirmedAccount = true;
-   // opt.User.RequireUniqueEmail = true;
+    // opt.User.RequireUniqueEmail = true;
     opt.Password.RequireDigit = false;
     opt.Password.RequiredLength = 4;
     opt.Password.RequireNonAlphanumeric = false;
@@ -92,6 +108,21 @@ builder.Services.AddSwaggerGen(option =>
     });
 });
 
+var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(
+        builder =>
+        {
+            builder
+                   .WithOrigins(corsOrigins)
+                   .AllowAnyMethod()
+                   .AllowCredentials()
+                   .AllowAnyHeader()
+                   .SetIsOriginAllowedToAllowWildcardSubdomains()
+                   .Build();
+        });
+});
 
 var app = builder.Build();
 
@@ -103,7 +134,30 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Agrovesto Enterprise Platform ");
+    c.DocumentTitle = "Agrovesto Enterprise Platform";
+    //  c.RoutePrefix = "/docs";
 
+});
+//using (var scope = app.Services.CreateScope())
+//{
+//    var services = scope.ServiceProvider;
+//    var logger = services.GetRequiredService<ILogger<Program>>();
+
+//    try
+//    {
+//        await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//    }
+//    catch (Exception ex)
+//    {
+//        logger.LogError($"Database seeding encountered an error but will not stop application: {ex.Message}");
+//    }
+//}
+
+app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
 

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-    public class InputWarehouse
+    internal class BundleSubscriptionDisbursement
     {
     }
 }

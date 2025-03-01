@@ -8,13 +8,14 @@ using System.ComponentModel.DataAnnotations;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 
 namespace Agrovesto.Backend.API.Controllers
 {
     [Route("api/role")]
-   // [ApiController]
+    // [ApiController]
     public class RoleController : ControllerBase
-    { 
+    {
 
         private readonly IRoleManager _roleManager;
         public RoleController(IRoleManager roleManager)
@@ -28,13 +29,49 @@ namespace Agrovesto.Backend.API.Controllers
         {
             // var isAdmin = User.Claims.ToArray();
             // if (!isAdmin) throw new BadRequestException("Not Authorized");
-            var data = await _roleManager.CreateRoleAsync(roleModel);
-            return Ok(new AgrovestoResponse<RoleModel>()
+            if (!ModelState.IsValid)
             {
-                Message = "",
-                Result = data.Result,
-               
-            }); 
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                var data = await _roleManager.CreateRoleAsync(roleModel);
+                return Ok(new AgrovestoResponse<RoleModel>()
+                {
+                    Message = "",
+                    Result = data.Result,
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
         [HttpGet("roles")]
@@ -46,8 +83,8 @@ namespace Agrovesto.Backend.API.Controllers
             return Ok(new PagedListResponse<List<RoleModel>>()
             {
                 Message = "",
-              Data= data.Data,
-              Count= data.Count
+                Data = data.Data,
+                Count = data.Count
 
             });
         }
@@ -65,6 +102,53 @@ namespace Agrovesto.Backend.API.Controllers
                 Data = data.Data
 
             });
+        }
+        [HttpPatch("assignUserToRole/{userId}/{roleId}")]
+        public async Task<IActionResult> AssignUserToRole(string userId, string roleId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var data = await _roleManager.AddUserToRole(userId, roleId);
+
+                return Ok(new AgrovestoResponse<string>()
+                {
+                    Message = "",
+                    Result = data.ToString(),
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
     }
 }

@@ -6,6 +6,16 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class WalletToWalletTransferRequest
+    {
+        public string Reference { get; set; }
+        public string OwnerId { get; set; }
+        public string BusinessAccountNumber { get; set; }
+        public decimal Amount { get; set; }
+        public string FromAccount { get; set; }
+        public string Memo { get; set; }
+        public string Env { get; set; }
+    }
 
     public class CafeOneBankData
     {
@@ -199,4 +209,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string DeletedAt { get; set; }
     }
 
+    public class WalletTransferResult
+    {
+        public bool success { get; set; }
+    }
 }

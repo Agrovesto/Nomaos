@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 {
     public class WalletProviderModel : Model
     {
-        [Key]
+        //[Key]
         public long ProviderId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
@@ -20,16 +20,16 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class WalletProviderParameterModel
     {
-        [Key]
+       // [Key]
         public long ParameterId { get; set; }
         public string Key { get; set; }
         public string Value { get; set; }
         public string Description { get; set; }
         public long ProviderId { get; set; }
-        public WalletProviderModel WalletProvider { get; set; }
+      //  public WalletProviderModel WalletProvider { get; set; }
         public Env Env { get; set; } = Env.Demo;
 
-        public ParameterStatus ParamStatus { get; set; }
+       // public ParameterStatus ParamStatus { get; set; }
 
     }
     public enum ParameterStatus

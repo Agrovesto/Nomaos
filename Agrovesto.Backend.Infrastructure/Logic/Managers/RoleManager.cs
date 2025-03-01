@@ -123,7 +123,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 };
             }
         }
+        public async Task<bool> AddUserToRole(string userId, string roleId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            var role = await _roleManager.FindByIdAsync(roleId);
 
+            if (user == null || role == null)
+                return false;
+
+            var result = await _userManager.AddToRoleAsync(user, role.Name);
+            return result.Succeeded;
+        }
 
         public async Task<PagedListResponse<List<RoleModel>>> GetRolesAsync()
         {

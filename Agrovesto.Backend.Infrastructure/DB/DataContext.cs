@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 {
     public class DataContext :IdentityDbContext<User,Role, string>
     {
-        public DataContext(DbContextOptions options): base(options)
+        public DataContext(DbContextOptions<DataContext> options): base(options)
         {
             
         }
@@ -34,7 +35,25 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Agent> Agents { get; set; }
         public DbSet<Cooperative> Cooperatives { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
+        public DbSet<FarmPlotDetails> FarmPlotDetails { get; set; }
+        public DbSet<Warehouse> Warehouses { get; set; }
+        public DbSet<WarehouseInputInventory> WarehouseInputInventories { get; set; }
+        public DbSet<WarehouseUser> WarehouseUsers { get; set; }
+        public DbSet<Bundle> Bundles { get; set; }
+        public DbSet<BundleItems> BundleItems { get; set; }
+        public DbSet<BundleSubscriptionInterest> BundleSubscriptionInterests { get; set; }
 
 
     }
+    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    //{
+    //    public DataContext CreateDbContext(string[] args)
+    //    {
+    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+    //        optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_paasdev;User Id=db_a971fc_paasdev_admin;Password=Agro144828@");
+
+    //        return new DataContext(optionsBuilder.Options);
+    //    }
+    //}
+
 }

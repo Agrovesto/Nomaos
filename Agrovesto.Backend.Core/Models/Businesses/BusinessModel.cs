@@ -17,16 +17,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int PageSize { get; set; } = 10;
         public string? Location { get; set; }
         public string? UserId { get; set; }
+        public long warehouseId { get; set; }
+        public string? businessCode { get; set; }
+        public long CooperativeId { get; set; }
     }
     public class BusinessRegistrationArgs
     {
-        public string UserType { get; set; }
-        public string RoleName { get; set; }
+        public string? UserType { get; set; }
+        public string? RoleName { get; set; }
         public string? UserId { get; set; }
         public string? DefaultPassword { get; set; }
-        public string businessCode { get; set; }
-        public string SubAccountType { get; set; }
-        public string Env { get; set; }
+        public string? businessCode { get; set; }
+        public string? SubAccountType { get; set; }
+        public string? Env { get; set; }
+        public long WarehouseId { get; set; }
+        public long CooperativeId { get; set; }
+        public string? Location { get; set; }
     }
     public class BusinessLoadModel
     {
@@ -46,7 +52,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long BusinessId { get; set; }
         [RegularExpression(ValidationRegex.BusinessCode)]
         [MaxLength(50)]
-        public string BusinessCode { get; set; }
+        public string? BusinessCode { get; set; }
 
         [Required]
         [RegularExpression(ValidationRegex.General)]
@@ -102,6 +108,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BusinessLogo { get; set; }
         public string? UserId { get; set; }
         public string? BusinessCodeSignage { get; set; }
+        public long TotalStaffCount { get; set; }
     }
     public enum BusinessStatus
     {
