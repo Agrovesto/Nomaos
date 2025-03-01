@@ -28,9 +28,47 @@ namespace Agrovesto.Backend.API.Controllers
             _roleManager = roleManager;
             _walletManager = walletManager;
             _inputFinancingManagement = inputFinancingManagement;
+            _warehouseManagementManager = warehouseManagementManager;
         }
 
         #region dashboard
+        //
+        [HttpGet("warehouse/input-disbursement/summary")]
+        public async Task<IActionResult> GetWarehouseInputTransit([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId);
+                return Ok(new Response<List<WarehouseInputTransitModel>> ()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         //user summary metrics
         [HttpGet("users/summary")]
         public async Task<IActionResult> GetBusinessEntitiesMetricsAsync([FromQuery] ListQueryParams query)

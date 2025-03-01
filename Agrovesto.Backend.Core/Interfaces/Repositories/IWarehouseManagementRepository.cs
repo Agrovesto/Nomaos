@@ -17,15 +17,17 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<bool> DepleteAsync(long id, long unitsToDeplete);
         Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness);
         Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId);
-        Task<WarehouseInputInventoryModel> GetByIdAsync(string belongToBusiness, long id);
+        Task<WarehouseInputInventoryModel> GetInputBYIdAsync(string belongToBusiness, long id);
         Task<List<WarehouseInputInventoryModel>> GetInputByWarehouse(string belongToBusiness, long warehouseId);
         Task<WarehouseModel> GetWarehouseByBusiness(string belongToBusiness, long warehouseId);
+        Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode);
         Task<WarehouseUserModel> GetWarehouseManagerByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseModel>> GetWarehouses();
         Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagerByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagersByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode);
+        Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date);
         Task<(bool status, WarehouseModel data)> UpdateWarehouse(WarehouseModel data);
         Task<(bool status, WarehouseUserModel data)> UpdateWarehouseManager(WarehouseUserModel data);
     }

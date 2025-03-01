@@ -144,11 +144,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         To = business.BusinessEmail,
                         ToName = $"{business.BusinessName}",
-                        Subject = "Welcome OnBoard",
+                        Subject = $"Welcome OnBoard {business.BusinessName}",
                         AccountOfficer = accountOfficer.model.Name,
                         Email = accountOfficer.model.Email,
                         PhoneNumber = accountOfficer.model.PhoneNumber,
-                        PropagateUrl = $"{propagationUrl}login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
+                        PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
                         logincred = $"login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
                     };
                     var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);

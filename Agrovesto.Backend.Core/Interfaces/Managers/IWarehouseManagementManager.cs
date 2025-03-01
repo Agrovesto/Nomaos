@@ -11,6 +11,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IWarehouseManagementManager
     {
         Task<bool> AddMoreInputToStock(InputUpdateModel model, BusinessRegistrationArgs args);
+        Task<WarehouseInputInventoryModel> ConfirmInputShipment(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);
+        Task<WarehouseInputInventoryModel> ConfirmReceiptOfInput(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);
         Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseUserModel data)> CreateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args);
@@ -20,6 +22,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<WarehouseInputInventoryModel>> GetInput(string userId, long warehouseId);
         Task<PagedListResponse<List<WarehouseInputInventoryModel>>> GetInputByWarehouse(string userId, ListQueryParams query);
         Task<Response<WarehouseModel>> GetWarehouseByBusiness(string userId, long warehouseId);
+        Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId);
         Task<Response<WarehouseUserModel>> GetWarehouseManagerByBusiness(string userId, long warehouseId);
            Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagerByBusiness(string userId, ListQueryParams query);

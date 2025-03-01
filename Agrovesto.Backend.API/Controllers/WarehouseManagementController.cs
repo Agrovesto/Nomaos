@@ -529,7 +529,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
         #endregion warehousemgt
         #region inputmgt
-        [HttpPost("stock-warehouse-input")]
+        [HttpPost("create-warehouse-input")]
         public async Task<IActionResult> CreateInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
@@ -553,6 +553,114 @@ namespace Agrovesto.Backend.API.Controllers
                 args.WarehouseId = args.WarehouseId;
 
                 var result = await _warehouseManagementManager.StockUpInput(model, args);
+                return Ok(new Response<WarehouseInputInventoryModel>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpPost("ship-input")]
+        public async Task<IActionResult> ShipInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId ??= CurrentUserId;
+                args.WarehouseId = args.WarehouseId;
+
+                var result = await _warehouseManagementManager.ConfirmInputShipment(model, args);
+                return Ok(new Response<WarehouseInputInventoryModel>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpPost("receive-warehouse-input")]
+        public async Task<IActionResult> ReceiveInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId ??= CurrentUserId;
+                args.WarehouseId = args.WarehouseId;
+
+                var result = await _warehouseManagementManager.ConfirmReceiptOfInput(model, args);
                 return Ok(new Response<WarehouseInputInventoryModel>()
                 {
                     Data = result,

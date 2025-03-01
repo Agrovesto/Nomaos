@@ -35,16 +35,28 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Brand { get; set; }
         public decimal Price { get; set; }
         public string Size { get; set; }
+        public string Reference { get; set; }
         public long UnitAdded { get; set; }
         public long UnitStockedUp { get; set; }
         public long UnitDepleted { get; set; }
         public long UnitBalance { get; set; }
         public bool IsAvailable { get; set; }
-        public DateTimeOffset InventoryStockedOn { get; set; } = DateTimeOffset.Now;
-        public DateTimeOffset ModifiedOn { get; set; }
+        public DateTimeOffset? InventoryStockedOn { get; set; }// = DateTimeOffset.Now;
+        public DateTimeOffset? ModifiedOn { get; set; }
+        public DateTimeOffset? ShipmentDate { get; set; }
         public string? ManagedByUserId { get; set; }
         public string? BelongToBusinessCode { get; set; }
         public long WarehouseId { get; set; }
+        public string InputComingFrom { get; set; }
+        public InputTransitStatus TransitStatus { get; set; }
+        public string DeliveredTo { get; set; }
+        public string ReceivedBy { get; set; }
+    }
+    public enum InputTransitStatus
+    {
+        Packed,
+        InTransit,
+        Received
     }
     public class WarehouseUserModel
     {
