@@ -234,7 +234,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var input = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness
             && x.WarehouseId == warehouseId).ToListAsync();
-            if (input == null) { throw new Exception("No record found"); }
+            if (input.Count == 0) { throw new Exception("No record found"); }
 
             return input.Select(x => x.Map()).ToList();
         }

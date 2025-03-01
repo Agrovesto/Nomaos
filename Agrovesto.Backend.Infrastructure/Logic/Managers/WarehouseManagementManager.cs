@@ -472,17 +472,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                     try
                     {
-                        var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
+                        var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId);
+                        if (warehouse == null) { throw new Exception("Warehouse could not be found"); }
                         model.BelongToBusinessCode = args.businessCode;
                         model.WarehouseId = args.WarehouseId;
                         model.ManagedByUserId = warehouse.UserId;
-                        var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, model.WarehouseId);
-                        if (input.Any(x => x.InputName == model.InputName && x.Brand == model.Brand)) throw new Exception($"The warehouse already have same stock of input");
+                        var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, args.WarehouseId);
 
-                        createWarehouse.InputComingFrom = model.InputComingFrom;
-                        createWarehouse.DeliveredTo = warehouse.Location;
-                        createWarehouse.TransitStatus = InputTransitStatus.Packed;
-                        createWarehouse.Reference = GenerateReference(business.BusinessCode);
+                        if (input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand)) { throw new Exception($"The warehouse already have same stock of input"); }
+
+                        model.InputComingFrom = model.InputComingFrom;
+                        model.DeliveredTo = warehouse.Location;
+                        model.TransitStatus = InputTransitStatus.Packed;
+                        model.Reference = GenerateReference(business.BusinessCode);
                         createWarehouse = await _repository.CreateAsync(model);
 
                         await _context.SaveChangesAsync();

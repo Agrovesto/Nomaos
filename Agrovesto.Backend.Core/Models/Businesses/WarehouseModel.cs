@@ -29,13 +29,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
-        public string InputName { get; set; }
-        public string InputDescription { get; set; }
-        public string Type { get; set; }
-        public string Brand { get; set; }
+        public string? InputName { get; set; }
+        public string? InputDescription { get; set; }
+        public string? Type { get; set; }
+        public string? Brand { get; set; }
         public decimal Price { get; set; }
-        public string Size { get; set; }
-        public string Reference { get; set; }
+        public string? Size { get; set; }
+        public string? Reference { get; set; }
         public long UnitAdded { get; set; }
         public long UnitStockedUp { get; set; }
         public long UnitDepleted { get; set; }
@@ -47,10 +47,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? ManagedByUserId { get; set; }
         public string? BelongToBusinessCode { get; set; }
         public long WarehouseId { get; set; }
-        public string InputComingFrom { get; set; }
+        public string? InputComingFrom { get; set; }
         public InputTransitStatus TransitStatus { get; set; }
-        public string DeliveredTo { get; set; }
-        public string ReceivedBy { get; set; }
+        public string? DeliveredTo { get; set; }
+        public string? ReceivedBy { get; set; }
     }
     public enum InputTransitStatus
     {
