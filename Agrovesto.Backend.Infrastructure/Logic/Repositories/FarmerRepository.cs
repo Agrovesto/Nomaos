@@ -178,8 +178,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .AsNoTracking()
                 .Where(s
                 =>
-                (!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-                 || s.Lga.Contains(query.Location))) &&
+                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+                // || s.Lga.Contains(query.Location))) &&
                 s.BelongToBusinessCode == businessCode)
                 .OrderByDescending(s => s.OnBoardedOn)
                 .Skip(query.PageNumber)
