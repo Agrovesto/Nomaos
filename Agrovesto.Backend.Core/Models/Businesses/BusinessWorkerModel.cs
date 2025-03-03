@@ -33,7 +33,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalAgents { get; set; }
         public long TotalCooperative { get; set; }
         public long TotalFarmer { get; set; }
-        
+        public double PercentageFarmerPerformance { get; set; }
+        public double PercentageCooperativePerformance { get; set; }
+        public double PercentageAgentPerformance { get; set; }
+        public double PercentageWarehousePerformance { get; set; }
+
     }
     public class WarehouseSummary
     {
