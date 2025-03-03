@@ -361,7 +361,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/list/${@params.OrganizationId}", headers);
+                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/list/{@params.OrganizationId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
@@ -395,7 +395,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/${walletId}", headers);
+                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/getById/{walletId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<CafeOneData>>(readResponse);
@@ -430,7 +430,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/${walletId}", headers);
+                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/{walletId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<CafeOneData>>(readResponse);
@@ -465,7 +465,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/providers/${internalAccountId}", headers);
+                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/providers/{internalAccountId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<AccountNumbers>>(readResponse);

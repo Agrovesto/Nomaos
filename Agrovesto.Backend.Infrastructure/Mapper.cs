@@ -41,6 +41,7 @@ namespace Agrovesto.Backend.Infrastructure
                 AreaInHectare = entity.AreaInHectare,
                 CoordinateTakenBy = entity.CoordinateTakenBy,
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
+                BelongToBusinessCode=entity.BelongToBusinessCode
             };
         }
 
@@ -65,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Longitude2 = model.Longitude2,
                 Longitude3 = model.Longitude3,
                 Longitude4 = model.Longitude4,
-
+                BelongToBusinessCode=model.BelongToBusinessCode,
                 AreaInDegress = model.AreaInDegress,
                 AreaInSqMetre = model.AreaInSqMetre,
                 AreaInHectare = model.AreaInHectare,

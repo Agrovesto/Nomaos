@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -30,10 +31,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<InputFinancingManagement> _log;
         private readonly ICafeOneWalletService _cafeOneWalletService;
         private readonly IWalletRepository _walletRepository;
+        private readonly ISMSService _whisperSMSService;
 
         private readonly IConfiguration _configuration;
         public InputFinancingManagement(IInputFinancingManagementRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
-            DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository,
+            DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, ISMSService whisperSMSService,
             IFarmerRepository farmerRepository, ICafeOneWalletService cafeOneWalletService, IWalletRepository walletRepository, IConfiguration config)
         {
             _repository = repository;
@@ -46,6 +48,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _cafeOneWalletService = cafeOneWalletService;
             _configuration = config;
             _walletRepository = walletRepository;
+
+            _whisperSMSService = whisperSMSService;
         }
         //FarmerBundleSubscriptionInterests
         public async Task<Response<SubscriptionMetrics>> FarmerBundleSubscriptions(ListQueryParams query)
@@ -220,13 +224,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice;
                         var settlementPlatformSplitAmount = getInputInventory.CommissionPrice - sterlingCharge;
 
-
+                        //TODO: REMOVE THIS LINE WHEN DEPLOYING
+                       
 
                         if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
                         {
                             throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement Validation mismatched");
                         }
-                        if (selectedBundle != null && (decimal.Parse(farmerWallet.Balance) < (selectedBundle.ExpectedTotalEquityPrice - sterlingCharge)))
+                        if (selectedBundle != null && (decimal.Parse(farmerWallet.Balance) > (selectedBundle.ExpectedTotalEquityPrice - sterlingCharge)))
                         {
                             var reference = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}";
 
@@ -266,6 +271,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             }
 
                             var update = await _repository.UpdateSubscriptionPayment(model);
+
+                            var messageBody = $"You have successfully completed your subscription for input package: {getInputInventory.BundlePackage}." +
+                                              $"You will receive an update when distribution begins ";
+
+                            var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                            {
+                                campaign_name = "Input Notification",
+                                contacts = new List<string> { farmer.PhoneNumber },
+                                message = messageBody,
+                            });
+                            var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                            {
+                                to = $"234{farmer.PhoneNumber.GetLast(10)}",
+                                sms = messageBody
+                            });
                             return (true, "Payment Updated");
                         }
                     }
@@ -342,7 +362,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         }
                     }
+                    var messageBody = $"You have indicated interest in input package: {getInputInventory.BundlePackage}." +
+                    $"Confirm your equity by crediting {response.Amount} into {response.AccountNUmber} {response.AccountName} {response.BankName} ";
 
+                    var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                    {
+                        campaign_name = "Input Notification",
+                        contacts = new List<string> { farmer.PhoneNumber },
+                        message = messageBody,
+                    });
+                    var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                    {
+                        to = $"234{farmer.PhoneNumber.GetLast(10)}",
+                        sms = messageBody
+                    });
                     return (true, response);
                 }
                 catch (Exception ex)
@@ -354,5 +387,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return (true, response);
         }
+
+
+        //method get all successful payment for input subscription
+        //method disburse input bundle to farmers and mark disbursement as completed,, deplete inventory in the warehouse based on what has been disbursed
+
     }
 }
