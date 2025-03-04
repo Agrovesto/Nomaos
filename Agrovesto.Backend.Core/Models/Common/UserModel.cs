@@ -36,9 +36,14 @@ namespace Agrovesto.Backend.Core.Models.Common
         //public string? DateOfBirth { get; set; }
         public string BusinessCode { get; set; }
     }
+    public class ImageModel
+    {
+        public IFormFile FarmerImage { get; set; }
+        public string FarmerUserId { get; set; }
+    }
     public class UserModel
     {
-        public IFormFile? FarmerImage { get; set; }
+       
         public string? Id { get; set; }
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }

@@ -895,7 +895,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
 
-        public async Task<object> SaveFarmerImage(IFormFile file, BusinessRegistrationArgs args)
+        public async Task<object> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
         {
             object saveFace = new object();
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -909,7 +909,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                     saveFace = await _faceManager.UploadImage(file, args.UserId, args.businessCode);
+                     saveFace = await _faceManager.UploadImage(model.FarmerImagefile, model.FarmerUserId, args.businessCode);
                    
                   
                 }
