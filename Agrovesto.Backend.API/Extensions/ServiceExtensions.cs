@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -50,6 +51,7 @@ namespace Agrovesto.Backend.API.Extensions
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
+            services.AddScoped<ISMSService, SMSService>();
 
         }
     }
