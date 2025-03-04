@@ -101,6 +101,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, entity.Map());
         }
 
+
+        public async Task<(bool status, FarmerImagesModel data)> SaveImage(FarmerImagesModel data)
+        {
+            var entity = data.Map();
+
+            await _context.AddAsync(entity);
+            await _context.SaveChangesAsync();
+
+            return (true, entity.Map());
+        }
+
+        public async Task<FarmerImagesModel> GetFarmerImage(string userId)
+        {
+            var farmer = await _context.FarmerImages.Where(x => x.FarmerUserId == userId).FirstOrDefaultAsync();
+            if (farmer == null)
+            {
+                return null;
+            }
+            return farmer.Map();
+        }
+
         //public async Task<(bool status, FarmerModel data)> UpdateFarmerProfile(FarmerModel model)
         //{
         //    var exist = await _context.Farmers.Where(c => c.UserId == model.UserId).FirstOrDefaultAsync();

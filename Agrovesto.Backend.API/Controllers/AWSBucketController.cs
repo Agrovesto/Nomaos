@@ -1,4 +1,9 @@
-﻿using Amazon.S3;
+﻿using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
+using Amazon.Rekognition;
+using Amazon.Rekognition.Model;
+using Amazon.S3;
+using Amazon.S3.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -8,17 +13,23 @@ namespace Agrovesto.Backend.API.Controllers
     [ApiController]
     public class AWSBucketController : ControllerBase
     {
-        private readonly IAmazonS3 _amazonS3;
-        public AWSBucketController(IAmazonS3 amazonS3)
+        private readonly IFaceManager _faceManager;
+        public AWSBucketController(IFaceManager faceManager)
         {
-            _amazonS3 = amazonS3;
+           _faceManager = faceManager;
         }
-        [HttpGet("list")]
-        public async Task<IActionResult> ListAsync()
+  
+        [HttpPost("compare-face")]
+        public async Task<IActionResult> CompareFaces([FromForm] IFormFile uploadedImage,[FromQuery] string userId, [FromQuery] int targetImageId)
         {
-            var data = await _amazonS3.ListBucketsAsync();
-            var buckets = data.Buckets.Select(b => { return b.BucketName; });
-            return Ok(buckets);
+            var result = await _faceManager.CompareFaces(uploadedImage,userId, targetImageId);
+            if (result == null)
+            {
+                return StatusCode(500, "An error occurred while processing the images.");
+            }
+            return Ok(result);
         }
+
+
     }
 }

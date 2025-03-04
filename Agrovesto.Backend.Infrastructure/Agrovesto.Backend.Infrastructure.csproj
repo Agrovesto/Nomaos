@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <Folder Include="Entities\FarmerMgts\" />
-    <Folder Include="ExternalServices\ImageRecognition\" />
     <Folder Include="Utilities\EmailTemplates\" />
     <Folder Include="Utilities\TextTemplates\" />
   </ItemGroup>

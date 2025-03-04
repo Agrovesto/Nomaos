@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
@@ -37,6 +38,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class UserModel
     {
+        public IFormFile? FarmerImage { get; set; }
         public string? Id { get; set; }
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }

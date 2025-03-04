@@ -244,6 +244,11 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
+                if(args.UserType == "Farmer")
+                {
+                    var saveFarmerFace = await _businessManager.SaveFarmerImage(model.FarmerImage,registerUser.UserId, args.businessCode);
+                }
+               
 
                 return Ok(new Response<SubAccountModel>()
                 {

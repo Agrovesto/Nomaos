@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Bundle> Bundles { get; set; }
         public DbSet<BundleItems> BundleItems { get; set; }
         public DbSet<BundleSubscriptionInterest> BundleSubscriptionInterests { get; set; }
+        public DbSet<FarmerImages> FarmerImages { get; set; }
 
 
     }
