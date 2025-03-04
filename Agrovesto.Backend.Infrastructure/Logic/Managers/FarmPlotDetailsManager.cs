@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                                              model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
 
                     var getAreaInSqMetre = ConvertDegreesToSquareMeters(getAreaInDegrees);
-                    var getAreaInHectare = ConvertDegreesToSquareMeters(getAreaInSqMetre);
+                    var getAreaInHectare = ConvertSquareMetersToHectares(getAreaInSqMetre);
                     model.AreaInDegress = getAreaInDegrees;
                     model.AreaInSqMetre = getAreaInSqMetre;
                     model.AreaInHectare = getAreaInHectare;

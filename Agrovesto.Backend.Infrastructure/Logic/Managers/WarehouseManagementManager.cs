@@ -23,18 +23,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     public class WarehouseManagementManager : IWarehouseManagementManager
     {
         private readonly IWarehouseManagementRepository _repository;
+        private readonly IAgentRepository _agentRepository;
         private readonly IBusinessRepository _businessRepository;
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly DataContext _context;
         private readonly ILogger<WarehouseManagementManager> _log;
         public WarehouseManagementManager(IWarehouseManagementRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
-            DataContext context, ILogger<WarehouseManagementManager> log)
+            DataContext context, ILogger<WarehouseManagementManager> log, IAgentRepository agentRepository)
         {
             _repository = repository;
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
             _context = context;
             _log = log;
+            _agentRepository = agentRepository;
         }
 
         #region warehousemgt
@@ -269,7 +271,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.WarehouseId = warehouse.Id;
                         model.UserId = args.UserId;
                         //model.c = DateTimeOffset.Now;
-
+                        var agent = await _agentRepository.GetAgentDetailByUserId(args.UserId);
+                        if (agent == null) throw new Exception("Could not retrieve agent");
 
                         var manager = await _repository.GetWarehousesManagerByBusiness(model.BelongToBusinessCode);
                         if (manager.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State && x.PhoneNumber == model.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");

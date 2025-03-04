@@ -19,15 +19,70 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode)
         {
+            var currentMonth = DateTime.UtcNow.Month;
+            var previousMonth = DateTime.UtcNow.AddMonths(-1).Month;
+            var currentYear = DateTime.UtcNow.Year;
+            var previousYear = DateTime.UtcNow.AddMonths(-1).Year;
+
+            double percentageChange = await CalculateFarmerPercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+            double cooperativePercentageChange = await CalculateCooperativePercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+            double agentPercentageChange = await CalculateAgentPercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+
             var metrics = new BusinessEntitiesMetrics
+
             {
                 TotalAgents = await _context.Agents.CountAsync(a => a.BelongToBusinessCode == businessCode),
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == businessCode),
                 TotalFarmer = await _context.Farmers.CountAsync(f => f.BelongToBusinessCode == businessCode),
-                TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode)
+                TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode),
+                PercentageFarmerPerformance = percentageChange,
+                PercentageCooperativePerformance = cooperativePercentageChange,
+                PercentageAgentPerformance = agentPercentageChange,
             };
 
             return metrics;
+        }
+
+        private async Task<double> CalculateAgentPercentagePerformance(string businessCode, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        {
+            var totalAgentsThisMonth = await _context.Agents
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
+
+            var totalAgentsLastMonth = await _context.Agents
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
+
+            double percentageChange = totalAgentsLastMonth == 0
+                ? (totalAgentsThisMonth > 0 ? 100 : 0)
+                : ((double)(totalAgentsThisMonth - totalAgentsLastMonth) / totalAgentsLastMonth) * 100;
+            return percentageChange;
+        }
+
+        private async Task<double> CalculateCooperativePercentagePerformance(string businessCode, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        {
+            var totalCooperativesThisMonth = await _context.Cooperatives
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
+
+            var totalCooperativesLastMonth = await _context.Cooperatives
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
+
+            double percentageChange = totalCooperativesLastMonth == 0
+                ? (totalCooperativesThisMonth > 0 ? 100 : 0)
+                : ((double)(totalCooperativesThisMonth - totalCooperativesLastMonth) / totalCooperativesLastMonth) * 100;
+            return percentageChange;
+        }
+
+        private async Task<double> CalculateFarmerPercentagePerformance(string businessCode, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        {
+            var totalFarmersThisMonth = await _context.Farmers
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
+
+            var totalFarmersLastMonth = await _context.Farmers
+                .CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
+
+            double percentageChange = totalFarmersLastMonth == 0
+                ? (totalFarmersThisMonth > 0 ? 100 : 0)
+                : ((double)(totalFarmersThisMonth - totalFarmersLastMonth) / totalFarmersLastMonth) * 100;
+            return percentageChange;
         }
 
         public string GetYearOfBirth(int age)
@@ -45,6 +100,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return (true, entity.Map());
         }
+
         //public async Task<(bool status, FarmerModel data)> UpdateFarmerProfile(FarmerModel model)
         //{
         //    var exist = await _context.Farmers.Where(c => c.UserId == model.UserId).FirstOrDefaultAsync();
@@ -127,23 +183,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
 
-        public async Task<List<FarmerModel>> GetFarmersByAgent(string userId, ListQueryParams query)
+        public async Task<List<FarmerModel>> GetFarmersByAgent(long agentId, ListQueryParams query)
         {
+            var farmers = await (from f in  _context.Farmers
+                                join c in _context.Cooperatives
+                                on f.BelongToCooperativeId equals c.Id
+                                where c.IsAssignedToAgentId == agentId
+                                 select f).ToListAsync();
 
-            var cooperatives = await (from a in _context.Agents
-                                      join c in _context.Cooperatives
-                                      on a.Id equals c.IsAssignedToAgentId
-                                      select c).ToListAsync();
+            //var cooperatives = await (from a in _context.Agents
+            //                          join c in _context.Cooperatives
+            //                          on a.Id equals c.IsAssignedToAgentId
+            //                          select c).ToListAsync();
 
-            var farmers = from f in _context.Farmers
-                          join c in cooperatives
-                          on f.OnboardedByUserId equals c.UserId
-                          select f;
+            //var farmers = from f in _context.Farmers
+            //              join c in cooperatives
+            //              on f.OnboardedByUserId equals c.UserId
+            //              select f;
 
-            var res = await farmers.ToListAsync();
-            if (res.Count > 0)
+            //var res = await farmers.ToListAsync();
+            if (farmers.Count > 0)
             {
-                return res.Select(f => f.Map()).ToList();
+                return farmers.Select(f => f.Map()).ToList();
             }
 
 

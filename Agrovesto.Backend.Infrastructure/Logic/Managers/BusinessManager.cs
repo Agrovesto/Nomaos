@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -35,9 +36,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAgentRepository _agentRepository;
         private readonly ICooperativeRepository _cooperativeRepository;
         private readonly ILogger<BusinessManager> _log;
+
+        private readonly ISMSService _whisperSMSService;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
-            IAgentRepository agentRepository,
+            IAgentRepository agentRepository, ISMSService whisperSMSService,
                  ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
@@ -48,6 +51,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _agentRepository = agentRepository;
             _cooperativeRepository = cooperativeRepository;
             _log = log;
+
+            _whisperSMSService = whisperSMSService;
         }
         public async Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query)
         {
@@ -315,6 +320,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //}
                     subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
                    subaccount.UserId = registeredUser.model.Id;
+                    //var messageBody = $"You are welcome onboard. ";
+
+                    //var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                    //{
+                    //    campaign_name = "Agrovesto Notification",
+                    //    contacts = new List<string> { model.PhoneNumber },
+                    //    message = messageBody,
+                    //});
+                    //var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                    //{
+                    //    to = $"234{model.PhoneNumber.GetLast(10)}",
+                    //    sms = messageBody
+                    //});
                     return subaccount;
                 }
                 catch (Exception ex)
@@ -775,7 +793,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
+                var farmers = await _farmerRepository.GetFarmersByAgent(agent.Id, query);
                 if (farmers == null) return new PagedListResponse<List<FarmerModel>>
                 {
                     Succeeded = true,
