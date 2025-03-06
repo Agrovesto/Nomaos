@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class ImageModel
     {
-        public IFormFile FarmerImage { get; set; }
+        public IFormFile File { get; set; }
         public string FarmerUserId { get; set; }
     }
     public class UserModel
