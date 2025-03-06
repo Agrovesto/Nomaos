@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
@@ -48,6 +49,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmPlotDetailsManager, FarmPlotDetailsManager>();
             services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
+            services.AddScoped<IFaceManager, FaceManager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();

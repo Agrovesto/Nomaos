@@ -15,7 +15,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("compare-face")]
-        public async Task<IActionResult> CompareFaces([FromForm] IFormFile uploadedImage, [FromQuery] string userId, [FromQuery] int targetImageId)
+        public async Task<IActionResult> CompareFaces(IFormFile uploadedImage, [FromQuery] string userId, [FromQuery] int targetImageId)
         {
             var result = await _faceManager.CompareFaces(uploadedImage, userId, targetImageId);
             if (result == null)

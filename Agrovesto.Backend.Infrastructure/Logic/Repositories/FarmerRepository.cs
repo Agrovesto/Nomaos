@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -273,6 +274,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return farmer.Map();
         }
+        public async Task<List<FarmerImagesModel>> GetImagesByBusinessCode(string businessCode)
+        {
+            var query= await _context.FarmerImages
+                                 .Where(img => img.BelongToBusinessCode == businessCode)
+                                 .ToListAsync();
+
+            if (query == null)
+            {
+                return null;
+            }
+            return query.Select(x=>x.Map()).ToList();
+        }
+
     }
 }
 
