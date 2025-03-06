@@ -30,5 +30,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(string userId, ListQueryParams query);
         Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsync(ListQueryParams query);
+        Task<object> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args);
     }
 }

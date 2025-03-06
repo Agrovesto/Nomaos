@@ -382,6 +382,29 @@ namespace Agrovesto.Backend.Infrastructure
         }
         #endregion warehouse
         #region userMgt
+        public static FarmerImagesModel Map(this FarmerImages entities)
+        {
+            if (entities == null) { return null; }
+            return new FarmerImagesModel
+            {
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+                FarmerUserId = entities.FarmerUserId,
+                Id = entities.Id,
+                ImageName = entities.ImageName,
+                ImageKey = entities.IMageKey,
+            };
+        }
+        public static FarmerImages Map(this FarmerImagesModel model)
+        {
+            if (model == null) { return null; }
+            return new FarmerImages
+            {
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                FarmerUserId = model.FarmerUserId,
+                ImageName = model.ImageName,
+                IMageKey = model.ImageKey,
+            };
+        }
         public static FarmerModel Map(this Farmer entities)
         {
             if (entities == null) { return null; }

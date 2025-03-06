@@ -8,6 +8,7 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -37,11 +38,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ICooperativeRepository _cooperativeRepository;
         private readonly ILogger<BusinessManager> _log;
 
+        private readonly IFaceManager _faceManager;
         private readonly ISMSService _whisperSMSService;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
             IAgentRepository agentRepository, ISMSService whisperSMSService,
-                 ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
+                IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
@@ -52,6 +54,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _cooperativeRepository = cooperativeRepository;
             _log = log;
 
+            _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
         }
         public async Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query)
@@ -889,5 +892,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
+
+        public async Task<object> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
+        {
+            object saveFace = new object();
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new Exception("Business does not exist");
+
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    saveFace = await _faceManager.UploadImage(model.FarmerImage, model.FarmerUserId, args.businessCode);
+
+
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return saveFace;
+        }
+
     }
 }

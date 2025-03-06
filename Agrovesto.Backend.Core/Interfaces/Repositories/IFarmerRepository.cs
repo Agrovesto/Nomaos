@@ -18,5 +18,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query);
+        Task<(bool status, FarmerImagesModel data)> SaveImage(FarmerImagesModel data);
+
+        Task<FarmerImagesModel> GetFarmerImage(string userId);
     }
 }
