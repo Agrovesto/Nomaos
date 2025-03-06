@@ -2,6 +2,8 @@ using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Rekognition;
+using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
@@ -51,6 +53,11 @@ builder.Services.AddIdentity<User, Role>(opt =>
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();
 builder.Services.AddAppServices(builder.Configuration);
+
+builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
+builder.Services.AddAWSService<IAmazonS3>();
+builder.Services.AddAWSService<IAmazonRekognition>();
+
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(opt =>
