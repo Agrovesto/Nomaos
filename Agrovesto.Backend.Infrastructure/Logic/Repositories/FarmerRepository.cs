@@ -265,9 +265,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, entity.Map());
         }
 
-        public async Task<FarmerImagesModel> GetFarmerImage(string userId)
+        public async Task<FarmerImagesModel> GetFarmerImage(string userId, string businessCode)
         {
-            var farmer = await _context.FarmerImages.Where(x => x.FarmerUserId == userId).FirstOrDefaultAsync();
+            var farmer = await _context.FarmerImages.Where(x => x.FarmerUserId == userId && x.BelongToBusinessCode==businessCode).FirstOrDefaultAsync();
             if (farmer == null)
             {
                 return null;
