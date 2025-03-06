@@ -21,5 +21,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<(bool status, FarmerImagesModel data)> SaveImage(FarmerImagesModel data);
 
         Task<FarmerImagesModel> GetFarmerImage(string userId);
+        Task<List<FarmerImagesModel>> GetImagesByBusinessCode(string businessCode);
     }
 }

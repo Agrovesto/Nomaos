@@ -896,28 +896,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<object> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
         {
             object saveFace = new object();
-            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                ?? throw new Exception("Business does not exist");
+            //var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+            //    ?? throw new Exception("Business does not exist");
 
 
-            var strategy = _context.Database.CreateExecutionStrategy();
+            //var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            //await strategy.ExecuteAsync(async () =>
+            //{
+            //    await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    saveFace = await _faceManager.UploadImage(model.FarmerImage, model.FarmerUserId, args.businessCode);
+                    saveFace = await _faceManager.UploadImage(model.File, model.FarmerUserId, args.businessCode);
 
-
+                return saveFace;
                 }
                 catch (Exception ex)
                 {
-                    await dbTransaction.RollbackAsync();
+                    //await dbTransaction.RollbackAsync();
                     throw new Exception($"{ex.Message}", ex);
                 }
-            });
-            return saveFace;
+           // });
+            //return saveFace;
         }
 
     }
