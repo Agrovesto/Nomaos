@@ -735,6 +735,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             var getInputInventory = await _repository.GetInputBYIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
                             if (getInputInventory == null || getInputInventory.IsAvailable == false)
                                 throw new ArgumentException($"This item does not exist: {item.Name}");
+
+                            item.Name = getInputInventory.InputName;
                         }
                         model.CreatedBy = args.UserId;
                         model.BelongToBusinessCode = business.BusinessCode;

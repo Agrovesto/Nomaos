@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public long BundleId { get; set; }
-        public string Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
+        public string? Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
         public long Unit { get; set; }
         public long WarehouseInputInventoryId { get; set; } //i. bunlde item must exist in the warehouse
     }
