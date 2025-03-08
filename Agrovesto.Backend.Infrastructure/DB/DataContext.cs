@@ -45,15 +45,17 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmerImages> FarmerImages { get; set; }
 
     }
-    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
-    //{
-    //    public DataContext CreateDbContext(string[] args)
-    //    {
-    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-    //        optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_paasdev;User Id=db_a971fc_paasdev_admin;Password=Agro144828@");
+    public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    {
+        public DataContext CreateDbContext(string[] args)
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+            optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@",
+                options =>
+            options.MigrationsAssembly("Agrovesto.Backend.API"));
 
-    //        return new DataContext(optionsBuilder.Options);
-    //    }
-    //}
+            return new DataContext(optionsBuilder.Options);
+        }
+    }
 
 }

@@ -85,7 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 model.UserId = args.UserId;
                                 model.IsMainAccount = true;
                                 model.CreatedBy = business.BusinessName;
-                                model.CreatedOn = DateTimeOffset.Now;
+                                model.OnBoardedOn = DateTimeOffset.Now;
                                 model.BusinessId = business.BusinessId;
 
                                 model.Status = BusinessStatus.Live.ToString();
@@ -159,7 +159,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 model.UserId = args.UserId;
                                 model.IsMainAccount = true;
                                 model.CreatedBy = business.BusinessName;
-                                model.CreatedOn = DateTimeOffset.Now;
+                                model.OnBoardedOn = DateTimeOffset.Now;
                                // model.SubAccountType = Enum.GetName(typeof(SubAccountType), model.s)
                                 //  model.BusinessId = business.BusinessId;
 

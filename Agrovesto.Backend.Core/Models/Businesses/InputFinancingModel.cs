@@ -10,9 +10,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class InputFinancingModel
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public long Id { get; set; }
+      public long Id { get; set; }
         public string RequestingFarmerName { get; set; }
         public long RequestingFarmerId { get; set; }
         public string BundlePlanSubscribedTo { get; set; }

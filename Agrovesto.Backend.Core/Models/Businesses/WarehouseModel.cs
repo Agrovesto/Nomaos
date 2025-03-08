@@ -10,8 +10,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public class WarehouseModel
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public string Name { get; set; }
         public string Location { get; set; }
@@ -26,8 +24,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class WarehouseInputInventoryModel
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+      
         public long Id { get; set; }
         public string? InputName { get; set; }
         public string? InputDescription { get; set; }
@@ -60,8 +57,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class WarehouseUserModel
     {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+      
         public long Id { get; set; }
         public string Name { get; set; }
         public string Location { get; set; }

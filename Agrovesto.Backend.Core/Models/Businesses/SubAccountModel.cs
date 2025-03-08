@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long BusinessId { get; set; }
         public string? Status { get; set; }
         public bool IsMainAccount { get; set; } //is main account is true for business, where as users account under the business is false
-        public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTime.Now;
         public string? CreatedBy { get; set; }
         public string? Bvn { get; set; }
         public string? DOB { get; set; }
