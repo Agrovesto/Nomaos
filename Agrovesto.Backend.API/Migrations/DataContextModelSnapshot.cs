@@ -123,6 +123,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("TotalBundlePackageRequested")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("WarehouseId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.ToTable("Bundles");

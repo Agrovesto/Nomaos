@@ -29,7 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool ShouldAddCommission { get; set; }
         public decimal CommissionPrice { get; set; }
         public decimal BundleEquityPlusCommission { get; set; }
-
+        public long WarehouseId { get; set; }
         public decimal BundleEquityPrice { get; set; }
     }
 

@@ -394,7 +394,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 BankAccount = model.BankAccount,
                 BankName = model.BankName,
                 CreatedBy = args.UserId,
-                CreatedOn = DateTimeOffset.UtcNow,
+                OnBoardedOn = DateTimeOffset.UtcNow,
                 IsMainAccount = false,
                 Status = BusinessStatus.Registered.ToString()
             };
