@@ -163,6 +163,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 Name = model.Name,
                 Description = model.Description,
                 BundlePrice = model.BundlePrice,
+                WarehouseId = model.WarehouseId,
+                
                 BundlePackage = model.BundlePackage.Select(i => new BundleItems
                 {
                     Name = i.Name,
@@ -185,24 +187,74 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return bundle.Map();
         }
 
-
         public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
         {
-            var bundles = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
-            ).ToListAsync();
-            if (bundles == null) { throw new Exception("No record found"); }
+            var bundles = await _context.Bundles
+                .Include(b => b.BundlePackage)
+                .Where(x => x.BelongToBusinessCode == belongToBusiness)
+                .ToListAsync();
 
-            return bundles.Select(x => x.Map()).ToList();
+            if (bundles == null || !bundles.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            // Fetch warehouse names for all distinct WarehouseIds in bundles
+            var warehouseIds = bundles.Select(b => b.WarehouseId).Distinct().ToList();
+            var warehouses = await _context.Warehouses
+                .Where(w => warehouseIds.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name);
+
+            return bundles.Select(bundle =>
+            {
+                var mappedBundle = bundle.Map();
+                if (warehouses.TryGetValue(bundle.WarehouseId, out var warehouseName))
+                {
+                    mappedBundle.WarehouseName = warehouseName;
+                }
+                return mappedBundle;
+            }).ToList();
         }
 
+        //public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
+        //{
+        //    var bundles = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
+        //    ).ToListAsync();
+        //    if (bundles == null) { throw new Exception("No record found"); }
+
+        //    return bundles.Select(x => x.Map()).ToList();
+        //}
         public async Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId)
         {
-            var bundle = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
-         && x.Id == bundleId).FirstOrDefaultAsync();
-            if (bundle == null) { throw new Exception("No record found"); }
+            var bundle = await _context.Bundles
+                .Include(b => b.BundlePackage)
+                .Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == bundleId)
+                .FirstOrDefaultAsync();
 
-            return bundle.Map();
+            if (bundle == null)
+            {
+                throw new Exception("No record found");
+            }
+
+            // Fetch warehouse name for the bundle
+            var warehouseName = await _context.Warehouses
+                .Where(w => w.Id == bundle.WarehouseId)
+                .Select(w => w.Name)
+                .FirstOrDefaultAsync();
+
+            var mappedBundle = bundle.Map();
+            mappedBundle.WarehouseName = warehouseName;
+
+            return mappedBundle;
         }
+        //public async Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId)
+        //{
+        //    var bundle = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
+        // && x.Id == bundleId).FirstOrDefaultAsync();
+        //    if (bundle == null) { throw new Exception("No record found"); }
+
+        //    return bundle.Map();
+        //}
         #endregion BundleManagement
         #region inputmgt
         public async Task<WarehouseInputInventoryModel> CreateAsync(WarehouseInputInventoryModel inventory)

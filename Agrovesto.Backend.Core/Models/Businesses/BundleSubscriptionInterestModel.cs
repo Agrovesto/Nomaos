@@ -29,7 +29,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalQuantityPaidFor { get; set; }
         public EquityPaymentStatus PaymentStatus { get; set; }
         public DateTimeOffset? PaymentDate { get; set; }
-        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public decimal EquityPlusCommission { get; set; }
         public bool IsCommissionPaidOut { get; set; }//has Agrovesto commission been paid
 
