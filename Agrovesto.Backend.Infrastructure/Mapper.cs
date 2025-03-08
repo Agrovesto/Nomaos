@@ -86,7 +86,7 @@ namespace Agrovesto.Backend.Infrastructure
             return new BundleSubscriptionInterestModel
             {
                OfficerInChargeUserId = entity.OfficerInChargeUserId,
-               CreatedOn = entity.CreatedOn,
+               OnBoardedOn = entity.CreatedOn,
                CommissionPercentage = entity.CommissionPercentage,
                CommissionPrice = entity.CommissionPrice,
                EquityPlusCommission = entity.EquityPlusCommission,
@@ -108,7 +108,8 @@ namespace Agrovesto.Backend.Infrastructure
               BelongToBusinessCode= entity.BelongToBusinessCode,
               Reference= entity.Reference,
                 Location= entity.Location,
-              CooperativeId= entity.CooperativeId  
+              CooperativeId= entity.CooperativeId  ,
+              
             };
         }
 
@@ -122,7 +123,7 @@ namespace Agrovesto.Backend.Infrastructure
             {
                PaymentStatus= Enum.GetName(typeof(EquityPaymentStatus), model.PaymentStatus),
                 OfficerInChargeUserId = model.OfficerInChargeUserId,
-                CreatedOn = model.CreatedOn,
+                CreatedOn = model.OnBoardedOn,
                 CommissionPercentage = model.CommissionPercentage,
                 CommissionPrice = model.CommissionPrice,
                 EquityPlusCommission = model.EquityPlusCommission,
@@ -167,13 +168,13 @@ namespace Agrovesto.Backend.Infrastructure
                 AvailableBundlePackagePacked = entity.AvailableBundlePackagePacked,
                 BelongToBusinessCode = entity.BelongToBusinessCode,
                 CreatedBy = entity.CreatedBy,
-                CreatedOn = entity.CreatedOn,
+                OnBoardedOn = entity.CreatedOn,
                 BundlePackage = entity.BundlePackage.Select(x => x.Map()).ToList(),
                 BundleEquityPlusCommission = entity.BundleEquityPlusCommission,
                 CommissionPrice = entity.CommissionPrice,
                 ShouldAddCommission = entity.ShouldAddCommission,
                 BundleEquityPrice= entity.BundleEquityPrice,
-                
+                WarehouseId =entity.WarehouseId,
             };
         }
 
@@ -190,7 +191,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BundlePrice = model.BundlePrice,
              BelongToBusinessCode   = model.BelongToBusinessCode,
              CreatedBy = model.CreatedBy,
-             CreatedOn = model.CreatedOn,
+             CreatedOn = model.OnBoardedOn,
              BundlePackage = model.BundlePackage.Select(x=>x.Map()).ToList(),
                 Name = model.Name,
                 TotalBundlePackagePacked = model.TotalBundlePackagePacked,
@@ -199,7 +200,8 @@ namespace Agrovesto.Backend.Infrastructure
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
                 CommissionPrice = model.CommissionPrice,
                 ShouldAddCommission = model.ShouldAddCommission,
-                BundleEquityPrice=model.BundleEquityPrice
+                BundleEquityPrice=model.BundleEquityPrice,
+                WarehouseId=model.WarehouseId,
             };
         }
 
@@ -555,7 +557,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessId = model.BusinessId,
                 Bvn = model.Bvn,
                 CreatedBy = model.CreatedBy,
-                CreatedOn = model.CreatedOn,
+                CreatedOn = model.OnBoardedOn,
                 IsMainAccount = model.IsMainAccount,
                 NIN = model.NIN,
                 PhoneNumber = model.PhoneNumber,
@@ -585,7 +587,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessId = entity.BusinessId,
                 Bvn = entity.Bvn,
                 CreatedBy = entity.CreatedBy,
-                CreatedOn = entity.CreatedOn,
+                OnBoardedOn = entity.CreatedOn,
                 IsMainAccount = entity.IsMainAccount,
                 NIN = entity.NIN,
                 PhoneNumber = entity.PhoneNumber,

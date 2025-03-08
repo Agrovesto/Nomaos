@@ -1,5 +1,8 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Amazon;
 using Amazon.Rekognition;
 using Amazon.Rekognition.Model;
@@ -8,6 +11,8 @@ using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,9 +29,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
         private readonly IConfiguration _configuration;
         private readonly IFarmerRepository _farmerRepository;
         private const float SimilarityThreshold = 70F;
+        private readonly ILogger<FaceManager> _log;
 
-        public FaceManager(IConfiguration configuration, IFarmerRepository farmerRepository)
+        public FaceManager(IConfiguration configuration, ILogger<FaceManager> log, IFarmerRepository farmerRepository)
         {
+            _log = log;
 
             var awsAccessKey = configuration["AWS:AccessKey"];
             var awsSecretKey = configuration["AWS:SecretKey"];
@@ -46,50 +53,64 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             _farmerRepository = farmerRepository;
         }
 
-        public async Task<object> CompareFaces(IFormFile uploadedImage, string userId, int targetImageId)
+        public async Task<object> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
         {
-            if (uploadedImage == null || uploadedImage.Length == 0)
+            try
             {
-                return null;
+
+                if (uploadedImage == null || uploadedImage.Length == 0)
+                {
+                    return null;
+                }
+
+                string bucketName = _configuration["AWS:BucketName"];
+                if (string.IsNullOrEmpty(bucketName))
+                {
+                    return null;
+                }
+
+                var targetImageRecord = await _farmerRepository.GetFarmerImage(args.FarmerUserId, args.BusinessCode);
+                if (targetImageRecord == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for the specified farmer");
+                }
+
+
+                Amazon.Rekognition.Model.Image sourceImage;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await uploadedImage.CopyToAsync(memoryStream);
+                    sourceImage = new Amazon.Rekognition.Model.Image { Bytes = memoryStream };
+                }
+
+                var targetImage = await GetImageFromS3(bucketName, targetImageRecord.ImageKey);
+                if (targetImage == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                }
+
+                var compareFacesRequest = new CompareFacesRequest
+                {
+                    SourceImage = sourceImage,
+                    TargetImage = targetImage,
+                    SimilarityThreshold = SimilarityThreshold
+                };
+
+                var compareFacesResponse = await _rekognitionClient.CompareFacesAsync(compareFacesRequest);
+                bool isMatch = compareFacesResponse.FaceMatches.Count > 0;
+
+                return new { IsSimilarFace = isMatch, Similarity = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
             }
-
-            string bucketName = _configuration["AWS:BucketName"];
-            if (string.IsNullOrEmpty(bucketName))
+            catch (BaseException ex)
             {
-                return null;
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
-
-            var targetImageRecord = await _farmerRepository.GetFarmerImage(userId);
-            if (targetImageRecord == null)
+            catch (Exception ex)
             {
-                return null;
+                throw new Exception($"Recognition Error: {ex.Message}");
             }
-
-
-            Amazon.Rekognition.Model.Image sourceImage;
-            using (var memoryStream = new MemoryStream())
-            {
-                await uploadedImage.CopyToAsync(memoryStream);
-                sourceImage = new Amazon.Rekognition.Model.Image { Bytes = memoryStream };
-            }
-
-            var targetImage = await GetImageFromS3(bucketName, targetImageRecord.ImageKey);
-            if (targetImage == null)
-            {
-                return null;
-            }
-
-            var compareFacesRequest = new CompareFacesRequest
-            {
-                SourceImage = sourceImage,
-                TargetImage = targetImage,
-                SimilarityThreshold = SimilarityThreshold
-            };
-
-            var compareFacesResponse = await _rekognitionClient.CompareFacesAsync(compareFacesRequest);
-            bool isMatch = compareFacesResponse.FaceMatches.Count > 0;
-
-            return new { match = isMatch, similarity = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
         }
 
         public async Task<object> UploadImage(IFormFile image, string userId, string businessCode)
@@ -177,51 +198,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             }
             catch (AmazonRekognitionException ex)
             {
-                Console.WriteLine($"Rekognition Error: {ex.Message}");
-                return false;
+                throw new Exception($"Recognition Error: {ex.Message}");
+           
             }
         }
-
-        //public async Task<object> UploadImage(IFormFile image, string userId, string businessCode)
-        //{
-        //    if (image == null || image.Length == 0)
-        //    {
-        //        return null;
-        //    }
-
-        //    string bucketName = _configuration["AWS:BucketName"];
-        //    if (string.IsNullOrEmpty(bucketName))
-        //    {
-        //        return null;
-        //    }
-
-        //    string imageKey = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
-
-        //    using (var memoryStream = new MemoryStream())
-        //    {
-        //        await image.CopyToAsync(memoryStream);
-        //        var putRequest = new PutObjectRequest
-        //        {
-        //            BucketName = bucketName,
-        //            Key = imageKey,
-        //            InputStream = memoryStream,
-        //            ContentType = image.ContentType
-        //        };
-        //        await _s3Client.PutObjectAsync(putRequest);
-        //    }
-
-        //    var targetImage = await _farmerRepository.SaveImage(new Core.Models.Businesses.FarmerImagesModel
-        //    {
-        //        BelongToBusinessCode =  businessCode,
-        //        FarmerUserId =  userId,
-        //        ImageKey = imageKey,
-        //        ImageName = image.FileName
-
-        //    });
-
-        //    return new { message = "Image uploaded successfully", imageKey = imageKey };
-        //}
-
         private async Task<Amazon.Rekognition.Model.Image> GetImageFromS3(string bucket, string key)
         {
             try

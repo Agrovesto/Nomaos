@@ -22,13 +22,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal BundlePrice { get; set; }
         public long AvailableBundlePackagePacked { get; set; }
         public string? CreatedBy { get; set; }
-        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? BelongToBusinessCode { get; set; }
 
         public bool ShouldAddCommission { get; set; }
         public decimal CommissionPrice { get; set; }
         public decimal BundleEquityPlusCommission { get; set; }
-
+        public long WarehouseId { get; set; }
+        public string? WarehouseName { get; set; }
     }
 
     public class BundleItemsModel
@@ -37,7 +38,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public long BundleId { get; set; }
-        public string Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
+        public string? Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
         public long Unit { get; set; }
         public long WarehouseInputInventoryId { get; set; } //i. bunlde item must exist in the warehouse
     }
