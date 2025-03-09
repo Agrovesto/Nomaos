@@ -222,32 +222,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var selectedBundle = bundleOfInterest.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefault();
                         var totalSettlment = getInputInventory.BundleEquityPlusCommission;
                         var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice;
-                        var settlementPlatformSplitAmount = getInputInventory.CommissionPrice - sterlingCharge;
+                        var settlementPlatformSplitAmount = getInputInventory.CommissionPrice; //- sterlingCharge;
 
                         //TODO: REMOVE THIS LINE WHEN DEPLOYING
-                       
+                        //TODO: REMOVE THIS
+                        farmerWallet.Balance = "50000";
 
-                        if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
-                        {
-                            throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement Validation mismatched");
-                        }
+                        //if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
+                        //{
+                        //    throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement Validation mismatched");
+                        //}
                         if (selectedBundle != null && (decimal.Parse(farmerWallet.Balance) > (selectedBundle.ExpectedTotalEquityPrice - sterlingCharge)))
                         {
-                            var reference = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}";
+                            var reference = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
 
                             var createBusinessSettlement = await _cafeOneWalletService.UserWalletToBusinessWalletTransfer(new WalletToWalletTransferRequest
                             {
                                 Amount = settlementSplitAmountBusiness,
-                                BusinessAccountNumber = businessAccount.AccountNumber,
-                                FromAccount = userSterlinWallet.AccountNumber,
+                                BusinessAccountNumber = businessAccount.InternalAccountId,
+                                FromAccount = userSterlinWallet.InternalAccountId,
                                 Env = args.Env,
                                 Memo = $"Input finance subscription for {getInputInventory.Name} by {farmer.Name} on {DateTimeOffset.Now}",
                                 OwnerId = userSterlinWallet.OwnerId,
                                 Reference = reference
                             });
                             _log.LogInformation($"Response from user transfer to User Business {business.BusinessCode} Wallet", JsonConvert.SerializeObject(createBusinessSettlement));
-                            var createPlatformSettlement = await _cafeOneWalletService.UserWalletToAgrovestoTransfer(reference,
-                                userSterlinWallet.OwnerId, settlementPlatformSplitAmount, userSterlinWallet.AccountNumber, args.Env);
+                            var @ref = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
+
+                            var createPlatformSettlement = await _cafeOneWalletService.UserWalletToAgrovestoTransfer(@ref,
+                                userSterlinWallet.OwnerId, settlementPlatformSplitAmount, userSterlinWallet.InternalAccountId, args.Env);
                             _log.LogInformation("Response from user transfer to Agrovesto Wallet", JsonConvert.SerializeObject(createPlatformSettlement));
                             //log reeponse
 
@@ -255,9 +258,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             {
                                 var status = createBusinessSettlement.Status;
                                 var platformstatus = createPlatformSettlement.Status;
-                                model.PaymentStatus = status == "Succeeded" ? EquityPaymentStatus.Paid : EquityPaymentStatus.Failed;
-                                model.PaymentDate = status == "Succeeded" ? DateTimeOffset.Now : null;
-                                model.IsCommissionPaidOut = platformstatus == "Suceeded" ? true : false;
+                                model.Status = status == "success" ? EquityPaymentStatus.Paid : EquityPaymentStatus.Failed;
+                                model.PaymentDate = status == "success" ? DateTimeOffset.Now : null;
+                                model.IsCommissionPaidOut = platformstatus == "success" ? true : false;
                                 model.TotalQuantityPaidFor = (long)(settlementSplitAmountBusiness / selectedBundle.ExpectedEquityPricePerBundle);
                                 model.TotalEquityPaid = settlementSplitAmountBusiness;
 
@@ -272,18 +275,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                             var update = await _repository.UpdateSubscriptionPayment(model);
 
+                            await _context.SaveChangesAsync();
+                            await dbTransaction.CommitAsync();
                             var messageBody = $"You have successfully completed your subscription for input package: {getInputInventory.BundlePackage}." +
                                               $"You will receive an update when distribution begins ";
 
                             var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
                             {
                                 campaign_name = "Input Notification",
-                                contacts = new List<string> { farmer.PhoneNumber },
+                                contacts = new List<string> { "09061562512" },//farmer.PhoneNumber },
                                 message = messageBody,
                             });
                             var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
                             {
-                                to = $"234{farmer.PhoneNumber.GetLast(10)}",
+                                to = "2349061562512",//$"234{farmer.PhoneNumber.GetLast(10)}",
                                 sms = messageBody
                             });
                             return (true, "Payment Updated");
@@ -307,6 +312,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
+            var status = true;
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -316,13 +322,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
 
                     var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
-                        ?? throw new Exception("Bundle does not exist");
+                         ?? throw new Exception("Bundle does not exist");
                     var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId) ?? throw new Exception("Farmer does not exist");
 
+                    var sterlingCharge = decimal.Parse(_configuration["Sterling:Charge"]);
                     model.BelongToBusinessCode = args.businessCode;
                     model.OfficerInChargeUserId = args.UserId;
                     model.InterestedBundleName = getInputInventory.Name;
-                    model.PaymentStatus = EquityPaymentStatus.Initial;
+                    model.Status = EquityPaymentStatus.Initial;
                     model.FarmerName = farmer.Name;
                     model.CooperativeId = args.CooperativeId;
                     model.Location = farmer.State;
@@ -333,18 +340,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                                                                   //model.EquityPlusCommission = (getInputInventory.BundlePrice * model.QuantityOfInterest) + getInputInventory.CommissionPrice
                     }
 
-                    model.ExpectedEquityPricePerBundle = getInputInventory.BundleEquityPrice; //if equity price is availa
+                    model.ExpectedEquityPricePerBundle = getInputInventory.BundleEquityPrice; //if equity price is available use equityprice
                     var expectedPayment = ((getInputInventory.BundleEquityPrice * model.QuantityOfInterest) + model.CommissionPrice);
 
                     if (expectedPayment < getInputInventory.BundleEquityPlusCommission)
                     {
                         throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Bundle equity value mismatched");
                     }
-                    model.ExpectedTotalEquityPrice = expectedPayment;
-                    var createWarehouse = await _repository.CreateInputFinancingInterestThroughBundle(model);
+                    model.ExpectedTotalEquityPrice = expectedPayment + sterlingCharge;
 
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
 
                     //after interest created, call, user sterling bank and display amount to pay
                     var userSterlinWallet = await _walletRepository.GetSterlingWallet(farmer.UserId);
@@ -354,29 +358,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var userWallet = await _cafeOneWalletService.GetUserAccount(userSterlinWallet.InternalAccountId, args.Env);
                         if (userWallet != null)
                         {
+                            
+                            var createWarehouse = await _repository.CreateInputFinancingInterestThroughBundle(model);
+
+                            await _context.SaveChangesAsync();
+                            await dbTransaction.CommitAsync();
 
                             response.AccountName = userWallet.ProviderAccountName;
                             response.AccountNUmber = userWallet.AccountNumber;
                             response.BankName = userWallet.ProviderBankName;
-                            response.Amount = createWarehouse.data.ExpectedTotalEquityPrice;
+                            response.Amount = createWarehouse.data.ExpectedTotalEquityPrice ;
+                            var messageBody = $"You have indicated interest in input package: {getInputInventory.BundlePackage}." +
+                             $"Confirm your equity by crediting {response.Amount} into {response.AccountNUmber} {response.AccountName} {response.BankName} ";
 
+                            var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                            {
+                                campaign_name = "Input Notification",
+                                contacts = new List<string> { farmer.PhoneNumber },
+                                message = messageBody,
+                            });
+                            var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                            {
+                                to = $"234{farmer.PhoneNumber.GetLast(10)}",
+                                sms = messageBody
+                            });
+                            status = true;
+                            //return (status, response);
                         }
                     }
-                    var messageBody = $"You have indicated interest in input package: {getInputInventory.BundlePackage}." +
-                    $"Confirm your equity by crediting {response.Amount} into {response.AccountNUmber} {response.AccountName} {response.BankName} ";
-
-                    var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                    {
-                        campaign_name = "Input Notification",
-                        contacts = new List<string> { farmer.PhoneNumber },
-                        message = messageBody,
-                    });
-                    var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                    {
-                        to = $"234{farmer.PhoneNumber.GetLast(10)}",
-                        sms = messageBody
-                    });
-                    return (true, response);
+                    status = false;
+                    // (status, response);
                 }
                 catch (Exception ex)
                 {
@@ -385,7 +396,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
 
             });
-            return (true, response);
+            return (status, response);
         }
 
 

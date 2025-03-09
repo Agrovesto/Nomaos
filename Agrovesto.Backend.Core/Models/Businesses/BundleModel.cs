@@ -13,9 +13,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public decimal BundleEquityPrice { get; set; }
         public long Id { get; set; }
-        public string Name { get; set; }
-        public string Description { get; set; }
-        public List<BundleItemsModel> BundlePackage { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public List<BundleItemsModel>? BundlePackage { get; set; }
         public long TotalBundlePackagePacked { get; set; }
         public long TotalBundlePackageRequested { get; set; }
         public long TotalBundlePackageDisbursed { get; set; }

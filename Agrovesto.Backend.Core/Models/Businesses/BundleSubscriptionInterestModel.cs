@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal TotalEquityPaid { get; set; }
         public decimal EquityPaymentBalanceDeficit { get; set; }
         public long TotalQuantityPaidFor { get; set; }
-        public EquityPaymentStatus PaymentStatus { get; set; }
+        public EquityPaymentStatus Status { get; set; }
         public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public decimal EquityPlusCommission { get; set; }
@@ -43,5 +43,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Location { get; set; }
         public long CooperativeId { get; set; }
         public string? AccountBalance { get; set; }
+        public string? PaymentStatus { get; set; }
     }
 }

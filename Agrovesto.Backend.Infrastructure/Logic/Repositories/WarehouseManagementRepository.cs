@@ -179,12 +179,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 AvailableBundlePackagePacked = 0,
                 TotalBundlePackageRequested = 0,
                 TotalBundlePackageDisbursed = 0,
-                BundleEquityPrice = model.BundleEquityPrice
+                BundleEquityPrice = model.BundleEquityPrice,
+                BundleEquityPlusCommission = model.BundleEquityPlusCommission,
             };
             _context.Set<Bundle>().Add(bundle);
             await _context.SaveChangesAsync();
 
             return bundle.Map();
+        }
+
+        public async Task<BundleModel> UpdateBundleEquitPrice(BundleModel model)
+        {
+            var bundle = await _context.Bundles.Include(x=>x.BundlePackage).Where(x => x.Id == model.Id && x.BelongToBusinessCode == model.BelongToBusinessCode).FirstOrDefaultAsync();
+            if (bundle != null)
+            {
+                bundle.BundleEquityPrice = model.BundleEquityPrice;
+                bundle.BundleEquityPlusCommission = model.BundleEquityPlusCommission;
+                bundle.CommissionPrice = model.CommissionPrice;
+                bundle.ShouldAddCommission = model.ShouldAddCommission;
+
+                await _context.SaveChangesAsync();
+                return bundle.Map();
+            }
+            return null;
         }
 
         public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)

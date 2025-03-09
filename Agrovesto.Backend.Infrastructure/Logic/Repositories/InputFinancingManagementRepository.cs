@@ -99,7 +99,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (interest != null)
             {
-                interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.PaymentStatus);
+                interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
                 interest.PaymentDate = model.PaymentDate;
                 interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
                 interest.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
