@@ -1,4 +1,6 @@
+
 using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.Infrastructure;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -14,6 +16,16 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
+builder.Services.AddAWSService<Amazon.S3.IAmazonS3>();
+builder.Services.AddAWSService<IAmazonRekognition>();
+
+
+
+var secretsManagerHelper = new AwsSecretsManagerHelper();
+var connectionString = await secretsManagerHelper.GetConnectionStringAsync();
+
+
 // Add services to the container.
 //builder.Services.AddDbContext<DataContext>(options =>
 
@@ -24,7 +36,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+       connectionString,
         sqlOptions =>
         {
             sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
@@ -55,8 +67,7 @@ builder.Services.AddIdentity<User, Role>(opt =>
 builder.Services.AddAppServices(builder.Configuration);
 
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
-builder.Services.AddAWSService<IAmazonS3>();
-builder.Services.AddAWSService<IAmazonRekognition>();
+
 
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

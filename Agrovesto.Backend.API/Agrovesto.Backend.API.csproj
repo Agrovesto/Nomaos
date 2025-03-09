@@ -14,6 +14,7 @@
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.107" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.415.12" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.109" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.1">

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,10 +50,18 @@ namespace Agrovesto.Backend.Infrastructure.DB
     {
         public DataContext CreateDbContext(string[] args)
         {
+            // Retrieve the connection string from AWS Secrets Manager
+            var secretsManagerHelper = new AwsSecretsManagerHelper();
+            var connectionString = secretsManagerHelper.GetConnectionString();
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new Exception("Failed to retrieve database connection string from AWS Secrets Manager.");
+            }
+
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-            optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@",
-                options =>
-            options.MigrationsAssembly("Agrovesto.Backend.API"));
+            optionsBuilder.UseSqlServer(connectionString,options =>
+    options.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)); ;
 
             return new DataContext(optionsBuilder.Options);
         }
