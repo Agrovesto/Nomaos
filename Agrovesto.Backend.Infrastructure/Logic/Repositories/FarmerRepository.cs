@@ -232,29 +232,58 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return null;
         }
-
         public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
         {
 
             var farmers = await _context.Farmers
-                .AsNoTracking()
-                .Where(s
-                =>
-                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-                // || s.Lga.Contains(query.Location))) &&
-                s.BelongToBusinessCode == businessCode)
-                .OrderByDescending(s => s.OnBoardedOn)
-                .Skip(query.PageNumber)
-                .Take(query.PageSize)
-                 .Select(s => s.Map()).ToListAsync();
+                .Where(x => x.BelongToBusinessCode == businessCode)
+                .ToListAsync();
 
-
-            if (farmers.Count > 0)
+            if (farmers == null || !farmers.Any())
             {
-                return farmers;
+                throw new Exception("No record found");
             }
-            return null;
+
+            // Fetch cooperative names for all distinct cooperativeIds in farmers
+            var cooperativeId = farmers.Select(b => b.BelongToCooperativeId).Distinct().ToList();
+            var cooperatives = await _context.Cooperatives
+                .Where(w => cooperativeId.Contains(w.Id))
+                .ToDictionaryAsync(w => w.Id, w => w.Name);
+
+            return farmers.Select(farmer =>
+            {
+                var mappedFarmer = farmer.Map();
+                if (cooperatives.TryGetValue(farmer.BelongToCooperativeId, out var cooperativeName))
+                {
+                    mappedFarmer.CooperativeName = cooperativeName;
+                }
+                return mappedFarmer;
+            }).ToList();
         }
+
+        //public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
+        //{
+
+        //    var farmers = await _context.Farmers
+        //        .AsNoTracking()
+        //        .Where(s
+        //        =>
+        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+        //        // || s.Lga.Contains(query.Location))) &&
+        //        s.BelongToBusinessCode == businessCode)
+        //        .OrderByDescending(s => s.OnBoardedOn)
+        //        .Skip(query.PageNumber)
+        //        .Take(query.PageSize)
+        //         .Select(s => s.Map()).ToListAsync();
+
+
+        //    if (farmers.Count > 0)
+        //    {
+        //        return farmers;
+        //    }
+        //    return null;
+        //}
+      
         public async Task<(bool status, FarmerImagesModel data)> SaveImage(FarmerImagesModel data)
         {
             var entity = data.Map();

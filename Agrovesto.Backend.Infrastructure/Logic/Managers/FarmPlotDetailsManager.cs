@@ -109,7 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return update.data;
         }
 
-        public async Task<FarmPlotDetailsModel> GetFarmDetailByFarmer(long farmerId)
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetailByFarmer(long farmerId)
         {
             return await _farmPlotDetailRepository.GetFarmDetailByFarmer(farmerId);
         }

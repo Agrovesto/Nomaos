@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
@@ -28,18 +29,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         .Select(g => new SubscriptionMetrics
         {
             TotalActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
-            PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) || 
+            PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
             b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
             PartialPaymentSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
         })
         .FirstOrDefaultAsync(); // We expect a single object as output
-            if(query == null) { return null; }
+            if (query == null) { return null; }
             return query;
         }
         public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode)
         {
             var query = await _context.BundleSubscriptionInterests
-                .Where(w=>w.BelongToBusinessCode == businessCode)
+                .Where(w => w.BelongToBusinessCode == businessCode)
                 .GroupBy(b => b.InterestedBundleName) // Assuming BundleName represents the bundle type
                 .Select(g => new BundleSubscriptionSummary
                 {
@@ -84,6 +85,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return interest.Select(x => x.Map()).ToList();
         }
 
+        public async Task<BundleSubscriptionInterestModel> GetPaidSubscriptionByFarmer(string businessCode, string farmerUserId, string reference)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference== reference).FirstOrDefaultAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Map();
+        }
         public async Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusiness(string businessCode)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
@@ -111,6 +120,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
 
+        }
+
+        public async Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model)
+        {
+            var disbursement = model.Map();
+            await _context.AddAsync(disbursement);
+            await _context.SaveChangesAsync();
+
+            return  disbursement.Map();
+        }
+        public async Task<List<BundleDisbursementModel>> GetDisbursedSubscriptions(string businessCode)
+        {
+            var interest = await _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Select(x=>x.Map()).ToList();
+        }
+        public async Task<BundleDisbursementModel> GetDisbursedSubscription(string businessCode, string farmerUserId, string reference)
+        {
+            var interest = await _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference == reference).FirstOrDefaultAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Map();
         }
         //update input interest payment
         //fetch account details with balance from cafeone
