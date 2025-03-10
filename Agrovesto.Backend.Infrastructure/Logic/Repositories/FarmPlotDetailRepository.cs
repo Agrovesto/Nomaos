@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,22 +20,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool status, FarmPlotDetailsModel data)> UpdateFarmerFarmPlot(FarmPlotDetailsModel data)
         {
-            var entity = data.Map();
-
-            await _context.AddAsync(entity);
-            await _context.SaveChangesAsync();
-
+            var entity = data.Map(); 
+           
+                await _context.AddAsync(entity);
+                await _context.SaveChangesAsync();
             return (true, entity.Map());
         }
     
-        public async Task<FarmPlotDetailsModel> GetFarmDetailByFarmer(long farmerId)
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetailByFarmer(long farmerId)
         {
-            var farmer = await _context.FarmPlotDetails.Where(x => x.FarmerId == farmerId).FirstOrDefaultAsync();
+            var farmer = await _context.FarmPlotDetails.Where(x => x.FarmerId == farmerId).ToListAsync();
             if (farmer == null)
             {
                 return null;
             }
-            return farmer.Map();
+            return farmer.Select(x=>x.Map()).OrderByDescending(x=>x.CreatedOn).ToList();
         }
         
         //public async Task<List<FarmerModel>> GetAllFarmPlotDetailsByCooperative(string userId, ListQueryParams query)

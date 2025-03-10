@@ -35,7 +35,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 ownerId = request.OwnerId,
                 fromAccountNumber = request.FromAccount,
                 toAccountNumber = request.BusinessAccountNumber, //@params.accountNumber,
-                amount = request.Amount,
+                amount = 0,//request.Amount, TODO: remove the 0
                 memo = request.Memo,//"User Wallet Transfer",
                 yourTnxRef = request.Reference,
 
@@ -361,7 +361,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/list/{@params.OrganizationId}", headers);
+                var request = await _httpService.Get($"{@params.Url}/wallet/list/{@params.OrganizationId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
@@ -395,7 +395,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/getById/{walletId}", headers);
+                var request = await _httpService.Get($"{@params.Url}/wallet/getById/{walletId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<CafeOneData>>(readResponse);
@@ -430,7 +430,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/{walletId}", headers);
+                var request = await _httpService.Get($"{@params.Url}/wallet/{walletId}", headers);
                 request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<CafeOneData>>(readResponse);
@@ -465,14 +465,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     { "x-api-key",  $"{@params.SecretKey}"},
                     { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
-                var request = await _httpService.Get<HttpResponseMessage>($"{@params.Url}/wallet/providers/{internalAccountId}", headers);
-                request.EnsureSuccessStatusCode();
+                var requestUrl = $"{@params.Url}/wallet/getByInternalAccountId/{internalAccountId}";
+                var request = await _httpService.Get(requestUrl, headers);
+                //request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<AccountNumbers>>(readResponse);
+                var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<CafeOneData>>(readResponse);
 
 
 
-                return response.Data.Providers.FirstOrDefault();
+                return response.Data.WalletProviders.FirstOrDefault();
 
 
             }
@@ -547,8 +548,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 organizationId = @params.OrganizationId,
                 ownerId = ownerId,
                 fromAccountNumber = fromAccount,
-                toAccountNumber = @params.accountNumber,
-                amount = amount,
+                toAccountNumber = @params.accountNumber, 
+                amount = 0,//amount, TODO: remove the 0
                 memo = "User Wallet Transfer",
                 yourTnxRef = reference,
 
@@ -566,9 +567,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 };
                 var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
 
+              
                 var request = await _httpService.Post($"{@params.Url}/wallet/transfer", content, headers);
-                request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+               
                 var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
                 if (response.StatusCode == 200)
                 {

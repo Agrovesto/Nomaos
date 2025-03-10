@@ -27,6 +27,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<WarehouseUserModel>> GetWarehousesManagerByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagersByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode);
+        Task<BundleModel> UpdateBundleEquitPrice(BundleModel model);
+        Task<BundleModel> UpdateBundleSubscriptions(BundleModel model);
         Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date);
         Task<(bool status, WarehouseModel data)> UpdateWarehouse(WarehouseModel data);
         Task<(bool status, WarehouseUserModel data)> UpdateWarehouseManager(WarehouseUserModel data);

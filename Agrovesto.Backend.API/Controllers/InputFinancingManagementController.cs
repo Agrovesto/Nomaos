@@ -141,7 +141,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateInterest([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+           // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -227,6 +227,102 @@ namespace Agrovesto.Backend.API.Controllers
                     Succeeded = true,
                     Message = "Successful",
                     Data = bundle
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+
+        [HttpGet("input-disbursements")]
+        public async Task<IActionResult> GetAllInputDisbursement([FromQuery] BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _inputFinancingManagement.GetAllInputDisbursement(query);
+                return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
+                {
+                    Data = result,
+                    Message = result.Any() ? "Successful" : "No Record",
+                    Succeeded = result.Any() ? true : false,
+                    Count = result.Count,
+                    //PageNumber = ,
+                    PageSize = 10,
+                    Code = result.Any() ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpPost("confirm-disbursement")]
+        public async Task<IActionResult> SubmitDisbursement([FromBody] BundleDisbursementModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                var input = await _inputFinancingManagement.UpdateInputDisbursement(model, args);
+                return Ok(new Response<BundleDisbursementModel>()
+                {
+                    Code = (input != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = input
                 });
 
 

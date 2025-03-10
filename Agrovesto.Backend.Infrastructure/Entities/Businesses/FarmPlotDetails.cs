@@ -29,6 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double AreaInSqMetre { get; set; }
         public double AreaInHectare { get; set; }
         public string BelongToBusinessCode { get; set; }
-      
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+
     }
 }

@@ -12,6 +12,28 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
 {
     public class HttpService : IHttpService
     {
+        public async Task<HttpResponseMessage> Get(string url, IDictionary<string, string> headers, string token = null)
+        {
+            var handler = new HttpClientHandler
+            {
+                ClientCertificateOptions = ClientCertificateOption.Manual,
+                ServerCertificateCustomValidationCallback = (httpRequestMessage, cert, cetChain, policyErrors) => { return true; }
+            };
+            using (HttpClient client = new HttpClient(handler, true))
+            {
+                if (!string.IsNullOrEmpty(token))
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                }
+                foreach (var tm in headers)
+                {
+                    client.DefaultRequestHeaders.Add(tm.Key, tm.Value);
+                }
+                var response = await client.GetAsync(url);
+              //  var readResponse = await response.Content.ReadAsStringAsync();
+                return response;
+            };
+        }
         public async Task<T> Get<T>(string url, string token = null)
         {
             var handler = new HttpClientHandler

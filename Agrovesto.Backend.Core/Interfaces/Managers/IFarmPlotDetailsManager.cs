@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
 {
     public interface IFarmPlotDetailsManager
     {
-        Task<FarmPlotDetailsModel> GetFarmDetailByFarmer(long farmerId);
+        Task<List<FarmPlotDetailsModel>> GetFarmDetailByFarmer(long farmerId);
         Task<FarmPlotDetailsModel> UpdateFarmPlotDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args);
     }
 }

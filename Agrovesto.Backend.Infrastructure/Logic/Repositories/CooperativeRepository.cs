@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
+using PhoneNumbers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -59,30 +60,59 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return null;
         }
 
-
-     
         public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
         {
-
-            var agents = await _context.Cooperatives
+            var cooperatives = await _context.Cooperatives
                 .AsNoTracking()
-                .Where(s
-                =>
-                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-                // || s.Lga.Contains(query.Location))) &&
-                s.BelongToBusinessCode == businessCode)
+                .Where(s => s.BelongToBusinessCode == businessCode)
                 .OrderByDescending(s => s.OnBoardedOn)
                 .Skip(query.PageNumber)
                 .Take(query.PageSize)
-                 .Select(s => s.Map()).ToListAsync();
+                .Select(s => new CooperativeModel
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    Location = s.Location,
+                    State = s.State,
+                    Lga = s.Lga,
+                    OnBoardedOn = s.OnBoardedOn,
+                    BelongToBusinessCode =s.BelongToBusinessCode,
+                    ContactPerson=s.ContactPerson,
+                    Email=s.Email,
+                    PhoneNumber=s.PhoneNumber,
+                    UserId=s.UserId,
+                    HasbeenAssignedAgent=s.HasbeenAssignedAgent,
+                    IsAssignedToAgentId=s.IsAssignedToAgentId,
+                    TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id)
+                })
+                .ToListAsync();
 
-
-            if (agents.Count > 0)
-            {
-                return agents;
-            }
-            return null;
+            return cooperatives;
         }
+
+
+        //public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
+        //{
+
+        //    var agents = await _context.Cooperatives
+        //        .AsNoTracking()
+        //        .Where(s
+        //        =>
+        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+        //        // || s.Lga.Contains(query.Location))) &&
+        //        s.BelongToBusinessCode == businessCode)
+        //        .OrderByDescending(s => s.OnBoardedOn)
+        //        .Skip(query.PageNumber)
+        //        .Take(query.PageSize)
+        //         .Select(s => s.Map()).ToListAsync();
+
+
+        //    if (agents.Count > 0)
+        //    {
+        //        return agents;
+        //    }
+        //    return null;
+        //}
 
 
         public async Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query)
