@@ -18,5 +18,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByBusiness(BusinessRegistrationArgs args);
         Task<Response<List<BundleSubscriptionSummary>>> GetBundleSubscriptionAnalysisByBusiness(ListQueryParams query);
         Task<Response<SubscriptionMetrics>> FarmerBundleSubscriptions(ListQueryParams query);
+        Task<BundleDisbursementModel> UpdateInputDisbursement(BundleDisbursementModel model, BusinessRegistrationArgs args);
+        Task<List<BundleDisbursementModel>> GetAllInputDisbursement(BusinessRegistrationArgs args);
     }
 }

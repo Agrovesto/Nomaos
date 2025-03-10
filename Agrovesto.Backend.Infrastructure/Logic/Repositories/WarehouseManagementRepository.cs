@@ -194,8 +194,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (bundle != null)
             {
                 bundle.BundleEquityPrice = model.BundleEquityPrice;
-                bundle.BundleEquityPlusCommission = model.BundleEquityPlusCommission;
-                bundle.CommissionPrice = model.CommissionPrice;
+                 bundle.CommissionPrice = model.CommissionPrice;
+                bundle.BundleEquityPlusCommission = model.BundleEquityPrice + model.CommissionPrice;
+
                 bundle.ShouldAddCommission = model.ShouldAddCommission;
 
                 await _context.SaveChangesAsync();
@@ -203,7 +204,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
+        public async Task<BundleModel> UpdateBundleSubscriptions(BundleModel model)
+        {
+            var bundle = await _context.Bundles.Include(x => x.BundlePackage).Where(x => x.Id == model.Id && x.BelongToBusinessCode == model.BelongToBusinessCode).FirstOrDefaultAsync();
+            if (bundle != null)
+            {
+               bundle.TotalBundlePackageRequested += model.TotalBundlePackageRequested;
+                bundle.TotalBundlePackageDisbursed += model.TotalBundlePackageDisbursed;
+                bundle.TotalBundlePackagePacked += model.TotalBundlePackagePacked;
 
+                await _context.SaveChangesAsync();
+                return bundle.Map();
+            }
+            return null;
+        }
         public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
         {
             var bundles = await _context.Bundles

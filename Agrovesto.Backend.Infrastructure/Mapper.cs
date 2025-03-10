@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
 
 namespace Agrovesto.Backend.Infrastructure
 {
@@ -41,7 +42,8 @@ namespace Agrovesto.Backend.Infrastructure
                 AreaInHectare = entity.AreaInHectare,
                 CoordinateTakenBy = entity.CoordinateTakenBy,
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
-                BelongToBusinessCode=entity.BelongToBusinessCode
+                BelongToBusinessCode=entity.BelongToBusinessCode,
+                CreatedOn = entity.CreatedOn,
             };
         }
 
@@ -72,6 +74,7 @@ namespace Agrovesto.Backend.Infrastructure
                 AreaInHectare = model.AreaInHectare,
                 CoordinateTakenBy = model.CoordinateTakenBy,
                 CoordinateTakenByUserId = model.CoordinateTakenByUserId,
+                CreatedOn = model.CreatedOn,
             };
         }
         #endregion FarmMgt
@@ -142,6 +145,61 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalQuantityPaidFor = model.TotalQuantityPaidFor,
                 BelongToBusinessCode=model.BelongToBusinessCode,
                 Reference= model.Reference,
+                Location = model.Location,
+                CooperativeId = model.CooperativeId,
+            };
+        }
+
+           public static BundleDisbursementModel Map(this BundleSubscriptionDisbursement entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+               return new BundleDisbursementModel
+            {
+               OfficerInChargeUserId = entity.OfficerInChargeUserId,
+               DisbursedBy=entity.DisbursedBy,
+               DisbursedOn  =entity.DisbursedOn,
+               InputAlreadyCollected = entity.InputAlreadyCollected,
+               InputCollectedByPictureOf=entity.InputCollectedByPictureOf,              
+              // Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),           
+              FarmerName= entity.FarmerName,             
+              FarmerUserId= entity.FarmerUserId,
+              InterestedBundleId= entity.InterestedBundleId,
+              InterestedBundleName= entity.InterestedBundleName,          
+              Id= entity.Id,
+                          TotalQuantityPaidFor= entity.TotalQuantityPaidFor,
+              BelongToBusinessCode= entity.BelongToBusinessCode,
+              Reference= entity.Reference,
+                Location= entity.Location,
+              CooperativeId= entity.CooperativeId  ,
+            };
+        }
+
+        public static BundleSubscriptionDisbursement Map(this BundleDisbursementModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new BundleSubscriptionDisbursement
+            {
+
+                OfficerInChargeUserId = model.OfficerInChargeUserId,
+                DisbursedBy = model.DisbursedBy,
+                DisbursedOn = model.DisbursedOn,
+                InputAlreadyCollected = model.InputAlreadyCollected,
+                InputCollectedByPictureOf = model.InputCollectedByPictureOf,
+                // Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),           
+                FarmerName = model.FarmerName,
+                FarmerUserId = model.FarmerUserId,
+                InterestedBundleId = model.InterestedBundleId,
+                InterestedBundleName = model.InterestedBundleName,
+              
+                TotalQuantityPaidFor = model.TotalQuantityPaidFor,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                Reference = model.Reference,
                 Location = model.Location,
                 CooperativeId = model.CooperativeId,
             };

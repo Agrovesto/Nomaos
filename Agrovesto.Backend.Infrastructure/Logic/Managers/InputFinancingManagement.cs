@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -32,9 +33,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ICafeOneWalletService _cafeOneWalletService;
         private readonly IWalletRepository _walletRepository;
         private readonly ISMSService _whisperSMSService;
-
+        private readonly IFaceManager _faceManager;
         private readonly IConfiguration _configuration;
-        public InputFinancingManagement(IInputFinancingManagementRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
+        public InputFinancingManagement(IInputFinancingManagementRepository repository,
+            IFaceManager faceManager,IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, ISMSService whisperSMSService,
             IFarmerRepository farmerRepository, ICafeOneWalletService cafeOneWalletService, IWalletRepository walletRepository, IConfiguration config)
         {
@@ -48,7 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _cafeOneWalletService = cafeOneWalletService;
             _configuration = config;
             _walletRepository = walletRepository;
-
+            _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
         }
         //FarmerBundleSubscriptionInterests
@@ -228,10 +230,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         //TODO: REMOVE THIS
                         farmerWallet.Balance = "50000";
 
-                        //if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
-                        //{
-                        //    throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement Validation mismatched");
-                        //}
+                        if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement Validation mismatched");
+                        }
                         if (selectedBundle != null && (decimal.Parse(farmerWallet.Balance) > (selectedBundle.ExpectedTotalEquityPrice - sterlingCharge)))
                         {
                             var reference = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
@@ -283,12 +285,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
                             {
                                 campaign_name = "Input Notification",
-                                contacts = new List<string> { "09061562512" },//farmer.PhoneNumber },
+                                contacts = new List<string> { farmer.PhoneNumber },
                                 message = messageBody,
                             });
                             var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
                             {
-                                to = "2349061562512",//$"234{farmer.PhoneNumber.GetLast(10)}",
+                                to = $"234{farmer.PhoneNumber.GetLast(10)}",
                                 sms = messageBody
                             });
                             return (true, "Payment Updated");
@@ -358,7 +360,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var userWallet = await _cafeOneWalletService.GetUserAccount(userSterlinWallet.InternalAccountId, args.Env);
                         if (userWallet != null)
                         {
-                            
+                            getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
+                            var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
+                            //update bundke
                             var createWarehouse = await _repository.CreateInputFinancingInterestThroughBundle(model);
 
                             await _context.SaveChangesAsync();
@@ -402,6 +406,109 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         //method get all successful payment for input subscription
         //method disburse input bundle to farmers and mark disbursement as completed,, deplete inventory in the warehouse based on what has been disbursed
+        public async Task<BundleDisbursementModel> UpdateInputDisbursement(BundleDisbursementModel model, BusinessRegistrationArgs args)
+        {
+            
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+            var updateDisbursement = new BundleDisbursementModel(); ;
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var compareFace = await _faceManager.CompareFaces(model.FarmerImage, new ImageVerificationArgs
+                    {
+                        BusinessCode = business.BusinessCode,
+                        FarmerUserId = model.FarmerUserId
+                    });
+
+                    if(compareFace !=null && compareFace.IsSimilarFace)
+                    {                        
+                        //compare with what we have in AWS rekognition
+                        //if image matches, proceed with disbursement else, terminate execution
+
+                        var hasBeenDisbursed = await _repository.GetDisbursedSubscription(business.BusinessCode, model.FarmerUserId, model.Reference);
+                        if (hasBeenDisbursed != null || hasBeenDisbursed.InputAlreadyCollected) throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Input already collected by farmer");
+
+                        var subscription = await _repository.GetPaidSubscriptionByFarmer(business.BusinessCode, model.FarmerUserId, model.Reference);
+                        if (subscription == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Subscription Detail not found");
+                        //get bundle detail
+                        var bundle = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId);
+
+                        // Validate that each item has a valid WarehouseInputInventoryId
+                        foreach (var item in bundle.BundlePackage)
+                        {
+                            if (item.WarehouseInputInventoryId <= 0)
+                                throw new ArgumentException($"Invalid inventory ID for item: {item.Name}");
+                            var getInputInventory = await _warehouseManagementRepository.GetInputBYIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
+                            if (getInputInventory == null || getInputInventory.IsAvailable == false)
+                                throw new ArgumentException($"This item does not exist: {item.Name}");
+                            item.Name = getInputInventory.InputName;
+                            //depletes input based on bundle package quantity
+                            var quantity = model.TotalQuantityPaidFor;
+                            var quantityToremove = item.Unit * quantity;
+                            if (getInputInventory.UnitBalance < quantityToremove)
+                            {
+                                throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "No more stock available");
+                            }
+                            var depleteInput = await _warehouseManagementRepository.DepleteAsync(getInputInventory.Id, quantityToremove);
+                        }
+                        bundle.TotalBundlePackageDisbursed = model.TotalQuantityPaidFor;
+                        var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(bundle);
+
+                        model.InterestedBundleName = bundle.Name;
+                        model.InterestedBundleId = bundle.Id;
+                        model.Location = model.Location;
+                        model.Reference = subscription.Reference;
+                        model.CooperativeId = subscription.CooperativeId;
+                        model.InputCollectedByPictureOf = model.InputCollectedByPictureOf;
+                        model.BelongToBusinessCode = business.BusinessCode;
+                        model.DisbursedBy = model.DisbursedBy;
+                        model.DisbursedOn = DateTimeOffset.Now;
+                        model.FarmerName = subscription.FarmerName;
+                        model.OfficerInChargeUserId = args.UserId;
+                        model.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
+                        model.InputAlreadyCollected = true;
+                        model.InputCollectedByPictureOf = compareFace.ImageKey;
+
+
+                        updateDisbursement = await _repository.UpdateDisbursement(model);
+
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+                      
+                    }
+                    //get farmer imagekey from db
+                    else
+                    {
+                        throw new Exception("No record was founding matching the captured user image");
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return updateDisbursement;
+        }
+        public async Task<List<BundleDisbursementModel>> GetAllInputDisbursement(BusinessRegistrationArgs args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+               ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+            var requestsByBusiness = await _repository.GetDisbursedSubscriptions(args.businessCode);
+            if (!requestsByBusiness.Any()) return null;
+           
+            return requestsByBusiness;
+        }
 
     }
 }
