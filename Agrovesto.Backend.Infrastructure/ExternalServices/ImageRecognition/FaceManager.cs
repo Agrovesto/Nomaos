@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             _farmerRepository = farmerRepository;
         }
 
-        public async Task<object> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
+        public async Task<ImageComparisonResponse> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
         {
             try
             {
@@ -99,7 +99,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var compareFacesResponse = await _rekognitionClient.CompareFacesAsync(compareFacesRequest);
                 bool isMatch = compareFacesResponse.FaceMatches.Count > 0;
 
-                return new { IsSimilarFace = isMatch, Similarity = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
+                return new ImageComparisonResponse { IsSimilarFace = isMatch, 
+                    ImageKey= targetImageRecord.ImageKey,
+                    SimilarityPercentage = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
             }
             catch (BaseException ex)
             {
@@ -113,17 +115,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             }
         }
 
-        public async Task<object> UploadImage(IFormFile image, string userId, string businessCode)
+        public async Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode)
         {
             if (image == null || image.Length == 0)
             {
-                return new { message = "Invalid image file." };
+                return new ImageUploadResponse { Message = "Invalid image file.", ImageKey=null };
             }
 
             string bucketName = _configuration["AWS:BucketName"];
             if (string.IsNullOrEmpty(bucketName))
             {
-                return new { message = "AWS S3 bucket is not configured." };
+                return new ImageUploadResponse { Message = "AWS S3 bucket is not configured.", ImageKey= null };
             }
 
             byte[] imageBytes;
@@ -140,7 +142,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var matchFound = await CompareFacesAsync(bucketName, existingImage.ImageKey, imageBytes);
                 if (matchFound)
                 {
-                    return new { message = "A user with the same face already exists." };
+                    return new ImageUploadResponse  { Message = "A user with the same face already exists.", ImageKey=null };
                 }
             }
             string imageKey = $"{Guid.NewGuid()}{Path.GetExtension(image.FileName)}";
@@ -166,7 +168,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 ImageName = image.FileName
             });
 
-            return new { message = "Image uploaded successfully", imageKey = imageKey };
+            return new ImageUploadResponse  { Message = "Image uploaded successfully", ImageKey = imageKey };
         }
         private async Task<bool> CompareFacesAsync(string bucketName, string existingImageKey, byte[] newImageBytes)
         {

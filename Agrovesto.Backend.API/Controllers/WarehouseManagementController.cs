@@ -20,7 +20,64 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _warehouseManagementManager = warehouseManagementManager;
         }
-        //
+
+        [HttpPost("bundle-equity")]
+        public async Task<IActionResult> UpdateBundleEquityPrice([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED,"Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                args.UserId ??= CurrentUserId;
+                var bundle = await _warehouseManagementManager.UpdateBundleEquity(model, args);
+                return Ok(new Response<BundleModel>()
+                {
+                    Code = (bundle != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = bundle
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+
         [HttpPost("bundle")]
         public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
         {

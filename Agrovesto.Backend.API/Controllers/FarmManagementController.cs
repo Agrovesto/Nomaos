@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
 
-        [HttpPost("plot-details")]
+        [HttpGet("plot-details")]
 
         public async Task<IActionResult> GetPlotDetails([FromQuery] long farmerId)
         {
@@ -93,7 +93,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var updateDetail = await _farmPlotDetailsManager.GetFarmDetailByFarmer(farmerId);
 
 
-                return Ok(new Response<FarmPlotDetailsModel>()
+                return Ok(new Response<List<FarmPlotDetailsModel>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
