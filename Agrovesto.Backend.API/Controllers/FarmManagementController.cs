@@ -23,8 +23,7 @@ namespace Agrovesto.Backend.API.Controllers
             
             _farmPlotDetailsManager = farmPlotDetailsManager;
         }
-        [HttpPost("update-plot-details")]
-    
+        [HttpPost("update-plot-details")]    
         public async Task<IActionResult> UpdateFarmPlotDetails([FromBody] FarmPlotDetailsModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
@@ -83,7 +82,6 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpGet("plot-details")]
-
         public async Task<IActionResult> GetPlotDetails([FromQuery] long farmerId)
         {
 

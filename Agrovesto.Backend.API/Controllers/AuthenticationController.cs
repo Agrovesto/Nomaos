@@ -48,14 +48,26 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 var createUser = await _authenticationRepository.Login(model, businessCode, isAgrovesto);
-
-                return Ok(new Response<TokenModel>()
+                if (createUser.Status)
                 {
-                    Code = ResponseCodes.Success,
-                    Succeeded = createUser.Status,
-                    Message = createUser.Message,
-                    Data = createUser.response
-                });
+                    return Ok(new Response<TokenModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = createUser.Status,
+                        Message = createUser.Message,
+                        Data = createUser.response
+                    });
+                }
+                else
+                {
+                    return BadRequest(new Response<TokenModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = createUser.Status,
+                        Message = createUser.Message,
+                        Data = createUser.response
+                    });
+                }
 
 
             }
