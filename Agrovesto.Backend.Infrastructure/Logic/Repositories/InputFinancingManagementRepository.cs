@@ -134,7 +134,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var interest = await _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
 
-            if (interest == null) { return null; }
+            if (interest.Count == 0) { return null; }
 
             return interest.Select(x=>x.Map()).ToList();
         }
