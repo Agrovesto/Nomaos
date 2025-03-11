@@ -69,7 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (user == null)
                     {
 
-                        await _userManager.AccessFailedAsync(user);
+                      //  await _userManager.AccessFailedAsync(user);
                         return (false, "Invalid username or password", null);
                     }
                     var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
@@ -154,7 +154,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             catch (Exception ex)
             {
-                await _userManager.AccessFailedAsync(user);
+               // await _userManager.AccessFailedAsync(user);
                 return (false, ex.Message, null);
             }
 
