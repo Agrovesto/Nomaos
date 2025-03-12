@@ -18,6 +18,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+
+        public async Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId)
+        {
+            var farmer = await _context.Farmers.Where(c => c.Id == farmerId).FirstOrDefaultAsync();
+            if (farmer == null) return null;
+            farmer.BelongToCooperativeId = cooperativeId;
+           
+            await _context.SaveChangesAsync();
+
+            return farmer.Map();
+        }
+
         public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode)
         {
             var currentMonth = DateTime.UtcNow.Month;

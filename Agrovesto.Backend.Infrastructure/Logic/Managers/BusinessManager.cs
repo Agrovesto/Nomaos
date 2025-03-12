@@ -920,5 +920,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             //return saveFace;
         }
 
+
+        public async Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId)
+        {
+            return await _farmerRepository.AssignFarmerToCooperative(farmerId, cooperativeId);
+        }
     }
 }
