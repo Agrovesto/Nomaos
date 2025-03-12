@@ -133,6 +133,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return await _farmPlotDetailRepository.GetFarmDetailByFarmer(farmerId);
         }
 
+
         public async Task<FarmActivityTypeModel> CreateActivityType(FarmActivityTypeModel model, BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -177,6 +178,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogtypesByBusiness(business.BusinessCode);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;   
             }
             catch(Exception ex)
@@ -193,6 +196,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogtypebyId(business.BusinessCode, farmerId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -231,6 +236,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.CooperativeId = farmer.BelongToCooperativeId;                    
                     model.OfficerInChargeId = args.UserId;
                     model.OfficerName = getUserCred.model.Name;
+                    model.CreatedBy = getUserCred.model.Name;
 
                     update = await _farmPlotDetailRepository.VisitationLog(model);
 
@@ -260,6 +266,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogsByBusiness(business.BusinessCode);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -277,6 +285,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogByFarmer(business.BusinessCode, farmerId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -294,6 +304,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(business.BusinessCode, args.UserId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -311,6 +323,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogsByCooperative(business.BusinessCode, args.CooperativeId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -328,6 +342,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogById(business.BusinessCode, visitationId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
@@ -345,6 +361,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 var types = await _farmPlotDetailRepository.GetVisitationLogsByActivityType(business.BusinessCode, activitytypeId);
+                if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
                 return types;
             }
             catch (Exception ex)
