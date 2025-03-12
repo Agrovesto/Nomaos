@@ -244,7 +244,16 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
+                //if (args.RoleName.Equals("Farmer"))
+                //{
+                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
+                //    {
+                //        FarmerUserId=registerUser.UserId,
+                //        File=model.FarmerCapturedImage
+                //    }, args);
 
+
+                //}
 
                 return Ok(new Response<SubAccountModel>()
                 {
@@ -762,7 +771,8 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-         [HttpGet("cooperatives-byagent")]
+         
+        [HttpGet("cooperatives-byagent")]
         public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
         {
             try
@@ -799,11 +809,9 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
 
-        }
-        
+        }   
         
         [HttpGet("farmers")]
-
         public async Task<IActionResult> GetFarmersByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
@@ -928,6 +936,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+       
         [HttpGet("farmers-byagent")]
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
         {
@@ -1005,5 +1014,57 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+        [HttpPost("assign-farmer-to-cooperative")]
+        public async Task<IActionResult> AssignFarmerToCooperative([FromQuery] long farmerId, [FromQuery] long cooperativeId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _businessManager.AssignFarmerToCooperative(farmerId, cooperativeId);
+                return Ok(new Response<FarmerModel>()
+                {
+                    Data = result,
+                    Message = "Assigned Successful",
+                    Succeeded = true,
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
     }
 }

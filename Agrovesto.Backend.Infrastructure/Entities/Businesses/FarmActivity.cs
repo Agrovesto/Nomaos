@@ -22,6 +22,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset CreatedOn { get; set; }
         public string OfficerInChargeId { get; set; }
         public string CreatedBy { get; set; }
+        public long CooperativeId { get; set; }
+        public string BelongToBusinessCode { get; set; }
+        public string OfficerName { get; set; }
     }
 
     public class FarmActivityType
@@ -32,5 +35,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
         public string Name { get; set; }
         public string Description { get; set; }
+        public string BelongToBusinessCode { get; set; }
     }
 }

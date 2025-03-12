@@ -77,6 +77,84 @@ namespace Agrovesto.Backend.Infrastructure
                 CreatedOn = model.CreatedOn,
             };
         }
+        public static FarmActivityTypeModel Map(this FarmActivityType entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmActivityTypeModel
+            {
+                Description = entity.Description,
+                Id = entity.Id,
+                Name = entity.Name,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+            };
+        }
+
+        public static FarmActivityType Map(this FarmActivityTypeModel model)
+        {
+            if(model == null)
+            {
+                return null;
+            }
+            return new FarmActivityType
+            {
+                Description = model.Description,
+                Name = model.Name,
+
+                BelongToBusinessCode = model.BelongToBusinessCode,
+            };
+        }
+
+        public static FarmVisitationActivityModel Map(this FarmVisitationActivity entity)
+        {
+            if(entity == null)
+            {
+                return null;
+            }
+
+            return new FarmVisitationActivityModel
+            {
+                FarmActivityId = entity.FarmActivityId,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn=entity.CreatedOn,
+                Description
+                = entity.Description,
+                FarmerName = entity.FarmerName,
+                FarmerUserId = entity.FarmerUserId,
+                Id = entity.Id,
+                OfficerInChargeId = entity.OfficerInChargeId,
+                Recommendation= entity.Recommendation  ,
+                CooperativeId=entity.CooperativeId,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                OfficerName= entity.OfficerName
+            };
+        }
+
+        public static FarmVisitationActivity Map(this FarmVisitationActivityModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new FarmVisitationActivity
+            {
+                FarmActivityId = model.FarmActivityId,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                Description
+                = model.Description,
+                FarmerName = model.FarmerName,
+                FarmerUserId = model.FarmerUserId,
+                CooperativeId=model.CooperativeId,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                OfficerInChargeId = model.OfficerInChargeId,
+                Recommendation = model.Recommendation,
+                OfficerName = model.OfficerName
+            };
+        }
         #endregion FarmMgt
 
         #region Bundle
