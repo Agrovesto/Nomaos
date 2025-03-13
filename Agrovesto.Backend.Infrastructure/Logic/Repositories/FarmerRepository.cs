@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var farmer = await _context.Farmers.Where(c => c.Id == farmerId).FirstOrDefaultAsync();
             if (farmer == null) return null;
             farmer.BelongToCooperativeId = cooperativeId;
-           
+
             await _context.SaveChangesAsync();
 
             return farmer.Map();
@@ -198,10 +198,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<FarmerModel>> GetFarmersByAgent(long agentId, ListQueryParams query)
         {
-            var farmers = await (from f in  _context.Farmers
-                                join c in _context.Cooperatives
-                                on f.BelongToCooperativeId equals c.Id
-                                where c.IsAssignedToAgentId == agentId
+            var farmers = await (from f in _context.Farmers
+                                 join c in _context.Cooperatives
+                                 on f.BelongToCooperativeId equals c.Id
+                                 where c.IsAssignedToAgentId == agentId
                                  select f).ToListAsync();
 
             //var cooperatives = await (from a in _context.Agents
@@ -229,12 +229,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
 
             var farmers = await (from a in _context.Farmers
-                                      join c in _context.Cooperatives
-                                      on a.BelongToCooperativeId equals c.Id
-                                      where a.BelongToCooperativeId == Id
-                                      select a).ToListAsync();
+                                 join c in _context.Cooperatives
+                                 on a.BelongToCooperativeId equals c.Id
+                                 where a.BelongToCooperativeId == Id
+                                 select a).ToListAsync();
 
-           
+
 
             if (farmers.Count > 0)
             {
@@ -246,7 +246,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
         {
-
             var farmers = await _context.Farmers
                 .Where(x => x.BelongToBusinessCode == businessCode)
                 .ToListAsync();
@@ -257,18 +256,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
             // Fetch cooperative names for all distinct cooperativeIds in farmers
-            var cooperativeId = farmers.Select(b => b.BelongToCooperativeId).Distinct().ToList();
+            var cooperativeIds = farmers.Select(f => f.BelongToCooperativeId).Distinct().ToList();
             var cooperatives = await _context.Cooperatives
-                .Where(w => cooperativeId.Contains(w.Id))
-                .ToDictionaryAsync(w => w.Id, w => w.Name);
+                .Where(c => cooperativeIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name);
+
+            // Fetch farmer images
+            var farmerUserIds = farmers.Select(f => f.UserId).Distinct().ToList();
+            var farmerImages = await _context.FarmerImages
+                .Where(img => farmerUserIds.Contains(img.FarmerUserId))
+                .ToDictionaryAsync(img => img.FarmerUserId, img => img.IMageKey); // Assuming ImageUrl is the image path
 
             return farmers.Select(farmer =>
             {
                 var mappedFarmer = farmer.Map();
+
                 if (cooperatives.TryGetValue(farmer.BelongToCooperativeId, out var cooperativeName))
                 {
                     mappedFarmer.CooperativeName = cooperativeName;
                 }
+
+                if (farmerImages.TryGetValue(farmer.UserId, out var imageUrl))
+                {
+                    mappedFarmer.FarmerImage = imageUrl; 
+                }
+
                 return mappedFarmer;
             }).ToList();
         }
@@ -277,30 +289,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //{
 
         //    var farmers = await _context.Farmers
-        //        .AsNoTracking()
-        //        .Where(s
-        //        =>
-        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-        //        // || s.Lga.Contains(query.Location))) &&
-        //        s.BelongToBusinessCode == businessCode)
-        //        .OrderByDescending(s => s.OnBoardedOn)
-        //        .Skip(query.PageNumber)
-        //        .Take(query.PageSize)
-        //         .Select(s => s.Map()).ToListAsync();
+        //        .Where(x => x.BelongToBusinessCode == businessCode)
+        //        .ToListAsync();
 
-
-        //    if (farmers.Count > 0)
+        //    if (farmers == null || !farmers.Any())
         //    {
-        //        return farmers;
+        //        throw new Exception("No record found");
         //    }
-        //    return null;
+
+        //    // Fetch cooperative names for all distinct cooperativeIds in farmers
+        //    var cooperativeId = farmers.Select(b => b.BelongToCooperativeId).Distinct().ToList();
+        //    var cooperatives = await _context.Cooperatives
+        //        .Where(w => cooperativeId.Contains(w.Id))
+        //        .ToDictionaryAsync(w => w.Id, w => w.Name);
+
+        //    return farmers.Select(farmer =>
+        //    {
+        //        var mappedFarmer = farmer.Map();
+        //        if (cooperatives.TryGetValue(farmer.BelongToCooperativeId, out var cooperativeName))
+        //        {
+        //            mappedFarmer.CooperativeName = cooperativeName;
+        //        }
+        //        return mappedFarmer;
+        //    }).ToList();
         //}
-      
+
         public async Task<(bool status, FarmerImagesModel data)> SaveImage(FarmerImagesModel data)
         {
             var entity = data.Map();
+            var imageExist = await _context.FarmerImages.Where(x => x.FarmerUserId == data.FarmerUserId && x.BelongToBusinessCode == data.BelongToBusinessCode).FirstOrDefaultAsync();
 
-            await _context.AddAsync(entity);
+
+            if (imageExist != null)
+            {
+                imageExist.IMageKey = data.ImageKey;
+                imageExist.ImageName = data.ImageName;
+
+                entity.IMageKey = data.ImageKey;
+                entity.ImageName = data.ImageName;
+            }
+            else
+            {
+                
+                await _context.AddAsync(entity);
+            }
+
+
+            
             await _context.SaveChangesAsync();
 
             return (true, entity.Map());
@@ -308,7 +343,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<FarmerImagesModel> GetFarmerImage(string userId, string businessCode)
         {
-            var farmer = await _context.FarmerImages.Where(x => x.FarmerUserId == userId && x.BelongToBusinessCode==businessCode).FirstOrDefaultAsync();
+            var farmer = await _context.FarmerImages.Where(x => x.FarmerUserId == userId && x.BelongToBusinessCode == businessCode).FirstOrDefaultAsync();
             if (farmer == null)
             {
                 return null;
@@ -317,7 +352,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<List<FarmerImagesModel>> GetImagesByBusinessCode(string businessCode)
         {
-            var query= await _context.FarmerImages
+            var query = await _context.FarmerImages
                                  .Where(img => img.BelongToBusinessCode == businessCode)
                                  .ToListAsync();
 
@@ -325,7 +360,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             {
                 return null;
             }
-            return query.Select(x=>x.Map()).ToList();
+            return query.Select(x => x.Map()).ToList();
         }
 
     }
