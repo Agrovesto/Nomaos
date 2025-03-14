@@ -346,9 +346,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return subaccount;
         }
-        public async Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
+        public async Task<SubAccountModel> UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
         {
-            await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
+          return  await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
             {
                 UserId = subaccount.UserId,
                 Env = args.Env
