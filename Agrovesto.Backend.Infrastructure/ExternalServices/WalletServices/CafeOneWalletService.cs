@@ -450,7 +450,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
 
 
-        public async Task<CafeOneWalletProvider> GetUserAccount(string internalAccountId, string env)
+        public async Task<(CafeOneWalletProvider data, string message)> GetUserAccount(string internalAccountId, string env)
         {
             var @params = await RetrieveParams(env);
 
@@ -473,14 +473,14 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
 
 
-                return response.Data.WalletProviders.FirstOrDefault();
+                return (response.Data.WalletProviders.FirstOrDefault(), "Successful");
 
 
             }
             catch (Exception ex)
             {
                 string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return null;
+                return (null, ex.Message);
             }
 
         }

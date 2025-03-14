@@ -778,7 +778,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
                         if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
-
+                        
                         createBundle = await _repository.CreateBundle(model);
 
                         await _context.SaveChangesAsync();
