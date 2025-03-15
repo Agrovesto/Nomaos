@@ -242,7 +242,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
                 if (registerUser != null)
                 {
-                    await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
+                  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
                 //if (args.RoleName.Equals("Farmer"))
                 //{
@@ -284,6 +284,79 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
         }
+
+
+
+
+        [HttpPost("update-user-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> UpdateUserProfile([FromBody] SubAccountModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+              
+                var update=  await _businessManager.UpdateUserAccountProfile(model, args, args.UserId);
+                if (update.WalletCode != null)
+                {
+                    return Ok(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = model
+                    });
+
+                }
+                else
+                {
+                    return BadRequest(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "Could not update profile",
+                        Data = model
+                    });
+
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpPost("upload-image")]
         [AllowAnonymous]
         public async Task<IActionResult> CaptureFarmersImage([FromForm] ImageModel model, [FromQuery] BusinessRegistrationArgs args)

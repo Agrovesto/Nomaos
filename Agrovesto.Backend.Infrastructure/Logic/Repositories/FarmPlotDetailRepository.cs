@@ -82,51 +82,179 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByBusiness(string businessCode)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
-            if (type.Count == 0) { return null; }
+            var activities = await _context.FarmVisitationActivities
+         .Where(x => x.BelongToBusinessCode == businessCode)
+         .Select(x => new FarmVisitationActivityModel
+         {
+          
+             Id = x.Id,
+             Description = x.Description,
+             BelongToBusinessCode = businessCode,
+             CooperativeId = x.CooperativeId,
+             CreatedBy = x.CreatedBy,
+             CreatedOn = x.CreatedOn,
+             FarmActivityId = x.FarmActivityId,
+             FarmerName = x.FarmerName,
+             FarmerUserId = x.FarmerUserId,
+             OfficerInChargeId = x.OfficerInChargeId,
+             OfficerName    = x.FarmerName,
+             Recommendation=x.Recommendation,
+        
+             ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(), 
+         })
+         .ToListAsync();
 
-            return type.Select(x => x.Map()).ToList();
+            return activities.Any() ? activities : null;
         }
 
         public async Task<List<FarmVisitationActivityModel>> GetVisitationLogByFarmer(string businessCode, string farmerId)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerId).ToListAsync();
-            if (type.Count == 0) { return null; }
+            var activities = await _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerId)
+                .Select(x => new FarmVisitationActivityModel
+                {
 
+                    Id = x.Id,
+                    Description = x.Description,
+                    BelongToBusinessCode = businessCode,
+                    CooperativeId = x.CooperativeId,
+                    CreatedBy = x.CreatedBy,
+                    CreatedOn = x.CreatedOn,
+                    FarmActivityId = x.FarmActivityId,
+                    FarmerName = x.FarmerName,
+                    FarmerUserId = x.FarmerUserId,
+                    OfficerInChargeId = x.OfficerInChargeId,
+                    OfficerName = x.FarmerName,
+                    Recommendation = x.Recommendation,
 
-            return type.Select(x => x.Map()).ToList();
+                    ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(),
+                })
+         .ToListAsync();
+
+            return activities.Any() ? activities : null;
         }
         public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(string businessCode, string officerInCharge)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeId == officerInCharge).ToListAsync();
-            if (type.Count == 0) { return null; }
+            var type = await _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeId == officerInCharge)
+                 .Select(x => new FarmVisitationActivityModel
+                 {
 
+                     Id = x.Id,
+                     Description = x.Description,
+                     BelongToBusinessCode = businessCode,
+                     CooperativeId = x.CooperativeId,
+                     CreatedBy = x.CreatedBy,
+                     CreatedOn = x.CreatedOn,
+                     FarmActivityId = x.FarmActivityId,
+                     FarmerName = x.FarmerName,
+                     FarmerUserId = x.FarmerUserId,
+                     OfficerInChargeId = x.OfficerInChargeId,
+                     OfficerName = x.FarmerName,
+                     Recommendation = x.Recommendation,
 
-            return type.Select(x => x.Map()).ToList();
+                     ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(),
+                 })
+         .ToListAsync();
+
+            return type.Any() ? type : null;
         }
         public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByCooperative(string businessCode, long cooperativeId)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode && x.CooperativeId == cooperativeId).ToListAsync();
-            if (type.Count == 0) { return null; }
+            var type = await _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.CooperativeId == cooperativeId)
+                .Select(x => new FarmVisitationActivityModel
+                {
 
+                    Id = x.Id,
+                    Description = x.Description,
+                    BelongToBusinessCode = businessCode,
+                    CooperativeId = x.CooperativeId,
+                    CreatedBy = x.CreatedBy,
+                    CreatedOn = x.CreatedOn,
+                    FarmActivityId = x.FarmActivityId,
+                    FarmerName = x.FarmerName,
+                    FarmerUserId = x.FarmerUserId,
+                    OfficerInChargeId = x.OfficerInChargeId,
+                    OfficerName = x.FarmerName,
+                    Recommendation = x.Recommendation,
 
-            return type.Select(x => x.Map()).ToList();
+                    ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(),
+                })
+         .ToListAsync();
+
+            return type.Any() ? type : null;
         }
         public async Task<FarmVisitationActivityModel> GetVisitationLogById(string businessCode, long Id)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode && x.Id == Id).FirstOrDefaultAsync();
-            if (type == null) { return null; }
+            var type = await _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.Id == Id)
+                 .Select(x => new FarmVisitationActivityModel
+                 {
 
-            return type.Map();
+                     Id = x.Id,
+                     Description = x.Description,
+                     BelongToBusinessCode = businessCode,
+                     CooperativeId = x.CooperativeId,
+                     CreatedBy = x.CreatedBy,
+                     CreatedOn = x.CreatedOn,
+                     FarmActivityId = x.FarmActivityId,
+                     FarmerName = x.FarmerName,
+                     FarmerUserId = x.FarmerUserId,
+                     OfficerInChargeId = x.OfficerInChargeId,
+                     OfficerName = x.FarmerName,
+                     Recommendation = x.Recommendation,
+
+                     ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(),
+                 })
+         .FirstOrDefaultAsync();
+
+            return type !=null ? type : null;
         }
 
         public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByActivityType(string businessCode, long activityTypeId)
         {
-            var type = await _context.FarmVisitationActivities.Where(x => x.BelongToBusinessCode == businessCode && x.FarmActivityId == activityTypeId).ToListAsync();
-            if (type.Count == 0) { return null; }
+            var type = await _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.FarmActivityId == activityTypeId)
+                 .Select(x => new FarmVisitationActivityModel
+                 {
 
+                     Id = x.Id,
+                     Description = x.Description,
+                     BelongToBusinessCode = businessCode,
+                     CooperativeId = x.CooperativeId,
+                     CreatedBy = x.CreatedBy,
+                     CreatedOn = x.CreatedOn,
+                     FarmActivityId = x.FarmActivityId,
+                     FarmerName = x.FarmerName,
+                     FarmerUserId = x.FarmerUserId,
+                     OfficerInChargeId = x.OfficerInChargeId,
+                     OfficerName = x.FarmerName,
+                     Recommendation = x.Recommendation,
 
-            return type.Select(x => x.Map()).ToList();
+                     ActivityType = _context.FarmActivityTypes
+                 .Where(t => t.Id == x.FarmActivityId)
+                 .Select(t => t.Name)
+                 .FirstOrDefault(),
+                 })
+         .ToListAsync();
+
+            return type.Any() ? type : null;
         }
         #endregion visitationlog
     }

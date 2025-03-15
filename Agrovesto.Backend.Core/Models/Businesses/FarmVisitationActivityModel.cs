@@ -23,6 +23,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? OfficerName { get; set; }
         public long CooperativeId { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public string? ActivityType { get; set; }
     }
 
     public class FarmActivityTypeModel
