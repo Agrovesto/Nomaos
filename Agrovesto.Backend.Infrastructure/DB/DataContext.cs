@@ -64,7 +64,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
             optionsBuilder.UseSqlServer(connectionString,options =>
-    options.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)); ;
+                options.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)); ;
 
             return new DataContext(optionsBuilder.Options);
         }
