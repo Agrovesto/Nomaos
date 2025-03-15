@@ -45,9 +45,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? BelongToBusinessCode { get; set; }
         public long WarehouseId { get; set; }
         public string? InputComingFrom { get; set; }
-        public InputTransitStatus TransitStatus { get; set; }
+        public InputTransitStatus Status { get; set; }
         public string? DeliveredTo { get; set; }
         public string? ReceivedBy { get; set; }
+        public string? TransitStatus { get; set; }
     }
     public enum InputTransitStatus
     {

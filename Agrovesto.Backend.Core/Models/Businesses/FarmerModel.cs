@@ -22,5 +22,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? DateOfBirth { get; set; }
         public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
         public long BelongToCooperativeId { get; set; }
+        public string? CooperativeName { get; set; }
+        public string? FarmerImage { get; set; }
     }
 }

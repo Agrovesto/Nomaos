@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
 
 namespace Agrovesto.Backend.Infrastructure
 {
@@ -41,7 +42,8 @@ namespace Agrovesto.Backend.Infrastructure
                 AreaInHectare = entity.AreaInHectare,
                 CoordinateTakenBy = entity.CoordinateTakenBy,
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
-                BelongToBusinessCode=entity.BelongToBusinessCode
+                BelongToBusinessCode=entity.BelongToBusinessCode,
+                CreatedOn = entity.CreatedOn,
             };
         }
 
@@ -72,6 +74,85 @@ namespace Agrovesto.Backend.Infrastructure
                 AreaInHectare = model.AreaInHectare,
                 CoordinateTakenBy = model.CoordinateTakenBy,
                 CoordinateTakenByUserId = model.CoordinateTakenByUserId,
+                CreatedOn = model.CreatedOn,
+            };
+        }
+        public static FarmActivityTypeModel Map(this FarmActivityType entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmActivityTypeModel
+            {
+                Description = entity.Description,
+                Id = entity.Id,
+                Name = entity.Name,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+            };
+        }
+
+        public static FarmActivityType Map(this FarmActivityTypeModel model)
+        {
+            if(model == null)
+            {
+                return null;
+            }
+            return new FarmActivityType
+            {
+                Description = model.Description,
+                Name = model.Name,
+
+                BelongToBusinessCode = model.BelongToBusinessCode,
+            };
+        }
+
+        public static FarmVisitationActivityModel Map(this FarmVisitationActivity entity)
+        {
+            if(entity == null)
+            {
+                return null;
+            }
+
+            return new FarmVisitationActivityModel
+            {
+                FarmActivityId = entity.FarmActivityId,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn=entity.CreatedOn,
+                Description
+                = entity.Description,
+                FarmerName = entity.FarmerName,
+                FarmerUserId = entity.FarmerUserId,
+                Id = entity.Id,
+                OfficerInChargeId = entity.OfficerInChargeId,
+                Recommendation= entity.Recommendation  ,
+                CooperativeId=entity.CooperativeId,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                OfficerName= entity.OfficerName
+            };
+        }
+
+        public static FarmVisitationActivity Map(this FarmVisitationActivityModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new FarmVisitationActivity
+            {
+                FarmActivityId = model.FarmActivityId,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                Description
+                = model.Description,
+                FarmerName = model.FarmerName,
+                FarmerUserId = model.FarmerUserId,
+                CooperativeId=model.CooperativeId,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                OfficerInChargeId = model.OfficerInChargeId,
+                Recommendation = model.Recommendation,
+                OfficerName = model.OfficerName
             };
         }
         #endregion FarmMgt
@@ -91,7 +172,7 @@ namespace Agrovesto.Backend.Infrastructure
                CommissionPrice = entity.CommissionPrice,
                EquityPlusCommission = entity.EquityPlusCommission,
                ShouldAddCommission = entity.ShouldAddCommission,
-               PaymentStatus = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),
+               Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),
               EquityPaymentBalanceDeficit=entity.EquityPaymentBalanceDeficit,
               ExpectedEquityPricePerBundle=entity.ExpectedEquityPricePerBundle,
               ExpectedTotalEquityPrice=entity.ExpectedTotalEquityPrice,
@@ -109,7 +190,7 @@ namespace Agrovesto.Backend.Infrastructure
               Reference= entity.Reference,
                 Location= entity.Location,
               CooperativeId= entity.CooperativeId  ,
-              
+                PaymentStatus = entity.PaymentStatus
             };
         }
 
@@ -121,7 +202,7 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new BundleSubscriptionInterest
             {
-               PaymentStatus= Enum.GetName(typeof(EquityPaymentStatus), model.PaymentStatus),
+               PaymentStatus= Enum.GetName(typeof(EquityPaymentStatus), model.Status),
                 OfficerInChargeUserId = model.OfficerInChargeUserId,
                 CreatedOn = model.OnBoardedOn,
                 CommissionPercentage = model.CommissionPercentage,
@@ -142,6 +223,61 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalQuantityPaidFor = model.TotalQuantityPaidFor,
                 BelongToBusinessCode=model.BelongToBusinessCode,
                 Reference= model.Reference,
+                Location = model.Location,
+                CooperativeId = model.CooperativeId,
+            };
+        }
+
+           public static BundleDisbursementModel Map(this BundleSubscriptionDisbursement entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+               return new BundleDisbursementModel
+            {
+               OfficerInChargeUserId = entity.OfficerInChargeUserId,
+               DisbursedBy=entity.DisbursedBy,
+               DisbursedOn  =entity.DisbursedOn,
+               InputAlreadyCollected = entity.InputAlreadyCollected,
+               InputCollectedByPictureOf=entity.InputCollectedByPictureOf,              
+              // Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),           
+              FarmerName= entity.FarmerName,             
+              FarmerUserId= entity.FarmerUserId,
+              InterestedBundleId= entity.InterestedBundleId,
+              InterestedBundleName= entity.InterestedBundleName,          
+              Id= entity.Id,
+                          TotalQuantityPaidFor= entity.TotalQuantityPaidFor,
+              BelongToBusinessCode= entity.BelongToBusinessCode,
+              Reference= entity.Reference,
+                Location= entity.Location,
+              CooperativeId= entity.CooperativeId  ,
+            };
+        }
+
+        public static BundleSubscriptionDisbursement Map(this BundleDisbursementModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new BundleSubscriptionDisbursement
+            {
+
+                OfficerInChargeUserId = model.OfficerInChargeUserId,
+                DisbursedBy = model.DisbursedBy,
+                DisbursedOn = model.DisbursedOn,
+                InputAlreadyCollected = model.InputAlreadyCollected,
+                InputCollectedByPictureOf = model.InputCollectedByPictureOf,
+                // Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),           
+                FarmerName = model.FarmerName,
+                FarmerUserId = model.FarmerUserId,
+                InterestedBundleId = model.InterestedBundleId,
+                InterestedBundleName = model.InterestedBundleName,
+              
+                TotalQuantityPaidFor = model.TotalQuantityPaidFor,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                Reference = model.Reference,
                 Location = model.Location,
                 CooperativeId = model.CooperativeId,
             };
@@ -303,10 +439,11 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode=entity.BelongToBusinessCode,
                 WarehouseId = entity.WarehouseId,
                 InputComingFrom=entity.InputComingFrom,
-                TransitStatus = entity.TransitStatus.ToEnum<InputTransitStatus>(),
+                Status = entity.TransitStatus.ToEnum<InputTransitStatus>(),
                 DeliveredTo=entity.DeliveredTo,
                 ReceivedBy=entity.ReceivedBy,
-                Reference=entity.Reference
+                Reference=entity.Reference,
+                TransitStatus = entity.TransitStatus
             };
         }
 
@@ -335,7 +472,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = model.BelongToBusinessCode,
                 WarehouseId = model.WarehouseId,
                 InputComingFrom = model.InputComingFrom,
-                TransitStatus= Enum.GetName(typeof(InputTransitStatus), model.TransitStatus),
+                TransitStatus= Enum.GetName(typeof(InputTransitStatus), model.Status),
                 DeliveredTo=model.DeliveredTo,
                 ReceivedBy = model.ReceivedBy,
                 Reference= model.Reference

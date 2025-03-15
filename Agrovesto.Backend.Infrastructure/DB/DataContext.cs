@@ -44,6 +44,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<BundleItems> BundleItems { get; set; }
         public DbSet<BundleSubscriptionInterest> BundleSubscriptionInterests { get; set; }
         public DbSet<FarmerImages> FarmerImages { get; set; }
+        public DbSet<BundleSubscriptionDisbursement> BundleSubscriptionDisbursements { get; set; }
+        public DbSet<FarmActivityType> FarmActivityTypes { get; set; }
+        public DbSet<FarmVisitationActivity> FarmVisitationActivities { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>

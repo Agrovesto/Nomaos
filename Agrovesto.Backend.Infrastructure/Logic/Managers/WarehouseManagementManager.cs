@@ -486,7 +486,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         model.InputComingFrom = model.InputComingFrom;
                         model.DeliveredTo = warehouse.Location;
-                        model.TransitStatus = InputTransitStatus.Packed;
+                        model.Status = InputTransitStatus.Packed;
                         model.Reference = GenerateReference(business.BusinessCode);
                         createWarehouse = await _repository.CreateAsync(model);
 
@@ -707,10 +707,45 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
             }
 
-            #endregion inputmgt
+        #endregion inputmgt
 
-            #region bundlemgt
-            public async Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args)
+        #region bundlemgt
+        public async Task<BundleModel> UpdateBundleEquity(BundleModel model, BusinessRegistrationArgs args)
+        {
+          
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+            var updateBundle = new BundleModel(); ;
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // Validate that each item has a valid WarehouseInputInventoryId
+                    model.BelongToBusinessCode = args.businessCode;
+                    updateBundle = await _repository.UpdateBundleEquitPrice(model);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return updateBundle;
+
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return updateBundle;
+        }
+
+
+
+        public async Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args)
             {
                 if (model.BundlePackage == null || model.BundlePackage.Count == 0)
                     throw new ArgumentException("Bundle must contain at least one item.");
@@ -743,7 +778,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
                         if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
-
+                        
                         createBundle = await _repository.CreateBundle(model);
 
                         await _context.SaveChangesAsync();

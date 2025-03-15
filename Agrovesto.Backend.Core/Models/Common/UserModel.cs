@@ -36,7 +36,18 @@ namespace Agrovesto.Backend.Core.Models.Common
         //public string? DateOfBirth { get; set; }
         public string BusinessCode { get; set; }
     }
+    public class ImageComparisonResponse
+    {
+        public bool IsSimilarFace { get; set; }
+        public double SimilarityPercentage { get; set; }
+        public string ImageKey { get; set; }
+    }
 
+    public class ImageUploadResponse
+    {
+        public string Message { get; set; }
+        public string ImageKey { get; set; }
+    }
     public class ImageVerificationArgs
     {
         public string FarmerUserId { get; set; }
@@ -49,6 +60,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class UserModel
     {
+      //  public IFormFile? FarmerCapturedImage { get; set; }
         public string? Id { get; set; }
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }

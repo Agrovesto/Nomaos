@@ -16,5 +16,6 @@ namespace Agrovesto.Backend.Core
         Task<T> Delete<T>(string url, string token = null);
         Task<T> Get<T>(string url, IDictionary<string, string> headers, string token = null);
         Task<HttpResponseMessage> Post(string url, HttpContent content, string token = null);
+        Task<HttpResponseMessage> Get(string url,  IDictionary<string, string> headers, string token = null);
     }
 }

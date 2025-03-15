@@ -242,9 +242,18 @@ namespace Agrovesto.Backend.API.Controllers
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
                 if (registerUser != null)
                 {
-                    await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
+                  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
+                //if (args.RoleName.Equals("Farmer"))
+                //{
+                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
+                //    {
+                //        FarmerUserId=registerUser.UserId,
+                //        File=model.FarmerCapturedImage
+                //    }, args);
 
+
+                //}
 
                 return Ok(new Response<SubAccountModel>()
                 {
@@ -275,6 +284,79 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
         }
+
+
+
+
+        [HttpPost("update-user-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> UpdateUserProfile([FromBody] SubAccountModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+              
+                var update=  await _businessManager.UpdateUserAccountProfile(model, args, args.UserId);
+                if (update.WalletCode != null)
+                {
+                    return Ok(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = model
+                    });
+
+                }
+                else
+                {
+                    return BadRequest(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "Could not update profile",
+                        Data = model
+                    });
+
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpPost("upload-image")]
         [AllowAnonymous]
         public async Task<IActionResult> CaptureFarmersImage([FromForm] ImageModel model, [FromQuery] BusinessRegistrationArgs args)
@@ -762,7 +844,8 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-         [HttpGet("cooperatives-byagent")]
+         
+        [HttpGet("cooperatives-byagent")]
         public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
         {
             try
@@ -799,11 +882,9 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
 
-        }
-        
+        }   
         
         [HttpGet("farmers")]
-
         public async Task<IActionResult> GetFarmersByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
@@ -928,6 +1009,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+       
         [HttpGet("farmers-byagent")]
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
         {
@@ -1005,5 +1087,57 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+        [HttpPost("assign-farmer-to-cooperative")]
+        public async Task<IActionResult> AssignFarmerToCooperative([FromQuery] long farmerId, [FromQuery] long cooperativeId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _businessManager.AssignFarmerToCooperative(farmerId, cooperativeId);
+                return Ok(new Response<FarmerModel>()
+                {
+                    Data = result,
+                    Message = "Assigned Successful",
+                    Succeeded = true,
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
     }
 }

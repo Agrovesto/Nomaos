@@ -15,7 +15,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
         Task<WalletResponseData> CreateCustomerWallet(string userId, string WalletName, string Env);
         Task<WalletResponseData> CreateWallet(string WalletName, string Env);
         Task<List<CafeOneBankData>> GetBanks(string env);
-        Task<CafeOneWalletProvider> GetUserAccount(string internalAccountId, string env);
+        Task<(CafeOneWalletProvider data, string message)> GetUserAccount(string internalAccountId, string env);
         Task<CafeOneData> GetUserBalance(string walletId, string env);
         Task<WalletResponseData> GetWallet(string env);
         Task<CafeOneWalletProvider> GetWalletbyId(string walletId, string env);

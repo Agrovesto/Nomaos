@@ -346,9 +346,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return subaccount;
         }
-        public async Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
+        public async Task<SubAccountModel> UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
         {
-            await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
+          return  await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
             {
                 UserId = subaccount.UserId,
                 Env = args.Env
@@ -635,7 +635,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
         public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId,
-                ListQueryParams query)
+     ListQueryParams query)
         {
             try
             {
@@ -644,26 +644,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var agent = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
-                if (agent == null) return new PagedListResponse<List<FarmerModel>>
+                var farmers = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
+
+                if (farmers == null || !farmers.Any())
                 {
-                    Succeeded = true,
-                    Data = null,
-                    Count = 0,
-                    Message = "No Record Found"
-                };
+                    return new PagedListResponse<List<FarmerModel>>
+                    {
+                        Succeeded = true,
+                        Data = null,
+                        Count = 0,
+                        Message = "No Record Found"
+                    };
+                }
+
+                // Fetch actual image URLs from Amazon S3 using the stored image keys
+                foreach (var farmer in farmers)
+                {
+                    if (!string.IsNullOrEmpty(farmer.FarmerImage))
+                    {
+                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage); 
+                    }
+                }
+
                 return new PagedListResponse<List<FarmerModel>>
                 {
                     Succeeded = true,
-                    Data = agent,
-                    Count = agent.Count,
-                    Message = "Retrieved Successfulluy"
+                    Data = farmers,
+                    Count = farmers.Count,
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
             {
-                _log.LogError($"Error retrieving Agents: {ex.Message}");
-
+                _log.LogError($"Error retrieving Farmers: {ex.Message}");
                 throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
             catch (Exception ex)
@@ -671,6 +684,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
+
+        //public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId,
+        //        ListQueryParams query)
+        //{
+        //    try
+        //    {
+        //        query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+        //        var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+        //        if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+        //        var farmers = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
+        //        if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+        //        {
+        //            Succeeded = true,
+        //            Data = null,
+        //            Count = 0,
+        //            Message = "No Record Found"
+        //        };
+        //        return new PagedListResponse<List<FarmerModel>>
+        //        {
+        //            Succeeded = true,
+        //            Data = farmers,
+        //            Count = farmers.Count,
+        //            Message = "Retrieved Successfulluy"
+        //        };
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new NotFoundException($"No Record Found");
+        //    }
+        //}
 
 
         public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId,
@@ -893,9 +944,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<object> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
+        public async Task<ImageUploadResponse> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
         {
-            object saveFace = new object();
+            var saveFace = new ImageUploadResponse();
             //var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
             //    ?? throw new Exception("Business does not exist");
 
@@ -910,7 +961,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     saveFace = await _faceManager.UploadImage(model.File, model.FarmerUserId, args.businessCode);
 
                 return saveFace;
-                }
+            }
                 catch (Exception ex)
                 {
                     //await dbTransaction.RollbackAsync();
@@ -920,5 +971,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             //return saveFace;
         }
 
+
+        public async Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId)
+        {
+            return await _farmerRepository.AssignFarmerToCooperative(farmerId, cooperativeId);
+        }
     }
 }

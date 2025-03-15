@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             _farmerRepository = farmerRepository;
         }
 
-        public async Task<object> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
+        public async Task<ImageComparisonResponse> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
         {
             try
             {
@@ -99,7 +99,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var compareFacesResponse = await _rekognitionClient.CompareFacesAsync(compareFacesRequest);
                 bool isMatch = compareFacesResponse.FaceMatches.Count > 0;
 
-                return new { IsSimilarFace = isMatch, Similarity = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
+                return new ImageComparisonResponse { IsSimilarFace = isMatch, 
+                    ImageKey= targetImageRecord.ImageKey,
+                    SimilarityPercentage = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
             }
             catch (BaseException ex)
             {
@@ -112,97 +114,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 throw new Exception($"Recognition Error: {ex.Message}");
             }
         }
-
-        public async Task<object> UploadImage(IFormFile image, string userId, string businessCode)
-        {
-            if (image == null || image.Length == 0)
-            {
-                return new { message = "Invalid image file." };
-            }
-
-            string bucketName = _configuration["AWS:BucketName"];
-            if (string.IsNullOrEmpty(bucketName))
-            {
-                return new { message = "AWS S3 bucket is not configured." };
-            }
-
-            byte[] imageBytes;
-            using (var memoryStream = new MemoryStream())
-            {
-                await image.CopyToAsync(memoryStream);
-                imageBytes = memoryStream.ToArray();
-            }
-
-            var existingImages = await _farmerRepository.GetImagesByBusinessCode(businessCode);
-
-            foreach (var existingImage in existingImages)
-            {
-                var matchFound = await CompareFacesAsync(bucketName, existingImage.ImageKey, imageBytes);
-                if (matchFound)
-                {
-                    return new { message = "A user with the same face already exists." };
-                }
-            }
-            string imageKey = $"{Guid.NewGuid()}{Path.GetExtension(image.FileName)}";
-
-
-            using (var memoryStream = new MemoryStream(imageBytes))
-            {
-                var putRequest = new PutObjectRequest
-                {
-                    BucketName = bucketName,
-                    Key = imageKey,
-                    InputStream = memoryStream,
-                    ContentType = image.ContentType
-                };
-                await _s3Client.PutObjectAsync(putRequest);
-            }
-
-            var savedImage = await _farmerRepository.SaveImage(new Core.Models.Businesses.FarmerImagesModel
-            {
-                BelongToBusinessCode = businessCode,
-                FarmerUserId = userId,
-                ImageKey = imageKey,
-                ImageName = image.FileName
-            });
-
-            return new { message = "Image uploaded successfully", imageKey = imageKey };
-        }
-        private async Task<bool> CompareFacesAsync(string bucketName, string existingImageKey, byte[] newImageBytes)
-        {
-            try
-            {
-                using (var memoryStream = new MemoryStream(newImageBytes))
-                {
-                    var compareRequest = new CompareFacesRequest
-                    {
-                        SourceImage = new Image
-                        {
-                            Bytes = memoryStream
-                        },
-                        TargetImage = new Image
-                        {
-                            S3Object = new S3Object
-                            {
-                                Bucket = bucketName,
-                                Name = existingImageKey
-                            }
-                        },
-                        SimilarityThreshold = 90 // Adjust similarity threshold as needed
-                    };
-
-                    var response = await _rekognitionClient.CompareFacesAsync(compareRequest);
-
-                    return response.FaceMatches.Count > 0;
-                }
-            }
-            catch (AmazonRekognitionException ex)
-            {
-                throw new Exception($"Recognition Error: {ex.Message}");
-           
-            }
-        }
-        private async Task<Amazon.Rekognition.Model.Image> GetImageFromS3(string bucket, string key)
+  private async Task<Amazon.Rekognition.Model.Image> GetImageFromS3(string bucket, string key)
         {
             try
             {
@@ -223,5 +135,165 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 return null;
             }
         }
+
+        public async Task<string> GetImageUrlAsync(string imageKey)
+        {
+            string bucketName = _configuration["AWS:BucketName"];
+            try
+            {
+                var request = new GetPreSignedUrlRequest
+                {
+                    BucketName = bucketName,
+                    Key = imageKey,
+                    Expires = DateTime.UtcNow.AddHours(1) // URL expires in 1 hour
+                };
+
+                return _s3Client.GetPreSignedURL(request);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error generating S3 URL: {ex.Message}");
+            }
+        }
+
+        public async Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode)
+        {
+            if (image == null || image.Length == 0)
+            {
+                return new ImageUploadResponse { Message = "Invalid image file.", ImageKey = null };
+            }
+            string[] allowedFormats = { ".jpg", ".jpeg", ".png" };
+            string fileExtension = Path.GetExtension(image.FileName).ToLower();
+
+            if (!allowedFormats.Contains(fileExtension))
+            {
+                return new ImageUploadResponse { Message = "Unsupported image format. Use JPG, JPEG, or PNG.", ImageKey = null };
+            }
+            try
+            {
+                string bucketName = _configuration["AWS:BucketName"];
+                if (string.IsNullOrEmpty(bucketName))
+                {
+                    return new ImageUploadResponse { Message = "AWS S3 bucket is not configured.", ImageKey = null };
+                }
+
+                byte[] imageBytes;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await image.CopyToAsync(memoryStream);
+                    imageBytes = memoryStream.ToArray();
+                }
+                var imageExist = await _farmerRepository.GetFarmerImage(userId, businessCode);
+                if (imageExist != null)
+                {
+                    try
+                    {
+                        var deleteRequest = new DeleteObjectRequest
+                        {
+                            BucketName = bucketName,
+                            Key = imageExist.ImageKey
+                        };
+                        await _s3Client.DeleteObjectAsync(deleteRequest);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new Exception($"Error deleting existing image: {ex.Message}");
+                    }
+                }
+
+
+                string imageKey = $"{Guid.NewGuid()}{Path.GetExtension(image.FileName)}";
+
+                using (var memoryStream = new MemoryStream(imageBytes))
+                {
+                    var putRequest = new PutObjectRequest
+                    {
+                        BucketName = bucketName,
+                        Key = imageKey,
+                        InputStream = memoryStream,
+                        ContentType = image.ContentType
+                    };
+                    await _s3Client.PutObjectAsync(putRequest);
+                }
+
+                var savedImage = await _farmerRepository.SaveImage(new Core.Models.Businesses.FarmerImagesModel
+                {
+                    BelongToBusinessCode = businessCode,
+                    FarmerUserId = userId,
+                    ImageKey = imageKey,
+                    ImageName = image.FileName
+                });
+
+                return new ImageUploadResponse { Message = "Image uploaded successfully", ImageKey = imageKey };
+            }
+            catch (AmazonRekognitionException ex)
+            {
+                throw new Exception($"Recognition Error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Upload Image error: {ex.Message}");
+            }
+        }
+        private async Task<bool> DoesS3ObjectExistAsync(string bucketName, string objectKey)
+        {
+            try
+            {
+                await _s3Client.GetObjectMetadataAsync(bucketName, objectKey);
+                return true; // Object exists
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                return false; // Object does not exist
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error checking if object exists in S3: {ex.Message}");
+            }
+        }
+
+        private async Task<bool> CompareFacesAsync(string bucketName, string existingImageKey, byte[] newImageBytes)
+        {
+            if (newImageBytes == null || newImageBytes.Length == 0)
+            {
+                throw new Exception("Source image data is empty.");
+            }
+
+            try
+            {
+                // 🔹 Validate that the target image exists in S3
+                bool objectExists = await DoesS3ObjectExistAsync(bucketName, existingImageKey);
+                if (!objectExists)
+                {
+                    throw new Exception($"Target image '{existingImageKey}' does not exist in S3.");
+                }
+
+                var compareRequest = new CompareFacesRequest
+                {
+                    SourceImage = new Image
+                    {
+                        Bytes = new MemoryStream(newImageBytes) // ✅ Convert properly
+                    },
+                    TargetImage = new Image
+                    {
+                        S3Object = new S3Object
+                        {
+                            Bucket = bucketName,
+                            Name = existingImageKey
+                        }
+                    },
+                    SimilarityThreshold = 90 // Adjust as needed
+                };
+
+                var response = await _rekognitionClient.CompareFacesAsync(compareRequest);
+
+                return response.FaceMatches.Count > 0;
+            }
+            catch (AmazonRekognitionException ex)
+            {
+                throw new Exception($"Recognition Error: {ex.Message}");
+            }
+        }
+
     }
 }

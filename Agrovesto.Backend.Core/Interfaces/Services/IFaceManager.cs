@@ -10,7 +10,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
 {
     public interface IFaceManager
     {
-        Task<object> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args);
-        Task<object> UploadImage(IFormFile image, string userId, string businessCode);
+        Task<ImageComparisonResponse> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args);
+        Task<string> GetImageUrlAsync(string imageKey);
+        Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode);
     }
 }
