@@ -100,7 +100,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     var getAreaInDegrees = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2,
                                                              model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
 
-                    var getAreaInSqMetre = ConvertDegreesToSquareMeters(getAreaInDegrees);
+                    var getAreaInSqMetre = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2,
+                                                             model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
                     var getAreaInHectare = ConvertSquareMetersToHectares(getAreaInSqMetre);
                     model.AreaInDegress = getAreaInDegrees;
                     model.AreaInSqMetre = getAreaInSqMetre;

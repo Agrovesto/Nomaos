@@ -84,6 +84,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Select(x => x.Map()).ToList();
         }
+          public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(string businessCode, string userId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode 
+            && x.OfficerInChargeUserId == userId).ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
 
         public async Task<BundleSubscriptionInterestModel> GetPaidSubscriptionByFarmer(string businessCode, string farmerUserId, string reference)
         {
@@ -146,6 +155,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Map();
         }
+
+        public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(string businessCode)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.PaymentStatus == "Paid").ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
+
+        public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid").ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
         //update input interest payment
         //fetch account details with balance from cafeone
 
@@ -178,6 +205,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //    await _context.SaveChangesAsync();
         //    return true;
         //}
+        public async Task<BundleSubscriptionInterestModel> UpdateEquitySubcriiptonStatus(BundleSubscriptionInterestModel model)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
+
+            if (interest != null)
+            {
+                interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);               
+
+                await _context.SaveChangesAsync();
+            }
+            return null;
+
+        }
 
     }
 }
