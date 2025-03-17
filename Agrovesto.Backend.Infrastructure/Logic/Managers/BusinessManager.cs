@@ -976,5 +976,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _farmerRepository.AssignFarmerToCooperative(farmerId, cooperativeId);
         }
-    }
+
+       
+
+        }
 }

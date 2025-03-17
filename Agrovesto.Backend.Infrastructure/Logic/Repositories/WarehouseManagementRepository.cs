@@ -146,8 +146,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              .GroupBy(wi => wi.InputName) 
              .Select(g => new WarehouseSummary
              {
-                 InputName = g.Key,
-                 Stocklevel = g.Sum(wi => wi.UnitBalance),
+                 Name = g.Key,
+                 Value = g.Sum(wi => wi.UnitBalance),
                  InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
              })
              .ToList()

@@ -53,7 +53,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
         }
+        public async Task<Response<List<SubscriptionData>>> FarmerBundleSubscriptionsMetric(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
 
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var bizEntities = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
+                if (bizEntities == null) return new Response<List<SubscriptionData>>
+                {
+                    Succeeded = false,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<List<SubscriptionData>>
+                {
+                    Succeeded = true,
+                    Data = bizEntities,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
         public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -81,7 +113,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
         //FarmerBundleSubscriptionInterests
-        public async Task<Response<SubscriptionMetrics>> FarmerBundleSubscriptions(ListQueryParams query)
+        public async Task<Response<List<SubscriptionData>>> FarmerBundleSubscriptions(ListQueryParams query)
         {
             try
             {
@@ -90,13 +122,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var subscription = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
-                if (subscription == null) return new Response<SubscriptionMetrics>
+                if (subscription == null) return new Response<List<SubscriptionData>>
                 {
                     Succeeded = true,
                     Data = null,
                     Message = "No Record Found"
                 };
-                return new Response<SubscriptionMetrics>
+                return new Response<List<SubscriptionData>>
                 {
                     Succeeded = true,
                     Data = subscription,

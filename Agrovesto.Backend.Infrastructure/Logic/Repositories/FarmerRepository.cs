@@ -19,6 +19,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
         }
 
+        #region agent
+        public async Task<BusinessEntitiesMetrics> GetAgentEntitiesMetricsAsync(string businessCode, string userId)
+        {
+            var currentMonth = DateTime.UtcNow.Month;
+            var previousMonth = DateTime.UtcNow.AddMonths(-1).Month;
+            var currentYear = DateTime.UtcNow.Year;
+            var previousYear = DateTime.UtcNow.AddMonths(-1).Year;
+
+            double percentageChange = await CalculateFarmerPercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+            double cooperativePercentageChange = await CalculateCooperativePercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+            double agentPercentageChange = await CalculateAgentPercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
+
+            var metrics = new BusinessEntitiesMetrics
+
+            {
+
+              //  TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == businessCode && c.IsAssignedToAgentId ==),
+                TotalFarmer = await _context.Farmers.CountAsync(f => f.BelongToBusinessCode == businessCode && f.OnboardedByUserId == userId),
+                PendingFarmUpdate = await _context.FarmPlotDetails.CountAsync(f => f.CoordinateTakenByUserId == userId),
+
+                TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode),
+                PercentageFarmerPerformance = percentageChange,
+                PercentageCooperativePerformance = cooperativePercentageChange,
+                PercentageAgentPerformance = agentPercentageChange,
+            };
+
+            return metrics;
+        }
+
+        #endregion agent
+
+
         public async Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId)
         {
             var farmer = await _context.Farmers.Where(c => c.Id == farmerId).FirstOrDefaultAsync();
