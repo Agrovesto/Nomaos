@@ -54,9 +54,9 @@ jobs:
       - name: Deploy to Ubuntu server
         uses: appleboy/scp-action@v0.1.3
         with:
-          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
-          username: ${{ secrets.SSH_USERNAME }}  # SSH username
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
+          host: ${{ secrets.EC2_HOST }}  # Server IP or hostname
+          username: ${{ secrets.EC2_USER }}  # SSH username
+          key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
           source: "./publish/*"
           target: "/var/www/argovesto-api/"
 
@@ -64,9 +64,9 @@ jobs:
       - name: Restart .NET application service
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
-          username: ${{ secrets.SSH_USERNAME }}  # SSH username
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
+          host: ${{ secrets.EC2_HOST }}  # Server IP or hostname
+          username: ${{ secrets.EC2_USER }}  # SSH username
+          key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
           script: |
             sudo systemctl restart dotnet-app
             sudo systemctl status dotnet-app
