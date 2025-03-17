@@ -1,0 +1,53 @@
+name: Build and Deploy .NET 8 Application
+
+on:
+  push:
+    branches:
+      - dev  # Trigger on pushes to the main branch
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up .NET 8 SDK
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      # Step 3: Restore dependencies and build the application
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build the application
+        run: dotnet build --configuration Release --no-restore
+
+      # Step 4: Publish the application
+      - name: Publish the application
+        run: dotnet publish -c Release -o ./publish
+
+      # Step 5: Deploy to the Ubuntu server
+      - name: Deploy to Ubuntu server
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
+          username: ${{ secrets.SSH_USERNAME }}  # SSH username
+          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
+          source: "./publish/*"
+          target: "/var/www/dotnet-app/"
+
+      # Step 6: Restart the .NET application service
+      - name: Restart .NET application service
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
+          username: ${{ secrets.SSH_USERNAME }}  # SSH username
+          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
+          script: |
+            sudo systemctl restart dotnet-app
+            sudo systemctl status dotnet-app
