@@ -59,6 +59,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
           source: "./publish/*"
           target: "/var/www/argovesto-api/"
+          strip_components: 1  # Remove the 'publish' directory from the target path
 
       # Step 3: Restart the .NET application service
       - name: Restart .NET application service
@@ -68,5 +69,6 @@ jobs:
           username: ${{ secrets.EC2_USER }}  # SSH username
           key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
           script: |
+            sudo systemctl daemon-reload
             sudo systemctl restart dotnet-app
             sudo systemctl status dotnet-app
