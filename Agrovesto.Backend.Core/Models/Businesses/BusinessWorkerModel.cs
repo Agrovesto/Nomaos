@@ -7,10 +7,15 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class SubscriptionData
+    {
+        public string Name { get; set; }
+        public int Value { get; set; }
+    }
     public class BundleSubscriptionSummary
     {
-        public string BundleName { get; set; }  // e.g., Basic Bundle A, Advanced Bundle
-        public int TotalSubscribers { get; set; }  // Number of farmers subscribed to the bundle
+        public string Name { get; set; }  // e.g., Basic Bundle A, Advanced Bundle
+        public int Value { get; set; }  // Number of farmers subscribed to the bundle
     }
     public class SubscriptionMetrics
     {
@@ -33,6 +38,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalAgents { get; set; }
         public long TotalCooperative { get; set; }
         public long TotalFarmer { get; set; }
+        public long PendingFarmUpdate { get; set; }
         public double PercentageFarmerPerformance { get; set; }
         public double PercentageCooperativePerformance { get; set; }
         public double PercentageAgentPerformance { get; set; }
@@ -41,9 +47,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class WarehouseSummary
     {
-        public string InputName { get; set; }
+        public string Name { get; set; }
         public long InitialStockUp { get; set; }
-        public long Stocklevel { get; set; }
+        public long Value { get; set; }
      
     }
     public class WarehouseSummaryMetrics

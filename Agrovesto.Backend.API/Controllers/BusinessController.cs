@@ -113,7 +113,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.FarmerBundleSubscriptions(query);
-                return Ok(new Response<SubscriptionMetrics>()
+                return Ok(new Response<List<SubscriptionData>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
