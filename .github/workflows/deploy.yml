@@ -83,4 +83,4 @@ jobs:
       #       -dest:auto,computerName=\"localhost\",includeAcls=False `
       #       -allowUntrusted
             
-            iisreset
+            # iisreset
