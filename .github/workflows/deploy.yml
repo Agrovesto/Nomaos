@@ -48,39 +48,36 @@ jobs:
           name: dotnet-app
           path: ./publish
             
-      # - name: Deploy to IIS with Web Deploy
-      #   uses: actions/upload-artifact@v4
-      #   env:
-      #     WEBAPP_NAME: 'agrovesto-api'
-      #     WEBAPP_PHYSICAL_PATH: 'C:\inetpub\agrovesto'
-      #   run: |
-      #     $msdeploy = "C:\Program Files (x86)\IIS\Microsoft Web Deploy V3\msdeploy.exe"
-      #     & $msdeploy -verb:sync `
-      #       -source:package="${{ github.workspace }}\publish\agrovesto.zip" `
-      #       -dest:auto,computerName="localhost",userName=${{ secrets.EC2_USER }},password=${{ secrets.EC2_SSH_KEY }},authtype='basic',includeAcls='False' `
-      #       -allowUntrusted
-
-      - name: Transfer package to IIS server
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "./publish/agrovesto.zip"
-          target: "C:/inetpub/agrovesto/"
-
       - name: Deploy to IIS with Web Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          shell: powershell
-          script: |
-            & "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" `
-            -verb:sync `
-            -source:package=\"C:\inetpub\agrovesto\agrovesto.zip\" `
-            -dest:auto,computerName=\"localhost\",includeAcls=False `
+        run: |
+          $msdeploy = "C:\Program Files (x86)\IIS\Microsoft Web Deploy V3\msdeploy.exe"
+          & $msdeploy -verb:sync `
+            -source:package="${{ github.workspace }}\publish\agrovesto.zip" `
+            -dest:auto,computerName="localhost",userName=${{ secrets.IIS_USER }},password=${{ secrets.IIS_PASSWORD }},authtype='basic',includeAcls='False' `
             -allowUntrusted
+        shell: powershell
+
+      # - name: Transfer package to IIS server
+      #   uses: appleboy/scp-action@master
+      #   with:
+      #     host: ${{ secrets.EC2_HOST }}
+      #     username: ${{ secrets.EC2_USER }}
+      #     key: ${{ secrets.EC2_SSH_KEY }}
+      #     source: "./publish/agrovesto.zip"
+      #     target: "C:/inetpub/agrovesto/"
+
+      # - name: Deploy to IIS with Web Deploy
+      #   uses: appleboy/ssh-action@master
+      #   with:
+      #     host: ${{ secrets.EC2_HOST }}
+      #     username: ${{ secrets.EC2_USER }}
+      #     key: ${{ secrets.EC2_SSH_KEY }}
+      #     shell: powershell
+      #     script: |
+      #       & "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" `
+      #       -verb:sync `
+      #       -source:package=\"C:\inetpub\agrovesto\agrovesto.zip\" `
+      #       -dest:auto,computerName=\"localhost\",includeAcls=False `
+      #       -allowUntrusted
             
-            iisreset
+      #       iisreset
