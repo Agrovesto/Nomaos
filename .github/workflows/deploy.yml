@@ -43,32 +43,31 @@ jobs:
     needs: build  # Ensure this job runs only if the build job succeeds
 
     steps:
-      # Step 1: Download the published artifacts
+      # Step 1: Download the Web Deploy package
       - name: Download artifacts
-        uses: actions/download-artifact@v4.1.9
+        uses: actions/download-artifact@v4
         with:
           name: dotnet-app
           path: ./publish
 
-      # Step 2: Deploy to the Ubuntu server
-      - name: Deploy to Ubuntu server
-        uses: appleboy/scp-action@v0.1.3
+      # Step 2: Transfer the Web Deploy package to Windows IIS server
+      - name: Transfer package to IIS server
+        uses: appleboy/scp-action@master
         with:
-          host: ${{ secrets.EC2_HOST }}  # Server IP or hostname
-          username: ${{ secrets.EC2_USER }}  # SSH username
-          key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
-          source: "./publish/*"
-          target: "/var/www/argovesto-api/"
-          strip_components: 1  # Remove the 'publish' directory from the target path
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "./publish/agrovesto.zip"
+          target: "C:\\inetpub\\agrovesto\\agrovesto.zip"
 
-      # Step 3: Restart the .NET application service
-      - name: Restart .NET application service
-        uses: appleboy/ssh-action@v0.1.7
+      # Step 3: Deploy to IIS using Web Deploy
+      - name: Deploy to IIS with Web Deploy
+        uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.EC2_HOST }}  # Server IP or hostname
-          username: ${{ secrets.EC2_USER }}  # SSH username
-          key: ${{ secrets.EC2_SSH_KEY }}  # SSH private key
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          shell: cmd
           script: |
-            sudo systemctl daemon-reload
-            sudo systemctl restart dotnet-app
-            sudo systemctl status dotnet-app
+            "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" -verb:sync -source:package="C:\inetpub\agrovesto\agrovesto.zip" -dest:auto,computerName="localhost",userName=admin,password="${{ secrets.EC2_PASSWORD }}",includeAcls="False" -allowUntrusted
+            iisreset
