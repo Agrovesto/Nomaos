@@ -29,7 +29,7 @@ jobs:
 
       - name: Create Web Deploy Package
         run: |
-         Compress-Archive -Path ./publish/* -DestinationPath ./publish/agrovesto.zip
+          Compress-Archive -Path ./publish/* -DestinationPath ./publish/agrovesto.zip
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -55,18 +55,24 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Copy artifact to EC2 instance
+      - name: Copy artifact to EC2 instance using WinRM
+        shell: pwsh
         run: |
-          scp -i ${{ secrets.EC2_SSH_KEY }} ./publish/agrovesto.zip Administrator@${{ secrets.EC2_HOST }}:C:/inetpub/wwwroot/agrovesto.zip
+          $username = "${{ secrets.EC2_USERNAME }}"
+          $password = "${{ secrets.EC2_PASSWORD }}" | ConvertTo-SecureString -AsPlainText -Force
+          $credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password
+          $session = New-PSSession -ComputerName "${{ secrets.EC2_HOST }}" -Credential $credential
 
-      - name: Unzip and deploy to IIS
-        run: |
-          ssh -i ${{ secrets.EC2_SSH_KEY }} Administrator@${{ secrets.EC2_HOST }} << 'EOF'
-          cd C:/inetpub/wwwroot
-          Remove-Item -Recurse -Force agrovesto
-          Expand-Archive -Path agrovesto.zip -DestinationPath agrovesto
-          Remove-Item -Force agrovesto.zip
-          iisreset
-          EOF
+          # Copy the zip file to the EC2 instance
+          Copy-Item -Path ./publish/agrovesto.zip -Destination "C:/inetpub/wwwroot/agrovesto.zip" -ToSession $session
 
-      
+          # Unzip and deploy to IIS
+          Invoke-Command -Session $session -ScriptBlock {
+            cd C:/inetpub/wwwroot
+            Remove-Item -Recurse -Force agrovesto
+            Expand-Archive -Path agrovesto.zip -DestinationPath agrovesto
+            Remove-Item -Force agrovesto.zip
+            iisreset
+          }
+
+          Remove-PSSession -Session $session
