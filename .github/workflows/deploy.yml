@@ -58,14 +58,28 @@ jobs:
       - name: Copy artifact to EC2 instance using WinRM
         shell: pwsh
         run: |
+          # Check if secrets are set
+          if (-not "${{ secrets.EC2_USER }}") {
+            Write-Host "EC2_USER secret is empty or not set."
+            exit 1
+          }
+          if (-not "${{ secrets.EC2_SSH_KEY }}") {
+            Write-Host "EC2_SSH_KEY secret is empty or not set."
+            exit 1
+          }
+          if (-not "${{ secrets.EC2_HOST }}") {
+            Write-Host "EC2_HOST secret is empty or not set."
+            exit 1
+          }
+  
           $username = "${{ secrets.EC2_USER }}"
           $password = "${{ secrets.EC2_SSH_KEY }}" | ConvertTo-SecureString -AsPlainText -Force
           $credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password
           $session = New-PSSession -ComputerName "${{ secrets.EC2_HOST }}" -Credential $credential
-
+  
           # Copy the zip file to the EC2 instance
           Copy-Item -Path ./publish/agrovesto.zip -Destination "C:/inetpub/wwwroot/agrovesto.zip" -ToSession $session
-
+  
           # Unzip and deploy to IIS
           Invoke-Command -Session $session -ScriptBlock {
             cd C:/inetpub/wwwroot
@@ -74,5 +88,5 @@ jobs:
             Remove-Item -Force agrovesto.zip
             iisreset
           }
-
+  
           Remove-PSSession -Session $session
