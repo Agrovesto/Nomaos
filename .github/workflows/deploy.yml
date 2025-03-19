@@ -58,8 +58,8 @@ jobs:
       - name: Copy artifact to EC2 instance using WinRM
         shell: pwsh
         run: |
-          $username = "${{ secrets.EC2_USERNAME }}"
-          $password = "${{ secrets.EC2_PASSWORD }}" | ConvertTo-SecureString -AsPlainText -Force
+          $username = "${{ secrets.EC2_USER }}"
+          $password = "${{ secrets.EC2_SSH_KEY }}" | ConvertTo-SecureString -AsPlainText -Force
           $credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password
           $session = New-PSSession -ComputerName "${{ secrets.EC2_HOST }}" -Credential $credential
 
