@@ -10,47 +10,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Set up .NET 8 SDK
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
 
-      # Step 3: Restore dependencies and build the application
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build the application
         run: dotnet build --configuration Release --no-restore
 
-      # Step 4: Publish the application
       - name: Publish the application
         run: dotnet publish -c Release -o ./publish
 
-      # Step 5: Upload the published artifacts
+      - name: Create Web Deploy Package
+        run: |
+          zip -r agrovesto.zip ./publish/*
+          mv agrovesto.zip ./publish/agrovesto.zip
+
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4.6.1
+        uses: actions/upload-artifact@v4
         with:
           name: dotnet-app
-          path: ./publish
+          path: ./publish/agrovesto.zip
 
   deploy:
     runs-on: ubuntu-latest
-    needs: build  # Ensure this job runs only if the build job succeeds
+    needs: build
 
     steps:
-      # Step 1: Download the Web Deploy package
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: dotnet-app
           path: ./publish
 
-      # Step 2: Transfer the Web Deploy package to Windows IIS server
       - name: Transfer package to IIS server
         uses: appleboy/scp-action@master
         with:
@@ -58,16 +56,20 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           source: "./publish/agrovesto.zip"
-          target: "C:\\inetpub\\agrovesto\\agrovesto.zip"
+          target: "C:/inetpub/agrovesto/"
 
-      # Step 3: Deploy to IIS using Web Deploy
       - name: Deploy to IIS with Web Deploy
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          shell: cmd
+          shell: powershell
           script: |
-            "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" -verb:sync -source:package="C:\inetpub\agrovesto\agrovesto.zip" -dest:auto,computerName="localhost",userName=admin,password="${{ secrets.EC2_PASSWORD }}",includeAcls="False" -allowUntrusted
+            & "C:\Program Files\IIS\Microsoft Web Deploy V3\msdeploy.exe" `
+            -verb:sync `
+            -source:package=\"C:\inetpub\agrovesto\agrovesto.zip\" `
+            -dest:auto,computerName=\"localhost\",includeAcls=False `
+            -allowUntrusted
+            
             iisreset
