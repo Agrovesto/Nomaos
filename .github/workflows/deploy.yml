@@ -1,92 +1,82 @@
-name: Build and Deploy .NET 8 Application
+name: Build and Deploy .NET 8 App to Windows EC2
 
 on:
   push:
     branches:
-      - dev  # Trigger on pushes to the dev branch
+      - main
 
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Setup .NET SDK
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup .NET 8
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
-
+          dotnet-version: 8.0.x
+      
       - name: Restore dependencies
         run: dotnet restore
-
-      - name: Build the application
+      
+      - name: Build application
         run: dotnet build --configuration Release --no-restore
-
-      - name: Publish the application
+      
+      - name: Publish application
         run: dotnet publish -c Release -o ./publish
 
-      - name: Create Web Deploy Package
-        run: |
-          Compress-Archive -Path ./publish/* -DestinationPath ./publish/agrovesto.zip
-
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: agrovesto-app
-          path: ./publish/agrovesto.zip
+          name: dotnet-app
+          path: ./publish
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     needs: build
 
     steps:
-      - name: Download artifacts
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: agrovesto-app
+          name: dotnet-app
           path: ./publish
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v3
+      
+      - name: Deploy to EC2 using WinRM
+        uses: cloudbase/winrm-action@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Copy artifact to EC2 instance using WinRM
-        shell: pwsh
-        run: |
-          # Check if secrets are set
-          if (-not "${{ secrets.EC2_USER }}") {
-            Write-Host "EC2_USER secret is empty or not set."
-            exit 1
-          }
-          if (-not "${{ secrets.EC2_SSH_KEY }}") {
-            Write-Host "EC2_SSH_KEY secret is empty or not set."
-            exit 1
-          }
-          if (-not "${{ secrets.EC2_HOST }}") {
-            Write-Host "EC2_HOST secret is empty or not set."
-            exit 1
-          }
-  
-          $username = "${{ secrets.EC2_USER }}"
-          $password = "${{ secrets.EC2_SSH_KEY }}" | ConvertTo-SecureString -AsPlainText -Force
-          $credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $username, $password
-          $session = New-PSSession -ComputerName "${{ secrets.EC2_HOST }}" -Credential $credential
-  
-          # Copy the zip file to the EC2 instance
-          Copy-Item -Path ./publish/agrovesto.zip -Destination "C:/inetpub/wwwroot/agrovesto.zip" -ToSession $session
-  
-          # Unzip and deploy to IIS
-          Invoke-Command -Session $session -ScriptBlock {
-            cd C:/inetpub/wwwroot
-            Remove-Item -Recurse -Force agrovesto
-            Expand-Archive -Path agrovesto.zip -DestinationPath agrovesto
-            Remove-Item -Force agrovesto.zip
-            iisreset
-          }
-  
-          Remove-PSSession -Session $session
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          password: ${{ secrets.EC2_PASSWORD }}
+          transport: ntlm
+          port: 5985
+          command: |
+            $appPoolName = "AgroVestoAppPool"
+            $siteName = "AgroVesto"
+            $sitePath = "C:\inetpub\wwwroot\AgroVesto"
+            
+            # Stop IIS
+            Stop-Service -Name W3SVC
+            
+            # Create application pool if it does not exist
+            if (-Not (Test-Path IIS:\AppPools\$appPoolName)) {
+              New-WebAppPool -Name $appPoolName
+              Set-ItemProperty IIS:\AppPools\$appPoolName -Name managedRuntimeVersion -Value ""  # No .NET runtime needed for self-contained apps
+            }
+            
+            # Remove existing website if it exists
+            if (Test-Path IIS:\Sites\$siteName) {
+              Remove-Website -Name $siteName
+            }
+            
+            # Create website
+            New-Website -Name $siteName -Port 80 -PhysicalPath $sitePath -ApplicationPool $appPoolName
+            
+            # Remove existing files and copy new ones
+            Remove-Item -Recurse -Force $sitePath\*
+            Copy-Item -Path "C:\Users\${{ secrets.EC2_USER }}\publish\*" -Destination $sitePath -Recurse
+            
+            # Start IIS
+            Start-Service -Name W3SVC
