@@ -23,5 +23,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerImagesModel> GetFarmerImage(string userId, string businessCode);
         Task<List<FarmerImagesModel>> GetImagesByBusinessCode(string businessCode);
         Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId);
+        Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(long agentId, ListQueryParams query);
     }
 }

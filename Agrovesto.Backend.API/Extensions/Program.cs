@@ -1,4 +1,5 @@
 using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -34,6 +35,11 @@ builder.Services.AddDbContext<DataContext>(options =>
                 errorNumbersToAdd: null);
             sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
         }));
+
+builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+
+builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {

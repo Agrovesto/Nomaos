@@ -19,6 +19,7 @@ using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -82,7 +83,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
                 else
                 {
-                    user = await FindByPhoneNumberAsync(model.phonenumber);
+
+                    if (header.Contains("IsAgrovesto"))
+                    {
+                        user = await FindByPhoneNumberAsync(model.phonenumber);
+                    }
+                    else if (header.Contains("IsBusiness"))
+                    {
+                        if (string.IsNullOrEmpty(businessCode))
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
+                        }
+                        user = await _context.Users.Where(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode).FirstOrDefaultAsync();
+                    }
+                    else
+                    {
+                        throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
+                    }
+                  
                     if (string.IsNullOrEmpty(user.Salt))
                     {
                         return (false, "Could not login user. Contact administrator", null);
@@ -265,7 +283,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return result;
         }
+        public async Task<(UserModel model, bool status, string message)> ChangeUserRole(string userId, string roleName)
+        {
+            var model = await _userManager.FindByIdAsync(userId);
+            var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+            if (uniqueRole == null) throw new Exception($"Could not find specified role");
+            var userExistingRole = await _userManager.GetRolesAsync(model);
+            if (userExistingRole.Any())
+            {
+                var removeFromRole = await _userManager.RemoveFromRoleAsync(model,userExistingRole[0]);
+            }
+            var addUserToRole = await _userManager.AddToRoleAsync(model, uniqueRole.Name);
 
+            if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
+            return (model.Map(), true, "Success");
+        }
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
             IdentityResult createUser = new IdentityResult(); model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
@@ -407,6 +439,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var response = user.Select(x => x.Map()).ToList();
             return (response.Select(x => x.ViewMap()).ToList(), true, "Retrieved Successfully");
         }
+        public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
+        {
+            var userExist = await _userManager.FindByEmailAsync(model.UserName);
+            if (userExist != null)
+            {
+               
+                var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
+                if (resetPassword.Succeeded)
+                {
+                    return (true, resetPassword.Succeeded.ToString());
+                }
+                else
+                {
+                    return (false, resetPassword.Errors.ToString());
+                }
+
+            }
+            return (false, "Invalid username");
+        }
+
 
     }
 }

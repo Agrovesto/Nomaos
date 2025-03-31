@@ -17,5 +17,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<RoleModel>>> GetRolesAsync();
         Task<PagedListResponse<List<RoleModel>>> GetRolesByBusinessAsync(string userId);
         Task<bool> AddUserToRole(string userId, string roleId);
+        Task<PagedListResponse<List<RoleModel>>> GetBusinessRoles();
     }
 }

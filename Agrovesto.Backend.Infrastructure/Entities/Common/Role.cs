@@ -14,11 +14,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         {
 
         }
-        public Role(string name, string descriptions) : base(name)
+        public Role(string name, string descriptions, bool isAvailableToBusiness) : base(name)
         {
             Descriptions = descriptions;
+            IsAvailableToBusiness = isAvailableToBusiness;
         }
         public string Descriptions { get; set; }
+        public bool IsAvailableToBusiness { get; set; }
         //add permission
 
         /// <summary>   

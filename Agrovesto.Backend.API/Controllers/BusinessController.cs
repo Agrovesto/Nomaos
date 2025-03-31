@@ -32,6 +32,46 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         #region dashboard
+
+
+        #region agent
+        [HttpGet("agent/users/summary")]
+        public async Task<IActionResult> GetBusinessEntitiesMetricsAsyncByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessEntitiesMetricsAsyncByAgent(query);
+                return Ok(new Response<BusinessEntitiesMetrics>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        #endregion agent
         //
         [HttpGet("warehouse/input-disbursement/summary")]
         public async Task<IActionResult> GetWarehouseInputTransit([FromQuery] ListQueryParams query)
@@ -214,6 +254,58 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         #endregion dashboard
+        //
+
+        [HttpPost("assign-agent-role")]
+   
+        public async Task<IActionResult> MakeUserAgent([FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+                
+                var registerUser = await _businessManager.MakeUserAgent(args);
+                
+                //if (args.RoleName.Equals("Farmer"))
+                //{
+                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
+                //    {
+                //        FarmerUserId=registerUser.UserId,
+                //        File=model.FarmerCapturedImage
+                //    }, args);
+
+
+                //}
+
+                return Ok(new Response<UserModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = registerUser
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
 
         [HttpPost("register")]
         [AllowAnonymous]
@@ -240,7 +332,7 @@ namespace Agrovesto.Backend.API.Controllers
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null)
+                if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent && !string.IsNullOrEmpty(model.Bvn) )
                 {
                   var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }

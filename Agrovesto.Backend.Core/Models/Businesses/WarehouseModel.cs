@@ -53,8 +53,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public enum InputTransitStatus
     {
         Packed,
+        PickedUp,
         InTransit,
+        ArrivedDestination,
+        Delivered,
         Received
+    }
+
+    public enum LogisticType
+    {
+        Truck,
+        Bus,
+       Bike
     }
     public class WarehouseUserModel
     {

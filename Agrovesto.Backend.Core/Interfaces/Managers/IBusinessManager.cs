@@ -32,5 +32,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsync(ListQueryParams query);
         Task<ImageUploadResponse> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args);
         Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId);
+        Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsyncByAgent(ListQueryParams query);
+        Task<UserModel> MakeUserAgent(BusinessRegistrationArgs args);
     }
 }

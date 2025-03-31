@@ -61,6 +61,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return farmer.Map();
         }
+     
+        public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(long agentId, ListQueryParams query)
+        {
+            
+            var farmers = await GetFarmersByAgent(agentId, query);
+          
+
+
+            var metrics = new BusinessEntitiesMetrics
+
+            {
+                TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == query.businessCode && c.IsAssignedToAgentId == agentId),
+                TotalFarmer = farmers.Count(),
+                TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == query.businessCode && w.ManagedByUserId == agentId),
+              
+            };
+
+            return metrics;
+        }
 
         public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode)
         {
@@ -167,12 +186,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<FarmerModel> GetFarmerByUserId(string userId)
         {
-            var farmer = await _context.Farmers.Where(x => x.UserId == userId).FirstOrDefaultAsync();
-            if (farmer == null)
+            //var farmer = await _context.Farmers.Where(x => x.UserId == userId).FirstOrDefaultAsync();
+            //if (farmer == null)
+            //{
+            //    return null;
+            //}
+            //return farmer.Map();
+
+            var farmers = await _context.Farmers.
+               Where(x => x.UserId == userId).FirstOrDefaultAsync();
+
+            if (farmers == null)
             {
-                return null;
+                throw new Exception("No record found");
             }
-            return farmer.Map();
+
+            // Fetch cooperative names for all distinct cooperativeIds in farmers
+           
+            var cooperatives = await _context.Cooperatives
+                .Where(c => c.Id == farmers.BelongToCooperativeId)
+                .ToDictionaryAsync(c => c.Id, c => c.Name);
+
+            // Fetch farmer images
+           
+            var farmerImages = await _context.FarmerImages
+                .Where(img => img.FarmerUserId == farmers.UserId)
+                .ToDictionaryAsync(img => img.FarmerUserId, img => img.IMageKey); // Assuming ImageUrl is the image path
+
+          
+          
+                var mappedFarmer = farmers.Map();
+
+                if (cooperatives.TryGetValue(mappedFarmer.BelongToCooperativeId, out var cooperativeName))
+                {
+                    mappedFarmer.CooperativeName = cooperativeName;
+                }
+
+                if (farmerImages.TryGetValue(mappedFarmer.UserId, out var imageUrl))
+                {
+                    mappedFarmer.FarmerImage = imageUrl;
+                }
+
+                return mappedFarmer;
+           
         }
 
         public async Task<FarmerModel> GetFarmerById(long Id)

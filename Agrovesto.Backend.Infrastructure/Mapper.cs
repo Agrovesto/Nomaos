@@ -519,6 +519,73 @@ namespace Agrovesto.Backend.Infrastructure
                 Capacity = entity.Capacity
             };
         }
+
+        public static InputDeliveryTrackerModel Map(this InputDeliveryTracker entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new InputDeliveryTrackerModel
+            {
+               BusinessCode=entity.BusinessCode,
+                Id = entity.Id,
+                WarehouseId = entity.WarehouseId,
+                Status = entity.Status.ToEnum<InputTransitStatus>(),
+                DeliveredTo = entity.DeliveredTo,
+                Reference = entity.Reference,
+                WarehouseInputInventoryId=entity.WarehouseInputInventoryId,
+                DeliveredBy=entity.DeliveredBy,
+                DeliveryContact= entity.DeliveryContact,
+                DeliveryDate= entity.DeliveryDate,
+                DeliveryLocation= entity.DeliveryLocation,
+                PickUpDate= entity.PickUpDate,
+                QuantityDelivered= entity.QuantityDelivered,
+                InputName= entity.InputName,
+                LogisticNumber= entity.LogisticNumber,
+                LogisticType = entity.LogisticType.ToEnum<LogisticType>(),
+                PickupLocation= entity.PickupLocation,
+                QuantityLoaded= entity.QuantityLoaded,
+                QuantityReceived= entity.QuantityReceived,
+                TransitStatus= Enum.GetName(typeof(InputTransitStatus), entity.Status),
+            };
+        }
+
+        public static InputDeliveryTracker Map(this InputDeliveryTrackerModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new InputDeliveryTracker
+            {
+                BusinessCode= model.BusinessCode,
+
+                WarehouseId = model.WarehouseId,
+                Status = Enum.GetName(typeof(InputTransitStatus), model.Status),
+                DeliveredTo = model.DeliveredTo,
+                Reference = model.Reference,
+                WarehouseInputInventoryId = model.WarehouseInputInventoryId,
+                DeliveredBy = model.DeliveredBy,
+                DeliveryContact = model.DeliveryContact,
+                DeliveryDate = model.DeliveryDate,
+                DeliveryLocation = model.DeliveryLocation,
+                PickUpDate = model.PickUpDate,
+                QuantityDelivered = model.QuantityDelivered,
+                InputName = model.InputName,
+                LogisticNumber = model.LogisticNumber,
+                LogisticType = Enum.GetName(typeof(LogisticType), model.LogisticType),
+             
+                PickupLocation = model.PickupLocation,
+                QuantityLoaded = model.QuantityLoaded,
+                QuantityReceived = model.QuantityReceived,
+               
+            };
+        }
+
+
+
+
         #endregion warehouse
         #region userMgt
         public static FarmerImagesModel Map(this FarmerImages entities)
@@ -974,7 +1041,8 @@ namespace Agrovesto.Backend.Infrastructure
             return new Role
             {
                 Descriptions = model.RoleDescription,
-                Name = model.RoleName
+                Name = model.RoleName,
+                IsAvailableToBusiness=model.IsAvailableToBusiness
             };
         }
 
@@ -989,7 +1057,8 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 RoleId = entity.Id,
                 RoleDescription = entity.Descriptions,
-                RoleName = entity.Name
+                RoleName = entity.Name,
+                IsAvailableToBusiness = entity.IsAvailableToBusiness
             };
         }
         #endregion RoleMgt

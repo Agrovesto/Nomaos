@@ -66,8 +66,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .AsNoTracking()
                 .Where(s => s.BelongToBusinessCode == businessCode)
                 .OrderByDescending(s => s.OnBoardedOn)
-                .Skip(query.PageNumber)
-                .Take(query.PageSize)
+                //.Skip(query.PageNumber)
+                //.Take(query.PageSize)
                 .Select(s => new CooperativeModel
                 {
                     Id = s.Id,
@@ -96,8 +96,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .AsNoTracking()
                 .Where(s => s.IsAssignedToAgentId == AgentId)
                 .OrderByDescending(s => s.OnBoardedOn)
-                .Skip(query.PageNumber)
-                .Take(query.PageSize)
+                //.Skip(query.PageNumber)
+                //.Take(query.PageSize)
                 .Select(s => new CooperativeModel
                 {
                     Id = s.Id,

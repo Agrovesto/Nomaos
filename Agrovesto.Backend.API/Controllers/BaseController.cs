@@ -67,6 +67,30 @@ namespace Agrovesto.Backend.API.Controllers
                 return claims?.Value;
             }
         }
+
+        public string CurrentUserEmail
+        {
+            get
+            {
+                var token = Token;
+                if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
+
+                var handler = new JwtSecurityTokenHandler();
+
+                // Ensure the token is a well-formed JWT before reading it
+                if (!handler.CanReadToken(token))
+                {
+                    throw new SecurityTokenException("Invalid JWT format");
+                }
+
+                var jst = handler.ReadJwtToken(token);
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase));
+
+                return claims?.Value;
+            }
+        }
+
+
         public string CurrentUserId
         {
             get
