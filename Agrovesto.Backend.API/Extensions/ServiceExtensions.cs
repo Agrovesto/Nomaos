@@ -54,7 +54,8 @@ namespace Agrovesto.Backend.API.Extensions
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<ISMSService, SMSService>();
-
+            services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
+            services.AddScoped<IEncryptionService, EncryptionService>();
         }
     }
 }

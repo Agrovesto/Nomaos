@@ -60,7 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         Succeeded = true,
                         Data = warehouse,
-                        Message = "Retrieved Successfulluy"
+                        Message = "Retrieved Successfully"
                     };
                 }
                 catch (BaseException ex)
@@ -179,7 +179,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
 
 
-            public async Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId,
+            public async Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByAgent(string userId,
+               ListQueryParams query)
+            {
+                try
+                {
+                    query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                    var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+
+                    if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for Agent");
+                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, agent.Id);
+                    if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
+                    {
+                        Succeeded = true,
+                        Data = null,
+                        Count = 0,
+                        Message = "No Record Found"
+                    };
+                    return new PagedListResponse<List<WarehouseModel>>
+                    {
+                        Succeeded = true,
+                        Data = warehouse,
+                        Count = warehouse.Count,
+                        Message = "Retrieved Successfulluy"
+                    };
+                }
+                catch (BaseException ex)
+                {
+                    _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                }
+                catch (Exception ex)
+                {
+                    throw new NotFoundException($"No Record Found");
+                }
+            }
+
+         public async Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId,
                ListQueryParams query)
             {
                 try
@@ -275,13 +314,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         if (agent == null) throw new Exception("Could not retrieve agent");
 
                         var manager = await _repository.GetWarehousesManagerByBusiness(model.BelongToBusinessCode);
-                        if (manager.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State && x.PhoneNumber == model.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");
+                        if (manager.Any(x => x.Name == agent.Name && x.Lga == agent.Lga && x.State == agent.State && x.PhoneNumber == agent.PhoneNumber)) throw new Exception($"A Warehouse manager with same name exist in {model.Location} {model.Lga} {model.State}");
 
 
                         createWarehouseManager = await _repository.CreateWarehouseManager(model);
 
                         warehouse.HasbeenAssignedManager = true;
-                        warehouse.ManagedByUserId = createWarehouseManager.data.Id;
+                        warehouse.ManagedByUserId = agent.Id;
                         await _repository.UpdateWarehouse(warehouse);
 
                         await _context.SaveChangesAsync();
@@ -482,7 +521,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.ManagedByUserId = warehouse.UserId;
                         var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, args.WarehouseId);
 
-                        if (input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand)) { throw new Exception($"The warehouse already have same stock of input"); }
+                        if (input!=null &&( input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand))) { throw new Exception($"The warehouse already have same stock of input"); }
 
                         model.InputComingFrom = model.InputComingFrom;
                         model.DeliveredTo = warehouse.Location;
@@ -502,13 +541,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 });
                 return createWarehouse;
             }
-            public async Task<WarehouseInputInventoryModel> ConfirmInputShipment(WarehouseInputInventoryModel model, BusinessRegistrationArgs args)
+            public async Task<InputDeliveryTrackerModel> ConfirmInputShipment(InputDeliveryTrackerModel model, BusinessRegistrationArgs args)
             {
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new Exception("Business does not exist");
 
                 args.UserId ??= business.UserId;
-                WarehouseInputInventoryModel createWarehouse = new WarehouseInputInventoryModel();
+            InputDeliveryTrackerModel createWarehouse = new InputDeliveryTrackerModel();
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -517,10 +556,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                     try
                     {
+                        //WarehouseInputInventoryModel
                         var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
-                        var status = Enum.GetName(typeof(InputTransitStatus), InputTransitStatus.InTransit);
-                        model.ShipmentDate = DateTimeOffset.Now;
-                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, model.Id, status, "", model.ShipmentDate.Value);
+                        var inputName = await _repository.GetInputBYIdAsync(business.BusinessCode, model.WarehouseInputInventoryId) ?? throw new Exception("Could not retrive input");
+                        model.BusinessCode = business.BusinessCode;
+                        model.InputName = inputName.InputName;
+                        model.Reference = inputName.Reference;
+                        model.WarehouseId = warehouse.Id;
+                        model.WarehouseInputInventoryId = model.WarehouseInputInventoryId;
+                        var logDelivery = await _repository.LogDeliveryTracker(model);
+
+                        var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
+
+                        var ShipmentDate = DateTimeOffset.Now;
+                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, model.WarehouseInputInventoryId, status, "", ShipmentDate);
+
                         if (!update) throw new Exception("No record found for input");
 
 
@@ -537,13 +587,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 });
                 return createWarehouse;
             }
-            public async Task<WarehouseInputInventoryModel> ConfirmReceiptOfInput(WarehouseInputInventoryModel model, BusinessRegistrationArgs args)
+            public async Task<InputDeliveryTrackerModel> ConfirmReceiptOfInput(InputDeliveryTrackerModel model, BusinessRegistrationArgs args)
             {
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new Exception("Business does not exist");
 
                 args.UserId ??= business.UserId;
-                WarehouseInputInventoryModel createWarehouse = new WarehouseInputInventoryModel();
+            InputDeliveryTrackerModel createWarehouse = new InputDeliveryTrackerModel();
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -553,9 +603,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     try
                     {
                         var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
-                        var status = Enum.GetName(typeof(InputTransitStatus), InputTransitStatus.Received);
-                        model.InventoryStockedOn = DateTimeOffset.Now;
-                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, model.Id, status, model.ReceivedBy, model.InventoryStockedOn.Value);
+                    
+                        var tracker = await _repository.GetInputTracker(model.Reference) ?? throw new Exception("record not found");
+
+                        if((model.QuantityDelivered != tracker.QuantityLoaded) ||(model.QuantityReceived != tracker.QuantityLoaded) )
+                        {
+                            //send a mail and end the transaction
+
+                            throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Kindly contact sender to reconcile disparity in Quantity");
+                        }
+                        var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
+                        model.Reference = tracker.Reference;
+                        var logDelivery = await _repository.LogDeliveryTracker(model);
+                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, tracker.WarehouseInputInventoryId, status, model.DeliveredTo, DateTimeOffset.Now);
                         if (!update) throw new Exception("No record found for input");
 
 
@@ -754,7 +814,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     ?? throw new Exception("Business does not exist");
 
                 args.UserId ??= business.UserId;
-                var createBundle = new BundleModel(); ;
+                var createBundle = new BundleModel(); 
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -776,8 +836,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.CreatedBy = args.UserId;
                         model.BelongToBusinessCode = business.BusinessCode;
 
-                        var bundles = await _repository.GetBundleByBusiness(model.BelongToBusinessCode);
-                        if (bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
+                        var bundles = await _repository.GetBundleByBusiness(business.BusinessCode);
+                        if (bundles !=null && bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
                         
                         createBundle = await _repository.CreateBundle(model);
 

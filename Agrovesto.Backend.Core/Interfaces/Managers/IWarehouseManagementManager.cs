@@ -11,8 +11,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IWarehouseManagementManager
     {
         Task<bool> AddMoreInputToStock(InputUpdateModel model, BusinessRegistrationArgs args);
-        Task<WarehouseInputInventoryModel> ConfirmInputShipment(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);
-        Task<WarehouseInputInventoryModel> ConfirmReceiptOfInput(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);
+        Task<InputDeliveryTrackerModel> ConfirmInputShipment(InputDeliveryTrackerModel model, BusinessRegistrationArgs args);
+        Task<InputDeliveryTrackerModel> ConfirmReceiptOfInput(InputDeliveryTrackerModel model, BusinessRegistrationArgs args);
         Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseUserModel data)> CreateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args);
@@ -24,7 +24,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<WarehouseModel>> GetWarehouseByBusiness(string userId, long warehouseId);
         Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId);
         Task<Response<WarehouseUserModel>> GetWarehouseManagerByBusiness(string userId, long warehouseId);
-           Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagerByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagersByBusiness(string userId, long warehouseId, ListQueryParams query);
         Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId);

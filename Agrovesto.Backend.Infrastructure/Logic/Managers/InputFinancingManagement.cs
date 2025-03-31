@@ -619,7 +619,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             args.UserId ??= business.UserId;
             var requestsByBusiness = await _repository.GetPaidSubscriptionInterestByBusinessAgent(args.businessCode, args.UserId);
-            if (!requestsByBusiness.Any()) return null;
+            if (requestsByBusiness == null) return null;
 
 
             foreach (var request in requestsByBusiness)

@@ -97,7 +97,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string NIN { get; set; }
 
         [RegularExpression(ValidationRegex.General)]
-        [MaxLength(50)]
+        [MaxLength(200)]
         public string Website { get; set; }
         public BusinessStatus BusinessStatus { get; set; }
         public Category Category { get; set; } = Category.Not_Live;
@@ -108,6 +108,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BusinessLogo { get; set; }
         public string? UserId { get; set; }
         public string? BusinessCodeSignage { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public long TotalStaffCount { get; set; }
     }
     public enum BusinessStatus

@@ -49,6 +49,40 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             }
 
         }
+
+        public static async Task DynamicBusinessStaffOnboarding(WelcomeMailBody model)
+        {
+            var key = AppSettingsHelper.Setting("SendGrid:key");
+            var apiKey = key;//Environment.GetEnvironmentVariable("NAME_OF_THE_ENVIRONMENT_VARIABLE_FOR_YOUR_SENDGRID_KEY");
+
+            var emailMessage = MailHelper.CreateSingleTemplateEmail(
+                   new EmailAddress(model.From, model.FromName),
+                   new EmailAddress(model.To, model.ToName),
+                   "d-b678eddcbe474d2b8f454bc5b95830ff",
+                   new
+                   {
+                       merchantName = model.ToName,
+                       accountOfficer = model.AccountOfficer,
+                       phoneNumber = model.PhoneNumber,
+                       email = model.Email,
+                       propagateUrl = model.PropagateUrl,
+                       logincred = model.logincred,
+                       defaultPassword = model.DefaultPassword,
+                       businessName = model.BusinessName,
+                       fullName = model.FullName,
+                       platform = model.Platform,
+                   });
+
+           // emailMessage = AddBcc(emailMessage);
+            var _sendGridClient = new SendGridClient(RetrieveAPIKey());
+
+            var response = await _sendGridClient.SendEmailAsync(emailMessage);
+
+            if (response.StatusCode != HttpStatusCode.Accepted)
+            {
+                await response.Body.ReadAsStringAsync();
+            }
+        }
         public static async Task DynamicBusinessOnboarding(WelcomeMailBody model)
         {
             var key = AppSettingsHelper.Setting("SendGrid:key");
@@ -65,7 +99,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                        phoneNumber =model.PhoneNumber,
                        email = model.Email,
                        propagateUrl =model.PropagateUrl,
-                       logincred = model.logincred
+                       logincred = model.logincred,
+                       defaultPassword = model.DefaultPassword
+
                    });
 
             emailMessage = AddBcc(emailMessage);
@@ -111,6 +147,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
     }
     public class WelcomeMailBody
     {
+        public string From { get; set; }
+        public string FromName { get; set; }
         public string To { get; set; }
         public string Subject { get; set; }
         public string Body { get; set; }
@@ -120,6 +158,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         public string Email { get; set; }
         public string PropagateUrl { get; set; }
         public string logincred { get; set; }
+        public string DefaultPassword { get; set; }
+        public string FullName { get; set; }
+        public string Platform { get; set; }
+        public string BusinessName { get; set; }
     }
 
 }

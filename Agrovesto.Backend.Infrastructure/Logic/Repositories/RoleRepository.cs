@@ -30,7 +30,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 });
             }
 
-            var role = new Role(roleName, description);
+            var role = new Role(roleName, description, true);
             return await _roleManager.CreateAsync(role);
         }
     }

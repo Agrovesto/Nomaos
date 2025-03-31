@@ -194,10 +194,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Select(x => x.Map()).ToList();
         }
+        public async Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusinessAgent(string businessCode, string userId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus != "Paid")
+                .OrderByDescending(x => x.CreatedOn).ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
 
         public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid").ToListAsync();
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid")
+                .OrderByDescending(x=> x.CreatedOn).ToListAsync();
 
             if (!interest.Any()) { return null; }
 

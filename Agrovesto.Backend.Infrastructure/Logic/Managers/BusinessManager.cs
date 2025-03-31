@@ -17,6 +17,8 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -37,12 +39,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAgentRepository _agentRepository;
         private readonly ICooperativeRepository _cooperativeRepository;
         private readonly ILogger<BusinessManager> _log;
-
+        private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IFarmPlotDetailRepository _farmPlotDetailRepository;
         private readonly IFaceManager _faceManager;
         private readonly ISMSService _whisperSMSService;
+        private readonly IInputFinancingManagementRepository _inputRepository;
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
+            IIdentityVerificationManager identityVerificationManager,
+            IFarmPlotDetailRepository farmPlotDetailRepository,
             IAgentRepository agentRepository, ISMSService whisperSMSService,
+            IInputFinancingManagementRepository inputRepository,
                 IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
@@ -53,16 +60,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _agentRepository = agentRepository;
             _cooperativeRepository = cooperativeRepository;
             _log = log;
-
+            _farmPlotDetailRepository = farmPlotDetailRepository;
+            _identityVerificationManager = identityVerificationManager;
             _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
+            _inputRepository = inputRepository;
         }
         public async Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query)
         {
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-             
+
                 var businesses = await _businessRepository.GetBusinessesAsync(query);
                 if (businesses == null) return new PagedListResponse<List<BusinessModel>>
                 {
@@ -93,6 +102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
         {
+            if (business.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
             business.Validate();
             business.BusinessStatus = BusinessStatus.Registered;
             BusinessModel newBusiness = new BusinessModel();
@@ -101,76 +111,77 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             await strategy.ExecuteAsync(async () =>
             {
                 using (var dbTransaction = _context.Database.BeginTransaction())
-            {
-                try
                 {
-                    var bModel = await _businessRepository.GetBusinessAsync(business.BusinessName);
-                    if (bModel != null)
+                    try
                     {
-                        throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST,$"{business.BusinessName} already exist, Kindly contact administrator");
+                        var bModel = await _businessRepository.GetBusinessAsync(business.BusinessName);
+                        if (bModel != null)
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST, $"{business.BusinessName} already exist, Kindly contact administrator");
+                        }
+                        var name = business.BusinessName.Replace(" ", string.Empty).ToUpper();
+                        var businessCount = await _businessRepository.BusinessCount();
+                        if (name.Length > 3)
+                        {
+                            name = $"{name.Substring(0, 3)}";
+                        }
+                        business.BusinessCode = $"{name}{DateTimeOffset.Now.Year}{businessCount + 1}";
+
+                        var registrationMode = new UserModel
+                        {
+                            Email = business.BusinessEmail,
+                            Name = business.BusinessName,
+                            Password = args.DefaultPassword,
+                            PhoneNumber = business.PhoneNumber,
+                            UserType = Enum.GetName(typeof(UserType), UserType.Business),//UserType.Business,
+                            CreatedBy = args.UserId,
+                            CreatedOn = DateTimeOffset.Now,
+                            BusinessCode = business.BusinessCode,
+
+                        };
+                        var registerBusiness = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*role name should be business admin role*/);
+                        if (!registerBusiness.status)
+                        {
+                            throw new Exception(registerBusiness.message);
+                        }
+
+                        newBusiness = await _businessRepository.CreateBusiness(business, registerBusiness.model.Id);
+
+
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+
+
+                        //send email to business about sucessful onboarding
+                        //DynamicBusinessOnboarding
+                        var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
+
+                        var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+                        newBusiness.BusinessCodeSignageSalt = HttpUtility.UrlEncode(newBusiness.BusinessCodeSignageSalt);
+                        var mailRequest = new WelcomeMailBody
+                        {
+                            To = business.BusinessEmail,
+                            ToName = $"{business.BusinessName}",
+                            Subject = $"Welcome OnBoard {business.BusinessName}",
+                            AccountOfficer = accountOfficer.model.Name,
+                            DefaultPassword = args.DefaultPassword,
+                            Email = accountOfficer.model.Email,
+                            PhoneNumber = accountOfficer.model.PhoneNumber,
+                            PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
+                            logincred = $"login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
+                        };
+                        var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
+
+                        return newBusiness;
                     }
-                    var name = business.BusinessName.Replace(" ", string.Empty).ToUpper();
-                    var businessCount = await _businessRepository.BusinessCount();
-                    if (name.Length > 3)
+                    catch (Exception ex)
                     {
-                        name = $"{name.Substring(0, 3)}";
+
+                        await dbTransaction.RollbackAsync();
+
+                        throw new Exception(ex.Message);
                     }
-                    business.BusinessCode = $"{name}{DateTimeOffset.Now.Year}{businessCount + 1}";
-
-                    var registrationMode = new UserModel
-                    {
-                        Email = business.BusinessEmail,
-                        Name = business.BusinessName,
-                        Password = args.DefaultPassword,
-                        PhoneNumber = business.PhoneNumber,
-                        UserType = Enum.GetName(typeof(UserType), UserType.Business),//UserType.Business,
-                        CreatedBy = args.UserId,
-                        CreatedOn = DateTimeOffset.Now,
-                        BusinessCode = business.BusinessCode,
-
-                    };
-                    var registerBusiness = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*role name should be business admin role*/);
-                    if (!registerBusiness.status)
-                    {
-                        throw new Exception(registerBusiness.message);
-                    }
-
-                    newBusiness = await _businessRepository.CreateBusiness(business, registerBusiness.model.Id);
-
-                    
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-
-
-                    //send email to business about sucessful onboarding
-                    //DynamicBusinessOnboarding
-                    var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
-
-                    var propagationUrl = AppSettingsHelper.Setting("propagation:url");
-                    newBusiness.BusinessCodeSignageSalt = HttpUtility.UrlEncode(newBusiness.BusinessCodeSignageSalt);
-                    var mailRequest = new WelcomeMailBody
-                    {
-                        To = business.BusinessEmail,
-                        ToName = $"{business.BusinessName}",
-                        Subject = $"Welcome OnBoard {business.BusinessName}",
-                        AccountOfficer = accountOfficer.model.Name,
-                        Email = accountOfficer.model.Email,
-                        PhoneNumber = accountOfficer.model.PhoneNumber,
-                        PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
-                        logincred = $"login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
-                    };
-                    var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-
-                    return newBusiness;
                 }
-                catch (Exception ex)
-                {
-
-                    await dbTransaction.RollbackAsync();
-
-                    throw new Exception(ex.Message);
-                }
-            }
             });
 
             return newBusiness;
@@ -178,11 +189,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public async Task<BusinessWorkerModel> CreateBusinessWorkerAsync(BusinessWorkerModel bWorker, BusinessRegistrationArgs args)
         {
+            if (bWorker.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
+
             var user = await _authenticationRepository.GetUserById(args.UserId);
             var business = await _businessRepository.GetBusinessByUserIdAsync(user.model.Id);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
             BusinessWorkerModel newBusinessWorker = new BusinessWorkerModel();
+            //verify user bvn details
+
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -215,14 +230,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         bWorker.BusinessId = business.BusinessId;
                         bWorker.UserId = registerBusinessWorker.model.Id;
-                         newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+                        newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
 
 
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
+                        var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+                        var mailRequest = new WelcomeMailBody
+                        {
+                            To = bWorker.Email,
+                            ToName = $"{bWorker.FullName}",
+                            Subject = $"Welcome OnBoard {business.BusinessName}",
+                            From = business.BusinessEmail,
+                            FromName = business.BusinessName,
+                            FullName = bWorker.FullName,
+                            Platform = business.BusinessName,
+                            DefaultPassword = args.DefaultPassword,
+                            BusinessName = business.BusinessName,
+                            PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
+                            logincred = $"login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
+                        };
+                        // var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
 
 
-                        //send email to user to reset their password
                         return newBusinessWorker;
                     }
                     catch (Exception ex)
@@ -233,11 +263,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         throw new Exception(ex.Message);
                     }
                 }
-              
+
             });
             return newBusinessWorker;
         }
+        private string ConvertedDate(string date)
+        {
+            string[] dateFormats = {
+            "dd-MMM-yyyy", "dd-MM-yyyy", "dd/MM/yyyy", "yyyy-MM-dd",
+            "MM/dd/yyyy", "MMM dd, yyyy", "yyyy/MM/dd"
+        };
 
+            string dateOfBirth = date; // Example input, change to test other formats
+
+            if (DateTime.TryParseExact(dateOfBirth, dateFormats,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
+            {
+                string formattedDate = parsedDate.ToString("yyyy-MM-dd");
+                return formattedDate;
+            }
+            else
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid date of birth");
+            }
+        }
         public async Task<BusinessLoadModel> GetBusinessBySinageSaltAsync(string businessCode, string signagesalt)
         {
 
@@ -264,14 +313,70 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _cooperativeRepository.ViewAgentAssignedToCooperative(cooperativeId);
         }
+
+        public async Task<UserModel> MakeUserAgent(BusinessRegistrationArgs args)
+        {
+            var user = new UserModel();
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                  ?? throw new Exception("Business does not exist");
+
+                    args.UserId ??= business.UserId;
+                    var cooperative = await _cooperativeRepository.GetCooperativeDetailByUserId(args.UserId) ?? throw new Exception("Could not find user");
+                    var changeRole = await _authenticationRepository.ChangeUserRole(args.UserId, args.RoleName);
+                    changeRole.model.Lga = cooperative.Lga;
+                    changeRole.model.State = cooperative.State;
+                    changeRole.model.Location = cooperative.Location;
+                    changeRole.model.Email = cooperative.Email;
+                    changeRole.model.PhoneNumber = cooperative.PhoneNumber;
+                    changeRole.model.Name= cooperative.Name;
+                    
+                    await CreateAgentProfileAsync(changeRole.model, business, args.UserId);
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    user = changeRole.model;
+                    return user;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return user;
+        }
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
+            if (model.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
+
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
             SubAccountModel subaccount = new SubAccountModel();
-          
+            model.DateOfBirth = ConvertedDate(model.DateOfBirth);
+
+            if (!string.IsNullOrEmpty(model.Bvn))
+            {
+                var verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+                {
+                    image = null,
+                    number = model.Bvn
+                });
+                if (!verifyBvn.status) throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
+                model.DateOfBirth = ConvertedDate(verifyBvn.data.dateOfBirth);
+                model.Bvn = verifyBvn.data.bvn;
+                model.Gender = verifyBvn.data.gender;
+                model.NIN = !string.IsNullOrEmpty(verifyBvn.data.nin) ? verifyBvn.data.nin : model.NIN;
+
+            }
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -280,12 +385,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
 
+
                     var registeredUser = await RegisterUserAsync(model, args);
                     if (!registeredUser.status)
                         throw new Exception($"Could not register user {registeredUser.message}");
 
                     subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-                  
+
 
                     switch (subaccount.SubAccountType)
                     {
@@ -295,8 +401,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         case SubAccountType.Cooperative:
                             model.Id = registeredUser.model.Id;
-                                //create first as cooperative
-                            var coop=    await CreateCooperativeProfileAsync(model, business, args.UserId);
+                            //create first as cooperative
+                            var coop = await CreateCooperativeProfileAsync(model, business, args.UserId);
                             args.UserId = registeredUser.model.Id;
                             //then create user as a farmer as well
 
@@ -322,7 +428,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //    await newTransaction.CommitAsync();
                     //}
                     subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
-                   subaccount.UserId = registeredUser.model.Id;
+                    subaccount.UserId = registeredUser.model.Id;
                     //var messageBody = $"You are welcome onboard. ";
 
                     //var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
@@ -348,13 +454,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         public async Task<SubAccountModel> UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
         {
-          return  await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
+            return await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
             {
                 UserId = subaccount.UserId,
                 Env = args.Env
             });
         }
-      
+
         private async Task<(UserModel model, bool status, string message)> RegisterUserAsync(UserModel model, BusinessRegistrationArgs args)
         {
 
@@ -402,7 +508,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return await _walletManager.CreateSubAccount(subaccount);
         }
 
-       
+
         private async Task CreateAgentProfileAsync(UserModel model, BusinessModel business, string userId)
         {
             var agent = new AgentModel
@@ -430,7 +536,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 isAssignedagent = true;
                 agent = await _agentRepository.GetAgentDetailByUserId(userId);
-             
+
             }
             var cooperative = new CooperativeModel
             {
@@ -444,14 +550,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
-                IsAssignedToAgentId= agent.Id,
-                HasbeenAssignedAgent=isAssignedagent
+                IsAssignedToAgentId = agent.Id,
+                HasbeenAssignedAgent = isAssignedagent
             };
 
-         return  await _cooperativeRepository.CreateCooperative(cooperative);
+            return await _cooperativeRepository.CreateCooperative(cooperative);
         }
 
-    
+
         private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount,
             long cooperativeId)
         {
@@ -473,7 +579,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 DateOfBirth = model.DateOfBirth,
-                BelongToCooperativeId= cooperativeId
+                BelongToCooperativeId = cooperativeId
             };
 
             var farer = await _farmerRepository.CreateFarmer(farmer);
@@ -563,7 +669,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             try
             {
-              //  query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                //  query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByCodeAsync(businessCode);
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
@@ -662,7 +768,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     if (!string.IsNullOrEmpty(farmer.FarmerImage))
                     {
-                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage); 
+                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
                     }
                 }
 
@@ -881,7 +987,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-               
+
                 var farmers = await _farmerRepository.GetFarmersByCooperativeId(query.CooperativeId, query);
                 if (farmers == null) return new PagedListResponse<List<FarmerModel>>
                 {
@@ -943,6 +1049,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
+        public async Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsyncByAgent(ListQueryParams query)
+        {
+            try
+            {
+                var agent = await _agentRepository.GetAgentDetailByUserId(query.UserId);
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var plots = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(query.businessCode, query.UserId);
+
+                var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsyncByAgent(agent.Id, query);
+                bizEntities.FarmVisit = plots !=null ? plots.FirstOrDefault() : null;
+
+
+                if (bizEntities == null) return new Response<BusinessEntitiesMetrics>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<BusinessEntitiesMetrics>
+                {
+                    Succeeded = true,
+                    Data = bizEntities,
+                    Message = "Retrieved Successfulluy"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
 
         public async Task<ImageUploadResponse> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
         {
@@ -956,18 +1099,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             //await strategy.ExecuteAsync(async () =>
             //{
             //    await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    saveFace = await _faceManager.UploadImage(model.File, model.FarmerUserId, args.businessCode);
+            try
+            {
+                saveFace = await _faceManager.UploadImage(model.File, model.FarmerUserId, args.businessCode);
 
                 return saveFace;
             }
-                catch (Exception ex)
-                {
-                    //await dbTransaction.RollbackAsync();
-                    throw new Exception($"{ex.Message}", ex);
-                }
-           // });
+            catch (Exception ex)
+            {
+                //await dbTransaction.RollbackAsync();
+                throw new Exception($"{ex.Message}", ex);
+            }
+            // });
             //return saveFace;
         }
 
@@ -977,7 +1120,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return await _farmerRepository.AssignFarmerToCooperative(farmerId, cooperativeId);
         }
 
-       
 
-        }
+
+    }
 }

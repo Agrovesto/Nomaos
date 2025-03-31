@@ -24,26 +24,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
         {
             var query = await (from b in _context.BusinessWorkers
-                               join u in _context.Users
-                               on b.UserId equals u.Id
+                               join u in _context.Users on b.UserId equals u.Id
+                               join r in _context.UserRoles on u.Id equals r.UserId into userRoles
+                               from ur in userRoles.DefaultIfEmpty() // Left Join for UserRoles
+                               join role in _context.Roles on ur.RoleId equals role.Id into roles
+                               from rl in roles.DefaultIfEmpty() // Left Join for Roles
                                where b.BusinessId == businessId
-                               orderby  b.CreatedOn
+                               orderby b.CreatedOn
                                select new BusinessWorkerModel
                                {
                                    BusinessId = businessId,
-                                   BusinessWorkerId= b.BusinessWorkerId,
-                                   Email=u.Email,
-                                   FullName=u.Name,
-                                   PhoneNumber=u.PhoneNumber,
-                                   UserId=u.Id
-                               }).ToListAsync();           
+                                   BusinessWorkerId = b.BusinessWorkerId,
+                                   Email = u.Email,
+                                   FullName = u.Name,
+                                   PhoneNumber = u.PhoneNumber,
+                                   UserId = u.Id,
+                                   RoleId = ur.RoleId, // Can be null if no role
+                                   RoleName = rl.Name ?? "No Role Assigned", // Handle null roles
+                                   CreatedOn = b.CreatedOn
+                               })
+                   .Take(50) // Limit to 50 records for better performance
+                   .ToListAsync();
 
+            return query.Any() ? query : null;
 
-            if (query.Count > 0)
-            {
-                return query;
-            }
-            return null;
         }
         public async Task<int> BusinessCount()
         {
@@ -92,6 +96,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                   BusinessId=s.BusinessId,
                   Website=s.Website,
                   UserId=s.UserId,
+                  DisputeEmail=s.DisputeEmail,
+                  SupportEmail=s.SupportEmail,
+                  BusinessCodeSignage=s.BusinessCodeSignage,
+                  BusinessCodeSignageSalt
+                  =s.BusinessCodeSignageSalt,
+                  CreatedOn=s.CreatedOn,
+                  BusinessWorkers=s.BusinessWorkers.Select(x=> new BusinessWorkerModel
+                  {
+                      BusinessId=x.BusinessId,
+                      BusinessWorkerId=x.BusinessWorkerId,
+                      UserId= x.UserId,
+                     
+                  }).ToArray(),
+                  BVN = s.BVN,
+                  Category=s.Category.ToEnum<Category>(),
+                  ContactEmail=s.ContactEmail,
+                  NIN=s.NIN,
+                  
               }).ToListAsync();
             if (business == null)
             {
