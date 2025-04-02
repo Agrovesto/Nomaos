@@ -235,23 +235,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
-                        var propagationUrl = AppSettingsHelper.Setting("propagation:url");
-                        var mailRequest = new WelcomeMailBody
-                        {
-                            To = bWorker.Email,
-                            ToName = $"{bWorker.FullName}",
-                            Subject = $"Welcome OnBoard {business.BusinessName}",
-                            From = business.BusinessEmail,
-                            FromName = business.BusinessName,
-                            FullName = bWorker.FullName,
-                            Platform = business.BusinessName,
-                            DefaultPassword = args.DefaultPassword,
-                            BusinessName = business.BusinessName,
-                            PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
-                            logincred = $"login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
-                        };
-                        // var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
-
+                        SendWorkerMail(bWorker, args, business);
 
                         return newBusinessWorker;
                     }
@@ -267,6 +251,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return newBusinessWorker;
         }
+
+        private static void SendWorkerMail(BusinessWorkerModel bWorker, BusinessRegistrationArgs args, BusinessModel business)
+        {
+            var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+            var mailRequest = new WelcomeMailBody
+            {
+                To = bWorker.Email,
+                ToName = $"{bWorker.FullName}",
+                Subject = $"Welcome OnBoard {business.BusinessName}",
+                From = business.BusinessEmail,
+                FromName = business.BusinessName,
+                FullName = bWorker.FullName,
+                Platform = business.BusinessName,
+                DefaultPassword = args.DefaultPassword,
+                BusinessName = business.BusinessName,
+                PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
+                logincred = $"login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
+            };
+            // var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
+        }
+
         private string ConvertedDate(string date)
         {
             string[] dateFormats = {
@@ -354,6 +359,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
+            var bWorker = new BusinessWorkerModel();
+            var newBusinessWorker = new BusinessWorkerModel();
+         
+
             if (model.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
 
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -397,6 +406,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         case SubAccountType.Agent:
                             await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
+
+                            bWorker.BusinessId = business.BusinessId;
+                            bWorker.UserId = registeredUser.model.Id;
+                            bWorker.CreatedOn = DateTimeOffset.Now;
+                            bWorker.Email = model.Email;
+                            bWorker.FullName = model.Name;
+                            bWorker.PhoneNumber= model.PhoneNumber;
+                         
+                            newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+
+                            SendWorkerMail(bWorker, args, business);
                             break;
 
                         case SubAccountType.Cooperative:
