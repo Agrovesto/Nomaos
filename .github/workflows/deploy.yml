@@ -38,41 +38,49 @@ jobs:
         with:
           name: dotnet-app
           path: ./publish
-
   deploy:
     runs-on: [self-hosted, windows]
     needs: build
-
+  
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: dotnet-app
           path: ./publish
-      
+  
       - name: Deploy to IIS (Elevated)
         run: |
-          # Run the deployment commands as Administrator using RunAs
+          # Define paths and app pool
           $dest = "C:\inetpub\wwwroot\agrovestro-api"
           $sitePath = "C:\inetpub\wwwroot\agrovestro-api"
           $appPoolName = "agrovesto"  # Set the desired application pool name
-          
+  
           # Create directory if not exists
           if (!(Test-Path $dest)) {
               New-Item -ItemType Directory -Path $dest
           }
-          
-          # Remove existing files and copy new ones
-          Remove-Item -Recurse -Force $sitePath\* -ErrorAction SilentlyContinue
-          Copy-Item -Path "./publish/*" -Destination $sitePath -Recurse
-
-          # Ensure IIS is installed and set up
-          Import-Module WebAdministration
-
-          # Create website if it doesn't exist
-          if (!(Get-Website -Name "agrovestro-api")) {
-            New-Website -Name "agrovestro-api" -Port 81 -PhysicalPath $sitePath -ApplicationPool $appPoolName
+  
+          # Run deployment as Administrator using Start-Process
+          $scriptBlock = {
+              param (
+                  $dest, $sitePath, $appPoolName
+              )
+              
+              # Ensure IIS App Pool exists
+              if (!(Get-WebAppPoolState -Name $appPoolName)) {
+                  New-WebAppPool -Name $appPoolName
+              }
+  
+              # Publish the app to the site directory
+              Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\publish\*" $dest
+  
+              # Set app pool for the site
+              Set-ItemProperty "IIS:\Sites\agrovestro-api" -Name applicationPool -Value $appPoolName
+  
+              # Start the site (if it's not running)
+              Start-Website -Name "agrovestro-api"
           }
-          
-          # Start IIS if not already running
-          Start-Service -Name W3SVC -Verb RunAs
+  
+          # Elevate to run script block as Administrator
+          Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command & { $scriptBlock } -dest '$dest' -sitePath '$sitePath' -appPoolName '$appPoolName' " -Verb RunAs
