@@ -7,15 +7,19 @@ on:
 
 jobs:
   build:
-    runs-on: self-hosted
+    runs-on: [self-hosted, windows]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+          install-dir: 'C:\Programs Files\dotnet'
+
+      - name: Add dotnet to PATH
+        run: echo "C:\Programs Files\dotnet" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       
       - name: Restore dependencies
         run: dotnet restore
@@ -33,7 +37,7 @@ jobs:
           path: ./publish
 
   deploy:
-    runs-on: self-hosted
+    runs-on: [self-hosted, windows]
     needs: build
 
     steps:
