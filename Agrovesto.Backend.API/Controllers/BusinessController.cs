@@ -1052,7 +1052,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("assign-agent")]
-        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] long agentId, [FromQuery] long cooperativeId)
+        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
         {
             if (!ModelState.IsValid)
             {

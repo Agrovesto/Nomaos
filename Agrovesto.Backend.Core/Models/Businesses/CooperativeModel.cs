@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public bool HasbeenAssignedAgent { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-        public long IsAssignedToAgentId { get; set; }
+        public string IsAssignedToAgentId { get; set; }
         public long TotalFarmers { get; set; }
     }
 }

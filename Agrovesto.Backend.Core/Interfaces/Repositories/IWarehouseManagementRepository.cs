@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode);
         Task<WarehouseUserModel> GetWarehouseManagerByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseModel>> GetWarehouses();
-        Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, long agentId);
+        Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId);
         Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagerByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagersByBusiness(string belongToBusiness, long warehouseId);

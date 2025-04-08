@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> GetFarmerById(long Id);
         Task<FarmerModel> GetFarmerByUserId(string userId);
         Task<List<FarmerModel>> GetFarmers();
-        Task<List<FarmerModel>> GetFarmersByAgent(long agentId, ListQueryParams query);
+        Task<List<FarmerModel>> GetFarmersByAgent(string agentId, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query);
         Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query);
@@ -23,6 +23,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerImagesModel> GetFarmerImage(string userId, string businessCode);
         Task<List<FarmerImagesModel>> GetImagesByBusinessCode(string businessCode);
         Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId);
-        Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(long agentId, ListQueryParams query);
+        Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(string agentId, ListQueryParams query);
+        Task<FarmerModel> AssignFarmerToAgent(string agentuserId, long farmerId);
     }
 }

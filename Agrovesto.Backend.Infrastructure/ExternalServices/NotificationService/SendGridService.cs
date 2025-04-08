@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using SendGrid.Helpers.Mail;
 using SendGrid;
+using Agrovesto.Backend.Core.Models.Businesses;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 {
@@ -49,7 +50,35 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             }
 
         }
+        public static async Task DynamicStockInputDelivery(StockMailBody model)
+        {
+            var key = AppSettingsHelper.Setting("SendGrid:key");
+            var apiKey = key;//Environment.GetEnvironmentVariable("NAME_OF_THE_ENVIRONMENT_VARIABLE_FOR_YOUR_SENDGRID_KEY");
 
+            var emailMessage = MailHelper.CreateSingleTemplateEmail(
+                   new EmailAddress(model.From, model.FromName),
+                   new EmailAddress(model.To, model.ToName),
+                   "d-9892ab1d12494eaf8d4f6ff3e2af6493",
+                   new
+                   {
+                       input=model.input,
+                       Reference = model.Reference,
+                       DeliveredBy = model.DeliveredBy,
+                       DeliveryContact = model.PhoneNumber,
+                       PhoneNumber = model.PhoneNumber,
+                       businessName = model.BusinessName
+                   });
+
+            // emailMessage = AddBcc(emailMessage);
+            var _sendGridClient = new SendGridClient(RetrieveAPIKey());
+
+            var response = await _sendGridClient.SendEmailAsync(emailMessage);
+
+            if (response.StatusCode != HttpStatusCode.Accepted)
+            {
+                await response.Body.ReadAsStringAsync();
+            }
+        }
         public static async Task DynamicBusinessStaffOnboarding(WelcomeMailBody model)
         {
             var key = AppSettingsHelper.Setting("SendGrid:key");
@@ -144,6 +173,21 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         public string Body { get; set; }
         public string ToName { get; set; }
         public string Token { get; set; }
+    }
+    public class StockMailBody
+    {
+        public string From { get; set; }
+        public string FromName { get; set; }
+        public string To { get; set; }
+        public string Subject { get; set; }
+        public string Body { get; set; }
+        public string ToName { get; set; }
+        public string DeliveredBy { get; set; }
+        public string input { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Reference { get; set; }
+        public string Quantity { get; set; }
+        public string BusinessName { get; set; }
     }
     public class WelcomeMailBody
     {

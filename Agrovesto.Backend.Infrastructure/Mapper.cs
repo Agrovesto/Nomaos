@@ -547,7 +547,7 @@ namespace Agrovesto.Backend.Infrastructure
                 PickupLocation= entity.PickupLocation,
                 QuantityLoaded= entity.QuantityLoaded,
                 QuantityReceived= entity.QuantityReceived,
-                TransitStatus= Enum.GetName(typeof(InputTransitStatus), entity.Status),
+                TransitStatus= entity.Status,//Enum.GetName(typeof(InputTransitStatus), entity.Status),
             };
         }
 
@@ -1029,6 +1029,81 @@ namespace Agrovesto.Backend.Infrastructure
 
 
         #region FarmerSalesMgt
+        public static FarmerSalesTracker Map(this FarmerSalesTrackerModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmerSalesTracker()
+            {
+                CropPricePerUnitSold = model.CropPricePerUnitSold,
+                CollectionDate = model.CollectionDate,
+                CropSold = model.CropSold,
+                CollectionOfficerId = model.CollectionOfficerId,
+                CostOfPackagingMaterial = model.CostOfPackagingMaterial,
+                FarmerUserId = model.FarmerUserId,
+                IntendedPriceToSellPerUnit = model.IntendedPriceToSellPerUnit,
+                IsCropPackaged = model.IsCropPackaged,
+                IsCropTransportedToMarket = model.IsCropTransportedToMarket,
+                MarketState = model.MarketState,
+                QuantitySoldToday = model.QuantitySoldToday,
+                TotalPriceSold = model.TotalPriceSold,
+                TotalTimeSpentInMarket = model.TotalTimeSpentInMarket,
+                MarketLga = model.MarketLga,
+                MarketLocation = model.MarketLocation,
+                MarketName = model.MarketName,
+                MeansOfTransport = model.MeansOfTransport,
+                ModeOfPayment = model.ModeOfPayment,
+                QuantityBroughtToMarket = model.QuantityBroughtToMarket,
+                OtherCost = model.OtherCost,
+                PackagingType = model.PackagingType,
+                TransportCost = model.TransportCost,
+                UnitType = model.UnitType,
+                TransactionActualDate= model.TransactionActualDate,
+                SalesType = Enum.GetName(typeof(SalesType), model.SalesType)
+
+            };
+        }
+
+        public static FarmerSalesTrackerModel Map(this FarmerSalesTracker entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmerSalesTrackerModel()
+            {
+               Id=entity.Id,
+               CropPricePerUnitSold = entity.CropPricePerUnitSold,
+               CollectionDate = entity.CollectionDate,
+               CropSold=entity.CropSold,
+               CollectionOfficerId = entity.CollectionOfficerId,
+               CostOfPackagingMaterial = entity.CostOfPackagingMaterial,
+               FarmerUserId=entity.FarmerUserId,
+               IntendedPriceToSellPerUnit = entity.IntendedPriceToSellPerUnit,
+               IsCropPackaged = entity.IsCropPackaged,
+               IsCropTransportedToMarket = entity.IsCropTransportedToMarket,
+               MarketState = entity.MarketState,
+               QuantitySoldToday = entity.QuantitySoldToday,
+               TotalPriceSold=entity.TotalPriceSold,
+               TotalTimeSpentInMarket = entity.TotalTimeSpentInMarket,
+               MarketLga=entity.MarketLga,
+               MarketLocation=entity.MarketLocation,
+               MarketName=entity.MarketName,
+               MeansOfTransport=entity.MeansOfTransport,
+               ModeOfPayment=entity.ModeOfPayment,
+               QuantityBroughtToMarket=entity.QuantityBroughtToMarket,
+               OtherCost=entity.OtherCost,
+               PackagingType=entity.PackagingType,
+               TransportCost=entity.TransportCost,
+               UnitType=entity.UnitType,
+                TransactionActualDate= entity.TransactionActualDate,
+                SalesType = entity.SalesType.ToEnum<SalesType>(),
+            };
+        }
+
+
         #endregion FarmerSalesMgt
         #region RoleMgt
         public static Role Map(this RoleModel model)

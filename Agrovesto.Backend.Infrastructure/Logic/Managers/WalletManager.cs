@@ -152,7 +152,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _walletRepository.CreateSubAccount(model);
         }
-
+        public async Task<SubAccountModel> GetSubAccountByUserId(string userId)
+        {
+            return await _walletRepository.GetSubAccount(userId);
+        }
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
 
