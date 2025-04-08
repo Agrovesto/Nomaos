@@ -50,11 +50,12 @@ jobs:
           name: dotnet-app
           path: ./publish
       
-      - name: Deploy to IIS
+      - name: Deploy to IIS (Elevated)
         run: |
+          # Run the deployment commands as Administrator using RunAs
           $dest = "C:\inetpub\wwwroot\agrovestro-api"
           $sitePath = "C:\inetpub\wwwroot\agrovestro-api"
-          $appPoolName = "YourAppPool"  # Set the desired application pool name
+          $appPoolName = "agrovesto"  # Set the desired application pool name
           
           # Create directory if not exists
           if (!(Test-Path $dest)) {
@@ -74,4 +75,4 @@ jobs:
           }
           
           # Start IIS if not already running
-          Start-Service -Name W3SVC
+          Start-Service -Name W3SVC -Verb RunAs
