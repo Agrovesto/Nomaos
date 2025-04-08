@@ -18,5 +18,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
+        Task TrackUserRoleAssignment(UserModel user, string userType);
     }
 }

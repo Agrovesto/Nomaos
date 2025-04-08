@@ -10,9 +10,10 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
 {
     public interface ICooperativeRepository
     {
-        Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId);
+        Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
+        Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId);
         Task<(bool status, CooperativeModel data)> CreateCooperative(CooperativeModel data);
-        Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query);
+        Task<List<CooperativeModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query);
         Task<CooperativeModel> GetCooperativeDetailById(long Id);
         Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
         Task<List<CooperativeModel>> GetCooperatives();

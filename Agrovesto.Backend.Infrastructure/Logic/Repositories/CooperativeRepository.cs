@@ -90,7 +90,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return cooperatives;
         }
 
-        public async Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query)
+        public async Task<List<CooperativeModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query)
         {
             var cooperatives = await _context.Cooperatives
                 .AsNoTracking()
@@ -166,7 +166,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //    return null;
         //}
 
-        public async Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId)
+        public async Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
         {
             var cooperative = await _context.Cooperatives.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
             if (cooperative == null) return null;
@@ -176,13 +176,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return cooperative.Map();
         }
+        public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
+        {
+            var farmers = await _context.Farmers
+                .Where(f => f.BelongToCooperativeId == cooperativeId)
+                .ToListAsync();
+
+            if (!farmers.Any())
+                return null;
+
+            foreach (var farmer in farmers)
+            {
+                farmer.OnboardedByUserId = agentUserId;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return farmers.Select(x=>x.Map()).ToList();
+
+        }
 
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             var agent =
                 await (from c in _context.Cooperatives
                        join a in _context.Agents
-                       on c.IsAssignedToAgentId equals a.Id
+                       on c.IsAssignedToAgentId equals a.UserId
                        where c.Id == cooperativeId
                        select a).FirstOrDefaultAsync();
 

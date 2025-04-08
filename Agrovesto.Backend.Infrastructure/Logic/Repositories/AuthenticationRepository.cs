@@ -4,13 +4,18 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Rekognition.Model;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
@@ -20,6 +25,7 @@ using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
+using User = Agrovesto.Backend.Infrastructure.Entities.Common.User;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -29,16 +35,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         private readonly RoleManager<Role> _roleManager;
         private readonly UserManager<User> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthenticationRepository> _log;
 
         private readonly SignInManager<User> _signInManager;
         public AuthenticationRepository(IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-           SignInManager<User> signInManager, DataContext context)
+           SignInManager<User> signInManager, DataContext context, ILogger<AuthenticationRepository> log)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _context = context;
             _signInManager = signInManager;
             _configuration = config;
+            _log = log;
         }
         public async Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model, string businessCode, string header)
         {
@@ -194,7 +202,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
         }
-        private async Task<User> FindByPhoneNumberAsync(string phoneNumber)
+        public async Task<User> FindByPhoneNumberAsync(string phoneNumber)
         {
             var user = new User();
             var users = await _context.Set<User>().Where(u => u.PhoneNumber == phoneNumber).ToListAsync();
@@ -367,10 +375,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             }
         }
-    
-            //});
 
-            //return (entity.Map(), true, "Success");
+        public async Task TrackUserRoleAssignment(UserModel user,  string userType)
+        {
+            try
+            {
+                var model = await _userManager.FindByIdAsync(user.Id);
+                if (!await _userManager.IsInRoleAsync(model, userType))
+                {
+                    await _userManager.AddToRoleAsync(model, userType);
+
+                }
+
+                _log.LogInformation($"Assigned role '{userType}' to user  under the business .");
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, $"Failed to track user role assignment for user {JsonConvert.SerializeObject(user)}");
+            }
+        }
+
+        //});
+
+        //return (entity.Map(), true, "Success");
         //}
 
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)

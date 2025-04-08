@@ -7,7 +7,9 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -190,7 +192,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
                 var agent = await _agentRepository.GetAgentDetailByUserId(userId);
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for Agent");
-                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, agent.Id);
+                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, userId);
                     if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                     {
                         Succeeded = true,
@@ -320,7 +322,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         createWarehouseManager = await _repository.CreateWarehouseManager(model);
 
                         warehouse.HasbeenAssignedManager = true;
-                        warehouse.ManagedByUserId = agent.Id;
+                        warehouse.ManagedByUserId = args.UserId;
                         await _repository.UpdateWarehouse(warehouse);
 
                         await _context.SaveChangesAsync();
@@ -558,6 +560,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         //WarehouseInputInventoryModel
                         var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
+                        var user = await _authenticationRepository.GetUserById(args.UserId);
                         var inputName = await _repository.GetInputBYIdAsync(business.BusinessCode, model.WarehouseInputInventoryId) ?? throw new Exception("Could not retrive input");
                         model.BusinessCode = business.BusinessCode;
                         model.InputName = inputName.InputName;
@@ -573,10 +576,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         if (!update) throw new Exception("No record found for input");
 
-
+                        model.Email = user.model.Email;
 
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
+
+                        //send mail and sms
+                        SendStockDisbursementMail(model, args, business);
                         return model;
                     }
                     catch (Exception ex)
@@ -587,7 +593,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 });
                 return createWarehouse;
             }
-            public async Task<InputDeliveryTrackerModel> ConfirmReceiptOfInput(InputDeliveryTrackerModel model, BusinessRegistrationArgs args)
+
+        private static void SendStockDisbursementMail(InputDeliveryTrackerModel bWorker, BusinessRegistrationArgs args, BusinessModel business)
+        {
+            var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+            var mailRequest = new StockMailBody
+            {
+                To = bWorker.Email,
+                ToName = $"{bWorker.Email}",
+                Subject = $"Warehouse Stock delivery {business.BusinessName}",
+                From = business.BusinessEmail,
+                FromName = business.BusinessName,
+               Reference=bWorker.Reference,
+               DeliveredBy=bWorker.DeliveredBy,
+               PhoneNumber=bWorker.DeliveryContact,
+               Quantity=bWorker.QuantityLoaded.ToString(),
+               input = bWorker.InputName,
+               BusinessName=business.BusinessName
+            };
+             var mail = SendGridService.DynamicStockInputDelivery(mailRequest);
+        }
+
+        public async Task<InputDeliveryTrackerModel> ConfirmReceiptOfInput(InputDeliveryTrackerModel model, BusinessRegistrationArgs args)
             {
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new Exception("Business does not exist");
@@ -614,6 +641,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         }
                         var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
                         model.Reference = tracker.Reference;
+                        model.BusinessCode = business.BusinessCode;
                         var logDelivery = await _repository.LogDeliveryTracker(model);
                         var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, tracker.WarehouseInputInventoryId, status, model.DeliveredTo, DateTimeOffset.Now);
                         if (!update) throw new Exception("No record found for input");
@@ -702,9 +730,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                    var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
 
-                    if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                     var inputs = await _repository.GetInputByWarehouse(business.BusinessCode, query.warehouseId);
                     if (inputs == null) return new PagedListResponse<List<WarehouseInputInventoryModel>>

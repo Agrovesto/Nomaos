@@ -451,8 +451,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("HasbeenAssignedAgent")
                         .HasColumnType("bit");
 
-                    b.Property<long>("IsAssignedToAgentId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("IsAssignedToAgentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Lga")
                         .IsRequired()
@@ -734,6 +735,99 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("FarmerImages");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerSalesTracker", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CollectionDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CollectionOfficerId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("CostOfPackagingMaterial")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CropPricePerUnitSold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CropSold")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("IntendedPriceToSellPerUnit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsCropPackaged")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCropTransportedToMarket")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("MarketLga")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketLocation")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketState")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MeansOfTransport")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ModeOfPayment")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("OtherCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PackagingType")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("QuantityBroughtToMarket")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("QuantitySoldToday")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("SalesType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("TotalPriceSold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("TotalTimeSpentInMarket")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("TransportCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("UnitType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmerSalesTracker");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FeeSplitConfiguration", b =>
                 {
                     b.Property<long>("Id")
@@ -935,8 +1029,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("ManagedByUserId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("ManagedByUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()

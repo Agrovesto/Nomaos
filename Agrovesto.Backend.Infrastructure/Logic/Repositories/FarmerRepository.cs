@@ -62,11 +62,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return farmer.Map();
         }
      
-        public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(long agentId, ListQueryParams query)
+        public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(string agentId, ListQueryParams query)
         {
             
             var farmers = await GetFarmersByAgent(agentId, query);
-          
+
+            var currentMonth = DateTime.UtcNow.Month;
+            var previousMonth = DateTime.UtcNow.AddMonths(-1).Month;
+            var currentYear = DateTime.UtcNow.Year;
+            var previousYear = DateTime.UtcNow.AddMonths(-1).Year;
+
+            double percentageChange = await CalculateFarmerPercentagePerformanceByAgent(agentId, currentMonth, previousMonth, currentYear, previousYear);
+            double cooperativePercentageChange = await CalculateCooperativePercentagePerformanceByAgent(agentId, currentMonth, previousMonth, currentYear, previousYear);
+           // double salesTrackedPerformance = await CalculateAgentPercentagePerformance(businessCode, currentMonth, previousMonth, currentYear, previousYear);
 
 
             var metrics = new BusinessEntitiesMetrics
@@ -75,10 +83,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == query.businessCode && c.IsAssignedToAgentId == agentId),
                 TotalFarmer = farmers.Count(),
                 TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == query.businessCode && w.ManagedByUserId == agentId),
-              
+                PercentageFarmerPerformance = percentageChange,
+                PercentageCooperativePerformance = cooperativePercentageChange,
+                //PercentageAgentPerformance = salesTrackedPerformance,
             };
 
             return metrics;
+        }
+
+
+
+        private async Task<double> CalculateCooperativePercentagePerformanceByAgent(string agentId, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        {
+            var totalCooperativesThisMonth = await _context.Cooperatives
+                .CountAsync(f => f.IsAssignedToAgentId == agentId && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
+
+            var totalCooperativesLastMonth = await _context.Cooperatives
+                .CountAsync(f => f.IsAssignedToAgentId == agentId && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
+
+            double percentageChange = totalCooperativesLastMonth == 0
+                ? (totalCooperativesThisMonth > 0 ? 100 : 0)
+                : ((double)(totalCooperativesThisMonth - totalCooperativesLastMonth) / totalCooperativesLastMonth) * 100;
+            return percentageChange;
+        }
+
+        private async Task<double> CalculateFarmerPercentagePerformanceByAgent(string agentId, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        {
+            var totalFarmersThisMonth = await _context.Farmers
+                .CountAsync(f => f.OnboardedByUserId == agentId && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
+
+            var totalFarmersLastMonth = await _context.Farmers
+                .CountAsync(f => f.OnboardedByUserId == agentId && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
+
+            double percentageChange = totalFarmersLastMonth == 0
+                ? (totalFarmersThisMonth > 0 ? 100 : 0)
+                : ((double)(totalFarmersThisMonth - totalFarmersLastMonth) / totalFarmersLastMonth) * 100;
+            return percentageChange;
         }
 
         public async Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsync(string businessCode)
@@ -284,7 +324,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
 
-        public async Task<List<FarmerModel>> GetFarmersByAgent(long agentId, ListQueryParams query)
+        public async Task<List<FarmerModel>> GetFarmersByAgent(string agentId, ListQueryParams query)
         {
             var farmers = await (from f in _context.Farmers
                                  join c in _context.Cooperatives
@@ -326,7 +366,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (farmers.Count > 0)
             {
-                return farmers.Select(f => f.Map()).ToList();
+                return farmers.Select(f => f.Map()).OrderByDescending(f=>f.OnBoardedOn).ToList();
             }
 
 
@@ -449,6 +489,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return null;
             }
             return query.Select(x => x.Map()).ToList();
+        }
+
+
+        public async Task<FarmerModel> AssignFarmerToAgent(string agentuserId, long farmerId)
+        {
+            var farmer = await _context.Farmers.Where(c => c.Id == farmerId).FirstOrDefaultAsync();
+            if (farmer == null) return null;
+         farmer.OnboardedByUserId = agentuserId;
+            await _context.SaveChangesAsync();
+
+            return farmer.Map();
         }
 
     }

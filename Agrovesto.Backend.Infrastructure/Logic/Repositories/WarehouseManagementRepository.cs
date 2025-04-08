@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return warehouse.Select(x => x.Map()).ToList();
         }
-           public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, long agentId)
+           public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
         {
             var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness && x.ManagedByUserId == agentId).ToListAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
@@ -392,7 +392,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<InputDeliveryTrackerModel> GetInputTracker(string reference)
         {
-            return await _context.Set<InputDeliveryTrackerModel>().FirstOrDefaultAsync(i => i.Reference == reference);
+            var input= await _context.Set<InputDeliveryTracker>().FirstOrDefaultAsync(i => i.Reference == reference);
+            if (input == null) return null;
+            return input.Map();
         }
 
         public async Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model)

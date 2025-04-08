@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Rekognition.Model;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -26,6 +27,7 @@ using System.Threading.Tasks;
 using System.Web;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using User = Agrovesto.Backend.Infrastructure.Entities.Common.User;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -44,12 +46,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IFaceManager _faceManager;
         private readonly ISMSService _whisperSMSService;
         private readonly IInputFinancingManagementRepository _inputRepository;
+       
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
             IIdentityVerificationManager identityVerificationManager,
             IFarmPlotDetailRepository farmPlotDetailRepository,
             IAgentRepository agentRepository, ISMSService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
+          
                 IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
@@ -65,6 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
             _inputRepository = inputRepository;
+           
         }
         public async Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query)
         {
@@ -310,9 +315,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId)
+        public async Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
         {
-            return await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
+            var assignAgentToCooperative = new CooperativeModel();
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    assignAgentToCooperative = await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
+
+                     var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return assignAgentToCooperative;
         }
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
@@ -341,8 +367,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     changeRole.model.Location = cooperative.Location;
                     changeRole.model.Email = cooperative.Email;
                     changeRole.model.PhoneNumber = cooperative.PhoneNumber;
-                    changeRole.model.Name= cooperative.Name;
-                    
+                    changeRole.model.Name = cooperative.Name;
+
                     await CreateAgentProfileAsync(changeRole.model, business, args.UserId);
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
@@ -357,121 +383,322 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return user;
         }
+        public async Task<UserModel> FindByPhoneNumberAsync(string phoneNumber)
+        {
+            var user = new User();
+            var users = await _context.Set<User>().Where(u => u.PhoneNumber == phoneNumber).ToListAsync();
+            if (users.Count > 0)
+            {
+                if (users.Count > 1)
+                {
+                    user = users.Where(u => u.UserType == UserType.Cooperative.ToString()).FirstOrDefault();
+                }
+                else
+                {
+                    user = users[0];
+                }
+            }
+            else
+            {
+                return null;
+            }
+
+
+            return user.Map();
+        }
+
+
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
-            var bWorker = new BusinessWorkerModel();
-            var newBusinessWorker = new BusinessWorkerModel();
-         
-
-            if (model.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
+            if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
 
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                ?? throw new Exception("Business does not exist");
+                            ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
 
             args.UserId ??= business.UserId;
-            SubAccountModel subaccount = new SubAccountModel();
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
 
+            // BVN Verification
             if (!string.IsNullOrEmpty(model.Bvn))
             {
-                var verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+                var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
                 {
                     image = null,
                     number = model.Bvn
                 });
-                if (!verifyBvn.status) throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
-                model.DateOfBirth = ConvertedDate(verifyBvn.data.dateOfBirth);
-                model.Bvn = verifyBvn.data.bvn;
-                model.Gender = verifyBvn.data.gender;
-                model.NIN = !string.IsNullOrEmpty(verifyBvn.data.nin) ? verifyBvn.data.nin : model.NIN;
 
+                if (!bvnVerification.status)
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
+
+                model.DateOfBirth = ConvertedDate(bvnVerification.data.dateOfBirth);
+                model.Bvn = bvnVerification.data.bvn;
+                model.Gender = bvnVerification.data.gender;
+                model.NIN = string.IsNullOrEmpty(model.NIN) ? bvnVerification.data.nin : model.NIN;
             }
-            var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
+                    var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
+                    UserModel finalUser = existingUser;
+                    bool isNewUser = false;
+                    bool reusedUserForDifferentRole = false;
 
-
-                    var registeredUser = await RegisterUserAsync(model, args);
-                    if (!registeredUser.status)
-                        throw new Exception($"Could not register user {registeredUser.message}");
-
-                    subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-
-
-                    switch (subaccount.SubAccountType)
+                    if (existingUser != null)
                     {
-                        case SubAccountType.Agent:
-                            await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
+                        if (existingUser.UserType.Equals(model.UserType, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"A user with phone number {model.PhoneNumber} and user type '{model.UserType}' already exists.");
+                        }
 
-                            bWorker.BusinessId = business.BusinessId;
-                            bWorker.UserId = registeredUser.model.Id;
-                            bWorker.CreatedOn = DateTimeOffset.Now;
-                            bWorker.Email = model.Email;
-                            bWorker.FullName = model.Name;
-                            bWorker.PhoneNumber= model.PhoneNumber;
-                         
-                            newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+                        reusedUserForDifferentRole = true;
 
-                            SendWorkerMail(bWorker, args, business);
-                            break;
+                        // Log reuse
+                        _log.LogInformation($"User with phone {model.PhoneNumber} exists with a different role ('{existingUser.UserType}'), reusing user for role '{model.UserType}'.");
 
-                        case SubAccountType.Cooperative:
-                            model.Id = registeredUser.model.Id;
-                            //create first as cooperative
-                            var coop = await CreateCooperativeProfileAsync(model, business, args.UserId);
-                            args.UserId = registeredUser.model.Id;
-                            //then create user as a farmer as well
+                        // Optional: send notification
+                        await NotifyUserOfRoleReuse(existingUser.PhoneNumber, model.UserType);
+                        
+                    }
+                    else
+                    {
+                        var registrationResult = await RegisterUserAsync(model, args);
+                        if (!registrationResult.status)
+                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
 
-                            await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
-
-                            break;
-
-                        case SubAccountType.Farmer:
-                            model.Id = registeredUser.model.Id;
-                            await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
-                            break;
+                        finalUser = registrationResult.model;
+                        isNewUser = true;
                     }
 
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-                    //using(var newTransaction = await _context.Database.BeginTransactionAsync())
-                    //{
-                    //    await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
-                    //    {
-                    //        UserId = registeredUser.Id,
-                    //        Env = args.Env
-                    //    });
-                    //    await newTransaction.CommitAsync();
-                    //}
-                    subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
-                    subaccount.UserId = registeredUser.model.Id;
-                    //var messageBody = $"You are welcome onboard. ";
+                    // Check for existing subaccount
+                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(finalUser.Id);
+                    SubAccountModel subAccount;
 
-                    //var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                    //{
-                    //    campaign_name = "Agrovesto Notification",
-                    //    contacts = new List<string> { model.PhoneNumber },
-                    //    message = messageBody,
-                    //});
-                    //var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                    //{
-                    //    to = $"234{model.PhoneNumber.GetLast(10)}",
-                    //    sms = messageBody
-                    //});
-                    return subaccount;
+                    if (existingSubAccount != null)
+                    {
+                        subAccount = existingSubAccount;
+                    }
+                    else
+                    {
+                        subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
+                    }
+
+                    // Track role assignments (multi-role support)
+                    await _authenticationRepository.TrackUserRoleAssignment(finalUser, model.UserType);
+
+                    // Create business worker
+                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (finalUser, !isNewUser, ""), args.UserType);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    subAccount.Email = !string.IsNullOrWhiteSpace(model.Email)
+                        ? model.Email
+                        : GenerateEmail(model.Name, business.BusinessEmail);
+                    subAccount.UserId = finalUser.Id;
+
+                    return subAccount;
                 }
                 catch (Exception ex)
                 {
-                    await dbTransaction.RollbackAsync();
-                    throw new Exception($"{ex.Message}", ex);
+                    await transaction.RollbackAsync();
+                    throw new Exception(ex.Message);
                 }
             });
-            return subaccount;
         }
+        
+        private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
+        {
+            try
+            {
+                //if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
+                //{
+                //    _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
+                //    return;
+                //}
+
+                //string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
+
+                //var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                //{
+                //    to = $"234{phoneNumber[^10..]}",
+                //    sms = message
+                //});
+
+                //if (termiiResult.response !=null && termiiResult.status)
+                //{
+                //    _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
+                //}
+                //else
+                //{
+                //    _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
+
+                //    var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                //    {
+                //        campaign_name = "Agrovesto Notification",
+                //        contacts = new List<string> { phoneNumber },
+                //        message = message
+                //    });
+
+                //    if (whisperResult.response is not null && whisperResult.status)
+                //    {
+                //        _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
+                //    }
+                //    else
+                //    {
+                //        _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
+                //    }
+                //}
+          
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to send role assignment SMS to {PhoneNumber}", phoneNumber);
+            }
+        }
+
+        /** public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
+         {
+             var bWorker = new BusinessWorkerModel();
+             var newBusinessWorker = new BusinessWorkerModel();
+             (UserModel model, bool status, string message) registeredUser = new(model, false, "");
+
+             if (model.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
+
+             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                 ?? throw new Exception("Business does not exist");
+
+             args.UserId ??= business.UserId;
+             SubAccountModel subaccount = new SubAccountModel();
+             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
+
+             if (!string.IsNullOrEmpty(model.Bvn))
+             {
+                 var verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+                 {
+                     image = null,
+                     number = model.Bvn
+                 });
+                 if (!verifyBvn.status) throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
+                 model.DateOfBirth = ConvertedDate(verifyBvn.data.dateOfBirth);
+                 model.Bvn = verifyBvn.data.bvn;
+                 model.Gender = verifyBvn.data.gender;
+                 model.NIN = !string.IsNullOrEmpty(verifyBvn.data.nin) ? verifyBvn.data.nin : model.NIN;
+
+             }
+             var strategy = _context.Database.CreateExecutionStrategy();
+
+             await strategy.ExecuteAsync(async () =>
+             {
+                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                 try
+                 {
+                     if (model.UserType == "Agent")
+                     {
+
+                         var getUser = await FindByPhoneNumberAsync(model.PhoneNumber);
+                         if (getUser != null)
+                         {
+                             subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
+
+                         }
+                         else
+                         {
+                             registeredUser = await RegisterUserAsync(model, args);
+                             if (!registeredUser.status)
+                                 throw new Exception($"Could not register user {registeredUser.message}");
+                             subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
+
+
+                         }
+                     }
+                     else
+                     {
+                          registeredUser = await RegisterUserAsync(model, args);
+                         if (!registeredUser.status)
+                             throw new Exception($"Could not register user {registeredUser.message}");
+                         subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
+
+                     }
+
+                     newBusinessWorker = await CreateUserCategory(model, args, bWorker, newBusinessWorker, business, subaccount, registeredUser);
+
+                     await _context.SaveChangesAsync();
+                     await dbTransaction.CommitAsync();
+                
+                     subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
+                     subaccount.UserId = registeredUser.model.Id;
+                     //var messageBody = $"You are welcome onboard. ";
+
+                     //var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                     //{
+                     //    campaign_name = "Agrovesto Notification",
+                     //    contacts = new List<string> { model.PhoneNumber },
+                     //    message = messageBody,
+                     //});
+                     //var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                     //{
+                     //    to = $"234{model.PhoneNumber.GetLast(10)}",
+                     //    sms = messageBody
+                     //});
+                     return subaccount;
+                 }
+                 catch (Exception ex)
+                 {
+                     await dbTransaction.RollbackAsync();
+                     throw new Exception($"{ex.Message}", ex);
+                 }
+             });
+             return subaccount;
+         }
+         **/
+        private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
+        {
+            if(userType != null)
+            {
+                subaccount.SubAccountType = userType.ToEnum<SubAccountType>();
+            }
+            switch (subaccount.SubAccountType)
+            {
+                case SubAccountType.Agent:
+                    await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
+
+                    bWorker.BusinessId = business.BusinessId;
+                    bWorker.UserId = registeredUser.model.Id;
+                    bWorker.CreatedOn = DateTimeOffset.Now;
+                    bWorker.Email = model.Email;
+                    bWorker.FullName = model.Name;
+                    bWorker.PhoneNumber = model.PhoneNumber;
+
+                    newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
+
+                    //SendWorkerMail(bWorker, args, business);
+                    break;
+
+                case SubAccountType.Cooperative:
+                    model.Id = registeredUser.model.Id;
+                    //create first as cooperative
+                    var coop = await CreateCooperativeProfileAsync(model, business, args.UserId);
+                    args.UserId = registeredUser.model.Id;
+                    //then create user as a farmer as well
+
+                    await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
+
+                    break;
+
+                case SubAccountType.Farmer:
+                    model.Id = registeredUser.model.Id;
+                    await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
+                    break;
+            }
+
+            return newBusinessWorker;
+        }
+
         public async Task<SubAccountModel> UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId)
         {
             return await _walletManager.UpdateUserProfile(subaccount, new ParameterArgs
@@ -555,7 +782,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (getUserType.model.UserType == Enum.GetName(typeof(UserType), UserType.Agent))
             {
                 isAssignedagent = true;
-                agent = await _agentRepository.GetAgentDetailByUserId(userId);
+                // agent = await _agentRepository.GetAgentDetailByUserId(userId);
 
             }
             var cooperative = new CooperativeModel
@@ -570,7 +797,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
-                IsAssignedToAgentId = agent.Id,
+                IsAssignedToAgentId = userId,
                 HasbeenAssignedAgent = isAssignedagent
             };
 
@@ -935,7 +1162,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var cooperative = await _cooperativeRepository.GetCooperativeByAgent(agent.Id, query);
+                var cooperative = await _cooperativeRepository.GetCooperativeByAgent(userId, query);
                 if (cooperative == null) return new PagedListResponse<List<CooperativeModel>>
                 {
                     Succeeded = true,
@@ -973,7 +1200,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var farmers = await _farmerRepository.GetFarmersByAgent(agent.Id, query);
+                var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
                 if (farmers == null) return new PagedListResponse<List<FarmerModel>>
                 {
                     Succeeded = true,
@@ -1078,8 +1305,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 var plots = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(query.businessCode, query.UserId);
 
-                var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsyncByAgent(agent.Id, query);
-                bizEntities.FarmVisit = plots !=null ? plots.FirstOrDefault() : null;
+                var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsyncByAgent(query.UserId, query);
+                bizEntities.FarmVisit = plots != null ? plots.FirstOrDefault() : null;
 
 
                 if (bizEntities == null) return new Response<BusinessEntitiesMetrics>
