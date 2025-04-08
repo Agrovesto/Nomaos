@@ -7,8 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
-
+    runs-on: self-hosted
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,7 +33,7 @@ jobs:
           path: ./publish
 
   deploy:
-    runs-on: windows-latest
+    runs-on: self-hosted
     needs: build
 
     steps:
@@ -44,35 +43,14 @@ jobs:
           name: dotnet-app
           path: ./publish
       
-      - name: Deploy to EC2 using WinRM
-        uses: cloudbase/winrm-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          password: ${{ secrets.EC2_PASSWORD }}
-          transport: ntlm
-          port: 5985
-          command: |
-            $appPoolName = "AgroVestoAppPool"
-            $siteName = "AgroVesto"
-            $sitePath = "C:\inetpub\wwwroot\AgroVesto"
-            
-            # Stop IIS
-            Stop-Service -Name W3SVC
-            
-            # Create application pool if it does not exist
-            if (-Not (Test-Path IIS:\AppPools\$appPoolName)) {
-              New-WebAppPool -Name $appPoolName
-              Set-ItemProperty IIS:\AppPools\$appPoolName -Name managedRuntimeVersion -Value ""  # No .NET runtime needed for self-contained apps
-            }
-            
-            # Remove existing website if it exists
-            if (Test-Path IIS:\Sites\$siteName) {
-              Remove-Website -Name $siteName
-            }
+      - name: Deploy to IIS
+        run: |
+          $dest = "C:\inetpub\wwwroot\agrovestro-api"
+          Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
+          Copy-Item -Path "dotnet-app\publish" -Destination $dest -Recurse
             
             # Create website
-            New-Website -Name $siteName -Port 80 -PhysicalPath $sitePath -ApplicationPool $appPoolName
+            New-Website -Name $agrovestro -Port 81 -PhysicalPath $sitePath -ApplicationPool $appPoolName
             
             # Remove existing files and copy new ones
             Remove-Item -Recurse -Force $sitePath\*
