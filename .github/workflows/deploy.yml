@@ -50,15 +50,25 @@ jobs:
       - name: Deploy to IIS
         run: |
           $dest = "C:\inetpub\wwwroot\agrovestro-api"
-          Remove-Item -Recurse -Force $dest -ErrorAction SilentlyContinue
-          Copy-Item -Path "dotnet-app\publish" -Destination $dest -Recurse
-            
-            # Create website
-            New-Website -Name $agrovestro -Port 81 -PhysicalPath $sitePath -ApplicationPool $appPoolName
-            
-            # Remove existing files and copy new ones
-            Remove-Item -Recurse -Force $sitePath\*
-            Copy-Item -Path "C:\Users\${{ secrets.EC2_USER }}\publish\*" -Destination $sitePath -Recurse
-            
-            # Start IIS
-            Start-Service -Name W3SVC
+          $sitePath = "C:\inetpub\wwwroot\agrovestro-api"
+          $appPoolName = "YourAppPool"  # Set the desired application pool name
+          
+          # Create directory if not exists
+          if (!(Test-Path $dest)) {
+              New-Item -ItemType Directory -Path $dest
+          }
+          
+          # Remove existing files and copy new ones
+          Remove-Item -Recurse -Force $sitePath\* -ErrorAction SilentlyContinue
+          Copy-Item -Path "./publish/*" -Destination $sitePath -Recurse
+
+          # Ensure IIS is installed and set up
+          Import-Module WebAdministration
+
+          # Create website if it doesn't exist
+          if (!(Get-Website -Name "agrovestro-api")) {
+            New-Website -Name "agrovestro-api" -Port 81 -PhysicalPath $sitePath -ApplicationPool $appPoolName
+          }
+          
+          # Start IIS if not already running
+          Start-Service -Name W3SVC
