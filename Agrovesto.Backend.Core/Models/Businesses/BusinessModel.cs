@@ -10,7 +10,20 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
-
+    public class TransactionQueryParams
+    {
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+        public string? transactionType { get; set; }
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
+        public string? Location { get; set; }
+        public string BusinessCode { get; set; }
+        public string? supervisorId { get; set; }
+        public string? UserId { get; set; } //logging officerId
+        public long CooperativeId { get; set; }
+        public long FarmerId { get; set; }
+    }
     public class ListQueryParams
     {
         public int PageNumber { get; set; } = 1;

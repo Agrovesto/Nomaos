@@ -196,6 +196,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Country { get; set; }
         public string Address1 { get; set; }
         public string Gender { get; set; }
+        public string CustomerId { get; set; }
     }
 
     public class CafeonePhoneModel
