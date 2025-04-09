@@ -72,7 +72,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     Succeeded = true,
                     Data = bizEntities,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -132,7 +132,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     Succeeded = true,
                     Data = subscription,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -166,7 +166,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     Succeeded = true,
                     Data = subscription,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)

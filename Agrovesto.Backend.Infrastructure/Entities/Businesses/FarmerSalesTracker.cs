@@ -13,6 +13,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
+        public string MarketDay { get; set; }
         public string CollectionOfficerId { get; set; }
         public DateTimeOffset CollectionDate { get; set; }
         public DateTimeOffset TransactionActualDate { get; set; }
@@ -38,5 +39,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string ModeOfPayment { get; set; } //cash, transfer, pos etc
         public long TotalTimeSpentInMarket { get; set; }
         public string SalesType { get; set; }
+        public string BelongToBusinessCode { get; set; }
+        public string? supervisorId { get; set; }
     }
 }

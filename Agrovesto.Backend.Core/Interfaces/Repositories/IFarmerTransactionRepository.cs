@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,6 +10,9 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
 {
     public interface IFarmerTransactionRepository
     {
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerSalesTransactionsByCooperativeAsync(long cooperativeId, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByAgent(string agentId, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByBusiness(string businessCode, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
 
         //TODO: get farmer transactions by userId
         //TODO: log farmer transaction
@@ -21,6 +26,9 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         //TODO: get most transacted product
         //TODO: get most transacted product by farmer
         //TODO: get most transacted product by location
-
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmer(string farmerId, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactions(int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionsByBusinessCode(string businessCode, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<(bool status, FarmerSalesTrackerModel data)> LogTransaction(FarmerSalesTrackerModel data);
     }
 }

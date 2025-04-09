@@ -90,7 +90,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = businesses,
                     Count = businesses.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -897,7 +897,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = agent,
                     Count = agent.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -934,7 +934,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = staff,
                     Count = staff.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -972,7 +972,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = agent,
                     Count = agent.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1061,7 +1061,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         //            Succeeded = true,
         //            Data = farmers,
         //            Count = farmers.Count,
-        //            Message = "Retrieved Successfulluy"
+        //            Message = "Retrieved Successfully"
         //        };
         //    }
         //    catch (BaseException ex)
@@ -1100,7 +1100,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = agent,
                     Count = agent.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1137,7 +1137,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = staff,
                     Count = staff.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1175,7 +1175,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = cooperative,
                     Count = cooperative.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1213,7 +1213,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = farmers,
                     Count = farmers.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1248,7 +1248,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = farmers,
                     Count = farmers.Count,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1282,7 +1282,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     Succeeded = true,
                     Data = bizEntities,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
@@ -1319,7 +1319,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     Succeeded = true,
                     Data = bizEntities,
-                    Message = "Retrieved Successfulluy"
+                    Message = "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)

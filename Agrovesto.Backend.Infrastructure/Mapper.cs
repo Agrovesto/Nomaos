@@ -821,6 +821,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = model.OrganizationId,
                 OwnerId = model.OwnerId,
                 UserId = model.UserId,
+                CafeOneCustomerId = model.CafeOneCustomerId
             };
         }
 
@@ -842,6 +843,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = entity.OrganizationId,
                 OwnerId = entity.OwnerId,
                 UserId = entity.UserId,
+                CafeOneCustomerId= entity.CafeOneCustomerId
             };
         }
 
@@ -1059,10 +1061,12 @@ namespace Agrovesto.Backend.Infrastructure
                 OtherCost = model.OtherCost,
                 PackagingType = model.PackagingType,
                 TransportCost = model.TransportCost,
-                UnitType = model.UnitType,
+                UnitType = Enum.GetName(typeof(UnitType), model.UnitType),           
                 TransactionActualDate= model.TransactionActualDate,
-                SalesType = Enum.GetName(typeof(SalesType), model.SalesType)
-
+                SalesType = Enum.GetName(typeof(SalesType), model.SalesType),
+                BelongToBusinessCode= model.BelongToBusinessCode,
+                supervisorId= model.supervisorId,
+                MarketDay= model.MarketDay
             };
         }
 
@@ -1074,7 +1078,8 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new FarmerSalesTrackerModel()
             {
-               Id=entity.Id,
+                //SalesTypeName= Enum.GetName(typeof(SalesType), entity.SalesType),
+                Id =entity.Id,
                CropPricePerUnitSold = entity.CropPricePerUnitSold,
                CollectionDate = entity.CollectionDate,
                CropSold=entity.CropSold,
@@ -1097,9 +1102,13 @@ namespace Agrovesto.Backend.Infrastructure
                OtherCost=entity.OtherCost,
                PackagingType=entity.PackagingType,
                TransportCost=entity.TransportCost,
-               UnitType=entity.UnitType,
-                TransactionActualDate= entity.TransactionActualDate,
-                SalesType = entity.SalesType.ToEnum<SalesType>(),
+               //UnitType= entity.UnitType.ToEnum<UnitType>(),
+                supervisorId= entity.supervisorId,
+                TransactionActualDate = entity.TransactionActualDate,
+                //SalesType = entity.SalesType.ToEnum<SalesType>(),
+                BelongToBusinessCode=entity.BelongToBusinessCode,
+                //UnitTypeName= Enum.GetName(typeof(UnitType), entity.UnitType),
+                MarketDay= entity.MarketDay
             };
         }
 

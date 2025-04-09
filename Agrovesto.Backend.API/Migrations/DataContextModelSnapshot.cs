@@ -743,6 +743,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("CollectionDate")
                         .HasColumnType("datetimeoffset");
 
@@ -772,6 +776,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<bool>("IsCropTransportedToMarket")
                         .HasColumnType("bit");
+
+                    b.Property<string>("MarketDay")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("MarketLga")
                         .HasColumnType("nvarchar(max)");
@@ -816,11 +824,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("TotalTimeSpentInMarket")
                         .HasColumnType("bigint");
 
+                    b.Property<DateTimeOffset>("TransactionActualDate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<decimal>("TransportCost")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("UnitType")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("supervisorId")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
@@ -1230,6 +1244,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AgrovestoUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CafeOneCustomerId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
