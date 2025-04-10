@@ -715,7 +715,7 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
-
+                SupervisorUserId= entities.SupervisorUserId
             };
         }
 
@@ -735,7 +735,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
-
+                SupervisorUserId = model.SupervisorUserId
             };
         }
 

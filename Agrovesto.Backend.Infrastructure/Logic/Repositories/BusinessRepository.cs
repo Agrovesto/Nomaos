@@ -23,30 +23,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
         {
-            var query = await (from b in _context.BusinessWorkers
-                               join u in _context.Users on b.UserId equals u.Id
-                               join r in _context.UserRoles on u.Id equals r.UserId into userRoles
-                               from ur in userRoles.DefaultIfEmpty() // Left Join for UserRoles
-                               join role in _context.Roles on ur.RoleId equals role.Id into roles
-                               from rl in roles.DefaultIfEmpty() // Left Join for Roles
-                               where b.BusinessId == businessId
-                               orderby b.CreatedOn
-                               select new BusinessWorkerModel
-                               {
-                                   BusinessId = businessId,
-                                   BusinessWorkerId = b.BusinessWorkerId,
-                                   Email = u.Email,
-                                   FullName = u.Name,
-                                   PhoneNumber = u.PhoneNumber,
-                                   UserId = u.Id,
-                                   RoleId = ur.RoleId, // Can be null if no role
-                                   RoleName = rl.Name ?? "No Role Assigned", // Handle null roles
-                                   CreatedOn = b.CreatedOn
-                               })
-                   .Take(50) // Limit to 50 records for better performance
-                   .ToListAsync();
+         
+
+            var list = await (from b in _context.BusinessWorkers
+                              join u in _context.Users on b.UserId equals u.Id
+                              join ur in _context.UserRoles on u.Id equals ur.UserId into userRoles
+                              from ur in userRoles.DefaultIfEmpty()
+                              join rl in _context.Roles on ur.RoleId equals rl.Id into roles
+                              from role in roles.DefaultIfEmpty()
+                              where b.BusinessId == businessId
+                              orderby b.CreatedOn
+                              select new BusinessWorkerModel
+                              {
+                                  BusinessId = businessId,
+                                  BusinessWorkerId = b.BusinessWorkerId,
+                                  Email = u.Email,
+                                  FullName = u.Name,
+                                  PhoneNumber = u.PhoneNumber,
+                                  UserId = u.Id,
+                                  RoleId = ur.RoleId,
+                                  RoleName = role.Name ?? "No Role Assigned",
+                                  CreatedOn = b.CreatedOn
+                              })
+                  .ToListAsync();
+
+            var query = list
+                .GroupBy(x => x.UserId)
+                .Select(g => g.First()) // Pick the first for each unique user
+                .Take(50)
+                .ToList();
 
             return query.Any() ? query : null;
+
 
         }
         public async Task<int> BusinessCount()

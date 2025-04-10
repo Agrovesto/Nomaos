@@ -31,6 +31,99 @@ namespace Agrovesto.Backend.API.Controllers
             _warehouseManagementManager = warehouseManagementManager;
         }
 
+        //assign supervisor to agent
+        [HttpPost("assign-supervisor")]
+        public async Task<IActionResult> AssignSupervisorToAgent([FromQuery] string agentId, [FromQuery] string supervisorId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _businessManager.AssignSupervisorToAgent(agentId, supervisorId);
+                return Ok(new Response<AgentModel>()
+                {
+                    Data = result,
+                    Message = "Retrieved",
+                    Succeeded = true,
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        //retrieve agent by supervisor
+
+        [HttpGet("agents-bysupervisor")]
+        public async Task<IActionResult> AgentsBySupervisor([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.AgentsBySupervisor(query.UserId, query);
+                return Ok(new PagedListResponse<List<AgentModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         #region dashboard
 
 
