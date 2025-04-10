@@ -166,6 +166,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //    return null;
         //}
 
+        public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
+        {
+            var agent = await _context.Agents.Where(c => c.UserId == agentId).FirstOrDefaultAsync();
+            if (agent == null) return null;
+            agent.SupervisorUserId = supervisorId;
+
+            await _context.SaveChangesAsync();
+
+            return agent.Map();
+        }
+
         public async Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
         {
             var cooperative = await _context.Cooperatives.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
@@ -209,6 +220,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return null;
             
         }
+
+        public async Task<List<AgentModel>> AgentsBySupervisor(string supervisorId, ListQueryParams query)
+        {
+            var agents = await _context.Agents
+                .AsNoTracking()
+                .Where(s => s.SupervisorUserId == supervisorId)
+                .OrderByDescending(s => s.OnBoardedOn)
+                //.Skip(query.PageNumber)
+                //.Take(query.PageSize)
+                .Select(s => new AgentModel
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    Location = s.Location,
+                    State = s.State,
+                    Lga = s.Lga,
+                    OnBoardedOn = s.OnBoardedOn,
+                    BelongToBusinessCode = s.BelongToBusinessCode,
+                    Email = s.Email,
+                    PhoneNumber = s.PhoneNumber,
+                    UserId = s.UserId,// Count farmers per cooperative
+                })
+                .ToListAsync();
+
+            return agents.Any() ? agents : null;
+        }
+
     }
 }
 

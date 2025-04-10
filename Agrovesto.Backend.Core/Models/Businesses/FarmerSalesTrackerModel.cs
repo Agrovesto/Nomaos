@@ -50,7 +50,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public enum UnitType
     {
         Bag,
-        Mudu,
+        Mudus,
+        Tons,
+        Kg,
+        Others
 
     }
 }

@@ -78,7 +78,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (user == null)
                     {
 
-                      //  await _userManager.AccessFailedAsync(user);
+                        //  await _userManager.AccessFailedAsync(user);
                         return (false, "Invalid username or password", null);
                     }
                     var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
@@ -108,7 +108,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     {
                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
                     }
-                  
+
                     if (string.IsNullOrEmpty(user.Salt))
                     {
                         return (false, "Could not login user. Contact administrator", null);
@@ -180,7 +180,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             catch (Exception ex)
             {
-               // await _userManager.AccessFailedAsync(user);
+                // await _userManager.AccessFailedAsync(user);
                 return (false, ex.Message, null);
             }
 
@@ -291,6 +291,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return result;
         }
+
+        //TODO: Update Agent name to fullname
+        public async Task<(UserModel model, bool status, string message)> UpdateUserProfile(string userId, UserModel user)
+        {
+            var model = await _userManager.FindByIdAsync(userId);
+            if (model == null) return (null, false, "");
+            model.Name = user.Name;
+           var update= await _userManager.UpdateAsync(model);
+            if (!update.Succeeded) throw new Exception($"Could not update user details");
+            return (model.Map(), true, "Success");
+        }
         public async Task<(UserModel model, bool status, string message)> ChangeUserRole(string userId, string roleName)
         {
             var model = await _userManager.FindByIdAsync(userId);
@@ -299,7 +310,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var userExistingRole = await _userManager.GetRolesAsync(model);
             if (userExistingRole.Any())
             {
-                var removeFromRole = await _userManager.RemoveFromRoleAsync(model,userExistingRole[0]);
+                var removeFromRole = await _userManager.RemoveFromRoleAsync(model, userExistingRole[0]);
             }
             var addUserToRole = await _userManager.AddToRoleAsync(model, uniqueRole.Name);
 
@@ -376,7 +387,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
         }
 
-        public async Task TrackUserRoleAssignment(UserModel user,  string userType)
+        public async Task TrackUserRoleAssignment(UserModel user, string userType)
         {
             try
             {
@@ -471,7 +482,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var userExist = await _userManager.FindByEmailAsync(model.UserName);
             if (userExist != null)
             {
-               
+
                 var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
                 if (resetPassword.Succeeded)
                 {

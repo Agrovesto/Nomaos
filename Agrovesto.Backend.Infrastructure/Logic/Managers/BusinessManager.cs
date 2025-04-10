@@ -71,6 +71,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _inputRepository = inputRepository;
            
         }
+        public async Task<PagedListResponse<List<AgentModel>>> AgentsBySupervisor(string userId,
+      ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var cooperative = await _cooperativeRepository.AgentsBySupervisor(userId, query);
+                if (cooperative == null) return new PagedListResponse<List<AgentModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<AgentModel>>
+                {
+                    Succeeded = true,
+                    Data = cooperative,
+                    Count = cooperative.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
+        {
+            var assignAgentToCooperative = new AgentModel();
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    assignAgentToCooperative = await _cooperativeRepository.AssignSupervisorToAgent(agentId, supervisorId);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return assignAgentToCooperative;
+        }
+
         public async Task<PagedListResponse<List<BusinessModel>>> GetBusinessesAsync(ListQueryParams query)
         {
             try
@@ -676,7 +739,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
 
-                    //SendWorkerMail(bWorker, args, business);
+                    SendWorkerMail(bWorker, args, business);
                     break;
 
                 case SubAccountType.Cooperative:

@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
-    public class FarmerTransactionManager :IFarmerTransactionManager
+    public class FarmerTransactionManager : IFarmerTransactionManager
     {
         private readonly IBusinessRepository _businessRepository;
         private readonly IAuthenticationRepository _authenticationRepository;
@@ -31,7 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             IAgentRepository agentRepository, DataContext context, IFarmerRepository farmerRepository)
         {
             _businessRepository = businessRepository;
-               _authenticationRepository = authenticationRepository; ;
+            _authenticationRepository = authenticationRepository; ;
             _context = context;
             _repository = repository;
             _log = log;
@@ -114,7 +114,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Count = transactions.Count,
                     PageNumber = query.PageNumber,
                     PageSize = query.PageSize,
-                    
+
                     Message = "Retrieved Successfully"
                 };
             }
@@ -148,17 +148,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     var farmer = await _farmerRepository.GetFarmerById(farmerId);
                     if (farmer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found For Farmer");
-                  
+
+
                     var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
                     if (!getUserCred.status) throw new Exception("User taking log not recognized");
+                    model.CollectionOfficerId = getUserCred.model.Id;
+
 
 
                     model.BelongToBusinessCode = business.BusinessCode;
                     model.FarmerUserId = farmer.UserId;
-                    model.CollectionOfficerId = getUserCred.model.Id;
+
                     model.SalesType = SalesType.Offline;
 
-                    var totalPriceSold= model.QuantitySoldToday * model.CropPricePerUnitSold;
+                    var totalPriceSold = model.QuantitySoldToday * model.CropPricePerUnitSold;
                     if (model.TotalPriceSold != totalPriceSold) throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"Total Price sold indicated {model.TotalPriceSold} does not tally when compared with Price per unit {model.CropPricePerUnitSold} and the quantity {model.QuantitySoldToday}");
 
                     var estimate = (
@@ -197,21 +200,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var business = await _businessRepository.GetBusinessByCodeAsync(query.BusinessCode)
                ?? throw new Exception("Business does not exist");
             try
-            {               
+            {
                 var agent = await _agentRepository.GetAgentDetailByUserId(query.UserId);
 
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var transactions = await _repository.GetTransactionByAgent(query.UserId, query.PageNumber, query.PageSize, query.transactionType,
                     query.startDate, query.endDate, query.Location);
-                if (transactions == null) 
+                if (transactions == null)
                     return new PagedListResponse<List<FarmerSalesTrackerModel>>
-                {
-                    Succeeded = true,
-                    Data = null,
-                    Count = 0,
-                    Message = "No Record Found"
-                };
+                    {
+                        Succeeded = true,
+                        Data = null,
+                        Count = 0,
+                        Message = "No Record Found"
+                    };
                 return new PagedListResponse<List<FarmerSalesTrackerModel>>
                 {
                     Succeeded = true,
@@ -227,7 +230,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 _log.LogError($"Error retrieving Agents: {ex.Message}");
 
-throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
             catch (Exception ex)
             {
@@ -284,7 +287,7 @@ throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             try
             {
 
-                var transactions = await _repository.GetTransactionsByBusinessCode(query.BusinessCode,query.PageNumber, query.PageSize, query.transactionType,
+                var transactions = await _repository.GetTransactionsByBusinessCode(query.BusinessCode, query.PageNumber, query.PageSize, query.transactionType,
                     query.startDate, query.endDate, query.Location);
                 if (transactions == null)
                     return new PagedListResponse<List<FarmerSalesTrackerModel>>
@@ -316,7 +319,7 @@ throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
                 throw new NotFoundException($"No Record Found");
             }
         }
-         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerTransactions(TransactionQueryParams query)
+        public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerTransactions(TransactionQueryParams query)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.BusinessCode)
                 ?? throw new Exception("Business does not exist");
@@ -356,7 +359,7 @@ throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
         }
 
-          //TODO: calculate total transaction volume
+        //TODO: calculate total transaction volume
         //TODO: calculate total transaction volumen based on transaction type
         //TODO: calculate transaction performance (daily, weekly, monthly, yearly)
         //TODO: get most transacted product

@@ -18,7 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string BelongToBusinessCode { get; set; }  //which business
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-
+        public string? SupervisorUserId { get; set; }
 
     }
 }
