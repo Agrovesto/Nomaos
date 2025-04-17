@@ -7,6 +7,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -26,8 +27,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<FarmerTransactionManager> _log;
         private readonly IAgentRepository _agentRepository;
         private readonly IFarmerRepository _farmerRepository;
+
+        private readonly IConfiguration _configuration;
         public FarmerTransactionManager(IFarmerTransactionRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
            ILogger<FarmerTransactionManager> log,
+           IConfiguration configuration,
             IAgentRepository agentRepository, DataContext context, IFarmerRepository farmerRepository)
         {
             _businessRepository = businessRepository;
@@ -35,6 +39,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _context = context;
             _repository = repository;
             _log = log;
+            _configuration = configuration;
             _agentRepository = agentRepository;
             _farmerRepository = farmerRepository;
         }
@@ -134,11 +139,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<FarmerSalesTrackerModel> LogOfflineTransaction(FarmerSalesTrackerModel model, TransactionQueryParams args,
             long farmerId)
         {
+
+            //string BagToMudu = _configuration["AWS:BucketName"];
+            //string BagToKg = _configuration["AWS:BucketName"];
+            //string MuduToKg = _configuration["AWS:BucketName"];
+            //string TonsToBag = _configuration["AWS:BucketName"];
+            //string TonsToKg = _configuration["AWS:BucketName"];
+            //string TonsToMudus = _configuration["AWS:BucketName"];
             var business = await _businessRepository.GetBusinessByCodeAsync(args.BusinessCode)
                 ?? throw new Exception("Business does not exist");
 
-
-            (bool status, FarmerSalesTrackerModel data) update = new(false, new FarmerSalesTrackerModel());
+            var totalPriceSold = 0m;
+            var estimate = 0m;
+          (bool status, FarmerSalesTrackerModel data) update = new(false, new FarmerSalesTrackerModel());
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -160,17 +173,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.FarmerUserId = farmer.UserId;
 
                     model.SalesType = SalesType.Offline;
+                  
+                    if(model.UnitType !=model.SoldCropUnitType)
+                    {
+                       
+                            var price = (decimal)model.LowestUnitQuntity * model.PriceOfLowestUnit;
+                            totalPriceSold = price ;
 
-                    var totalPriceSold = model.QuantitySoldToday * model.CropPricePerUnitSold;
+                         estimate = (
+                            (
+                            (model.CostOfPackagingMaterial / (decimal)model.LowestUnitQuntity)
+                            + (model.TransportCost / (decimal)model.LowestUnitQuntity)
+                            //+ (model.CropPricePerUnitSold)
+                            + (model.OtherCost / (decimal)model.LowestUnitQuntity))
+                            * (decimal)model.LowestUnitQuntity);
+
+                    }
+                    else { totalPriceSold = (decimal)model.QuantitySoldToday * model.CropPricePerUnitSold;
+
+                         estimate = (
+                            (
+                            (model.CostOfPackagingMaterial / (decimal)model.QuantitySoldToday)
+                            + (model.TransportCost / (decimal)model.QuantitySoldToday)
+                            //+ (model.CropPricePerUnitSold)
+                            + (model.OtherCost / (decimal)model.QuantitySoldToday))
+                            * (decimal)model.QuantitySoldToday);
+                    }
+
+
+                  
+
                     if (model.TotalPriceSold != totalPriceSold) throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"Total Price sold indicated {model.TotalPriceSold} does not tally when compared with Price per unit {model.CropPricePerUnitSold} and the quantity {model.QuantitySoldToday}");
 
-                    var estimate = (
-                        (
-                        (model.CostOfPackagingMaterial / model.QuantitySoldToday)
-                        + (model.TransportCost / model.QuantitySoldToday)
-                        //+ (model.CropPricePerUnitSold)
-                        + (model.OtherCost / model.QuantitySoldToday))
-                        * model.QuantitySoldToday);
 
                     //if (model.IntendedPriceToSellPerUnit == 0)
                     //{

@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -63,6 +64,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId)
         {
+            var businessExist = await _context.Businesses
+              .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (businessExist != null)
+            {
+                // Business already exists, return the existing one
+                return  businessExist.Map();
+            }
             Business business = businessModel.Map();
             byte[] salt = EncryptionUtil.GetSalt();
             business.BusinessCodeSignageSalt = Convert.ToBase64String(salt);

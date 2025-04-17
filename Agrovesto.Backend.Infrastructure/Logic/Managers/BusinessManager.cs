@@ -46,13 +46,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IFaceManager _faceManager;
         private readonly ISMSService _whisperSMSService;
         private readonly IInputFinancingManagementRepository _inputRepository;
-       
+        private readonly ITraderRepository _traderRepository;
+
+
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
             IIdentityVerificationManager identityVerificationManager,
             IFarmPlotDetailRepository farmPlotDetailRepository,
             IAgentRepository agentRepository, ISMSService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
+            ITraderRepository traderRepository,
           
                 IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
@@ -69,7 +72,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
             _inputRepository = inputRepository;
-           
+            _traderRepository = traderRepository;
+
+
         }
         public async Task<PagedListResponse<List<AgentModel>>> AgentsBySupervisor(string userId,
       ListQueryParams query)
@@ -77,9 +82,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+                //var agent = await _agentRepository.GetAgentBySuperVisor(userId);
 
-                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                //if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var cooperative = await _cooperativeRepository.AgentsBySupervisor(userId, query);
                 if (cooperative == null) return new PagedListResponse<List<AgentModel>>
@@ -727,6 +732,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
             switch (subaccount.SubAccountType)
             {
+                case SubAccountType.Trader:
+                    await CreateTraderProfile(model, business, registeredUser.model.Id);                   
+                    break;
                 case SubAccountType.Agent:
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
 
@@ -818,6 +826,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return await _walletManager.CreateSubAccount(subaccount);
         }
 
+        private async Task CreateTraderProfile(UserModel model, BusinessModel business, string userId)
+        {
+            var trader = new TraderModel
+            {
+                BelongToBusinessCode = business.BusinessCode,
+                State = model.State,
+                Lga = model.Lga,
+                Email = model.Email,
+                Location = model.Location,
+                Name = model.Name,
+                OnBoardedOn = DateTimeOffset.UtcNow,
+                PhoneNumber = model.PhoneNumber,
+                UserId = userId
+            };
+
+            await _traderRepository.CreateTrader(trader);
+        }
 
         private async Task CreateAgentProfileAsync(UserModel model, BusinessModel business, string userId)
         {

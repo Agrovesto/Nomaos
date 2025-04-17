@@ -197,6 +197,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool status, FarmerModel data)> CreateFarmer(FarmerModel data)
         {
+            var farmerExist = await _context.Farmers
+                .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+            if (farmerExist != null)
+            {
+                // Farmer already exists, return the existing one
+                return (true, farmerExist.Map());
+            }
             var entity = data.Map();
 
             await _context.AddAsync(entity);

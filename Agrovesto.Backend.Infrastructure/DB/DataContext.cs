@@ -48,6 +48,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmVisitationActivity> FarmVisitationActivities { get; set; }
         public DbSet<InputDeliveryTracker> InputDeliveryTrackers { get; set; }
         public DbSet<FarmerSalesTracker> FarmerSalesTracker { get; set; }
+        public DbSet<Trader> Traders { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>

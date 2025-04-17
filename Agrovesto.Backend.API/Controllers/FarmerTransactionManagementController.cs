@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -45,13 +46,15 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 var userRole = CurrentUserRole;
-                if (userRole == "SuperAgent")
+                if (userRole == "Supervisor")
                 {
                     args.supervisorId = CurrentUserId;
+                    args.UserId = args.UserId;
                 }
                 else
                 {
-                    args.UserId= CurrentUserId;
+                    args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+              
                 }
                 var request = await _farmerTransactionManager.LogOfflineTransaction(model, args, args.FarmerId);
 

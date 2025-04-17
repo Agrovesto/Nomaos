@@ -1028,6 +1028,46 @@ namespace Agrovesto.Backend.Infrastructure
 
 
         #endregion Business
+        public static TraderModel Map(this Trader entities)
+        {
+            if (entities == null) { return null; }
+            return new TraderModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.PhoneNumber,
+                UserId = entities.UserId,
+                OnBoardedOn = entities.OnBoardedOn,
+                State = entities.State,
+                Lga = entities.Lga,
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+
+              //  SupervisorUserId = entities.SupervisorUserId
+            };
+        }
+
+        public static Trader Map(this TraderModel model)
+        {
+            if (model == null) { return null; }
+            return new Trader
+            {
+                // Id = model.Id,
+                Location = model.Location,
+                Name = model.Name,
+                Email = model.Email,
+                UserId = model.UserId,
+                State = model.State,
+                Lga = model.Lga,
+                BelongToBusinessCode = model.BelongToBusinessCode
+                ,
+                PhoneNumber = model.PhoneNumber,
+                OnBoardedOn = model.OnBoardedOn,
+                //SupervisorUserId = model.SupervisorUserId
+            };
+        }
+
 
 
         #region FarmerSalesMgt
@@ -1066,7 +1106,10 @@ namespace Agrovesto.Backend.Infrastructure
                 SalesType = Enum.GetName(typeof(SalesType), model.SalesType),
                 BelongToBusinessCode= model.BelongToBusinessCode,
                 supervisorId= model.supervisorId,
-                MarketDay= model.MarketDay
+                MarketDay= model.MarketDay,
+                SoldCropUnitType = Enum.GetName(typeof(UnitType), model.SoldCropUnitType),
+                PriceOfLowestUnit = model.PriceOfLowestUnit,
+                LowestUnitQuntity = model.LowestUnitQuntity
             };
         }
 
@@ -1078,7 +1121,9 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new FarmerSalesTrackerModel()
             {
-                //SalesTypeName= Enum.GetName(typeof(SalesType), entity.SalesType),
+                SalesTypeName= entity.SalesType,
+                SoldCropUnitTypeName= entity.SoldCropUnitType,
+                UnitTypeName= entity.UnitType,
                 Id =entity.Id,
                CropPricePerUnitSold = entity.CropPricePerUnitSold,
                CollectionDate = entity.CollectionDate,
@@ -1108,7 +1153,10 @@ namespace Agrovesto.Backend.Infrastructure
                 //SalesType = entity.SalesType.ToEnum<SalesType>(),
                 BelongToBusinessCode=entity.BelongToBusinessCode,
                 //UnitTypeName= Enum.GetName(typeof(UnitType), entity.UnitType),
-                MarketDay= entity.MarketDay
+                MarketDay= entity.MarketDay,
+                PriceOfLowestUnit= entity.PriceOfLowestUnit,
+                LowestUnitQuntity= entity.LowestUnitQuntity
+                //  SoldCropUnitType = entity.SoldCropUnitType,
             };
         }
 

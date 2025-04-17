@@ -20,8 +20,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? MarketLga { get; set; }
         public string? FarmerUserId { get; set; }
         public string CropSold { get; set; }
-        public long QuantityBroughtToMarket { get; set; } //same as quantity uploaded on the platform
-        public long QuantitySoldToday { get; set; }
+        public double QuantityBroughtToMarket { get; set; } //same as quantity uploaded on the platform
+        public double QuantitySoldToday { get; set; }
         public UnitType UnitType { get; set; } //bag, modul, cup
         public string? UnitTypeName { get; set; } //bag, modul, cup
         public decimal CropPricePerUnitSold { get; set; }
@@ -40,13 +40,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? SalesTypeName { get; set; }
         public string? BelongToBusinessCode { get; set; }
         public string? supervisorId { get; set; }
+        public UnitType SoldCropUnitType { get; set; }
+        public string? SoldCropUnitTypeName { get; set; }
+        public decimal PriceOfLowestUnit { get; set; }
+
+        public double LowestUnitQuntity { get; set; }
     }
     public enum SalesType
     {
         Offline,
         Online
     }
-    
+  
     public enum UnitType
     {
         Bag,

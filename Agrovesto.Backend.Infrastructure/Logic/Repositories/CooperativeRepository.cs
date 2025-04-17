@@ -22,6 +22,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool status, CooperativeModel data)> CreateCooperative(CooperativeModel data)
         {
+            var existingCooperative = await _context.Cooperatives
+                 .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+            if (existingCooperative != null)
+            {
+                // Cooperative already exists, return the existing one
+                return (true, existingCooperative.Map());
+            }
+
             var entity =data.Map();
 
             await _context.AddAsync(entity);
