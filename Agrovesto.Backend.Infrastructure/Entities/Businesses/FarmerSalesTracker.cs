@@ -23,8 +23,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? MarketLga { get; set; }
         public string FarmerUserId { get; set; }
         public string CropSold { get; set; }
-        public long QuantityBroughtToMarket { get; set; } //same as quantity uploaded on the platform
-        public long QuantitySoldToday { get; set; }
+        public double QuantityBroughtToMarket { get; set; } //same as quantity uploaded on the platform
+        public double QuantitySoldToday { get; set; }
         public string UnitType { get; set; }
         public decimal CropPricePerUnitSold { get; set; }
         public decimal TotalPriceSold { get; set; }
@@ -41,5 +41,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string SalesType { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string? supervisorId { get; set; }
+        public string SoldCropUnitType { get; set; }
+
+        public decimal PriceOfLowestUnit { get; set; }
+        public double LowestUnitQuntity { get; set; }
     }
 }

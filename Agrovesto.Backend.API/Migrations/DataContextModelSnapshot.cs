@@ -780,6 +780,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsCropTransportedToMarket")
                         .HasColumnType("bit");
 
+                    b.Property<double>("LowestUnitQuntity")
+                        .HasColumnType("float");
+
                     b.Property<string>("MarketDay")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -811,13 +814,20 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("PackagingType")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("QuantityBroughtToMarket")
-                        .HasColumnType("bigint");
+                    b.Property<decimal>("PriceOfLowestUnit")
+                        .HasColumnType("decimal(18,2)");
 
-                    b.Property<long>("QuantitySoldToday")
-                        .HasColumnType("bigint");
+                    b.Property<double>("QuantityBroughtToMarket")
+                        .HasColumnType("float");
+
+                    b.Property<double>("QuantitySoldToday")
+                        .HasColumnType("float");
 
                     b.Property<string>("SalesType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SoldCropUnitType")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
@@ -1011,6 +1021,53 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("BusinessId");
 
                     b.ToTable("SubAccounts");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Trader", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Lga")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("OnBoardedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Traders");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Warehouse", b =>

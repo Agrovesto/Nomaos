@@ -10,7 +10,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 {
     public class ChnagePasswordModel
     {
-        public string UserName { get; set; }
+        public string? UserName { get; set; }
         public string OldPassword { get; set; }
         public string NewPassword { get; set; }
         public string ConfirmPassword { get; set; }
@@ -115,7 +115,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         [Description("Agrovesto")]
         Agrovesto,
         [Description("Buyer")]
-        Buyer
+        Buyer,
+        [Description("Trader")]
+        Trader
     }
     public class LoginModel
     {

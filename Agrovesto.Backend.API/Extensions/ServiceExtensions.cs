@@ -41,6 +41,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IWarehouseManagementRepository, WarehouseManagementRepository>();
             services.AddScoped<IInputFinancingManagementRepository, InputFinancingManagementRepository>();
            services.AddScoped<IFarmerTransactionRepository, FarmerTransactionRepository>();
+            services.AddScoped<ITraderRepository, TraderRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();

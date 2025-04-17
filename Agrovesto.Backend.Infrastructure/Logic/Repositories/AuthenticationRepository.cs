@@ -366,7 +366,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
 
 
-                    // var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
+                    //var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
 
                     //var mailUtil = new MailUtilities(_configuration);
                     //mailUtil.SendWelcomeEmail(model);
