@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("record-sales")]
-        public async Task<IActionResult> LogMarketSalesTransaction([FromBody] FarmerSalesTrackerModel model, [FromQuery] TransactionQueryParams args)
+        public async Task<IActionResult> LogMarketSalesTransaction([FromBody] FarmerSalesTrackerRequestModel model, [FromQuery] TransactionQueryParams args)
         {
 
             if (!ModelState.IsValid)
@@ -56,7 +56,7 @@ namespace Agrovesto.Backend.API.Controllers
                     args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
               
                 }
-                var request = await _farmerTransactionManager.LogOfflineTransaction(model, args, args.FarmerId);
+                var request = await _farmerTransactionManager.LogOfflineTransaction(model.request, args, args.FarmerId);
 
                 return Ok(new Response<FarmerSalesTrackerModel>()
                 {

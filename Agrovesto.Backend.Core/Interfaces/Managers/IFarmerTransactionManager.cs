@@ -29,6 +29,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmer(long farmerId, TransactionQueryParams query);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmerByUserId(TransactionQueryParams query);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionsByBusinessCode(TransactionQueryParams query);
-        Task<FarmerSalesTrackerModel> LogOfflineTransaction(FarmerSalesTrackerModel model, TransactionQueryParams args, long farmerId);
+        Task<FarmerSalesTrackerModel> LogOfflineTransaction(List<FarmerSalesTrackerModel> request, TransactionQueryParams args,  long farmerId );
+        //Task<FarmerSalesTrackerModel> LogOfflineTransaction(FarmerSalesTrackerModel model, TransactionQueryParams args, long farmerId);
     }
 }
