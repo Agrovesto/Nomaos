@@ -136,7 +136,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         //TODO: log farmer transaction
 
-        public async Task<FarmerSalesTrackerModel> LogOfflineTransaction(FarmerSalesTrackerModel model, TransactionQueryParams args,
+        public async Task<FarmerSalesTrackerModel> LogOfflineTransaction(List<FarmerSalesTrackerModel> request, TransactionQueryParams args,
             long farmerId)
         {
 
@@ -165,54 +165,60 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
                     if (!getUserCred.status) throw new Exception("User taking log not recognized");
-                    model.CollectionOfficerId = getUserCred.model.Id;
-
-
-
-                    model.BelongToBusinessCode = business.BusinessCode;
-                    model.FarmerUserId = farmer.UserId;
-
-                    model.SalesType = SalesType.Offline;
-                  
-                    if(model.UnitType !=model.SoldCropUnitType)
+                   foreach(var model in request)
                     {
-                       
+                        model.CollectionOfficerId = getUserCred.model.Id;
+
+
+
+                        model.BelongToBusinessCode = business.BusinessCode;
+                        model.FarmerUserId = farmer.UserId;
+
+                        model.SalesType = SalesType.Offline;
+
+                        if (model.UnitType != model.SoldCropUnitType)
+                        {
+                            model.LowestUnitQuntity = (double)(model.TotalPriceSold / model.PriceOfLowestUnit);
                             var price = (decimal)model.LowestUnitQuntity * model.PriceOfLowestUnit;
-                            totalPriceSold = price ;
+                            totalPriceSold = price;
 
-                         estimate = (
-                            (
-                            (model.CostOfPackagingMaterial / (decimal)model.LowestUnitQuntity)
-                            + (model.TransportCost / (decimal)model.LowestUnitQuntity)
-                            //+ (model.CropPricePerUnitSold)
-                            + (model.OtherCost / (decimal)model.LowestUnitQuntity))
-                            * (decimal)model.LowestUnitQuntity);
+                            estimate = (
+                               (
+                               (model.CostOfPackagingMaterial / (decimal)model.LowestUnitQuntity)
+                               + (model.TransportCost / (decimal)model.LowestUnitQuntity)
+                               //+ (model.CropPricePerUnitSold)
+                               + (model.OtherCost / (decimal)model.LowestUnitQuntity))
+                               * (decimal)model.LowestUnitQuntity);
 
+                        }
+                        else
+                        {
+                            totalPriceSold = (decimal)model.QuantitySoldToday * model.CropPricePerUnitSold;
+
+                            estimate = (
+                               (
+                               (model.CostOfPackagingMaterial / (decimal)model.QuantitySoldToday)
+                               + (model.TransportCost / (decimal)model.QuantitySoldToday)
+                               //+ (model.CropPricePerUnitSold)
+                               + (model.OtherCost / (decimal)model.QuantitySoldToday))
+                               * (decimal)model.QuantitySoldToday);
+                        }
+
+
+
+
+                        if (model.TotalPriceSold != totalPriceSold) throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"Total Price sold indicated {model.TotalPriceSold} does not tally when compared with Price per unit {model.CropPricePerUnitSold} and the quantity {model.QuantitySoldToday}");
+
+
+                        //if (model.IntendedPriceToSellPerUnit == 0)
+                        //{
+                        //    model.IntendedPriceToSellPerUnit =
+                        //    model.TotalPriceSold - estimate;                
+                        //}
+                        model.supervisorId = args.supervisorId;
+                        update = await _repository.LogTransaction(model);
                     }
-                    else { totalPriceSold = (decimal)model.QuantitySoldToday * model.CropPricePerUnitSold;
-
-                         estimate = (
-                            (
-                            (model.CostOfPackagingMaterial / (decimal)model.QuantitySoldToday)
-                            + (model.TransportCost / (decimal)model.QuantitySoldToday)
-                            //+ (model.CropPricePerUnitSold)
-                            + (model.OtherCost / (decimal)model.QuantitySoldToday))
-                            * (decimal)model.QuantitySoldToday);
-                    }
-
-
-                  
-
-                    if (model.TotalPriceSold != totalPriceSold) throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"Total Price sold indicated {model.TotalPriceSold} does not tally when compared with Price per unit {model.CropPricePerUnitSold} and the quantity {model.QuantitySoldToday}");
-
-
-                    //if (model.IntendedPriceToSellPerUnit == 0)
-                    //{
-                    //    model.IntendedPriceToSellPerUnit =
-                    //    model.TotalPriceSold - estimate;                
-                    //}
-                    model.supervisorId = args.supervisorId;
-                    update = await _repository.LogTransaction(model);
+             
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();

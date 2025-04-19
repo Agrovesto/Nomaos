@@ -109,6 +109,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
                     }
 
+                    if (user == null )
+                    {
+                        return (false, "User not found", null);
+
+                    }
                     if (string.IsNullOrEmpty(user.Salt))
                     {
                         return (false, "Could not login user. Contact administrator", null);
@@ -271,6 +276,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             await _context.SaveChangesAsync();
                             await dbTransaction.CommitAsync();
                             result = (entity.Map(), true, "Success");
+                            return result;
+                        }
+                        else if(fetchuser !=null && fetchuser.UserType != "Admin")
+                        {
+                            var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+                            if (uniqueRole == null) throw new Exception($"Could not find specified role");
+                            var addUserToRole = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
+
+                            if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
+
+                            await _context.SaveChangesAsync();
+                            await dbTransaction.CommitAsync();
+                            result = (entity.Map(), true, "User as been added as an Admin");
                             return result;
                         }
                         else

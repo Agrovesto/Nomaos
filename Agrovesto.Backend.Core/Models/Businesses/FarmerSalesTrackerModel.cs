@@ -6,16 +6,20 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class FarmerSalesTrackerRequestModel
+    {
+        public List<FarmerSalesTrackerModel> request {  get; set; }
+    }
     public class FarmerSalesTrackerModel
     {
 
         public DateTimeOffset TransactionActualDate { get; set; }
         public long Id { get; set; }
-        public string CollectionOfficerId { get; set; }
+        public string? CollectionOfficerId { get; set; }
         public DateTimeOffset CollectionDate { get; set; } = DateTimeOffset.Now;
-        public string MarketName { get; set; } //if on the platform, then Agrovesto Market
-        public string MarketDay { get; set; } //if on the platform, then Agrovesto Market
-        public string MarketLocation { get; set; } //if online, the online
+        public string? MarketName { get; set; } //if on the platform, then Agrovesto Market
+        public string? MarketDay { get; set; } //if on the platform, then Agrovesto Market
+        public string? MarketLocation { get; set; } //if online, the online
         public string? MarketState { get; set; }
         public string? MarketLga { get; set; }
         public string? FarmerUserId { get; set; }
