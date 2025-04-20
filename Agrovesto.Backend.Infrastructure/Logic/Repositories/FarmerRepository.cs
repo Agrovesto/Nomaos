@@ -18,7 +18,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        #region report
+        public async Task<List<FarmerModel>> FilterFarmerForDownload(
+   string? businessCode,
+    string? cooperativeName,
+    string? state,
+    DateTime? startDate,
+    DateTime? endDate)
+        {
+            var query = _context.Farmers.AsQueryable();
 
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+            }
+
+            if (!string.IsNullOrWhiteSpace(state))
+            {
+                query = query.Where(x => x.State == state);
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.OnBoardedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.OnBoardedOn <= endDate.Value);
+            }
+
+            var farmers = await query.ToListAsync();
+
+            if (farmers == null || !farmers.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            var cooperativeIds = farmers.Select(f => f.BelongToCooperativeId).Distinct().ToList();
+            var cooperatives = await _context.Cooperatives
+                .Where(c => cooperativeIds.Contains(c.Id))
+                .ToDictionaryAsync(c => c.Id, c => c.Name);
+
+            if (!string.IsNullOrWhiteSpace(cooperativeName))
+            {
+                farmers = farmers
+                    .Where(f => cooperatives.TryGetValue(f.BelongToCooperativeId, out var name)
+                                && name.Equals(cooperativeName, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            return farmers.Select(farmer =>
+            {
+                var mappedFarmer = farmer.Map();
+
+                if (cooperatives.TryGetValue(farmer.BelongToCooperativeId, out var coopName))
+                {
+                    mappedFarmer.CooperativeName = coopName;
+                }
+
+                return mappedFarmer;
+            }).ToList();
+        }
+        #endregion report
         #region agent
         public async Task<BusinessEntitiesMetrics> GetAgentEntitiesMetricsAsync(string businessCode, string userId)
         {
