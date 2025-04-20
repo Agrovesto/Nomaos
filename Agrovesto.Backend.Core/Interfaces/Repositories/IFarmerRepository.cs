@@ -25,5 +25,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId);
         Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(string agentId, ListQueryParams query);
         Task<FarmerModel> AssignFarmerToAgent(string agentuserId, long farmerId);
+        Task<List<FarmerModel>> FilterFarmerForDownload(string? businessCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
     }
 }

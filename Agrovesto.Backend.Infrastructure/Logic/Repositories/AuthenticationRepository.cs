@@ -121,6 +121,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     }
                     byte[] salt = Convert.FromBase64String(user.Salt);
                     string transPin = model.pin.HashSecret(salt);
+                    if(string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
+                    {
+                        return (false, "Login with Email and Password, then enable login with Pin in settings", null);
+                    }
                     var userPin = await ValidateTransactionPin(user, transPin);
                     if (!userPin)
                     {
@@ -196,7 +200,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             byte[] salt = Convert.FromBase64String(user.Salt);
             string pin = transactionPin.HashSecret(salt);
-
+            if (string.IsNullOrEmpty(user.PinEncrypt)) return false;
             if (!user.PinEncrypt.Equals(transactionPin))
             {
                 return false;
@@ -500,7 +504,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var userExist = await _userManager.FindByEmailAsync(model.UserName);
             if (userExist != null)
             {
-
+                //TODO: rework such that if user is using pin, it should just go ahead and change pin instead of password
                 var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
                 if (resetPassword.Succeeded)
                 {

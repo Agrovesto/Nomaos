@@ -52,12 +52,14 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
             services.AddScoped<IFaceManager, FaceManager>();
             services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
+            services.AddScoped<IReportManager, ReportManager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<ISMSService, SMSService>();
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
+            services.AddScoped<IExcelConverterService, ExcelConverterService>();
         }
     }
 }
