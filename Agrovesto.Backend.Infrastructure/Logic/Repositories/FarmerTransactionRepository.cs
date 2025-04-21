@@ -21,6 +21,65 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         }
 
+        #region Report
+        public async Task<List<FarmerSalesTrackerModel>> FilterFarmerTransactionForDownload(
+string? businessCode,
+string? farmerId,
+string? state,
+string? marketDay,
+string? marketName,
+string? cropName,
+DateTime? startDate,
+DateTime? endDate)
+        {
+            var query = _context.FarmerSalesTracker.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+            }
+
+            if (!string.IsNullOrWhiteSpace(state))
+            {
+                query = query.Where(x => x.MarketState == state);
+            }
+
+            if (!string.IsNullOrWhiteSpace(marketDay))
+            {
+                query = query.Where(x => x.MarketDay == marketDay);
+            }
+
+            if (!string.IsNullOrWhiteSpace(marketName))
+            {
+                query = query.Where(x => x.MarketName == marketName);
+            }
+            if (!string.IsNullOrWhiteSpace(cropName))
+            {
+                query = query.Where(x => x.CropSold == cropName);
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.TransactionActualDate >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.TransactionActualDate <= endDate.Value);
+            }
+
+            var farmers = await query.OrderByDescending(x=>x.TransactionActualDate).ToListAsync();
+
+            if (farmers == null || !farmers.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            return farmers.Select(x => x.Map()).ToList();
+        }
+
+        #endregion
+
         //TODO: get farmer transactions by userId
         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmer(string farmerId, int pageNumber = 1,
          int pageSize = 10,

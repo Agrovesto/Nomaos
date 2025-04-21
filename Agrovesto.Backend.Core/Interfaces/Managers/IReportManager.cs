@@ -10,5 +10,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IReportManager
     {
         Task<FileDownloadModel> FilterFarmerDetailsForDownload(string? businessCode, string? cooperativeName, string? state, string? startDate, string? endDate, string? exportFormat);
+        Task<FileDownloadModel> FilterFarmerTransactionForDownload(string? businessCode, string? FarmerUserId, string? state, string? marketDay, string? marketName, string? cropName, string? startDate, string? endDate, string? exportFormat);
     }
 }

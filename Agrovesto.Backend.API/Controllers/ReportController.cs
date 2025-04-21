@@ -68,6 +68,57 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
+              [HttpGet("download-sales-report")]
+        [ProducesResponseType(typeof(Response<FarmerModel[]>), 200)]
+        [ProducesResponseType(typeof(Response<FarmerModel[]>), 400)]
+        [ProducesResponseType(typeof(Response<FarmerModel[]>), 422)]
+        [ProducesResponseType(typeof(Response<FarmerModel[]>), 500)]
+        public async Task<IActionResult> FilterForDownload(
+        [FromQuery] string? businessCode,
+       [FromQuery] string? FarmerUserId,
+       [FromQuery] string? state,
+       [FromQuery] string? marketDay,
+       [FromQuery] string? marketName,
+       [FromQuery] string? cropName,
+        [MaxLength(100)][RegularExpression(Constants.ValidationRegex.General)][FromQuery] string startDate = null,
+        [MaxLength(100)][RegularExpression(Core.Models.Common.Constants.ValidationRegex.General)][FromQuery] string endDate = null,
+     [FromQuery] string? exportFormat = null)
+        {
+
+            try
+            {
+
+
+                var result = await _reportManager.FilterFarmerTransactionForDownload(businessCode, FarmerUserId, state, marketDay, marketName,cropName,startDate, endDate, exportFormat);
+
+                Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
+                return File(result.FileBytes, result.MimeType);
+
+                //return Ok(new Response<FileDownloadModel>()
+                //{
+                //    Succeeded = true,
+                //    Data = result
+                //});
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
 
     }
 }
