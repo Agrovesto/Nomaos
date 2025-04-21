@@ -163,7 +163,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
                  .FirstOrDefault(),
-                 })
+                 }).OrderByDescending(x=>x.CreatedOn)
          .ToListAsync();
 
             return type.Any() ? type : null;

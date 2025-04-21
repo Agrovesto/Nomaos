@@ -21,22 +21,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
-        public async Task<SubscriptionMetrics> FarmerBundleSubscriptions(string businessCode)
+        public async Task<List<SubscriptionData>> FarmerBundleSubscriptions(string businessCode)
         {
             var query = await _context.BundleSubscriptionInterests
                 .Where(w => w.BelongToBusinessCode == businessCode)
-        .GroupBy(b => 1) // Group everything together to get overall counts
-        .Select(g => new SubscriptionMetrics
-        {
-            TotalActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
-            PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
-            b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
-            PartialPaymentSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
-        })
-        .FirstOrDefaultAsync(); // We expect a single object as output
-            if (query == null) { return null; }
-            return query;
+                .GroupBy(b => 1) // Group everything together to get overall counts
+                .Select(g => new
+                {
+                    ActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
+                    PendingSubscribers = g.Count(b =>
+                        b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
+                        b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
+                    OverdueSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
+                })
+                .FirstOrDefaultAsync(); // We expect a single object as output
+
+            if (query == null)
+            {
+                return new List<SubscriptionData>();
+            }
+
+            return new List<SubscriptionData>
+    {
+        new SubscriptionData { Name = "Active Subscribers", Value = query.ActiveSubscribers },
+        new SubscriptionData { Name = "Pending Subscribers", Value = query.PendingSubscribers },
+        new SubscriptionData { Name = "Overdue Subscribers", Value = query.OverdueSubscribers }
+    };
         }
+
+       
+
+        //public async Task<SubscriptionMetrics> FarmerBundleSubscriptions(string businessCode)
+        //{
+        //    var query = await _context.BundleSubscriptionInterests
+        //        .Where(w => w.BelongToBusinessCode == businessCode)
+        //.GroupBy(b => 1) // Group everything together to get overall counts
+        //.Select(g => new SubscriptionMetrics
+        //{
+        //    TotalActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
+        //    PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
+        //    b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
+        //    PartialPaymentSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
+        //})
+        //.FirstOrDefaultAsync(); // We expect a single object as output
+        //    if (query == null) { return null; }
+        //    return query;
+        //}
         public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode)
         {
             var query = await _context.BundleSubscriptionInterests
@@ -44,8 +74,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .GroupBy(b => b.InterestedBundleName) // Assuming BundleName represents the bundle type
                 .Select(g => new BundleSubscriptionSummary
                 {
-                    BundleName = g.Key,
-                    TotalSubscribers = g.Count() // Count number of farmers subscribed to each bundle
+                    Name = g.Key,
+                    Value = g.Count() // Count number of farmers subscribed to each bundle
                 })
                 .ToListAsync();
             if (query.Count == 0) { return null; }
@@ -164,10 +194,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Select(x => x.Map()).ToList();
         }
+        public async Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusinessAgent(string businessCode, string userId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus != "Paid")
+                .OrderByDescending(x => x.CreatedOn).ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
 
         public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid").ToListAsync();
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid")
+                .OrderByDescending(x=> x.CreatedOn).ToListAsync();
 
             if (!interest.Any()) { return null; }
 

@@ -414,13 +414,13 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
                     Data = result,
-                    Message = result.Any() ? "Successful" : "No Record",
-                    Succeeded = result.Any() ? true : false,
-                    Count = result.Count,
+                    Message = result != null ? "Successful" : "No Record",
+                    Succeeded = result !=null ? true : false,
+                    Count = result !=null ? result.Count: 0,
                     //PageNumber = ,
                     PageSize = 10,
-                    Code = result.Any() ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
+                    Code = result!=null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                }); ;
             }
             catch (BaseException ex)
             {

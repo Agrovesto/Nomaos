@@ -7,7 +7,8 @@
         NO_RECORD_FOUND,
         UNAUTHORIZED,
         NOTFOUND,
-        OPERATION_FAILED
+        OPERATION_FAILED,
+        CONFLICT
     }
 
 }

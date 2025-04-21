@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Managers;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -9,6 +10,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Individuals;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -22,16 +24,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IWalletRepository _walletRepository;
         private readonly DataContext _context;
-        public WalletManager(ICafeOneWalletService cafeOneWalletService, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
+        private readonly IIdentityVerificationManager _identityVerificationManager;
+        public WalletManager(ICafeOneWalletService cafeOneWalletService, IBusinessRepository businessRepository,
+            IIdentityVerificationManager identityVerificationManager,
+            IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletRepository walletRepository)
         {
                 _cafeOneWalletService = cafeOneWalletService;
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;
+            _identityVerificationManager = identityVerificationManager;
             _context = context;
             _walletRepository = walletRepository;   
         }
 
+        private string ConvertedDate(string date)
+        {
+            string[] dateFormats = {
+            "dd-MMM-yyyy", "dd-MM-yyyy", "dd/MM/yyyy", "yyyy-MM-dd",
+            "MM/dd/yyyy", "MMM dd, yyyy", "yyyy/MM/dd"
+        };
+
+            string dateOfBirth = date; // Example input, change to test other formats
+
+            if (DateTime.TryParseExact(dateOfBirth, dateFormats,
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
+            {
+                string formattedDate = parsedDate.ToString("yyyy-MM-dd");
+                return formattedDate;
+            }
+            else
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid date of birth");
+            }
+        }
         public async Task<SubAccountModel> UpdateBusinessProfile(SubAccountModel model, ParameterArgs args)
         {
 
@@ -39,6 +65,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var business = await _businessRepository.GetBusinessByUserIdAsync(args.UserId);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
+
+            var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+            {
+                number = model.Bvn
+            });
+            if (!bvnVerification.status)
+            {
+                throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Could not verify BVN details");
+            }
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -49,7 +84,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
                         {
-                            phoneNumber = model.PhoneNumber,
+                            phoneNumber =  model.PhoneNumber,
                             firstName = model.FirstName,
                             lastName = model.LastName,
                             dob = model.DOB,
@@ -117,12 +152,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _walletRepository.CreateSubAccount(model);
         }
-
+        public async Task<SubAccountModel> GetSubAccountByUserId(string userId)
+        {
+            return await _walletRepository.GetSubAccount(userId);
+        }
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
 
             var user = await _walletRepository.GetSubAccount(model.UserId);
-
+            if(user !=null && user.WalletCode !=null)
+            {
+                var createSubaccount = await _walletRepository.UpdateSubAccount(model);                
+            }
             var business = await _businessRepository.GetBusinessByIdAsync(user.BusinessId);
 
             if (business == null) { throw new Exception($"Business does not exist"); }

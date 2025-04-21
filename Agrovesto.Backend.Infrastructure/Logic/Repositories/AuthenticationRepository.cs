@@ -4,13 +4,18 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Rekognition.Model;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
@@ -19,6 +24,8 @@ using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
+using User = Agrovesto.Backend.Infrastructure.Entities.Common.User;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -28,16 +35,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         private readonly RoleManager<Role> _roleManager;
         private readonly UserManager<User> _userManager;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthenticationRepository> _log;
 
         private readonly SignInManager<User> _signInManager;
         public AuthenticationRepository(IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
-           SignInManager<User> signInManager, DataContext context)
+           SignInManager<User> signInManager, DataContext context, ILogger<AuthenticationRepository> log)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _context = context;
             _signInManager = signInManager;
             _configuration = config;
+            _log = log;
         }
         public async Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model, string businessCode, string header)
         {
@@ -69,7 +78,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (user == null)
                     {
 
-                      //  await _userManager.AccessFailedAsync(user);
+                        //  await _userManager.AccessFailedAsync(user);
                         return (false, "Invalid username or password", null);
                     }
                     var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
@@ -82,7 +91,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
                 else
                 {
-                    user = await FindByPhoneNumberAsync(model.phonenumber);
+
+                    if (header.Contains("IsAgrovesto"))
+                    {
+                        user = await FindByPhoneNumberAsync(model.phonenumber);
+                    }
+                    else if (header.Contains("IsBusiness"))
+                    {
+                        if (string.IsNullOrEmpty(businessCode))
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
+                        }
+                        user = await _context.Users.Where(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode).FirstOrDefaultAsync();
+                    }
+                    else
+                    {
+                        throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
+                    }
+
+                    if (user == null )
+                    {
+                        return (false, "User not found", null);
+
+                    }
                     if (string.IsNullOrEmpty(user.Salt))
                     {
                         return (false, "Could not login user. Contact administrator", null);
@@ -90,6 +121,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     }
                     byte[] salt = Convert.FromBase64String(user.Salt);
                     string transPin = model.pin.HashSecret(salt);
+                    if(string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
+                    {
+                        return (false, "Login with Email and Password, then enable login with Pin in settings", null);
+                    }
                     var userPin = await ValidateTransactionPin(user, transPin);
                     if (!userPin)
                     {
@@ -154,7 +189,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             catch (Exception ex)
             {
-               // await _userManager.AccessFailedAsync(user);
+                // await _userManager.AccessFailedAsync(user);
                 return (false, ex.Message, null);
             }
 
@@ -165,7 +200,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             byte[] salt = Convert.FromBase64String(user.Salt);
             string pin = transactionPin.HashSecret(salt);
-
+            if (string.IsNullOrEmpty(user.PinEncrypt)) return false;
             if (!user.PinEncrypt.Equals(transactionPin))
             {
                 return false;
@@ -176,7 +211,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
         }
-        private async Task<User> FindByPhoneNumberAsync(string phoneNumber)
+        public async Task<User> FindByPhoneNumberAsync(string phoneNumber)
         {
             var user = new User();
             var users = await _context.Set<User>().Where(u => u.PhoneNumber == phoneNumber).ToListAsync();
@@ -247,6 +282,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             result = (entity.Map(), true, "Success");
                             return result;
                         }
+                        else if(fetchuser !=null && fetchuser.UserType != "Admin")
+                        {
+                            var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+                            if (uniqueRole == null) throw new Exception($"Could not find specified role");
+                            var addUserToRole = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
+
+                            if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
+
+                            await _context.SaveChangesAsync();
+                            await dbTransaction.CommitAsync();
+                            result = (entity.Map(), true, "User as been added as an Admin");
+                            return result;
+                        }
                         else
                         {
                             result = (model, false, "Admin User already exists, Kindly contact administrator");
@@ -266,6 +314,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return result;
         }
 
+        //TODO: Update Agent name to fullname
+        public async Task<(UserModel model, bool status, string message)> UpdateUserProfile(string userId, UserModel user)
+        {
+            var model = await _userManager.FindByIdAsync(userId);
+            if (model == null) return (null, false, "");
+            model.Name = user.Name;
+           var update= await _userManager.UpdateAsync(model);
+            if (!update.Succeeded) throw new Exception($"Could not update user details");
+            return (model.Map(), true, "Success");
+        }
+        public async Task<(UserModel model, bool status, string message)> ChangeUserRole(string userId, string roleName)
+        {
+            var model = await _userManager.FindByIdAsync(userId);
+            var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+            if (uniqueRole == null) throw new Exception($"Could not find specified role");
+            var userExistingRole = await _userManager.GetRolesAsync(model);
+            if (userExistingRole.Any())
+            {
+                var removeFromRole = await _userManager.RemoveFromRoleAsync(model, userExistingRole[0]);
+            }
+            var addUserToRole = await _userManager.AddToRoleAsync(model, uniqueRole.Name);
+
+            if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
+            return (model.Map(), true, "Success");
+        }
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
             IdentityResult createUser = new IdentityResult(); model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
@@ -315,7 +388,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
 
 
-                    // var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
+                    //var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
 
                     //var mailUtil = new MailUtilities(_configuration);
                     //mailUtil.SendWelcomeEmail(model);
@@ -335,10 +408,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             }
         }
-    
-            //});
 
-            //return (entity.Map(), true, "Success");
+        public async Task TrackUserRoleAssignment(UserModel user, string userType)
+        {
+            try
+            {
+                var model = await _userManager.FindByIdAsync(user.Id);
+                if (!await _userManager.IsInRoleAsync(model, userType))
+                {
+                    await _userManager.AddToRoleAsync(model, userType);
+
+                }
+
+                _log.LogInformation($"Assigned role '{userType}' to user  under the business .");
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, $"Failed to track user role assignment for user {JsonConvert.SerializeObject(user)}");
+            }
+        }
+
+        //});
+
+        //return (entity.Map(), true, "Success");
         //}
 
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
@@ -407,6 +499,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var response = user.Select(x => x.Map()).ToList();
             return (response.Select(x => x.ViewMap()).ToList(), true, "Retrieved Successfully");
         }
+        public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
+        {
+            var userExist = await _userManager.FindByEmailAsync(model.UserName);
+            if (userExist != null)
+            {
+                //TODO: rework such that if user is using pin, it should just go ahead and change pin instead of password
+                var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
+                if (resetPassword.Succeeded)
+                {
+                    return (true, resetPassword.Succeeded.ToString());
+                }
+                else
+                {
+                    return (false, resetPassword.Errors.ToString());
+                }
+
+            }
+            return (false, "Invalid username");
+        }
+
 
     }
 }

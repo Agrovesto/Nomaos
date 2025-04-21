@@ -22,5 +22,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string OwnerId { get; set; }
         public bool IsABusinessAccount { get; set; } //true for businesses, false for ordinary users
         public DateTimeOffset CreatedOn { get; set; }
+
+        public string CafeOneCustomerId { get; set; }
     }
 }

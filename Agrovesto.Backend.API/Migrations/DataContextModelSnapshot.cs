@@ -60,6 +60,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("SupervisorUserId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -451,8 +454,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("HasbeenAssignedAgent")
                         .HasColumnType("bit");
 
-                    b.Property<long>("IsAssignedToAgentId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("IsAssignedToAgentId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Lga")
                         .IsRequired()
@@ -734,6 +738,123 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("FarmerImages");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerSalesTracker", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CollectionDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CollectionOfficerId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("CostOfPackagingMaterial")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CropPricePerUnitSold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("CropSold")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FarmerUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("IntendedPriceToSellPerUnit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsCropPackaged")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCropTransportedToMarket")
+                        .HasColumnType("bit");
+
+                    b.Property<double>("LowestUnitQuntity")
+                        .HasColumnType("float");
+
+                    b.Property<string>("MarketDay")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketLga")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketLocation")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MarketState")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MeansOfTransport")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ModeOfPayment")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("OtherCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PackagingType")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("PriceOfLowestUnit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<double>("QuantityBroughtToMarket")
+                        .HasColumnType("float");
+
+                    b.Property<double>("QuantitySoldToday")
+                        .HasColumnType("float");
+
+                    b.Property<string>("SalesType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SoldCropUnitType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("TotalPriceSold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("TotalTimeSpentInMarket")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("TransactionActualDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<decimal>("TransportCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("UnitType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("supervisorId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmerSalesTracker");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FeeSplitConfiguration", b =>
                 {
                     b.Property<long>("Id")
@@ -754,6 +875,83 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("FeeSplitConfigurations");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputDeliveryTracker", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeliveredBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeliveredTo")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeliveryContact")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeliveryDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeliveryLocation")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("InputName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LogisticNumber")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("LogisticType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("PickUpDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PickupLocation")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("QuantityDelivered")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("QuantityLoaded")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("QuantityReceived")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Reference")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("WarehouseId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("WarehouseInputInventoryId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InputDeliveryTrackers");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubAccount", b =>
@@ -825,6 +1023,53 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("SubAccounts");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Trader", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Lga")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("OnBoardedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("PhoneNumber")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Traders");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Warehouse", b =>
                 {
                     b.Property<long>("Id")
@@ -858,8 +1103,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("ManagedByUserId")
-                        .HasColumnType("bigint");
+                    b.Property<string>("ManagedByUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1023,6 +1269,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsAvailableToBusiness")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Name")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -1055,6 +1304,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AgrovestoUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CafeOneCustomerId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

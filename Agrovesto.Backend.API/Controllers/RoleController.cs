@@ -89,6 +89,21 @@ namespace Agrovesto.Backend.API.Controllers
             });
         }
 
+         [HttpGet("roles/business")]
+        public async Task<IActionResult> GetBusinessRoles()
+        {
+            // var isAdmin = User.Claims.ToArray();
+            // if (!isAdmin) throw new BadRequestException("Not Authorized");
+            var data = await _roleManager.GetBusinessRoles();
+            return Ok(new PagedListResponse<List<RoleModel>>()
+            {
+                Message = "",
+                Data = data.Data,
+                Count = data.Count
+
+            });
+        }
+
 
         [HttpGet("role/{roleId}")]
         public async Task<IActionResult> GetRole(string roleId)

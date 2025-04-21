@@ -19,14 +19,17 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId);
         Task<WarehouseInputInventoryModel> GetInputBYIdAsync(string belongToBusiness, long id);
         Task<List<WarehouseInputInventoryModel>> GetInputByWarehouse(string belongToBusiness, long warehouseId);
+        Task<InputDeliveryTrackerModel> GetInputTracker(string reference);
         Task<WarehouseModel> GetWarehouseByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode);
         Task<WarehouseUserModel> GetWarehouseManagerByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseModel>> GetWarehouses();
+        Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId);
         Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagerByBusiness(string belongToBusiness);
         Task<List<WarehouseUserModel>> GetWarehousesManagersByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode);
+        Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model);
         Task<BundleModel> UpdateBundleEquitPrice(BundleModel model);
         Task<BundleModel> UpdateBundleSubscriptions(BundleModel model);
         Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date);
