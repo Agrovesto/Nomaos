@@ -1,23 +1,9 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
-using System.Drawing;
-using System.Text;
-using System.Xml.Linq;
-using Color = System.Drawing.Color;
 using Document = iTextSharp.text.Document;
-using DocumentFormat.OpenXml.Office2010.PowerPoint;
-using DocumentFormat.OpenXml.Wordprocessing;
 using iTextSharp.text;
 using iTextSharp.text.pdf;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
-using System.Reflection.Metadata;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 using ClosedXML.Excel;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices
@@ -33,6 +19,117 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                                      )
         {
             _farmerRepository = farmerRepository;
+        }
+
+        public byte[] ConvertFarmerTransactionsToExcel(IEnumerable<FarmerSalesTrackerModel> farmers)
+
+        {
+            var list = farmers.ToList();
+
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Farmer");
+
+
+            // Header
+            var headers = new[]
+            {
+        "S/N", "FARMER NAME", "CROP SOLD", "MARKET NAME",  "STATE",
+        "MARKET DAY", "PRICE SOLD", "QUANTITY SOLD",
+        "UNIT TYPE", "TRANSACTION TYPE", "MODE OF PAYMENT",  "DATE"
+    };
+
+            for (int i = 0; i < headers.Length; i++)
+            {
+                worksheet.Cell(1, i + 1).Value = headers[i];
+                worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                //worksheet.Cell(1, i + 1).Style.Font.SetFontColor(Color.Green);
+            }
+
+            int serialNo = 1;
+            // Rows
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                var item = list[i];
+                int row = i + 2;
+                int col = 1;
+
+                worksheet.Cell(row, col++).Value = serialNo++;
+                worksheet.Cell(row, col++).Value = item.FarmerUserId;
+                worksheet.Cell(row, col++).Value = item.CropSold;
+                worksheet.Cell(row, col++).Value = item.MarketName;
+                worksheet.Cell(row, col++).Value = item.MarketState;
+                worksheet.Cell(row, col++).Value = item.MarketDay;
+                worksheet.Cell(row, col++).Value = item.TotalPriceSold.ToString();
+                worksheet.Cell(row, col++).Value = item.SoldCropUnitTypeName;
+                worksheet.Cell(row, col++).Value = item.SalesTypeName;
+                worksheet.Cell(row, col++).Value = item.ModeOfPayment;
+                worksheet.Cell(row, col++).Value = item.TransactionActualDate.ToString();
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
+        }
+        public byte[] ConvertFarmerTransactionsToPdf(IEnumerable<FarmerSalesTrackerModel> farmers)
+        {
+            var list = farmers.ToList();
+
+            using var stream = new MemoryStream();
+            var document = new Document(iTextSharp.text.PageSize.A4.Rotate(), 20f, 20f, 20f, 20f);
+            PdfWriter.GetInstance(document, stream);
+
+            document.Open();
+
+            var fontHeader = FontFactory.GetFont(FontFactory.HELVETICA_BOLD, 10, BaseColor.CYAN);
+            var fontBody = FontFactory.GetFont(FontFactory.HELVETICA, 9);
+
+
+            var table = new PdfPTable(14)
+            {
+                WidthPercentage = 100
+            };
+
+            var headers = new[]
+            {
+ "S/N", "FARMER NAME", "CROP SOLD", "MARKET NAME",  "STATE",
+        "MARKET DAY", "PRICE SOLD", "QUANTITY SOLD",
+        "UNIT TYPE", "TRANSACTION TYPE", "MODE OF PAYMENT", "DATE"
+    };
+
+            // headers
+            foreach (var header in headers)
+            {
+                var cell = new PdfPCell(new Phrase(header, fontHeader))
+                {
+                    BackgroundColor = new BaseColor(230, 255, 255),
+                    HorizontalAlignment = Element.ALIGN_CENTER,
+                    Padding = 5
+                };
+                table.AddCell(cell);
+            }
+
+            // rows
+            int serialNo = 1;
+            foreach (var item in list)
+            {
+                table.AddCell(new Phrase(serialNo++.ToString(), fontBody));
+                table.AddCell(new Phrase(item.FarmerUserId, fontBody));
+                table.AddCell(new Phrase(item.CropSold, fontBody));
+                table.AddCell(new Phrase(item.MarketName.ToString(), fontBody));
+                table.AddCell(new Phrase(item.MarketState, fontBody));
+                table.AddCell(new Phrase(item.MarketDay, fontBody));
+                table.AddCell(new Phrase(item.TotalPriceSold.ToString(), fontBody));
+                table.AddCell(new Phrase(item.SoldCropUnitTypeName, fontBody));
+                table.AddCell(new Phrase(item.SalesTypeName, fontBody));
+                table.AddCell(new Phrase(item.ModeOfPayment, fontBody));
+                table.AddCell(new Phrase(item.TransactionActualDate.ToString(), fontBody));
+            }
+
+            document.Add(table);
+            document.Close();
+
+            return stream.ToArray();
         }
 
 
