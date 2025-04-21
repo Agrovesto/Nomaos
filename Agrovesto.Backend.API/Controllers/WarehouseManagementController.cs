@@ -368,7 +368,44 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        [HttpGet("warehouse/by-agent")]
+        public async Task<IActionResult> GetWarehousesByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.GetWarehousesByAgent(query.UserId, query);
+                return Ok(new PagedListResponse<List<WarehouseModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
         [HttpGet("warehouse/{id}")]
         public async Task<IActionResult> GetSingleWarehouseDetail(long id)
         {
@@ -640,7 +677,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
         [HttpPost("ship-input")]
-        public async Task<IActionResult> ShipInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> ShipInput([FromBody] InputDeliveryTrackerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -663,7 +700,7 @@ namespace Agrovesto.Backend.API.Controllers
                 args.WarehouseId = args.WarehouseId;
 
                 var result = await _warehouseManagementManager.ConfirmInputShipment(model, args);
-                return Ok(new Response<WarehouseInputInventoryModel>()
+                return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
                     Message = "Successful",
@@ -695,7 +732,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpPost("receive-warehouse-input")]
-        public async Task<IActionResult> ReceiveInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> ReceiveInput([FromBody] InputDeliveryTrackerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -718,7 +755,7 @@ namespace Agrovesto.Backend.API.Controllers
                 args.WarehouseId = args.WarehouseId;
 
                 var result = await _warehouseManagementManager.ConfirmReceiptOfInput(model, args);
-                return Ok(new Response<WarehouseInputInventoryModel>()
+                return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
                     Message = "Successful",
@@ -856,6 +893,8 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+       
         [HttpGet("inputs-by-warehouse")]
         public async Task<IActionResult> InputsByWarehouse([FromQuery] ListQueryParams query)
         {

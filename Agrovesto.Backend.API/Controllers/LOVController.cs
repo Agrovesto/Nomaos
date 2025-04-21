@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -56,6 +57,43 @@ namespace Agrovesto.Backend.API.Controllers
                 Succeeded = request != null,
                 Message = request == null ? "Failed" : "Success",
                 Data = request != null ? request : null
+            });
+        }
+
+        [AllowAnonymous]
+        [HttpGet("states")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> States()
+        {
+
+            var request = State_CityService.GetStates().GetAwaiter().GetResult();
+            return Ok(new Response<List<States>>()
+            {
+                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                Succeeded = request != null,
+                Message = request == null ? "Failed" : "Success",
+                Data = request.Count > 0 ? request : null
+            });
+        }
+        [AllowAnonymous]
+        [HttpGet("cities/{code}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> Cities(string code)
+        {
+
+            var request = State_CityService.GetCities(code).GetAwaiter().GetResult();
+            return Ok(new Response<List<Cities>>()
+            {
+                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                Succeeded = request != null,
+                Message = request == null ? "Failed" : "Success",
+                Data = request.Count > 0 ? request : null
             });
         }
 

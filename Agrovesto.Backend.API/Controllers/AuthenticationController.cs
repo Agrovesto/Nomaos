@@ -240,6 +240,67 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
+        {
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                model.UserName = CurrentUserEmail;
+                var resetPasswordRequest = await _authenticationRepository.ChangePassword(model);
+                if (resetPasswordRequest.Status)
+                {
+                    return Ok(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Success",
+                        Data = resetPasswordRequest
+                    });
+                }
+                else
+                {
+                    return BadRequest(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.NotSuccessful,
+                        Succeeded = false,
+                        Message = "Failed",
+                        Data = resetPasswordRequest
+                    });
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
     }
 }

@@ -17,7 +17,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
         public string Capacity { get; set; }
-        public long ManagedByUserId { get; set; }
+        public string ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
         public string? BelongToBusinessCode { get; set; }
     }
@@ -53,8 +53,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public enum InputTransitStatus
     {
         Packed,
+        PickedUp,
         InTransit,
+        ArrivedDestination,
+        Delivered,
         Received
+    }
+
+    public enum LogisticType
+    {
+        Truck,
+        Bus,
+       Bike
     }
     public class WarehouseUserModel
     {

@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Amazon.S3.Util.S3EventNotification;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
@@ -46,6 +47,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness)
         {
             var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness).ToListAsync();
+            if (warehouse == null) { throw new Exception("No record found"); }
+
+            return warehouse.Select(x => x.Map()).ToList();
+        }
+           public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
+        {
+            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness && x.ManagedByUserId == agentId).ToListAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
 
             return warehouse.Select(x => x.Map()).ToList();
@@ -117,22 +125,55 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         #region BundleManagement
         public async Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode)
         {
-            var query = await _context.WarehouseInputInventories
-    .Where(w => w.BelongToBusinessCode == businessCode)
-    .Select(w => new WarehouseInputTransitModel
-    {
-        To=w.DeliveredTo,
-        From=w.InputComingFrom,
-        Status=w.TransitStatus,
-        TrackingId= w.Reference,
-        DateReceived=w.InventoryStockedOn,
-        DateShipped=w.Shipmentdate
+            var query = await (from w in _context.WarehouseInputInventories
+                               join d in _context.InputDeliveryTrackers on w.WarehouseId equals d.WarehouseId
+                               where w.BelongToBusinessCode == businessCode
+                               select new WarehouseInputTransitModel
+                               {
+                                   WarehouseId = w.WarehouseId,
+                                   WarehouseInputInventoryId = w.Id,
+                                   Status = d.Status,
+                                   InputName = w.InputName,
+                                   QuantityLoaded = d.QuantityLoaded,
+                                   QuantityDelivered = d.QuantityDelivered,
+                                   QuantityReceived = d.QuantityReceived,
+                                   DeliveredTo = d.DeliveredTo,
+                                   DeliveredBy = d.DeliveredBy,
+                                   Reference = w.Reference,
+                                   TransitStatus = w.TransitStatus,
+                                   DeliveryContact = d.DeliveryContact,
+                                   PickupLocation = d.PickupLocation,
+                                   DeliveryLocation = d.DeliveryLocation,
+                                  // LogisticType = d.LogisticType,
+                                   LogisticNumber = d.LogisticNumber,
+                                   DateReceived = w.InventoryStockedOn,
+                                    DateShipped=w.Shipmentdate,
+                                    From= d.PickupLocation,
+                                    To= d.DeliveredTo,
+                                    TrackingId= d.Reference
+                               }).ToListAsync();
 
-    }).ToListAsync();
-
-            if (query.Count == 0) { return null; }
             return query;
         }
+
+        //    public async Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode)
+        //    {
+        //        var query = await _context.WarehouseInputInventories
+        //.Where(w => w.BelongToBusinessCode == businessCode)
+        //.Select(w => new WarehouseInputTransitModel
+        //{
+        //    To=w.DeliveredTo,
+        //    From=w.InputComingFrom,
+        //    Status=w.TransitStatus,
+        //    TrackingId= w.Reference,
+        //    DateReceived=w.InventoryStockedOn,
+        //    DateShipped=w.Shipmentdate
+
+        //}).ToListAsync();
+
+        //        if (query.Count == 0) { return null; }
+        //        return query;
+        //    }
         public async Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode)
         {
             var query = await _context.Warehouses
@@ -146,8 +187,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              .GroupBy(wi => wi.InputName) 
              .Select(g => new WarehouseSummary
              {
-                 InputName = g.Key,
-                 Stocklevel = g.Sum(wi => wi.UnitBalance),
+                 Name = g.Key,
+                 Value = g.Sum(wi => wi.UnitBalance),
                  InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
              })
              .ToList()
@@ -227,7 +268,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (bundles == null || !bundles.Any())
             {
-                throw new Exception("No record found");
+                return null;
             }
 
             // Fetch warehouse names for all distinct WarehouseIds in bundles
@@ -317,7 +358,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var input = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness
             && x.WarehouseId == warehouseId).ToListAsync();
-            if (input.Count == 0) { throw new Exception("No record found"); }
+            if (input.Count == 0) { return null; }
 
             return input.Select(x => x.Map()).ToList();
         }
@@ -325,7 +366,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WarehouseInputInventoryModel> GetInputBYIdAsync(string belongToBusiness, long id)
         {
             var warehouse = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == id).FirstOrDefaultAsync();
-            if (warehouse == null) { throw new Exception("No record found"); }
+            if (warehouse == null) { return null; }
 
             return warehouse.Map();
         }
@@ -349,6 +390,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return true;
         }
 
+        public async Task<InputDeliveryTrackerModel> GetInputTracker(string reference)
+        {
+            var input= await _context.Set<InputDeliveryTracker>().FirstOrDefaultAsync(i => i.Reference == reference);
+            if (input == null) return null;
+            return input.Map();
+        }
+
+        public async Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model)
+        {
+           
+
+            var delivery = await _context.InputDeliveryTrackers.Where(x => x.BusinessCode == model.BusinessCode && x.Reference == model.Reference).FirstOrDefaultAsync();
+            if(delivery == null)
+            {
+                var newDelivery = model.Map();
+                _context.Add(newDelivery);
+            }
+            else {
+                delivery.QuantityDelivered = model.QuantityDelivered;
+                delivery.QuantityReceived = model.QuantityReceived;
+                delivery.DeliveryDate = DateTimeOffset.Now;
+                delivery.Status = Enum.GetName(typeof(InputTransitStatus), model.Status);
+
+            }
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
         public async Task<bool> DepleteAsync(long id, long unitsToDeplete)
         {
             var inventory = await _context.Set<WarehouseInputInventory>().FindAsync(id);

@@ -519,6 +519,73 @@ namespace Agrovesto.Backend.Infrastructure
                 Capacity = entity.Capacity
             };
         }
+
+        public static InputDeliveryTrackerModel Map(this InputDeliveryTracker entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new InputDeliveryTrackerModel
+            {
+               BusinessCode=entity.BusinessCode,
+                Id = entity.Id,
+                WarehouseId = entity.WarehouseId,
+                Status = entity.Status.ToEnum<InputTransitStatus>(),
+                DeliveredTo = entity.DeliveredTo,
+                Reference = entity.Reference,
+                WarehouseInputInventoryId=entity.WarehouseInputInventoryId,
+                DeliveredBy=entity.DeliveredBy,
+                DeliveryContact= entity.DeliveryContact,
+                DeliveryDate= entity.DeliveryDate,
+                DeliveryLocation= entity.DeliveryLocation,
+                PickUpDate= entity.PickUpDate,
+                QuantityDelivered= entity.QuantityDelivered,
+                InputName= entity.InputName,
+                LogisticNumber= entity.LogisticNumber,
+                LogisticType = entity.LogisticType.ToEnum<LogisticType>(),
+                PickupLocation= entity.PickupLocation,
+                QuantityLoaded= entity.QuantityLoaded,
+                QuantityReceived= entity.QuantityReceived,
+                TransitStatus= entity.Status,//Enum.GetName(typeof(InputTransitStatus), entity.Status),
+            };
+        }
+
+        public static InputDeliveryTracker Map(this InputDeliveryTrackerModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new InputDeliveryTracker
+            {
+                BusinessCode= model.BusinessCode,
+
+                WarehouseId = model.WarehouseId,
+                Status = Enum.GetName(typeof(InputTransitStatus), model.Status),
+                DeliveredTo = model.DeliveredTo,
+                Reference = model.Reference,
+                WarehouseInputInventoryId = model.WarehouseInputInventoryId,
+                DeliveredBy = model.DeliveredBy,
+                DeliveryContact = model.DeliveryContact,
+                DeliveryDate = model.DeliveryDate,
+                DeliveryLocation = model.DeliveryLocation,
+                PickUpDate = model.PickUpDate,
+                QuantityDelivered = model.QuantityDelivered,
+                InputName = model.InputName,
+                LogisticNumber = model.LogisticNumber,
+                LogisticType = Enum.GetName(typeof(LogisticType), model.LogisticType),
+             
+                PickupLocation = model.PickupLocation,
+                QuantityLoaded = model.QuantityLoaded,
+                QuantityReceived = model.QuantityReceived,
+               
+            };
+        }
+
+
+
+
         #endregion warehouse
         #region userMgt
         public static FarmerImagesModel Map(this FarmerImages entities)
@@ -648,7 +715,7 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
-
+                SupervisorUserId= entities.SupervisorUserId
             };
         }
 
@@ -668,7 +735,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
-
+                SupervisorUserId = model.SupervisorUserId
             };
         }
 
@@ -754,6 +821,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = model.OrganizationId,
                 OwnerId = model.OwnerId,
                 UserId = model.UserId,
+                CafeOneCustomerId = model.CafeOneCustomerId
             };
         }
 
@@ -775,6 +843,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = entity.OrganizationId,
                 OwnerId = entity.OwnerId,
                 UserId = entity.UserId,
+                CafeOneCustomerId= entity.CafeOneCustomerId
             };
         }
 
@@ -959,9 +1028,139 @@ namespace Agrovesto.Backend.Infrastructure
 
 
         #endregion Business
+        public static TraderModel Map(this Trader entities)
+        {
+            if (entities == null) { return null; }
+            return new TraderModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.PhoneNumber,
+                UserId = entities.UserId,
+                OnBoardedOn = entities.OnBoardedOn,
+                State = entities.State,
+                Lga = entities.Lga,
+                BelongToBusinessCode = entities.BelongToBusinessCode,
+
+              //  SupervisorUserId = entities.SupervisorUserId
+            };
+        }
+
+        public static Trader Map(this TraderModel model)
+        {
+            if (model == null) { return null; }
+            return new Trader
+            {
+                // Id = model.Id,
+                Location = model.Location,
+                Name = model.Name,
+                Email = model.Email,
+                UserId = model.UserId,
+                State = model.State,
+                Lga = model.Lga,
+                BelongToBusinessCode = model.BelongToBusinessCode
+                ,
+                PhoneNumber = model.PhoneNumber,
+                OnBoardedOn = model.OnBoardedOn,
+                //SupervisorUserId = model.SupervisorUserId
+            };
+        }
+
 
 
         #region FarmerSalesMgt
+        public static FarmerSalesTracker Map(this FarmerSalesTrackerModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmerSalesTracker()
+            {
+                CropPricePerUnitSold = model.CropPricePerUnitSold,
+                CollectionDate = model.CollectionDate,
+                CropSold = model.CropSold,
+                CollectionOfficerId = model.CollectionOfficerId,
+                CostOfPackagingMaterial = model.CostOfPackagingMaterial,
+                FarmerUserId = model.FarmerUserId,
+                IntendedPriceToSellPerUnit = model.IntendedPriceToSellPerUnit,
+                IsCropPackaged = model.IsCropPackaged,
+                IsCropTransportedToMarket = model.IsCropTransportedToMarket,
+                MarketState = model.MarketState,
+                QuantitySoldToday = model.QuantitySoldToday,
+                TotalPriceSold = model.TotalPriceSold,
+                TotalTimeSpentInMarket = model.TotalTimeSpentInMarket,
+                MarketLga = model.MarketLga,
+                MarketLocation = model.MarketLocation,
+                MarketName = model.MarketName,
+                MeansOfTransport = model.MeansOfTransport,
+                ModeOfPayment = model.ModeOfPayment,
+                QuantityBroughtToMarket = model.QuantityBroughtToMarket,
+                OtherCost = model.OtherCost,
+                PackagingType = model.PackagingType,
+                TransportCost = model.TransportCost,
+                UnitType = Enum.GetName(typeof(UnitType), model.UnitType),           
+                TransactionActualDate= model.TransactionActualDate,
+                SalesType = Enum.GetName(typeof(SalesType), model.SalesType),
+                BelongToBusinessCode= model.BelongToBusinessCode,
+                supervisorId= model.supervisorId,
+                MarketDay= model.MarketDay,
+                SoldCropUnitType = Enum.GetName(typeof(UnitType), model.SoldCropUnitType),
+                PriceOfLowestUnit = model.PriceOfLowestUnit,
+                LowestUnitQuntity = model.LowestUnitQuntity
+            };
+        }
+
+        public static FarmerSalesTrackerModel Map(this FarmerSalesTracker entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmerSalesTrackerModel()
+            {
+                SalesTypeName= entity.SalesType,
+                SoldCropUnitTypeName= entity.SoldCropUnitType,
+                UnitTypeName= entity.UnitType,
+                Id =entity.Id,
+               CropPricePerUnitSold = entity.CropPricePerUnitSold,
+               CollectionDate = entity.CollectionDate,
+               CropSold=entity.CropSold,
+               CollectionOfficerId = entity.CollectionOfficerId,
+               CostOfPackagingMaterial = entity.CostOfPackagingMaterial,
+               FarmerUserId=entity.FarmerUserId,
+               IntendedPriceToSellPerUnit = entity.IntendedPriceToSellPerUnit,
+               IsCropPackaged = entity.IsCropPackaged,
+               IsCropTransportedToMarket = entity.IsCropTransportedToMarket,
+               MarketState = entity.MarketState,
+               QuantitySoldToday = entity.QuantitySoldToday,
+               TotalPriceSold=entity.TotalPriceSold,
+               TotalTimeSpentInMarket = entity.TotalTimeSpentInMarket,
+               MarketLga=entity.MarketLga,
+               MarketLocation=entity.MarketLocation,
+               MarketName=entity.MarketName,
+               MeansOfTransport=entity.MeansOfTransport,
+               ModeOfPayment=entity.ModeOfPayment,
+               QuantityBroughtToMarket=entity.QuantityBroughtToMarket,
+               OtherCost=entity.OtherCost,
+               PackagingType=entity.PackagingType,
+               TransportCost=entity.TransportCost,
+               //UnitType= entity.UnitType.ToEnum<UnitType>(),
+                supervisorId= entity.supervisorId,
+                TransactionActualDate = entity.TransactionActualDate,
+                //SalesType = entity.SalesType.ToEnum<SalesType>(),
+                BelongToBusinessCode=entity.BelongToBusinessCode,
+                //UnitTypeName= Enum.GetName(typeof(UnitType), entity.UnitType),
+                MarketDay= entity.MarketDay,
+                PriceOfLowestUnit= entity.PriceOfLowestUnit,
+                LowestUnitQuntity= entity.LowestUnitQuntity
+                //  SoldCropUnitType = entity.SoldCropUnitType,
+            };
+        }
+
+
         #endregion FarmerSalesMgt
         #region RoleMgt
         public static Role Map(this RoleModel model)
@@ -974,7 +1173,8 @@ namespace Agrovesto.Backend.Infrastructure
             return new Role
             {
                 Descriptions = model.RoleDescription,
-                Name = model.RoleName
+                Name = model.RoleName,
+                IsAvailableToBusiness=model.IsAvailableToBusiness
             };
         }
 
@@ -989,7 +1189,8 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 RoleId = entity.Id,
                 RoleDescription = entity.Descriptions,
-                RoleName = entity.Name
+                RoleName = entity.Name,
+                IsAvailableToBusiness = entity.IsAvailableToBusiness
             };
         }
         #endregion RoleMgt

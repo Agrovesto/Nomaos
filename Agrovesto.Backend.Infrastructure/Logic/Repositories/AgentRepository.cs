@@ -25,6 +25,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             try
             {
+                var existingAgent = await _context.Agents
+                   .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+                if (existingAgent != null)
+                {
+                    // Agent already exists, return the existing one
+                    return (true, existingAgent.Map());
+                }
+
                 var entity = data.Map();
 
                 await _context.AddAsync(entity);
@@ -52,6 +61,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return Agent.Map();
         }
 
+        public async Task<AgentModel> GetAgentBySuperVisor(string userId)
+        {
+            var Agent = await _context.Agents.Where(x => x.SupervisorUserId == userId).FirstOrDefaultAsync();
+            if (Agent == null)
+            {
+                return null;
+            }
+            return Agent.Map();
+        }
         public async Task<AgentModel> GetAgentDetailById(long Id)
         {
             var Agent = await _context.Agents.Where(x => x.Id == Id).FirstOrDefaultAsync();

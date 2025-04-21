@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -23,27 +24,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
         {
-            var query = await (from b in _context.BusinessWorkers
-                               join u in _context.Users
-                               on b.UserId equals u.Id
-                               where b.BusinessId == businessId
-                               orderby  b.CreatedOn
-                               select new BusinessWorkerModel
-                               {
-                                   BusinessId = businessId,
-                                   BusinessWorkerId= b.BusinessWorkerId,
-                                   Email=u.Email,
-                                   FullName=u.Name,
-                                   PhoneNumber=u.PhoneNumber,
-                                   UserId=u.Id
-                               }).ToListAsync();           
+         
+
+            var list = await (from b in _context.BusinessWorkers
+                              join u in _context.Users on b.UserId equals u.Id
+                              join ur in _context.UserRoles on u.Id equals ur.UserId into userRoles
+                              from ur in userRoles.DefaultIfEmpty()
+                              join rl in _context.Roles on ur.RoleId equals rl.Id into roles
+                              from role in roles.DefaultIfEmpty()
+                              where b.BusinessId == businessId
+                              orderby b.CreatedOn
+                              select new BusinessWorkerModel
+                              {
+                                  BusinessId = businessId,
+                                  BusinessWorkerId = b.BusinessWorkerId,
+                                  Email = u.Email,
+                                  FullName = u.Name,
+                                  PhoneNumber = u.PhoneNumber,
+                                  UserId = u.Id,
+                                  RoleId = ur.RoleId,
+                                  RoleName = role.Name ?? "No Role Assigned",
+                                  CreatedOn = b.CreatedOn
+                              })
+                  .ToListAsync();
+
+            var query = list
+                .GroupBy(x => x.UserId)
+                .Select(g => g.First()) // Pick the first for each unique user
+                .Take(50)
+                .ToList();
+
+            return query.Any() ? query : null;
 
 
-            if (query.Count > 0)
-            {
-                return query;
-            }
-            return null;
         }
         public async Task<int> BusinessCount()
         {
@@ -51,6 +64,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId)
         {
+            var businessExist = await _context.Businesses
+              .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (businessExist != null)
+            {
+                // Business already exists, return the existing one
+                return  businessExist.Map();
+            }
             Business business = businessModel.Map();
             byte[] salt = EncryptionUtil.GetSalt();
             business.BusinessCodeSignageSalt = Convert.ToBase64String(salt);
@@ -92,6 +113,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                   BusinessId=s.BusinessId,
                   Website=s.Website,
                   UserId=s.UserId,
+                  DisputeEmail=s.DisputeEmail,
+                  SupportEmail=s.SupportEmail,
+                  BusinessCodeSignage=s.BusinessCodeSignage,
+                  BusinessCodeSignageSalt
+                  =s.BusinessCodeSignageSalt,
+                  CreatedOn=s.CreatedOn,
+                  BusinessWorkers=s.BusinessWorkers.Select(x=> new BusinessWorkerModel
+                  {
+                      BusinessId=x.BusinessId,
+                      BusinessWorkerId=x.BusinessWorkerId,
+                      UserId= x.UserId,
+                     
+                  }).ToArray(),
+                  BVN = s.BVN,
+                  Category=s.Category.ToEnum<Category>(),
+                  ContactEmail=s.ContactEmail,
+                  NIN=s.NIN,
+                  
               }).ToListAsync();
             if (business == null)
             {

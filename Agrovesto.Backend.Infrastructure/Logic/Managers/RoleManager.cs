@@ -105,6 +105,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
 
             var role = model.Map();
+            
             var result = await _roleManager.CreateAsync(role);
             if (result.Succeeded)
             {
@@ -134,7 +135,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var result = await _userManager.AddToRoleAsync(user, role.Name);
             return result.Succeeded;
         }
+        public async Task<PagedListResponse<List<RoleModel>>> GetBusinessRoles()
+        {
+            var roles = await _roleManager.Roles.Where(x => x.IsAvailableToBusiness).ToListAsync();
 
+            var roleMap = roles.Select(x => x.Map()).ToList();
+            return new PagedListResponse<List<RoleModel>>
+            {
+                Data = roleMap,
+                Code = "00",
+                Message = "",
+                Count = roleMap.Count,
+                Succeeded = true,
+            };
+        }
         public async Task<PagedListResponse<List<RoleModel>>> GetRolesAsync()
         {
             var roles = await _roleManager.Roles.ToListAsync();
