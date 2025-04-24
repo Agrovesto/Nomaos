@@ -105,6 +105,7 @@ builder.Services.AddSwaggerGen(option =>
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
+
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -119,6 +120,8 @@ builder.Services.AddSwaggerGen(option =>
             new string[]{}
         }
     });
+
+   // option.OperationFilter<AddCustomHeaderParameter>();
 });
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");

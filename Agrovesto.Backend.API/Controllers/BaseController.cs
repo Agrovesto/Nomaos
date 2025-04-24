@@ -22,6 +22,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             get
             {
+                var headers = _httpContextAccessor.HttpContext?.Request.Headers;
                 var header = _httpContextAccessor.HttpContext?.Request.Headers["Domain"];
                 if (string.IsNullOrEmpty(header)) return string.Empty;
                 return header;
