@@ -25,6 +25,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long CooperativeId { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string OfficerName { get; set; }
+        public decimal FarmerTransportCost { get; set; }
+        public decimal FarmerLabourCost {  get; set; }
+        public decimal InputCost { get; set; } //input can be seed, water, fertilizer
+        public string? InputType { get; set; }
+        public double InputQuantity { get; set; }
+        public decimal OtherCost { get; set; }
+        public decimal TotalCost { get; set; }
     }
 
     public class FarmActivityType

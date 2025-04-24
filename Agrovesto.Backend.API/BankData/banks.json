@@ -1,0 +1,670 @@
+[
+  {
+    "Code": "000001",
+    "Bank_name": "Sterling Bank"
+  },
+  {
+    "Code": "000002",
+    "Bank_name": "Keystone Bank"
+  },
+  {
+    "Code": "000003",
+    "Bank_name": "FCMB"
+  },
+  {
+    "Code": "000004",
+    "Bank_name": "United Bank for Africa"
+  },
+  {
+    "Code": "000005",
+    "Bank_name": "Diamond Bank"
+  },
+  {
+    "Code": "000006",
+    "Bank_name": "JAIZ Bank"
+  },
+  {
+    "Code": "000007",
+    "Bank_name": "Fidelity Bank"
+  },
+  {
+    "Code": "000008",
+    "Bank_name": "Polaris Bank"
+  },
+  {
+    "Code": "000009",
+    "Bank_name": "Citi Bank"
+  },
+  {
+    "Code": "000010",
+    "Bank_name": "Ecobank Bank"
+  },
+  {
+    "Code": "000011",
+    "Bank_name": "Unity Bank"
+  },
+  {
+    "Code": "000012",
+    "Bank_name": "StanbicIBTC Bank"
+  },
+  {
+    "Code": "000013",
+    "Bank_name": "GTBank Plc"
+  },
+  {
+    "Code": "000014",
+    "Bank_name": "Access Bank"
+  },
+  {
+    "Code": "000015",
+    "Bank_name": "Zenith Bank Plc"
+  },
+  {
+    "Code": "000016",
+    "Bank_name": "First Bank of Nigeria"
+  },
+  {
+    "Code": "000017",
+    "Bank_name": "Wema Bank"
+  },
+  {
+    "Code": "000018",
+    "Bank_name": "Union Bank"
+  },
+  {
+    "Code": "000019",
+    "Bank_name": "Enterprise Bank"
+  },
+  {
+    "Code": "000020",
+    "Bank_name": "Heritage"
+  },
+  {
+    "Code": "000021",
+    "Bank_name": "Standard Chartered"
+  },
+  {
+    "Code": "000022",
+    "Bank_name": "Suntrust Bank"
+  },
+  {
+    "Code": "000023",
+    "Bank_name": "Providus Bank"
+  },
+  {
+    "Code": "000024",
+    "Bank_name": "Rand Merchant Bank"
+  },
+  {
+    "Code": "000025",
+    "Bank_name": "Titan Trust Bank"
+  },
+  {
+    "Code": "000026",
+    "Bank_name": "Taj Bank"
+  },
+  {
+    "Code": "000027",
+    "Bank_name": "Globus Bank"
+  },
+  {
+    "Code": "000028",
+    "Bank_name": "Central Bank of Nigeria"
+  },
+  {
+    "Code": "000029",
+    "Bank_name": "Lotus Bank"
+  },
+  {
+    "Code": "000031",
+    "Bank_name": "Premium Trust Bank"
+  },
+  {
+    "Code": "000033",
+    "Bank_name": "eNaira"
+  },
+  {
+    "Code": "000034",
+    "Bank_name": "Signature Bank"
+  },
+  {
+    "Code": "000036",
+    "Bank_name": "Optimus Bank"
+  },
+  {
+    "Code": "050002",
+    "Bank_name": "FEWCHORE FINANCE COMPANY LIMITED"
+  },
+  {
+    "Code": "050003",
+    "Bank_name": "SageGrey Finance Limited"
+  },
+  {
+    "Code": "050005",
+    "Bank_name": "AAA Finance"
+  },
+  {
+    "Code": "050006",
+    "Bank_name": "Branch International Financial Services"
+  },
+  {
+    "Code": "050007",
+    "Bank_name": "Tekla Finance Limited"
+  },
+  {
+    "Code": "050009",
+    "Bank_name": "Fast Credit"
+  },
+  {
+    "Code": "050010",
+    "Bank_name": "Fundquest Financial Services Limited"
+  },
+  {
+    "Code": "050012",
+    "Bank_name": "Enco Finance"
+  },
+  {
+    "Code": "050013",
+    "Bank_name": "Dignity Finance"
+  },
+  {
+    "Code": "050013",
+    "Bank_name": "Trinity Financial Services Limited"
+  },
+  {
+    "Code": "400001",
+    "Bank_name": "FSDH Merchant Bank"
+  },
+  {
+    "Code": "060001",
+    "Bank_name": "Coronation Merchant Bank"
+  },
+  {
+    "Code": "060002",
+    "Bank_name": "FBNQUEST Merchant Bank"
+  },
+  {
+    "Code": "060003",
+    "Bank_name": "Nova Merchant Bank"
+  },
+  {
+    "Code": "060004",
+    "Bank_name": "Greenwich Merchant Bank"
+  },
+  {
+    "Code": "070007",
+    "Bank_name": "Omoluabi savings and loans"
+  },
+  {
+    "Code": "090001",
+    "Bank_name": "ASOSavings & Loans"
+  },
+  {
+    "Code": "090005",
+    "Bank_name": "Trustbond Mortgage Bank"
+  },
+  {
+    "Code": "090006",
+    "Bank_name": "SafeTrust"
+  },
+  {
+    "Code": "090107",
+    "Bank_name": "FBN Mortgages Limited"
+  },
+  {
+    "Code": "100024",
+    "Bank_name": "Imperial Homes Mortgage Bank"
+  },
+  {
+    "Code": "100028",
+    "Bank_name": "AG Mortgage Bank"
+  },
+  {
+    "Code": "070009",
+    "Bank_name": "Gateway Mortgage Bank"
+  },
+  {
+    "Code": "070010",
+    "Bank_name": "Abbey Mortgage Bank"
+  },
+  {
+    "Code": "070011",
+    "Bank_name": "Refuge Mortgage Bank"
+  },
+  {
+    "Code": "070012",
+    "Bank_name": "Lagos Building Investment Company"
+  },
+  {
+    "Code": "070013",
+    "Bank_name": "Platinum Mortgage Bank"
+  },
+  {
+    "Code": "070014",
+    "Bank_name": "First Generation Mortgage Bank"
+  },
+  {
+    "Code": "070015",
+    "Bank_name": "Brent Mortgage Bank"
+  },
+  {
+    "Code": "070016",
+    "Bank_name": "Infinity Trust Mortgage Bank"
+  },
+  {
+    "Code": "070019",
+    "Bank_name": "MayFresh Mortgage Bank"
+  },
+  {
+    "Code": "090003",
+    "Bank_name": "Jubilee-Life Mortgage Bank"
+  },
+  {
+    "Code": "070017",
+    "Bank_name": "Haggai Mortgage Bank Limited"
+  },
+  {
+    "Code": "070021",
+    "Bank_name": "Coop Mortgage Bank"
+  },
+  {
+    "Code": "070023",
+    "Bank_name": "Delta Trust Microfinance Bank"
+  },
+  {
+    "Code": "070024",
+    "Bank_name": "Homebase Mortgage Bank"
+  },
+  {
+    "Code": "070025",
+    "Bank_name": "Akwa Savings & Loans Limited"
+  },
+  {
+    "Code": "070026",
+    "Bank_name": "FHA Mortgage Bank"
+  },
+  {
+    "Code": "090108",
+    "Bank_name": "New Prudential Bank"
+  },
+  {
+    "Code": "070001",
+    "Bank_name": "NPF MicroFinance Bank"
+  },
+  {
+    "Code": "070002",
+    "Bank_name": "Fortis Microfinance Bank"
+  },
+  {
+    "Code": "070006",
+    "Bank_name": "Covenant MFB"
+  },
+  {
+    "Code": "070008",
+    "Bank_name": "Page Financials"
+  },
+  {
+    "Code": "090004",
+    "Bank_name": "Parralex Microfinance bank"
+  },
+  {
+    "Code": "090097",
+    "Bank_name": "Ekondo MFB"
+  },
+  {
+    "Code": "090110",
+    "Bank_name": "VFD MFB"
+  },
+  {
+    "Code": "090111",
+    "Bank_name": "FinaTrust Microfinance Bank"
+  },
+  {
+    "Code": "090112",
+    "Bank_name": "Seed Capital Microfinance Bank"
+  },
+  {
+    "Code": "090114",
+    "Bank_name": "Empire trust MFB"
+  },
+  {
+    "Code": "090115",
+    "Bank_name": "TCF MFB"
+  },
+  {
+    "Code": "090116",
+    "Bank_name": "AMML MFB"
+  },
+  {
+    "Code": "090117",
+    "Bank_name": "Boctrust Microfinance Bank"
+  },
+  {
+    "Code": "090118",
+    "Bank_name": "IBILE Microfinance Bank"
+  },
+  {
+    "Code": "090119",
+    "Bank_name": "Ohafia Microfinance Bank"
+  },
+  {
+    "Code": "090120",
+    "Bank_name": "Wetland Microfinance Bank"
+  },
+  {
+    "Code": "090121",
+    "Bank_name": "Hasal Microfinance Bank"
+  },
+  {
+    "Code": "090122",
+    "Bank_name": "Gowans Microfinance Bank"
+  },
+  {
+    "Code": "090123",
+    "Bank_name": "Verite Microfinance Bank"
+  },
+  {
+    "Code": "090124",
+    "Bank_name": "Xslnce Microfinance Bank"
+  },
+  {
+    "Code": "090125",
+    "Bank_name": "Regent Microfinance Bank"
+  },
+  {
+    "Code": "090126",
+    "Bank_name": "Fidfund Microfinance Bank"
+  },
+  {
+    "Code": "090127",
+    "Bank_name": "BC Kash Microfinance Bank"
+  },
+  {
+    "Code": "090128",
+    "Bank_name": "Ndiorah Microfinance Bank"
+  },
+  {
+    "Code": "090129",
+    "Bank_name": "Money Trust Microfinance Bank"
+  },
+  {
+    "Code": "090130",
+    "Bank_name": "Consumer Microfinance Bank"
+  },
+  {
+    "Code": "090131",
+    "Bank_name": "Allworkers Microfinance Bank"
+  },
+  {
+    "Code": "090132",
+    "Bank_name": "Richway Microfinance Bank"
+  },
+  {
+    "Code": "090133",
+    "Bank_name": "AL-Barakah Microfinance Bank"
+  },
+  {
+    "Code": "090134",
+    "Bank_name": "Accion Microfinance Bank"
+  },
+  {
+    "Code": "090135",
+    "Bank_name": "Personal Trust Microfinance Bank"
+  },
+  {
+    "Code": "090136",
+    "Bank_name": "Microcred Microfinance Bank"
+  },
+  {
+    "Code": "090137",
+    "Bank_name": "PecanTrust Microfinance Bank"
+  },
+  {
+    "Code": "090138",
+    "Bank_name": "Royal Exchange Microfinance Bank"
+  },
+  {
+    "Code": "090139",
+    "Bank_name": "Visa Microfinance Bank"
+  },
+  {
+    "Code": "090140",
+    "Bank_name": "Sagamu Microfinance Bank"
+  },
+  {
+    "Code": "090141",
+    "Bank_name": "Chikum Microfinance Bank"
+  },
+  {
+    "Code": "090142",
+    "Bank_name": "Yes Microfinance Bank"
+  },
+  {
+    "Code": "090143",
+    "Bank_name": "Apeks Microfinance Bank"
+  },
+  {
+    "Code": "090144",
+    "Bank_name": "CIT Microfinance Bank"
+  },
+  {
+    "Code": "090145",
+    "Bank_name": "Baobab Microfinance Bank"
+  },
+  {
+    "Code": "090146",
+    "Bank_name": "Bowen Microfinance Bank"
+  },
+  {
+    "Code": "090147",
+    "Bank_name": "Lovonus Microfinance Bank"
+  },
+  {
+    "Code": "090148",
+    "Bank_name": "Infinity Microfinance Bank"
+  },
+  {
+    "Code": "090149",
+    "Bank_name": "Mainstreet Microfinance Bank"
+  },
+  {
+    "Code": "090150",
+    "Bank_name": "Infinity Microfinance Bank"
+  },
+  {
+    "Code": "090151",
+    "Bank_name": "Trust microfinance Bank"
+  },
+  {
+    "Code": "090152",
+    "Bank_name": "Rehoboth Microfinance Bank"
+  },
+  {
+    "Code": "090153",
+    "Bank_name": "CIT Microfinance Bank"
+  },
+  {
+    "Code": "090154",
+    "Bank_name": "Lapo Microfinance Bank"
+  },
+  {
+    "Code": "090155",
+    "Bank_name": "Merry Microfinance Bank"
+  },
+  {
+    "Code": "090156",
+    "Bank_name": "Addosser Microfinance Bank"
+  },
+  {
+    "Code": "090157",
+    "Bank_name": "Grooming Microfinance Bank"
+  },
+  {
+    "Code": "090158",
+    "Bank_name": "Dot Microfinance Bank"
+  },
+  {
+    "Code": "090159",
+    "Bank_name": "Bosak Microfinance Bank"
+  },
+  {
+    "Code": "090160",
+    "Bank_name": "Daylight Microfinance Bank"
+  },
+  {
+    "Code": "090161",
+    "Bank_name": "Stellas Microfinance Bank"
+  },
+  {
+    "Code": "090162",
+    "Bank_name": "Accion Microfinance Bank"
+  },
+  {
+    "Code": "090163",
+    "Bank_name": "Unical Microfinance Bank"
+  },
+  {
+    "Code": "090164",
+    "Bank_name": "Niger Delta Microfinance Bank"
+  },
+  {
+    "Code": "090165",
+    "Bank_name": "Page Microfinance Bank"
+  },
+  {
+    "Code": "090166",
+    "Bank_name": "Ologo Microfinance Bank"
+  },
+  {
+    "Code": "090167",
+    "Bank_name": "Polaris Bank"
+  },
+  {
+    "Code": "090168",
+    "Bank_name": "MicMon Microfinance Bank"
+  },
+  {
+    "Code": "090169",
+    "Bank_name": "Infinity Microfinance Bank"
+  },
+  {
+    "Code": "090170",
+    "Bank_name": "SMEFUNDS"
+  },
+  {
+    "Code": "090171",
+    "Bank_name": "Lapo Microfinance Bank"
+  },
+  {
+    "Code": "090172",
+    "Bank_name": "AB Microfinance Bank"
+  },
+  {
+    "Code": "090173",
+    "Bank_name": "Mutual Benefit Microfinance Bank"
+  },
+  {
+    "Code": "090174",
+    "Bank_name": "Blue Intercontinental Microfinance Bank"
+  },
+  {
+    "Code": "090175",
+    "Bank_name": "Quick Fund Microfinance Bank"
+  },
+  {
+    "Code": "090176",
+    "Bank_name": "Smart Microfinance Bank"
+  },
+  {
+    "Code": "090177",
+    "Bank_name": "Shepherd Trust Microfinance Bank"
+  },
+  {
+    "Code": "090178",
+    "Bank_name": "Page Microfinance Bank"
+  },
+  {
+    "Code": "090179",
+    "Bank_name": "PolyU Poly Microfinance Bank"
+  },
+  {
+    "Code": "090180",
+    "Bank_name": "Orange One Microfinance Bank"
+  },
+  {
+    "Code": "090181",
+    "Bank_name": "Letshego MFB"
+  },
+  {
+    "Code": "090182",
+    "Bank_name": "Solid Microfinance Bank"
+  },
+  {
+    "Code": "090183",
+    "Bank_name": "Onima Microfinance Bank"
+  },
+  {
+    "Code": "090184",
+    "Bank_name": "Stellas Microfinance Bank"
+  },
+  {
+    "Code": "090185",
+    "Bank_name": "Chitamu Microfinance Bank"
+  },
+  {
+    "Code": "090186",
+    "Bank_name": "Chitamu Microfinance Bank"
+  },
+  {
+    "Code": "090187",
+    "Bank_name": "Chitamu Microfinance Bank"
+  },
+  {
+    "Code": "090188",
+    "Bank_name": "Personal Trust Microfinance Bank"
+  },
+  {
+    "Code": "090189",
+    "Bank_name": "IBILE Microfinance Bank"
+  },
+  {
+    "Code": "090190",
+    "Bank_name": "OxfamEdu Microfinance Bank"
+  },
+  {
+    "Code": "090191",
+    "Bank_name": "Solid Rock Microfinance Bank"
+  },
+  {
+    "Code": "090192",
+    "Bank_name": "MPC Microfinance Bank"
+  },
+  {
+    "Code": "090193",
+    "Bank_name": "Gowans Microfinance Bank"
+  },
+  {
+    "Code": "090194",
+    "Bank_name": "SEED Capital Microfinance Bank"
+  },
+  {
+    "Code": "090195",
+    "Bank_name": "Polaris Bank"
+  },
+  {
+    "Code": "090196",
+    "Bank_name": "GTBank Plc"
+  },
+  {
+    "Code": "090197",
+    "Bank_name": "Peoples Microfinance Bank"
+  },
+  {
+    "Code": "090198",
+    "Bank_name": "VFD Microfinance Bank"
+  },
+  {
+    "Code": "090199",
+    "Bank_name": "GTBank Plc"
+  }
+]

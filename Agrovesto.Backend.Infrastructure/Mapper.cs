@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using System;
@@ -9,11 +10,70 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
+using ProviderStatus = Agrovesto.Backend.Core.Models.Common.ProviderStatus;
 
 namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        #region paymentProvider
+        public static PaymentProvider Map(this PaymentProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new PaymentProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                PaymentProviderParameters = model.PaymentProviderParameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static PaymentProviderModel Map(this PaymentProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new PaymentProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                PaymentProviderParameters = entity.PaymentProviderParameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<Core.Models.Payment.ProviderStatus>()
+            };
+        }
+        public static PaymentProviderParameter Map(this ProviderParameterModel model)
+        {
+            return new PaymentProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = model.Env.ToString()
+            };
+        }
+        public static ProviderParameterModel Map(this PaymentProviderParameter model)
+        {
+            return new ProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+
+        #endregion 
         #region FarmMgt
         public static FarmPlotDetailsModel Map(this FarmPlotDetails entity)
         {
@@ -128,7 +188,15 @@ namespace Agrovesto.Backend.Infrastructure
                 Recommendation= entity.Recommendation  ,
                 CooperativeId=entity.CooperativeId,
                 BelongToBusinessCode = entity.BelongToBusinessCode,
-                OfficerName= entity.OfficerName
+                OfficerName= entity.OfficerName,
+                FarmerLabourCost=entity.FarmerLabourCost,
+                InputCost=entity.InputCost,
+                FarmerTransportCost=entity.FarmerTransportCost,
+                OtherCost=entity.OtherCost,
+                TotalCost=entity.TotalCost,
+                InputQuantity=entity.InputQuantity,
+                InputType=entity.InputType,
+                
             };
         }
 
@@ -152,7 +220,14 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = model.BelongToBusinessCode,
                 OfficerInChargeId = model.OfficerInChargeId,
                 Recommendation = model.Recommendation,
-                OfficerName = model.OfficerName
+                OfficerName = model.OfficerName,
+                FarmerLabourCost = model.FarmerLabourCost,
+                InputCost = model.InputCost,
+                FarmerTransportCost = model.FarmerTransportCost,
+                OtherCost = model.OtherCost,
+                TotalCost = model.TotalCost,
+                InputQuantity = model.InputQuantity,
+                InputType = model.InputType,
             };
         }
         #endregion FarmMgt
