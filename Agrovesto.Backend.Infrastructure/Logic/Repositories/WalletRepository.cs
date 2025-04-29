@@ -50,7 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             account.WalletCode = model.WalletCode;
             account.IsMainAccount = false;
             account.NIN = model.NIN;
-            account.Status = model.Status;
+            account.Status = BusinessStatus.Registered.ToString();//model.Status;
             account.SubAccountName = model.SubAccountName;  
             
 

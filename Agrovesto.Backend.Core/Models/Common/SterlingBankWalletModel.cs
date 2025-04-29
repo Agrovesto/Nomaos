@@ -12,17 +12,24 @@ namespace Agrovesto.Backend.Core.Models.Common
         public long Id { get; set; }
         public string UserId { get; set; }
         public string AgrovestoUserId { get; set; }
-        public string AccountNumber { get; set; }
-        public string LedgerAccountNumber { get; set; }
+        public string CustomerId { get; set; }
         public string WalletId { get; set; }
-        public string InternalAccountId { get; set; }
+        public string AccountNumber { get; set; }
+        public string BankCode { get; set; }
+        public string BankName { get; set; }
+        public string walletClassificationId { get; set; }
+        public string currencyId { get; set; }
+        public string AccountName { get; set; }
+        public string customerTypeId { get; set; }
 
+        public string LedgerAccountNumber { get; set; }
+        public string InternalAccountId { get; set; }
+        
         public string OrganizationId { get; set; } //if user is agrovesto, then organizationId is gotten from walletprovider parameter, else it is the ownerId of the business
 
         public string OwnerId { get; set; }
         public bool IsABusinessAccount { get; set; } //true for businesses, false for ordinary users
         public DateTimeOffset CreatedOn { get; set; }
 
-        public string CafeOneCustomerId { get; set; }
     }
 }

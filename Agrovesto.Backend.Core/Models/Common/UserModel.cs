@@ -95,6 +95,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? BankAccount { get; set; }
         public string? BankName { get; set; }
         public string? BusinessCode { get; set; }
+        public string? Alias { get; set; }
     }
     public enum UserType
     {
