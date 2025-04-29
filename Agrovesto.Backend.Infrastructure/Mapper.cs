@@ -896,7 +896,14 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = model.OrganizationId,
                 OwnerId = model.OwnerId,
                 UserId = model.UserId,
-                CafeOneCustomerId = model.CafeOneCustomerId
+                CustomerId = model.CustomerId,
+                AccountName = model.AccountName,
+                BankCode = model.BankCode,
+                BankName = model.BankName,
+                currencyId = model.currencyId,
+                customerTypeId = model.customerTypeId,
+                walletClassificationId = model.walletClassificationId,
+                
             };
         }
 
@@ -918,7 +925,14 @@ namespace Agrovesto.Backend.Infrastructure
                 OrganizationId = entity.OrganizationId,
                 OwnerId = entity.OwnerId,
                 UserId = entity.UserId,
-                CafeOneCustomerId= entity.CafeOneCustomerId
+                CustomerId= entity.CustomerId,
+                AccountName = entity.AccountName,
+                BankCode = entity.BankCode,
+                BankName = entity.BankName,
+                currencyId = entity.currencyId,
+                customerTypeId = entity.customerTypeId,
+                walletClassificationId = entity.walletClassificationId,
+                Id = entity.Id,
             };
         }
 

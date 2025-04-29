@@ -61,6 +61,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Email { get; set; }
         public string Password { get; set; }
         public string accountNumber { get; set; }
+        public string customerTypeId { get; set; }
+        public string countryId { get; set; }
+        public string currencyId { get; set; }
     }
     public class ExternalBankTransferModel
 
@@ -150,55 +153,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public Customer Customer { get; set; }
         public bool PndEnabled { get; set; }
     }
-
-    public class CafeoneCustomerRequest
-    {
-        public string phoneNumber { get; set; }
-        public string firstName { get; set; }
-        public string lastName { get; set; }
-        public string email { get; set; }
-        public string dob { get; set; }
-        public string bvnNumber { get; set; }
-        public string nin { get; set; }
-    }
-
-    public class CafeoneResponseModel
-    {
-        public CafeoneDataModel Data { get; set; }
-        public int StatusCode { get; set; }
-        public string Status { get; set; }
-        public string Message { get; set; }
-    }
-
-    public class CafeoneDataModel
-    {
-        public long CreatedAt { get; set; }
-        public long UpdatedAt { get; set; }
-        public string Tier { get; set; }
-        public bool Blacklisted { get; set; }
-        public string Id { get; set; }
-        public string OrganizationId { get; set; }
-        public string UserId { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string Email { get; set; }
-        public string Dob { get; set; }
-        public string BvnNumber { get; set; }
-        public string Nin { get; set; }
-        public string Photo { get; set; }
-        public string PhoneNumber { get; set; }
-        public string TransactionLimit { get; set; }
-        public CafeonePhoneModel Phone { get; set; }
-        public string DeletedAt { get; set; }
-        public string VerifiedAt { get; set; }
-        public string UtilityBill { get; set; }
-        public string PlaceOfBirth { get; set; }
-        public string Country { get; set; }
-        public string Address1 { get; set; }
-        public string Gender { get; set; }
-        public string CustomerId { get; set; }
-    }
-
+  
     public class CafeonePhoneModel
     {
         public string CreatedAt { get; set; }

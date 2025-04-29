@@ -568,7 +568,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         ? model.Email
                         : GenerateEmail(model.Name, business.BusinessEmail);
                     subAccount.UserId = finalUser.Id;
-
+                    subAccount.Address = model.Location;
+                    subAccount.City = model.Lga;
+                    subAccount.Alias = model.Alias;
                     return subAccount;
                 }
                 catch (Exception ex)
