@@ -11,6 +11,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Individuals;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -37,6 +38,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _identityVerificationManager = identityVerificationManager;
             _context = context;
             _walletRepository = walletRepository;   
+        }
+        public async Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string userId, string env)
+        {
+            try
+            {
+
+                var userWallet = await _walletRepository.GetSterlingWallet(userId);
+                if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                var retrieveWalletDetails = await _cafeOneWalletService.RetrieveCustomerWallet(userWallet.CustomerId, userWallet.WalletId, env);
+                if (retrieveWalletDetails == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                return retrieveWalletDetails;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
         }
 
         private string ConvertedDate(string date)
@@ -175,6 +194,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<SubAccountModel> GetSubAccountByUserId(string userId)
         {
             return await _walletRepository.GetSubAccount(userId);
+        }
+        public async Task<SterlingBankWalletModel> GetUserSterlingAccount(string userId)
+        {
+            return await _walletRepository.GetSterlingWallet(userId);
         }
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {

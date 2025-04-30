@@ -6,7 +6,25 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
-  
+    public class UserWalletBalanceModel
+    {
+        public string WalletId { get; set; }
+        public string CustomerId { get; set; }
+        public string Currency { get; set; }
+        public string Status { get; set; }
+        public long AvailableBalance { get; set; }
+        public long LedgerBalance { get; set; }
+    }
+
+    public class UserAccountDetailsModel
+    {
+        public string WalletId { get; set; }
+        public string CustomerId { get; set; }
+        public string AccountNumber { get; set; }
+        public string BankCode { get; set; }
+        public string BankName { get; set; }
+        public string AccountName { get; set; }
+    }
     public class SterlingBankWalletModel
     {
         public long Id { get; set; }
