@@ -36,5 +36,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<UserModel> MakeUserAgent(BusinessRegistrationArgs args);
         Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId);
         Task<PagedListResponse<List<AgentModel>>> AgentsBySupervisor(string userId, ListQueryParams query);
+        Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(ListQueryParams query);
+        Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(ListQueryParams query);
     }
 }

@@ -175,6 +175,45 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 return null;
             }
         }
+        public async Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string customerId, string walletId, string Env)
+        {
+            var @params = await RetrieveParams(Env);        
+
+            try
+            {
+                var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
+
+
+                var headers = new Dictionary<string, string>
+                {
+                    { "x-api-key",  $"{@params.SecretKey}"},
+                   // { "Authorization",  $"Bearer {token.AccessToken}"}
+                };
+
+                var request = await _httpService.Get($"{@params.Url}/wallets/get/customer/{customerId}/wallet/{walletId}",  headers);
+                var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
+
+                var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
+                if (response.success)
+                {  
+                    return response.data;
+                }
+                else
+                {
+                    return null;
+                }
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                //  _logService.Error(ex, $"Flutterwave Initiate Payment Api Error: {errorMsg}");
+                return null;
+            }
+
+        }
+
 
         #endregion Customer Account Creation
         public async Task<CafeOnWalletResponse<WalletTransferResult>> UserWalletToBusinessWalletTransfer(WalletToWalletTransferRequest request)

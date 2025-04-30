@@ -1325,5 +1325,75 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
+        [HttpGet("bank-account-details")]
+        public async Task<IActionResult> GetUserBankAccountDetails([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountDetails(query);
+                return Ok(new Response<UserAccountDetailsModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+     [HttpGet("bank-account-balance")]
+        public async Task<IActionResult> GetUserBankAccountBalance([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountBalance(query);
+                return Ok(new Response<UserWalletBalanceModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
     }
 }
