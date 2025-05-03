@@ -1274,6 +1274,65 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("WarehouseUsers");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProvider", b =>
+                {
+                    b.Property<long>("ProviderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ProviderId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ProviderId");
+
+                    b.ToTable("PaymentProviders");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProviderParameter", b =>
+                {
+                    b.Property<long>("ParameterId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ParameterId"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Env")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("PaymentProviderProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ParameterId");
+
+                    b.HasIndex("PaymentProviderProviderId");
+
+                    b.ToTable("PaymentProviderParameters");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
                 {
                     b.Property<string>("Id")
@@ -1707,6 +1766,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProviderParameter", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProvider", "PaymentProvider")
+                        .WithMany("PaymentProviderParameters")
+                        .HasForeignKey("PaymentProviderProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PaymentProvider");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", "Business")
@@ -1805,6 +1875,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("SubAccounts");
 
                     b.Navigation("users");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProvider", b =>
+                {
+                    b.Navigation("PaymentProviderParameters");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>

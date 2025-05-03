@@ -6,7 +6,21 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
 {
-   
+    public class WalletToWalletTransferRequestModel
+    {
+        public string CustomerId { get; set; }
+        public string WalletId { get; set; }
+        public string OrganizationId { get; set; }
+        public string AgrovestoUserId { get; set; }
+        public string Remarks { get; set; }
+        public string BatchReference { get; set; }
+        public string TransactionReference { get; set; }
+        public string ProductId { get; set; }  //get from db, either debit or credit id
+        public string Direction { get; set; } //get from db, either D or C
+        public string Currency { get; set; } //get from db, default to NGN
+        public decimal Amount { get; set; }
+        public string AccountNumber { get; set; }
+    }
     public class CafeOneCustomerWalletResponse
     {
         public string Id {  get; set; }

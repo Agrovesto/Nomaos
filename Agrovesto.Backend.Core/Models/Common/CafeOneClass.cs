@@ -64,6 +64,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string customerTypeId { get; set; }
         public string countryId { get; set; }
         public string currencyId { get; set; }
+        public string currency { get; set; }
+        public string debitdirection { get; set; }
+        public string creditdirection { get; set; }
+        public string productCredit { get; set; }
+        public string productDebit { get; set; }
     }
     public class ExternalBankTransferModel
 

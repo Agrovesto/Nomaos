@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Payment;
 using System;
 using System.Collections.Generic;
 using System.Linq;

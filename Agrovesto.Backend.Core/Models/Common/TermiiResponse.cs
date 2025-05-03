@@ -60,4 +60,16 @@ namespace Agrovesto.Backend.Core.Models.Common
         public bool priority_route { get; set; } = true;
         public string campaign_name { get; set; }
     }
+
+    public class AfricaSMSResponse
+    {
+        public string Date { get; set; }
+        public string From { get; set; }
+        public string Id { get; set; }
+        public string LinkId { get; set; }
+        public string Text { get; set; }
+        public string NetworkCode { get; set; }
+        public string To { get; set; }
+
+    }
 }

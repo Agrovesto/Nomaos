@@ -13,6 +13,8 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Core.Models.Payment;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -23,10 +25,15 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IWalletProviderManager _walletProvider;
+
+        private readonly IPaymentProviderManager _providerManager;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
+            IPaymentProviderManager providerManager,
             IAuthenticationRepository authenticationRepository) : base(httpContextAccessor)
         {
+
+            _providerManager = providerManager;
             _authenticationRepository = authenticationRepository;
             _walletProvider = walletProvider;
         }
@@ -308,6 +315,141 @@ namespace Agrovesto.Backend.API.Controllers
 
         #endregion
 
+        #region payment
+        /// <summary>
+        /// Gets all provider
+        /// </summary>
+        /// <param name="pageNumber"></param>
+        /// <param name="pageSize"></param>
+        /// <returns></returns>
+        // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpGet("payment/all")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> GetAllProviders([FromQuery] int pageNumber, [FromQuery] int pageSize)
+        {
+
+            var result = await _providerManager.Get();
+            return Ok(new Response<PaymentProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Creates provider
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpPost("payment")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+        public async Task<IActionResult> CreateProvider([FromBody] PaymentProviderModel model)
+        {
+            return Ok(new Response<PaymentProviderModel>
+            {
+                Succeeded = true,
+                Data = await _providerManager.CreateProvider(model)
+            });
+        }
+        /// <summary>
+        /// Updates provider
+        /// </summary>
+        /// <param name="providerModel"></param>
+        /// <returns></returns>
+       // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpPut("payment/{id}")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+
+        public async Task<IActionResult> UpdateProvider([FromBody] PaymentProviderModel providerModel)
+        {
+            PaymentProviderModel result = await _providerManager.UpdateProvider(providerModel);
+            return Ok(new Response<object>()
+            {
+                Succeeded = true,
+                Message = "Provider has been updated successfully",
+                Data = result
+            });
+        }
+
+        /// <summary>
+        /// Gets parameters 
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        //[Authorize(Roles = "Admin")]
+        [HttpGet("payment/parameters/{id}/{Env}")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+
+        public async Task<IActionResult> GetParameters(long id, string Env)
+        {
+            var result = await _providerManager.GetParametersByProvider(id, Env);
+            return Ok(new Response<ProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Updates parameter
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        //  [Authorize(Roles = "Admin")]
+
+        [HttpPost("payment/parameters")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 422)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+        public async Task<IActionResult> UpdateParameters([FromBody] PaymentProviderModel model)
+        {
+
+            var result = await _providerManager.UpdateProviderParameter(model);
+
+
+            return Ok(new Response<PaymentProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Disables provider
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+      //  [Authorize(Roles = "Admin")]
+        [HttpPut("payment/{id}/disable")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> DisableProvider(long id)
+        {
+            bool result = await _providerManager.DisableProvider(id);
+            return Ok(new Response<object>()
+            {
+                Succeeded = result,
+                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
+
+        #endregion payment
 
     }
 }

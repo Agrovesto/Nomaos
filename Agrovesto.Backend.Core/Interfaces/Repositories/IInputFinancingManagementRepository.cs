@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +11,11 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     public interface IInputFinancingManagementRepository
     {
         Task<(bool status, BundleSubscriptionInterestModel data)> CreateInputFinancingInterestThroughBundle(BundleSubscriptionInterestModel data);
-        Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusiness(string businessCode);
+        Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetSubscriptionInterestByBusiness(string businessCode, int pageNumber = 1,
+      int pageSize = 10,
+         DateTimeOffset? startDate = null,
+         DateTimeOffset? endDate = null,
+         string? location = null);
         Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByCooperative(string businessCode, long CooperativeId);
         Task<List<BundleSubscriptionInterestModel>> GetUnpaidSubscriptionInterestByFarmer(BundleSubscriptionInterestModel data);
         Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByLocation(string businessCode, string Location);
@@ -22,7 +27,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BundleDisbursementModel> GetDisbursedSubscription(string businessCode, string farmerUserId, string reference);
         Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model);
         Task<List<BundleDisbursementModel>> GetDisbursedSubscriptions(string businessCode);
-        Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(string businessCode, string userId);
+        Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
+         int pageSize = 10);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(string businessCode);
         Task<BundleSubscriptionInterestModel> UpdateEquitySubcriiptonStatus(BundleSubscriptionInterestModel model);

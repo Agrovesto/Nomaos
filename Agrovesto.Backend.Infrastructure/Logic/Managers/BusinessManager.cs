@@ -576,22 +576,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
 
             // BVN Verification
-            if (!string.IsNullOrEmpty(model.Bvn))
-            {
-                var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
-                {
-                    image = null,
-                    number = model.Bvn
-                });
+            //if (!string.IsNullOrEmpty(model.Bvn))
+            //{
+            //    var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+            //    {
+            //        image = null,
+            //        number = model.Bvn
+            //    });
 
-                if (!bvnVerification.status)
-                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
+            //    if (!bvnVerification.status)
+            //        throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
 
-                model.DateOfBirth = ConvertedDate(bvnVerification.data.dateOfBirth);
-                model.Bvn = bvnVerification.data.bvn;
-                model.Gender = bvnVerification.data.gender;
-                model.NIN = string.IsNullOrEmpty(model.NIN) ? bvnVerification.data.nin : model.NIN;
-            }
+            //    model.DateOfBirth = ConvertedDate(bvnVerification.data.dateOfBirth);
+            //    model.Bvn = bvnVerification.data.bvn;
+            //    model.Gender = bvnVerification.data.gender;
+            //    model.NIN = string.IsNullOrEmpty(model.NIN) ? bvnVerification.data.nin : model.NIN;
+            //}
 
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
@@ -633,13 +633,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     // Check for existing subaccount
                     var existingSubAccount = await _walletManager.GetSubAccountByUserId(finalUser.Id);
                     SubAccountModel subAccount;
-
+                    model.Email = !string.IsNullOrWhiteSpace(model.Email)
+            ? model.Email
+            : GenerateEmail(model.Name, business.BusinessEmail);
                     if (existingSubAccount != null)
                     {
                         subAccount = existingSubAccount;
                     }
                     else
                     {
+             
                         subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
                     }
 
@@ -652,9 +655,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    subAccount.Email = !string.IsNullOrWhiteSpace(model.Email)
-                        ? model.Email
-                        : GenerateEmail(model.Name, business.BusinessEmail);
+                   
                     subAccount.UserId = finalUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
@@ -673,45 +674,45 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             try
             {
-                //if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
-                //{
-                //    _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
-                //    return;
-                //}
+                if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
+                {
+                    _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
+                    return;
+                }
 
-                //string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
+                string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
 
-                //var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                //{
-                //    to = $"234{phoneNumber[^10..]}",
-                //    sms = message
-                //});
+                var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                {
+                    to = $"234{phoneNumber[^10..]}",
+                    sms = message
+                });
 
-                //if (termiiResult.response !=null && termiiResult.status)
-                //{
-                //    _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
-                //}
-                //else
-                //{
-                //    _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
+                if (termiiResult.response != null && termiiResult.status)
+                {
+                    _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
+                }
+                else
+                {
+                    _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
 
-                //    var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                //    {
-                //        campaign_name = "Agrovesto Notification",
-                //        contacts = new List<string> { phoneNumber },
-                //        message = message
-                //    });
+                    var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                    {
+                        campaign_name = "Agrovesto Notification",
+                        contacts = new List<string> { phoneNumber },
+                        message = message
+                    });
 
-                //    if (whisperResult.response is not null && whisperResult.status)
-                //    {
-                //        _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
-                //    }
-                //    else
-                //    {
-                //        _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
-                //    }
-                //}
-          
+                    if (whisperResult.response is not null && whisperResult.status)
+                    {
+                        _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
+                    }
+                    else
+                    {
+                        _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
+                    }
+                }
+
             }
             catch (Exception ex)
             {
@@ -719,102 +720,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        /** public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
-         {
-             var bWorker = new BusinessWorkerModel();
-             var newBusinessWorker = new BusinessWorkerModel();
-             (UserModel model, bool status, string message) registeredUser = new(model, false, "");
-
-             if (model.PhoneNumber.Length != 11) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number length incorrect"); }
-
-             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                 ?? throw new Exception("Business does not exist");
-
-             args.UserId ??= business.UserId;
-             SubAccountModel subaccount = new SubAccountModel();
-             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
-
-             if (!string.IsNullOrEmpty(model.Bvn))
-             {
-                 var verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
-                 {
-                     image = null,
-                     number = model.Bvn
-                 });
-                 if (!verifyBvn.status) throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
-                 model.DateOfBirth = ConvertedDate(verifyBvn.data.dateOfBirth);
-                 model.Bvn = verifyBvn.data.bvn;
-                 model.Gender = verifyBvn.data.gender;
-                 model.NIN = !string.IsNullOrEmpty(verifyBvn.data.nin) ? verifyBvn.data.nin : model.NIN;
-
-             }
-             var strategy = _context.Database.CreateExecutionStrategy();
-
-             await strategy.ExecuteAsync(async () =>
-             {
-                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-                 try
-                 {
-                     if (model.UserType == "Agent")
-                     {
-
-                         var getUser = await FindByPhoneNumberAsync(model.PhoneNumber);
-                         if (getUser != null)
-                         {
-                             subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-
-                         }
-                         else
-                         {
-                             registeredUser = await RegisterUserAsync(model, args);
-                             if (!registeredUser.status)
-                                 throw new Exception($"Could not register user {registeredUser.message}");
-                             subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-
-
-                         }
-                     }
-                     else
-                     {
-                          registeredUser = await RegisterUserAsync(model, args);
-                         if (!registeredUser.status)
-                             throw new Exception($"Could not register user {registeredUser.message}");
-                         subaccount = await CreateSubAccountAsync(model, args, business, registeredUser.model.Id);
-
-                     }
-
-                     newBusinessWorker = await CreateUserCategory(model, args, bWorker, newBusinessWorker, business, subaccount, registeredUser);
-
-                     await _context.SaveChangesAsync();
-                     await dbTransaction.CommitAsync();
-                
-                     subaccount.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.Name, business.BusinessEmail);
-                     subaccount.UserId = registeredUser.model.Id;
-                     //var messageBody = $"You are welcome onboard. ";
-
-                     //var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                     //{
-                     //    campaign_name = "Agrovesto Notification",
-                     //    contacts = new List<string> { model.PhoneNumber },
-                     //    message = messageBody,
-                     //});
-                     //var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                     //{
-                     //    to = $"234{model.PhoneNumber.GetLast(10)}",
-                     //    sms = messageBody
-                     //});
-                     return subaccount;
-                 }
-                 catch (Exception ex)
-                 {
-                     await dbTransaction.RollbackAsync();
-                     throw new Exception($"{ex.Message}", ex);
-                 }
-             });
-             return subaccount;
-         }
-         **/
-        private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
+         private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
         {
             if(userType != null)
             {

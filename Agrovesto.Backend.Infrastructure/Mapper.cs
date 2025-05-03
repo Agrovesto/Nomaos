@@ -10,7 +10,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
-using ProviderStatus = Agrovesto.Backend.Core.Models.Common.ProviderStatus;
 
 namespace Agrovesto.Backend.Infrastructure
 {
@@ -55,7 +54,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Description = model.Description,
                 Key = model.Key,
                 ParameterId = model.ParameterId,
-                ProviderId = model.ProviderId,
+                PaymentProviderProviderId = model.ProviderId,
                 Value = model.Value,
                 Env = model.Env.ToString()
             };
@@ -67,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Description = model.Description,
                 Key = model.Key,
                 ParameterId = model.ParameterId,
-                ProviderId = model.ProviderId,
+                ProviderId = model.PaymentProviderProviderId,
                 Value = model.Value,
                 Env = model.Env.ToEnum<Env>()
             };

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -114,14 +115,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Select(x => x.Map()).ToList();
         }
-          public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(string businessCode, string userId)
+          public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
+      int pageSize = 10)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode 
             && x.OfficerInChargeUserId == userId).ToListAsync();
 
-            if (!interest.Any()) { return null; }
+            if (interest.Count() == 0) { return null; }
+            var totalCount =  interest.Count();
 
-            return interest.Select(x => x.Map()).ToList();
+            var data= interest.OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Map()).ToList();
+            return new PagedListResponse<List<BundleSubscriptionInterestModel>>
+            {
+                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
         }
 
         public async Task<BundleSubscriptionInterestModel> GetPaidSubscriptionByFarmer(string businessCode, string farmerUserId, string reference)
@@ -132,15 +145,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Map();
         }
-        public async Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusiness(string businessCode)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetSubscriptionInterestByBusiness(string businessCode, int pageNumber = 1,
+      int pageSize = 10, 
+         DateTimeOffset? startDate = null,
+         DateTimeOffset? endDate = null,
+         string? location = null)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
+            var query =  _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode
+            ).AsQueryable();
 
-            if (!interest.Any()) { return null; }
+         
 
-            return interest.Select(x => x.Map()).ToList();
-        }
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.CreatedOn >= startDate.Value);
+            }
 
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.CreatedOn <= endDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                query = query.Where(x => x.Location == location);
+            }
+            if (query.Count() == 0) { return null; }
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Map()).ToListAsync();
+            return new PagedListResponse<List<BundleSubscriptionInterestModel>>
+            {
+                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
+            }
         public async Task<BundleSubscriptionInterestModel> UpdateSubscriptionPayment(BundleSubscriptionInterestModel model)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();

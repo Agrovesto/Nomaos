@@ -497,7 +497,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
                 model.UserId = args.UserId;
                 var update=  await _businessManager.UpdateUserAccountProfile(model, args, args.UserId);
                 if (update.WalletCode != null)
