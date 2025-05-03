@@ -26,6 +26,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Bvn { get; set; }
         public string? DOB { get; set; }
         public string? NIN { get; set; }
+        public string City { get; set; }
+        public string Alias { get; set; }
+        public string Address { get; set; }
         public SubAccountType SubAccountType { get; set; }  
     }
     public enum SubAccountType

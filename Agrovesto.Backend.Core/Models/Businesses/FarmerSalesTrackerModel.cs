@@ -47,7 +47,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public UnitType SoldCropUnitType { get; set; }
         public string? SoldCropUnitTypeName { get; set; }
         public decimal PriceOfLowestUnit { get; set; }
-
+        public string? FarmerName { get; set; }
         public double LowestUnitQuntity { get; set; }
     }
     public enum SalesType

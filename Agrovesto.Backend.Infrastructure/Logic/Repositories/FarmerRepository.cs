@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -296,13 +297,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<FarmerModel> GetFarmerByUserId(string userId)
         {
-            //var farmer = await _context.Farmers.Where(x => x.UserId == userId).FirstOrDefaultAsync();
-            //if (farmer == null)
-            //{
-            //    return null;
-            //}
-            //return farmer.Map();
-
             var farmers = await _context.Farmers.
                Where(x => x.UserId == userId).FirstOrDefaultAsync();
 
@@ -359,15 +353,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-        //public async Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId)
-        //{
-        //    var farmer = await _context.Farmers.Where(x=>x.OnboardedByUserId == userId).ToListAsync();
-        //    if (farmer.Count > 0)
-        //    {
-        //        return farmer.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
-        //    }
-        //    return null;
-        //}
+
+        public async Task<PagedListResponse<List<FarmerModel>>> FilterFarmers(
+  int pageNumber = 1,
+  int pageSize = 10,
+  DateTimeOffset? startDate = null,
+  DateTimeOffset? endDate = null,
+  string? location = null)
+        {
+            //var query = _context.FarmerSalesTracker
+
+            //    .AsQueryable();
+            var query = _context.Farmers
+          
+           .AsQueryable();
+          
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.OnBoardedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.OnBoardedOn <= endDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                query = query.Where(x => x.State == location);
+            }
+            if (query.Count() == 0) { return null; }
+            var totalCount = await query.CountAsync();
+
+
+            var pagedResult = await query
+                .OrderByDescending(x => x.OnBoardedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+               .ToListAsync();
+            return new PagedListResponse<List<FarmerModel>>
+            {
+                Data = pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
 
         public async Task<List<FarmerModel>> GetFarmersByOnboardedUserId(string userId, ListQueryParams query)
         {
@@ -446,6 +477,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var farmers = await _context.Farmers
                 .Where(x => x.BelongToBusinessCode == businessCode)
+                .OrderByDescending(x => x.OnBoardedOn)
                 .ToListAsync();
 
             if (farmers == null || !farmers.Any())

@@ -76,6 +76,94 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
         }
+
+        public async Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(
+
+        ListQueryParams query)
+        {
+            try
+            {
+                var user = await _authenticationRepository.GetUserById(query.UserId);
+                if (user.model == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found"); }
+
+                var accountDetails = await _walletManager.GetUserSterlingAccount(query.UserId); 
+                if(accountDetails == null) {
+                    return new Response<UserAccountDetailsModel>
+                    {
+                        Succeeded = true,
+                        Data = null,
+                        Message = "No Record Found"
+                    };
+                }
+                var account = new UserAccountDetailsModel
+                {
+                    WalletId = accountDetails.WalletId,
+                    CustomerId = accountDetails.CustomerId,
+                    AccountName=accountDetails.AccountName,
+                    AccountNumber = accountDetails.AccountNumber,
+                    BankCode = accountDetails.BankCode,
+                    BankName = accountDetails.BankName,
+                };
+                return new Response<UserAccountDetailsModel>
+                {
+                    Succeeded = true,
+                    Data = account,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving User Account: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
+        public async Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(
+
+        ListQueryParams query)
+        {
+            try
+            {
+                var user = await _authenticationRepository.GetUserById(query.UserId);
+                if (user.model == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found"); }
+
+
+                var userBalance = await _walletManager.RetrieveCustomerWallet(query.UserId, query.env);
+                if (userBalance == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+                var accountDetails = new UserWalletBalanceModel
+                {
+                    AvailableBalance=userBalance.availableBalance,
+                    LedgerBalance=userBalance.ledgerBalance,
+                    //Status=userBalance,
+                    WalletId=userBalance.Id,
+                    Currency=userBalance.currencyId,
+                    CustomerId=userBalance.customerId,
+                };
+                return new Response<UserWalletBalanceModel>
+                {
+                    Succeeded = true,
+                    Data = accountDetails,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving User Account: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
         public async Task<PagedListResponse<List<AgentModel>>> AgentsBySupervisor(string userId,
       ListQueryParams query)
         {
@@ -568,7 +656,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         ? model.Email
                         : GenerateEmail(model.Name, business.BusinessEmail);
                     subAccount.UserId = finalUser.Id;
-
+                    subAccount.Address = model.Location;
+                    subAccount.City = model.Lga;
+                    subAccount.Alias = model.Alias;
                     return subAccount;
                 }
                 catch (Exception ex)

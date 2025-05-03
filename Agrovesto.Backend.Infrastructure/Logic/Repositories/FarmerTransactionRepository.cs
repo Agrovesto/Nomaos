@@ -300,40 +300,81 @@ DateTime? endDate)
       DateTimeOffset? endDate = null,
       string? location = null)
         {
-            var query = _context.FarmerSalesTracker
-                .AsQueryable();
+            //var query = _context.FarmerSalesTracker
 
+            //    .AsQueryable();
+            var query = from sale in _context.FarmerSalesTracker
+                        join farmer in _context.Farmers
+                            on sale.FarmerUserId equals farmer.UserId
+                        select new { sale, farmer };
             // Apply filters dynamically
             if (!string.IsNullOrWhiteSpace(transactionType))
             {
-                query = query.Where(x => x.SalesType == transactionType);
+                query = query.Where(x => x.sale.SalesType == transactionType);
             }
 
             if (startDate.HasValue)
             {
-                query = query.Where(x => x.CollectionDate >= startDate.Value);
+                query = query.Where(x => x.sale.CollectionDate >= startDate.Value);
             }
 
             if (endDate.HasValue)
             {
-                query = query.Where(x => x.CollectionDate <= endDate.Value);
+                query = query.Where(x => x.sale.CollectionDate <= endDate.Value);
             }
 
             if (!string.IsNullOrWhiteSpace(location))
             {
-                query = query.Where(x => x.MarketLocation == location);
+                query = query.Where(x => x.sale.MarketLocation == location);
             }
             if (query.Count() == 0) { return null; }
             var totalCount = await query.CountAsync();
-            // Apply pagination and ordering
+            
+
             var pagedResult = await query
-                .OrderByDescending(x => x.CollectionDate)
+                .OrderByDescending(x => x.sale.TransactionActualDate)
                 .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Take(pageSize).
+                Select(x=> new FarmerSalesTrackerModel
+                {
+                    BelongToBusinessCode=x.sale.BelongToBusinessCode,
+                    CollectionDate=x.sale.CollectionDate,
+                    CollectionOfficerId=x.sale.CollectionOfficerId,
+                    CostOfPackagingMaterial=x.sale.CostOfPackagingMaterial,
+                    CropPricePerUnitSold=x.sale.CropPricePerUnitSold,
+                    FarmerUserId=x.sale.FarmerUserId,
+                    IntendedPriceToSellPerUnit=x.sale.IntendedPriceToSellPerUnit,
+                    IsCropPackaged=x.sale.IsCropPackaged,
+                    IsCropTransportedToMarket=x.sale.IsCropTransportedToMarket,
+                    LowestUnitQuntity=x.sale.LowestUnitQuntity,
+                    MarketLga=x.sale.MarketLga,
+                    MeansOfTransport=x.sale.MeansOfTransport,
+                    ModeOfPayment=x.sale.ModeOfPayment,
+                    OtherCost=x.sale.OtherCost,
+                    PackagingType=x.sale.PackagingType,
+                    PriceOfLowestUnit=x.sale.PriceOfLowestUnit,
+                    QuantityBroughtToMarket=x.sale.QuantityBroughtToMarket,
+                    QuantitySoldToday=x.sale.QuantitySoldToday,
+                    SalesTypeName=x.sale.SalesType,
+                    SoldCropUnitTypeName=x.sale.SoldCropUnitType,
+                    supervisorId=x.sale.supervisorId,
+                    TransportCost=x.sale.TransportCost,
+                    UnitTypeName=x.sale.UnitType,
+                    Id = x.sale.Id,
+                    CropSold = x.sale.CropSold,
+                    TotalPriceSold = x.sale.TotalPriceSold,
+                    MarketName = x.sale.MarketName,
+                    MarketDay = x.sale.MarketDay,
+                    MarketState = x.sale.MarketState,
+                    MarketLocation = x.sale.MarketLocation,
+                    TotalTimeSpentInMarket = x.sale.TotalTimeSpentInMarket,
+                    TransactionActualDate = x.sale.CollectionDate,
+                    FarmerName = x.farmer.Name
+                })
                 .ToListAsync();
             return new PagedListResponse<List<FarmerSalesTrackerModel>>
             {
-                Data = pagedResult.Select(x => x.Map()).ToList(),
+                Data = pagedResult,//pagedResult.Select(x => x.Map()).ToList(),
                 Count = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize

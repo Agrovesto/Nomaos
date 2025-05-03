@@ -624,12 +624,27 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("FarmActivityId")
                         .HasColumnType("bigint");
 
+                    b.Property<decimal>("FarmerLabourCost")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("FarmerName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("FarmerTransportCost")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("FarmerUserId")
                         .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("InputCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<double>("InputQuantity")
+                        .HasColumnType("float");
+
+                    b.Property<string>("InputType")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OfficerInChargeId")
@@ -640,9 +655,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal>("OtherCost")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Recommendation")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("TotalCost")
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -1300,19 +1321,32 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("AccountName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("AccountNumber")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("AgrovestoUserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("CafeOneCustomerId")
+                    b.Property<string>("BankCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BankName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CustomerId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("InternalAccountId")
                         .HasColumnType("nvarchar(max)");
@@ -1334,6 +1368,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("WalletId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("currencyId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("customerTypeId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("walletClassificationId")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
