@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Payment;
 using SendGrid.Helpers.Errors.Model;
 using System;
 using System.Collections.Generic;

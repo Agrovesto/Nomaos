@@ -29,6 +29,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<SubAccount> SubAccounts { get; set; }
         public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
 
+        public DbSet<PaymentProvider> PaymentProviders { get; set; }
+        public DbSet<PaymentProviderParameter> PaymentProviderParameters { get; set; }
         public DbSet<WalletProvider> WalletProviders { get; set; }
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }

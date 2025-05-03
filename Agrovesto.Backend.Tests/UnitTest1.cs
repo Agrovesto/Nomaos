@@ -33,7 +33,7 @@ namespace Agrovesto.Backend.Tests
 
             _mockHttpContextAccessor.Setup(x => x.HttpContext).Returns(httpContext);
 
-            _controller = new AdminController(_mockHttpContextAccessor.Object,_manager.Object, _authRepo.Object);
+           // _controller = new AdminController(_mockHttpContextAccessor.Object,_manager.Object, _authRepo.Object);
         }
         //[Fact]
         //public void GetProduct_ReturnsNotFound_WhenProductMissing()

@@ -68,13 +68,14 @@ namespace Agrovesto.Backend.API.Controllers
                 var result = await _inputFinancingManagement.GetInterestRequestByAgent(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
-                    Data = result,
-                    Message = result.Any() ? "Successful" : "No Record",
-                    Succeeded = result.Any() ? true : false,
+                    Data = result.Data,
+                    Message = result.Count != 0 ? "Successful" : "No Record",
+                    Succeeded = result.Count !=0 ? true : false,
                     Count = result.Count,
-                    //PageNumber = ,
-                    PageSize = 10,
-                    Code = result.Any() ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
+                    
+                    Code = result.Count != 0 ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
             catch (BaseException ex)

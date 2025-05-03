@@ -15,6 +15,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<SubAccountModel> GetSubAccountByUserId(string userId);
         Task<SterlingBankWalletModel> GetUserSterlingAccount(string userId);
         Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string userId, string env);
+        Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string env);
+        Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string env);
         Task<SubAccountModel> UpdateBusinessProfile(SubAccountModel model, ParameterArgs args);
         Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args);
     }

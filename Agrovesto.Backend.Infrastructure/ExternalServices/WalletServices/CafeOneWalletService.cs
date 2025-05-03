@@ -25,14 +25,43 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             _httpService = httpService;
             _walletRepository = walletRepository;
         }
+        public async Task<CafeOneParams> RetrieveParams(string Env)
+        {
+            var response = new CafeOneParams();
+            var provider = await _providerRepo.GetActiveProvider();
+            var providerId = provider.Where(x => x.Code == "CafeOne").FirstOrDefault().ProviderId;
+            var parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
+            var _params = parameters.ToDictionary(x => x.Key);
+
+            response.Url = _params["url"].Value;
+            response.SecretKey = _params["secretkey"].Value;
+            response.PublicKey = _params["publickey"].Value;
+            response.OrganizationId = _params["organizationId"].Value;
+            response.OwnerId = _params["ownerId"].Value;
+            response.Email = _params["email"].Value;
+            response.Password = _params["password"].Value;
+            response.accountNumber = _params["accountNumber"].Value;
+            response.customerTypeId = _params["customerTypeId"].Value;
+            response.countryId = _params["countryId"].Value;
+            response.currencyId = _params["currencyId"].Value;
+            response.currency = _params["currency"].Value;
+            response.debitdirection = _params["debitdirection"].Value;
+            response.creditdirection = _params["creditdirection"].Value;
+            response.productCredit = _params["productCredit"].Value;
+            response.productDebit = _params["productDebit"].Value;
+
+
+            return response;
+
+        }
+
+
         #region Customer Account Creation
         //Step 1
         public async Task<CafeoneDataModel> CreateCustomer(CafeoneCustomerRequest model, string Env)
         {
             var @params = await RetrieveParams(Env);
-            DateTime date = DateTime.ParseExact(model.dob, "yyyy-MM-dd", CultureInfo.InvariantCulture);
-            string dobOfBirth = date.ToString("dd-MM-yyyy");
-            model.dob = dobOfBirth;
+           
 
             try
             {
@@ -107,16 +136,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var readResponse = await sendrequest.Content.ReadAsStringAsync();
                 sendrequest.EnsureSuccessStatusCode();
 
-                var response = JsonConvert.DeserializeObject<CafeoneResponseModel<bool>>(readResponse);
-                if (response.success)
-                {
+                return true;
+                //var response = JsonConvert.DeserializeObject<CafeoneResponseModel<bool>>(readResponse);
+                //if (response.success)
+                //{
 
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
+                //    return true;
+                //}
+                //else
+                //{
+                //    return false;
+                //}
 
             }
             catch (Exception ex)
@@ -216,6 +246,118 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
 
         #endregion Customer Account Creation
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string Env)
+        {
+            var @params = await RetrieveParams(Env);
+
+            var model = new
+            {
+                organizationId = @params.OrganizationId,
+                productId = @params.productDebit,
+                amount = request.Amount,
+                direction = @params.debitdirection,
+                currency = @params.currency,
+                walletId = request.WalletId,
+                transactionReference = request.TransactionReference,
+                customerId = request.CustomerId,
+                remarks = request.Remarks,
+                batchReference = request.BatchReference,
+                accountNumber = @params.accountNumber,
+
+            };
+
+            try
+            {
+                var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
+
+
+                var headers = new Dictionary<string, string>
+                {
+                    { "x-api-key",  $"{@params.PublicKey}"},
+                  //  { "Authorization",  $"Bearer {token.AccessToken}"}
+                };
+                var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
+
+                var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
+                var readResponse = await query.Content.ReadAsStringAsync();
+                query.EnsureSuccessStatusCode();
+
+                var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
+                if (response.success)
+                {
+
+                    return response;
+                }
+                else
+                {
+                    return null;
+                }
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                //  _logService.Error(ex, $"Flutterwave Initiate Payment Api Error: {errorMsg}");
+                return null;
+            }
+        }
+
+
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string Env)
+        {
+            var @params = await RetrieveParams(Env);
+
+            var model = new
+            {
+                organizationId = @params.OrganizationId,
+                productId = @params.productDebit,
+                amount = request.Amount,
+                direction = @params.debitdirection,
+                currency = @params.currency,
+                walletId = request.WalletId,
+                transactionReference = request.TransactionReference,
+                customerId = request.CustomerId,
+                remarks = request.Remarks,
+                batchReference = request.BatchReference,
+                accountNumber = request.AccountNumber
+
+            };
+
+            try
+            {
+                var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
+
+
+                var headers = new Dictionary<string, string>
+                {
+                    { "x-api-key",  $"{@params.PublicKey}"},
+                  //  { "Authorization",  $"Bearer {token.AccessToken}"}
+                };
+                var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
+
+                var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
+                var readResponse = await query.Content.ReadAsStringAsync();
+                query.EnsureSuccessStatusCode();
+             
+                var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
+                if (response.success)
+                {
+
+                    return response;
+                }
+                else
+                {
+                    return null;
+                }
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                //  _logService.Error(ex, $"Flutterwave Initiate Payment Api Error: {errorMsg}");
+               return null;
+            }
+        }
         public async Task<CafeOnWalletResponse<WalletTransferResult>> UserWalletToBusinessWalletTransfer(WalletToWalletTransferRequest request)
         {
             var @params = await RetrieveParams(request.Env);
@@ -426,80 +568,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
         }
 
-        public async Task<CafeOneParams> RetrieveParams(string Env)
-        {
-            var response = new CafeOneParams();
-            var provider = await _providerRepo.GetActiveProvider();
-            var providerId = provider.Where(x => x.Code == "CafeOne").FirstOrDefault().ProviderId;
-            var parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
-            var _params = parameters.ToDictionary(x => x.Key);
-
-            response.Url = _params["url"].Value;
-            response.SecretKey = _params["secretkey"].Value;
-            response.PublicKey = _params["publickey"].Value;
-            response.OrganizationId = _params["organizationId"].Value;
-            response.OwnerId = _params["ownerId"].Value;
-            response.Email = _params["email"].Value;
-            response.Password = _params["password"].Value;
-            response.accountNumber = _params["accountNumber"].Value;
-            response.customerTypeId = _params["customerTypeId"].Value;
-            response.countryId = _params["countryId"].Value;
-            response.currencyId = _params["currencyId"].Value;
-
-
-            return response;
-
-        }
       
-        // public async Task<WalletResponseData> CreateCustomerWallet(string userId, string WalletName, string Env)
-        //{
-        //    var @params = await RetrieveParams(Env);
-
-        //    var model = new
-        //    {
-        //        organizationId = @params.OrganizationId,
-        //        ownerId = userId,
-        //        accountName = WalletName,
-        //        currency = "NGN"
-        //    };
-        //    try
-        //    {
-        //        var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
-
-
-        //        var headers = new Dictionary<string, string>
-        //        {
-        //            { "x-api-key",  $"{@params.SecretKey}"},
-        //            { "Authorization",  $"Bearer {token.AccessToken}"}
-        //        };
-        //        var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
-
-        //        var request = await _httpService.Post($"{@params.Url}/wallet/create", content, headers);
-        //        request.EnsureSuccessStatusCode();
-        //        var readResponse = await request.Content.ReadAsStringAsync();
-        //        var response = JsonConvert.DeserializeObject<CafeOnWalletResponse<WalletResponseData>>(readResponse);
-        //        if (response.StatusCode == 200)
-        //        {
-
-        //            return response.Data;
-        //        }
-        //        else
-        //        {
-        //            return new WalletResponseData();
-        //        }
-
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-        //        //  _logService.Error(ex, $"Flutterwave Initiate Payment Api Error: {errorMsg}");
-        //        return new WalletResponseData
-        //        {
-
-        //        };
-        //    }
-        //}
-
         public async Task<WalletResponseData> GetWallet(string env)
         {
             var @params = await RetrieveParams(env);

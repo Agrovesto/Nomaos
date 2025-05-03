@@ -15,6 +15,7 @@ using System.Data.Common;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
@@ -39,6 +40,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _context = context;
             _walletRepository = walletRepository;   
         }
+
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string env)
+        {
+            try
+            {
+
+                var userWallet = await _walletRepository.GetSterlingWallet(request.AgrovestoUserId);
+                if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                var retrieveWalletDetails = await _cafeOneWalletService.TransferFromUserAccountToBusinessAccount(request, env);
+                if (retrieveWalletDetails == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                return retrieveWalletDetails;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }  public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string env)
+        {
+            try
+            {
+
+                var userWallet = await _walletRepository.GetSterlingWallet(request.AgrovestoUserId);
+                if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                var retrieveWalletDetails = await _cafeOneWalletService.TransferFromUserAccountToBusinessAccount(request, env);
+                if (retrieveWalletDetails == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                return retrieveWalletDetails;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+
         public async Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string userId, string env)
         {
             try
@@ -86,14 +124,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             if (business == null) { throw new Exception($"Business does not exist"); }
 
-            var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
-            {
-                number = model.Bvn
-            });
-            if (!bvnVerification.status)
-            {
-                throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Could not verify BVN details");
-            }
+            //var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+            //{
+            //    number = model.Bvn
+            //});
+            //if (!bvnVerification.status)
+            //{
+            //    throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Could not verify BVN details");
+            //}
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -102,6 +140,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     try
                     {
+                        DateTime date = DateTime.ParseExact(model.DOB, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+                        string dobOfBirth = date.ToString("dd-MM-yyyy");
+                         model.DOB = dobOfBirth;
                         var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
                         {
                             mobileNumber =  model.PhoneNumber,
@@ -199,6 +240,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _walletRepository.GetSterlingWallet(userId);
         }
+        private static string ExtractDomain(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email) || !email.Contains("@"))
+            {
+                return string.Empty;
+            }
+            string[] parts = email.Split('@');
+            return parts.Length == 2 ? parts[1] : string.Empty;
+        }
+        private static string GenerateEmail(string fullName, string domain)
+        {
+            if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(domain))
+            {
+                throw new ArgumentException("Invalid input provided.");
+            }
+            domain = ExtractDomain(domain);
+            fullName = Regex.Replace(fullName.Trim(), @"[^a-zA-Z\s]", "");
+
+            string[] nameParts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (nameParts.Length == 0)
+            {
+                throw new ArgumentException("Name must contain at least one word.");
+            }
+
+            string firstName = nameParts[0];
+            string lastName = nameParts.Length > 1 ? nameParts[^1] : "user";
+
+            firstName = firstName.ToLower();
+            lastName = lastName.ToLower();
+
+            return $"{firstName}.{lastName}@{domain}";
+        }
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
 
@@ -211,7 +285,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             if (business == null) { throw new Exception($"Business does not exist"); }
             var strategy = _context.Database.CreateExecutionStrategy();
-
+            model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.FirstName, business.BusinessEmail);
             await strategy.ExecuteAsync(async () =>
             {
                 using (var dbTransaction = _context.Database.BeginTransaction())

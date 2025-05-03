@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<List<SubscriptionData>>> FarmerBundleSubscriptions(ListQueryParams query);
         Task<BundleDisbursementModel> UpdateInputDisbursement(BundleDisbursementModel model, BusinessRegistrationArgs args);
         Task<List<BundleDisbursementModel>> GetAllInputDisbursement(BusinessRegistrationArgs args);
-        Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(BusinessRegistrationArgs args);
+        Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(BusinessRegistrationArgs args);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(BusinessRegistrationArgs args);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(BusinessRegistrationArgs args);
     }

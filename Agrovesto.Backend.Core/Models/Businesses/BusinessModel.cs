@@ -37,6 +37,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class BusinessRegistrationArgs
     {
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
+        public string? Location { get; set; }
         public string? UserType { get; set; }
         public string? RoleName { get; set; }
         public string? UserId { get; set; }
@@ -46,7 +49,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Env { get; set; }
         public long WarehouseId { get; set; }
         public long CooperativeId { get; set; }
-        public string? Location { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
     }
     public class BusinessLoadModel
     {

@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string Key { get; set; }
         public string Value { get; set; }
         public string Description { get; set; }
-        public long ProviderId { get; set; }
+        public long PaymentProviderProviderId { get; set; }
         public PaymentProvider PaymentProvider { get; set; }
         public string Env { get; set; }
     }
