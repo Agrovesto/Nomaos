@@ -426,7 +426,7 @@ namespace Agrovesto.Backend.API.Controllers
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent && !string.IsNullOrEmpty(model.Bvn) )
+                if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
                 {
                   var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 }
@@ -498,7 +498,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-              
+                model.UserId = args.UserId;
                 var update=  await _businessManager.UpdateUserAccountProfile(model, args, args.UserId);
                 if (update.WalletCode != null)
                 {
@@ -1325,5 +1325,75 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
+        [HttpGet("bank-account-details")]
+        public async Task<IActionResult> GetUserBankAccountDetails([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountDetails(query);
+                return Ok(new Response<UserAccountDetailsModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+     [HttpGet("bank-account-balance")]
+        public async Task<IActionResult> GetUserBankAccountBalance([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountBalance(query);
+                return Ok(new Response<UserWalletBalanceModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
     }
 }
