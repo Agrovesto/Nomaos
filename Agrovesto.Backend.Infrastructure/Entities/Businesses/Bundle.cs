@@ -31,8 +31,21 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal BundleEquityPlusCommission { get; set; }
         public long WarehouseId { get; set; }
         public decimal BundleEquityPrice { get; set; }
+
+        public List<OtherBundlePaymentCost> OtherBundlePaymentCosts { get; set; }
     }
 
+    public class OtherBundlePaymentCost
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string? Description { get; set; }
+        public decimal Amount { get; set; }
+        public long BundleId { get; set; }
+        public virtual Bundle Bundle { get; set; }
+    }
     public class BundleItems
     {
         [Key]

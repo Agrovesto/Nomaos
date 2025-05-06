@@ -193,8 +193,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             args.UserId ??= business.UserId;
             var requestsByBusiness = await _repository.GetSubscriptionInterestByBusiness(args.businessCode, args.PageNumber,args.PageSize,args.startDate, args.endDate,args.Location);
-            if (!requestsByBusiness.Any()) return null;
-            foreach (var request in requestsByBusiness)
+            if (requestsByBusiness == null) return null;
+            foreach (var request in requestsByBusiness.Data)
             {
                 var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
@@ -206,7 +206,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
 
             }
-            return requestsByBusiness;
+            return requestsByBusiness.Data;
         }
 
         public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByCooperative(BusinessRegistrationArgs args)
@@ -256,13 +256,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return requestsByBusiness;
         }
 
-        public async Task<(bool status, string message)> ConfirmEquityCommitmentPayment(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
+        public async Task<(bool status, BundleInterestReceiptModel data)> ConfirmEquityCommitmentPayment(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
         {
             var farmerWallet = new CafeOneCustomerWalletResponse();
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                  ?? throw new Exception("Business does not exist");
-
+            var getInputInventory = new BundleModel();
             args.UserId ??= business.UserId;
+            var responseObject = new BundleInterestReceiptModel();
+
+            ///REFACTOR, LET IT RETURN THE SUBSCIRPTION THE FARMER MADE AND SHOULD INCLUDE THE SUBSCRIPTION DETAIL
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -279,22 +282,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
 
                     var bundleOfInterest = await _repository.GetUnpaidSubscriptionInterestByFarmer(model);
-                    var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
+                    getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
                             ?? throw new Exception("Bundle does not exist");
                     if (!bundleOfInterest.Any()) { throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "No pending equity payment for selected farmer"); }
 
                     var sterlingCharge = decimal.Parse(_configuration["Sterling:Charge"]);
                     var selectedBundle = bundleOfInterest.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefault();
-                    var totalSettlment = getInputInventory.BundleEquityPlusCommission != 0m
-                                            ? getInputInventory.BundleEquityPlusCommission
-                                            : getInputInventory.BundlePrice;
+                    var totalSettlment = selectedBundle.ExpectedTotalEquityPrice;
+                                           
 
-                    var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice != 0m ? getInputInventory.BundleEquityPrice :
-                    getInputInventory.BundlePrice;
+                    var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice != 0m 
+                    ? ((getInputInventory.BundleEquityPrice * selectedBundle.QuantityOfInterest) - (getInputInventory.CommissionPrice)) 
+                    : (getInputInventory.BundlePrice + getInputInventory.CommissionPrice) ;
+
                     var settlementPlatformSplitAmount = getInputInventory.CommissionPrice; //- sterlingCharge;
 
-                    //TODO: REMOVE THIS LINE WHEN DEPLOYING
-                    //TODO: REMOVE THIS
+                    //TODO: Remove this before production
                     farmerWallet.availableBalance = 100000;
 
                     if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
@@ -377,7 +380,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         to = $"234{farmer.PhoneNumber.GetLast(10)}",
                         sms = messageBody
                     });
-                    return (true, "Payment Updated");
+                    
+                      //  responseObject.Id = update.Id;
+                    responseObject.Description = getInputInventory.Description;
+                    responseObject.EquityPaymentBalanceDeficit = (getInputInventory.BundlePrice * update.QuantityOfInterest) - update.TotalEquityPaid;
+                    responseObject.PaymentDate = update.PaymentDate;
+                    responseObject.BundlePackage = getInputInventory.BundlePackage;
+                    responseObject.BundlePrice = getInputInventory.BundlePrice * update.QuantityOfInterest;
+                    responseObject.FarmerName = update.FarmerName;
+                    responseObject.FarmerUserId = update.FarmerUserId;
+                    responseObject.Name = getInputInventory.Name;
+                    responseObject.OtherBundlePaymentCosts = getInputInventory.OtherBundlePaymentCosts;
+                    responseObject.PaymentStatus = update.PaymentStatus;
+                    responseObject.QuantityOfInterest = update.QuantityOfInterest;
+                    responseObject.Status = update.Status;
+                    responseObject.TotalEquityPaid = update.TotalEquityPaid + settlementPlatformSplitAmount;
+                    responseObject.OnBoardedOn = update.OnBoardedOn;
+                    responseObject.ExpectedEquity = update.ExpectedTotalEquityPrice;
+
+
+                    return (true, getInputInventory);
 
                 }
                 catch (Exception ex)
@@ -386,7 +408,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     throw new Exception($"{ex.Message}", ex);
                 }
             });
-            return (true, "Payment Updated");
+            return (true, responseObject);
         }
         public async Task<(bool status, BundleSubscriptionInterestResponseModel data)> CreateInputFinancingInterest(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
         {
@@ -403,7 +425,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-
+                    var existingInterest = await _repository.GetExistingSubscription(model);
+                    if(existingInterest !=null) { throw new Exception("You've indicated interest in this previously, kindly pay for the existing interest"); }
                     var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
                          ?? throw new Exception("Bundle does not exist");
                     var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId) ?? throw new Exception("Farmer does not exist");
@@ -419,75 +442,67 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     if (getInputInventory.ShouldAddCommission)
                     {
                         model.ShouldAddCommission = true;
-                        model.CommissionPrice = getInputInventory.CommissionPrice;//(getInputInventory.CommissionPrice * model.QuantityOfInterest);
-                                                                                  //model.EquityPlusCommission = (getInputInventory.BundlePrice * model.QuantityOfInterest) + getInputInventory.CommissionPrice
+                        model.CommissionPrice = getInputInventory.CommissionPrice;
                     }
 
                     model.ExpectedEquityPricePerBundle = getInputInventory.BundleEquityPrice; //if equity price is available use equityprice
 
-                    getInputInventory.BundleEquityPrice = getInputInventory.BundleEquityPrice != 0m
-   ? getInputInventory.BundleEquityPrice
-   : getInputInventory.BundlePrice;
+                    getInputInventory.BundleEquityPrice = getInputInventory.BundleEquityPrice != 0m ? getInputInventory.BundleEquityPrice : getInputInventory.BundlePrice;
 
-                    getInputInventory.BundleEquityPlusCommission = getInputInventory.BundleEquityPlusCommission != 0m
-   ? getInputInventory.BundleEquityPlusCommission
-   : getInputInventory.BundlePrice;
-                    var expectedPayment = ((getInputInventory.BundleEquityPrice * model.QuantityOfInterest) + model.CommissionPrice);
+                    //getInputInventory.BundleEquityPlusCommission = getInputInventory.BundleEquityPlusCommission != 0m ? getInputInventory.BundleEquityPlusCommission : getInputInventory.BundlePrice;
 
-                    if (expectedPayment < getInputInventory.BundleEquityPlusCommission)
+                    var expectedPayment = ((getInputInventory.BundleEquityPrice * model.QuantityOfInterest));// + model.CommissionPrice);
+
+                    if (expectedPayment < (model.QuantityOfInterest * model.ExpectedEquityPricePerBundle))
                     {
                         throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Bundle equity value mismatched");
                     }
-                    model.ExpectedTotalEquityPrice = expectedPayment + sterlingCharge;
+                    model.ExpectedTotalEquityPrice = expectedPayment;// + sterlingCharge;
 
 
-                    //after interest created, call, user sterling bank and display amount to pay
-                    //var userSterlinWallet = await _walletRepository.GetSterlingWallet(farmer.UserId);
-                    //if (userSterlinWallet == null)
-                    //{
-                    //    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Customer account not found, kindly update your profile");
-                    //}
+                    
 
                     var userWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
 
-                    if (userWallet == null)
+                   if(userWallet != null)
                     {
-                        throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Could not retrieve account at the moment, try again or update your profile");
+                        getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
+                        var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
+                        //update bundke
+                        var createWarehouse = await _repository.CreateInputFinancingInterestThroughBundle(model);
+
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+
+                        response.AccountName = userWallet.AccountName;
+                        response.AccountNumber = userWallet.AccountNumber;
+                        response.BankName = userWallet.BankName;
+                        response.Amount = createWarehouse.data.ExpectedTotalEquityPrice;
+                        var messageBody = $"You have indicated interest in input package: {getInputInventory.Name}." +
+                         $"Confirm your equity by crediting {response.Amount} into {response.AccountNumber} {response.AccountName} {response.BankName} ";
+
+                        var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                        {
+                            campaign_name = "Input Notification",
+                            contacts = new List<string> { farmer.PhoneNumber },
+                            message = messageBody,
+                        });
+                        var sms1 = await _whisperSMSService.HandleAfricasTalkingSMS(new WhisperSMSModel
+                        {
+                            campaign_name = "Input Notification",
+                            contacts = new List<string> { $"+234{farmer.PhoneNumber.GetLast(10)}" },
+                            message = messageBody,
+                        });
+                        var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                        {
+                            to = $"234{farmer.PhoneNumber.GetLast(10)}",
+                            sms = messageBody
+                        });
+                        status = true;
                     }
 
-                    getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
-                    var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
-                    //update bundke
-                    var createWarehouse = await _repository.CreateInputFinancingInterestThroughBundle(model);
-
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-
-                    response.AccountName = userWallet.AccountName;
-                    response.AccountNUmber = userWallet.AccountNumber;
-                    response.BankName = userWallet.BankName;
-                    response.Amount = createWarehouse.data.ExpectedTotalEquityPrice;
-                    var messageBody = $"You have indicated interest in input package: {getInputInventory.Name}." +
-                     $"Confirm your equity by crediting {response.Amount} into {response.AccountNUmber} {response.AccountName} {response.BankName} ";
-
-                    var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                    {
-                        campaign_name = "Input Notification",
-                        contacts = new List<string> { farmer.PhoneNumber },
-                        message = messageBody,
-                    });  
-                    var sms1 = await _whisperSMSService.HandleAfricasTalkingSMS(new WhisperSMSModel
-                    {
-                        campaign_name = "Input Notification",
-                        contacts = new List<string> { $"+234{farmer.PhoneNumber.GetLast(10)}" },
-                        message = messageBody,
-                    });
-                    var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                    {
-                        to = $"234{farmer.PhoneNumber.GetLast(10)}",
-                        sms = messageBody
-                    });
-                    status = true;
+                    status = false;
+                   
                     //return (status, response);
 
                     // (status, response);

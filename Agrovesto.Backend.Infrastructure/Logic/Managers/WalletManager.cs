@@ -66,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 var userWallet = await _walletRepository.GetSterlingWallet(request.AgrovestoUserId);
                 if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
 
-                var retrieveWalletDetails = await _cafeOneWalletService.TransferFromUserAccountToBusinessAccount(request, env);
+                var retrieveWalletDetails = await _cafeOneWalletService.TransferFromUserAccountToAgrovestoAccount(request, env);
                 if (retrieveWalletDetails == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
 
                 return retrieveWalletDetails;

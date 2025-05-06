@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                    });
 
             // emailMessage = AddBcc(emailMessage);
-            var _sendGridClient = new SendGridClient(RetrieveAPIKey());
+            var _sendGridClient = new SendGridClient(apiKey);
 
             var response = await _sendGridClient.SendEmailAsync(emailMessage);
 
