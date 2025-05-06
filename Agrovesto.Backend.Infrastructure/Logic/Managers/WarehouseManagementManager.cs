@@ -560,7 +560,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         //WarehouseInputInventoryModel
                         var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
-                        var user = await _authenticationRepository.GetUserById(args.UserId);
+                        var user = await _authenticationRepository.GetUserById(warehouse.UserId);
                         var inputName = await _repository.GetInputBYIdAsync(business.BusinessCode, model.WarehouseInputInventoryId) ?? throw new Exception("Could not retrive input");
                         model.BusinessCode = business.BusinessCode;
                         model.InputName = inputName.InputName;
@@ -572,7 +572,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
 
                         var ShipmentDate = DateTimeOffset.Now;
-                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, model.WarehouseInputInventoryId, status, "", ShipmentDate);
+                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, model.WarehouseInputInventoryId, status, "", ShipmentDate, 0);
 
                         if (!update) throw new Exception("No record found for input");
 
@@ -643,10 +643,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.Reference = tracker.Reference;
                         model.BusinessCode = business.BusinessCode;
                         var logDelivery = await _repository.LogDeliveryTracker(model);
-                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, tracker.WarehouseInputInventoryId, status, model.DeliveredTo, DateTimeOffset.Now);
+                        var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, tracker.WarehouseInputInventoryId, status, 
+                            model.DeliveredTo, DateTimeOffset.Now, model.QuantityReceived);
                         if (!update) throw new Exception("No record found for input");
 
-
+                      
 
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
@@ -844,7 +845,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 args.UserId ??= business.UserId;
                 var createBundle = new BundleModel(); 
                 var strategy = _context.Database.CreateExecutionStrategy();
-
+            var totalOtherCost = 0m;
+            var bundlecost = 0m;
                 await strategy.ExecuteAsync(async () =>
                 {
                     await using var dbTransaction = await _context.Database.BeginTransactionAsync();
@@ -860,15 +862,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 throw new ArgumentException($"This item does not exist: {item.Name}");
 
                             item.Name = getInputInventory.InputName;
+                            var depleteUnit = await _repository.DepleteAsync(item.WarehouseInputInventoryId, item.Unit);
+                            var cost= (item.Unit * getInputInventory.Price);
+                            bundlecost += cost;
                         }
+                      if(model.OtherBundlePaymentCosts.Count > 0)
+                        {
+                            foreach(var item in model.OtherBundlePaymentCosts)
+                            {
+                                totalOtherCost += item.Amount;
+                                
+                            }
+                          
+                        }
+                        totalOtherCost += bundlecost;
+                        if (model.BundlePrice < totalOtherCost)
+                        { throw new Exception("Total Bundle Cost calculation mismatched"); }                    
                         model.CreatedBy = args.UserId;
                         model.BelongToBusinessCode = business.BusinessCode;
 
                         var bundles = await _repository.GetBundleByBusiness(business.BusinessCode);
                         if (bundles !=null && bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
                         
+                        if(model.IsPercentageEquity)
+                        {
+                            model.BundleEquityPrice = model.BundlePrice * (decimal)(model.EquityPercentage / 100);
+                        }
+                        if(model.ShouldAddCommission)
+                        {
+                            model.BundleEquityPlusCommission = model.CommissionPrice + model.BundleEquityPrice;
+                            model.BundleEquityPrice += model.CommissionPrice; 
+                        }
                         createBundle = await _repository.CreateBundle(model);
 
+                       
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
                         return createBundle;

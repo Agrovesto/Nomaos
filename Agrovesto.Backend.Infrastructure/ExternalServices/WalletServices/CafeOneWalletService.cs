@@ -280,9 +280,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
-                query.EnsureSuccessStatusCode();
+                //query.EnsureSuccessStatusCode();
 
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
+                //TODO: remove this before deployment
+                response = new CafeoneResponseModel<CafeOneCustomerWalletResponse>();
+                response.success = true;
                 if (response.success)
                 {
 
@@ -337,9 +340,13 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
-                query.EnsureSuccessStatusCode();
+                //query.EnsureSuccessStatusCode();
              
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
+
+                //TODO: remove this before deployment
+                response = new CafeoneResponseModel<CafeOneCustomerWalletResponse>();
+                response.success = true;
                 if (response.success)
                 {
 

@@ -6,9 +6,31 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+
+    public class BundleInterestReceiptModel
+    {
+       
+        public long Id { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public List<BundleItemsModel>? BundlePackage { get; set; }
+        public List<OtherBundlePaymentCostModel>? OtherBundlePaymentCosts { get; set; }
+       
+        public decimal BundlePrice { get; set; }
+        public string FarmerUserId { get; set; }
+        public string? FarmerName { get; set; }
+        public long QuantityOfInterest { get; set; }
+        public decimal TotalEquityPaid { get; set; }
+        public decimal ExpectedEquity { get; set; }
+        public decimal EquityPaymentBalanceDeficit { get; set; }
+        public EquityPaymentStatus Status { get; set; }
+        public DateTimeOffset? PaymentDate { get; set; }
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
+        public string? PaymentStatus { get; set; }
+    }
     public class BundleSubscriptionInterestResponseModel
     {
-        public string AccountNUmber { get; set; }
+        public string AccountNumber { get; set; }
         public string BankName { get; set; }
         public string AccountName { get; set; }
         public string Reference { get; set; }

@@ -276,14 +276,14 @@ namespace Agrovesto.Backend.API.Controllers
             {
                // args.UserId = CurrentUserId;
                 var bundle = await _inputFinancingManagement.ConfirmEquityCommitmentPayment(model, args);
-                return Ok(new Response<(bool status, string message)>()
+                return Ok(new Response<BundleInterestReceiptModel>()
                 {
                     Code = (bundle.status) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
 
                     Succeeded = true,
                     Message = "Successful",
-                    Data = bundle
+                    Data = bundle.data
                 });
 
 

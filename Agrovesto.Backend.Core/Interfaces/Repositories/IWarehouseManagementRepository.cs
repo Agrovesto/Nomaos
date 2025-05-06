@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model);
         Task<BundleModel> UpdateBundleEquitPrice(BundleModel model);
         Task<BundleModel> UpdateBundleSubscriptions(BundleModel model);
-        Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date);
+        Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date, long unitstoadd);
         Task<(bool status, WarehouseModel data)> UpdateWarehouse(WarehouseModel data);
         Task<(bool status, WarehouseUserModel data)> UpdateWarehouseManager(WarehouseUserModel data);
     }

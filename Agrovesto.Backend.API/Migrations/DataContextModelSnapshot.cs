@@ -960,6 +960,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("Reference")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset>("Shipmentdate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -973,6 +976,34 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("InputDeliveryTrackers");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OtherBundlePaymentCost", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<long>("BundleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BundleId");
+
+                    b.ToTable("OtherBundlePaymentCosts");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubAccount", b =>
@@ -1757,6 +1788,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("Business");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OtherBundlePaymentCost", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Bundle", "Bundle")
+                        .WithMany("OtherBundlePaymentCosts")
+                        .HasForeignKey("BundleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Bundle");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubAccount", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", null)
@@ -1866,6 +1908,8 @@ namespace Agrovesto.Backend.API.Migrations
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Bundle", b =>
                 {
                     b.Navigation("BundlePackage");
+
+                    b.Navigation("OtherBundlePaymentCosts");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", b =>

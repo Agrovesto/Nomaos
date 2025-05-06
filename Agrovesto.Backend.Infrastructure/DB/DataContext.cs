@@ -43,6 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WarehouseUser> WarehouseUsers { get; set; }
         public DbSet<Bundle> Bundles { get; set; }
         public DbSet<BundleItems> BundleItems { get; set; }
+        public DbSet<OtherBundlePaymentCost> OtherBundlePaymentCosts { get; set; }
         public DbSet<BundleSubscriptionInterest> BundleSubscriptionInterests { get; set; }
         public DbSet<FarmerImages> FarmerImages { get; set; }
         public DbSet<BundleSubscriptionDisbursement> BundleSubscriptionDisbursements { get; set; }

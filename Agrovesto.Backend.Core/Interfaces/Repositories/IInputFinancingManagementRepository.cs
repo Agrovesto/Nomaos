@@ -33,5 +33,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(string businessCode);
         Task<BundleSubscriptionInterestModel> UpdateEquitySubcriiptonStatus(BundleSubscriptionInterestModel model);
         Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusinessAgent(string businessCode, string userId);
+        Task<List<BundleSubscriptionInterestModel>> GetExistingSubscription(BundleSubscriptionInterestModel data);
     }
 }

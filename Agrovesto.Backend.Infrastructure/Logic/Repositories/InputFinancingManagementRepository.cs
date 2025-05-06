@@ -90,7 +90,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return (true, entity.Map());
         }
+        public async Task<List<BundleSubscriptionInterestModel>> GetExistingSubscription(BundleSubscriptionInterestModel data)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId && x.PaymentStatus != EquityPaymentStatus.Paid.ToString()
+            && x.InterestedBundleId == data.InterestedBundleId).ToListAsync();
 
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
         public async Task<List<BundleSubscriptionInterestModel>> GetUnpaidSubscriptionInterestByFarmer(BundleSubscriptionInterestModel data)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId && x.PaymentStatus != EquityPaymentStatus.Paid.ToString()).ToListAsync();
@@ -189,8 +197,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
 
-            if (interest != null)
-            {
+            if (interest == null) return null;
+            
                 interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
                 interest.PaymentDate = model.PaymentDate;
                 interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
@@ -200,8 +208,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
                 await _context.SaveChangesAsync();
-            }
-            return null;
+
+                return interest.Map();
+           
 
         }
 
