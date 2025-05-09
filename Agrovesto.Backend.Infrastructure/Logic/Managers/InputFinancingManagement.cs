@@ -8,6 +8,7 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -17,6 +18,7 @@ using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -32,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly DataContext _context;
         private readonly ILogger<InputFinancingManagement> _log;
         private readonly ICafeOneWalletService _cafeOneWalletService;
-       // private readonly IWalletRepository _walletRepository;
+        // private readonly IWalletRepository _walletRepository;
         private readonly ISMSService _whisperSMSService;
         private readonly IFaceManager _faceManager;
         private readonly IConfiguration _configuration;
@@ -42,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, ISMSService whisperSMSService,
             IFarmerRepository farmerRepository,
             ICafeOneWalletService cafeOneWalletService,
-           // IWalletRepository walletRepository, 
+            // IWalletRepository walletRepository, 
             IConfiguration config, IWalletManager walletManager)
         {
             _repository = repository;
@@ -54,7 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _farmerRepository = farmerRepository;
             _cafeOneWalletService = cafeOneWalletService;
             _configuration = config;
-           // _walletRepository = walletRepository;
+            // _walletRepository = walletRepository;
             _faceManager = faceManager;
             _whisperSMSService = whisperSMSService;
             _walletManager = walletManager;
@@ -98,8 +100,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var requestsByBusiness = await _repository.GetInterestRequestByAgent( args.businessCode, args.UserId, args.PageNumber, args.PageSize);
-            if (requestsByBusiness ==null) return null;
+            var requestsByBusiness = await _repository.GetInterestRequestByAgent(args.businessCode, args.UserId, args.PageNumber, args.PageSize);
+            if (requestsByBusiness == null) return null;
 
 
             foreach (var request in requestsByBusiness.Data)
@@ -186,27 +188,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByBusiness(BusinessRegistrationArgs args)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByBusiness(BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var requestsByBusiness = await _repository.GetSubscriptionInterestByBusiness(args.businessCode, args.PageNumber,args.PageSize,args.startDate, args.endDate,args.Location);
+            var requestsByBusiness = await _repository.GetSubscriptionInterestByBusiness(args.businessCode, args.PageNumber, args.PageSize, args.startDate, args.endDate, args.Location);
             if (requestsByBusiness == null) return null;
+         
+
             foreach (var request in requestsByBusiness.Data)
             {
                 var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
-
-                    var accouuntBalance = await _cafeOneWalletService.GetUserBalance(userSterlinWallet.WalletId, args.Env);
-                    request.AccountBalance = accouuntBalance.Balance;
+                    var accouuntBalance = await _cafeOneWalletService.RetrieveCustomerWallet(userSterlinWallet.CustomerId, userSterlinWallet.WalletId, args.Env);
+                    request.AccountBalance = accouuntBalance.availableBalance.ToString();
                 }
 
             }
-            return requestsByBusiness.Data;
+            return requestsByBusiness;
         }
 
         public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByCooperative(BusinessRegistrationArgs args)
@@ -256,14 +259,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return requestsByBusiness;
         }
 
-        public async Task<(bool status, BundleInterestReceiptModel data)> ConfirmEquityCommitmentPayment(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
+        public async Task<(bool status, BundleSubscriptionInterestModel data)> ConfirmEquityCommitmentPayment(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
         {
             var farmerWallet = new CafeOneCustomerWalletResponse();
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                  ?? throw new Exception("Business does not exist");
             var getInputInventory = new BundleModel();
             args.UserId ??= business.UserId;
-            var responseObject = new BundleInterestReceiptModel();
+            var update = new BundleSubscriptionInterestModel();
 
             ///REFACTOR, LET IT RETURN THE SUBSCIRPTION THE FARMER MADE AND SHOULD INCLUDE THE SUBSCRIPTION DETAIL
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -289,11 +292,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     var sterlingCharge = decimal.Parse(_configuration["Sterling:Charge"]);
                     var selectedBundle = bundleOfInterest.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefault();
                     var totalSettlment = selectedBundle.ExpectedTotalEquityPrice;
-                                           
 
-                    var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice != 0m 
-                    ? ((getInputInventory.BundleEquityPrice * selectedBundle.QuantityOfInterest) - (getInputInventory.CommissionPrice)) 
-                    : (getInputInventory.BundlePrice + getInputInventory.CommissionPrice) ;
+
+                    var settlementSplitAmountBusiness = getInputInventory.BundleEquityPrice != 0m
+                    ? ((getInputInventory.BundleEquityPrice * selectedBundle.QuantityOfInterest) - (getInputInventory.CommissionPrice))
+                    : (getInputInventory.BundlePrice + getInputInventory.CommissionPrice);
 
                     var settlementPlatformSplitAmount = getInputInventory.CommissionPrice; //- sterlingCharge;
 
@@ -314,13 +317,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     var createBusinessSettlement = await _walletManager.TransferFromUserAccountToBusinessAccount(new WalletToWalletTransferRequestModel
                     {
                         Amount = settlementSplitAmountBusiness,
-                        WalletId= userSterlinWallet.WalletId,
+                        WalletId = userSterlinWallet.WalletId,
                         TransactionReference = reference,
-                        BatchReference= reference,
-                        AccountNumber= businessAccount.AccountNumber,
-                        Remarks= $"Farmer purchase for {selectedBundle}",
-                        CustomerId= userSterlinWallet.CustomerId,
-                        AgrovestoUserId=userSterlinWallet.AgrovestoUserId,                       
+                        BatchReference = reference,
+                        AccountNumber = businessAccount.AccountNumber,
+                        Remarks = $"Farmer purchase for {selectedBundle}",
+                        CustomerId = userSterlinWallet.CustomerId,
+                        AgrovestoUserId = userSterlinWallet.AgrovestoUserId,
                     }, args.Env);
 
                     _log.LogInformation($"Response from user transfer to User Business {business.BusinessCode} Wallet", JsonConvert.SerializeObject(createBusinessSettlement));
@@ -333,7 +336,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         TransactionReference = @ref,
                         BatchReference = @ref,
                         //AccountNumber = //businessAccount.AccountNumber,
-                            Remarks = $"Farmer purchase for {selectedBundle}",
+                        Remarks = $"Farmer purchase for {selectedBundle}",
                         CustomerId = userSterlinWallet.CustomerId,
                         AgrovestoUserId = userSterlinWallet.AgrovestoUserId,
                     }, args.Env);
@@ -361,8 +364,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //update payment
                     //notify farmer
                     //notify business
-
-                    var update = await _repository.UpdateSubscriptionPayment(model);
+                    model.EquitySubscriptionStatus = InputFinancingStatus.Requested;
+                    model.MaturityDate = getInputInventory.MaturityDate;
+                    update = await _repository.UpdateSubscriptionPayment(model);
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
@@ -380,26 +384,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         to = $"234{farmer.PhoneNumber.GetLast(10)}",
                         sms = messageBody
                     });
-                    
-                      //  responseObject.Id = update.Id;
-                    responseObject.Description = getInputInventory.Description;
-                    responseObject.EquityPaymentBalanceDeficit = (getInputInventory.BundlePrice * update.QuantityOfInterest) - update.TotalEquityPaid;
-                    responseObject.PaymentDate = update.PaymentDate;
-                    responseObject.BundlePackage = getInputInventory.BundlePackage;
-                    responseObject.BundlePrice = getInputInventory.BundlePrice * update.QuantityOfInterest;
-                    responseObject.FarmerName = update.FarmerName;
-                    responseObject.FarmerUserId = update.FarmerUserId;
-                    responseObject.Name = getInputInventory.Name;
-                    responseObject.OtherBundlePaymentCosts = getInputInventory.OtherBundlePaymentCosts;
-                    responseObject.PaymentStatus = update.PaymentStatus;
-                    responseObject.QuantityOfInterest = update.QuantityOfInterest;
-                    responseObject.Status = update.Status;
-                    responseObject.TotalEquityPaid = update.TotalEquityPaid + settlementPlatformSplitAmount;
-                    responseObject.OnBoardedOn = update.OnBoardedOn;
-                    responseObject.ExpectedEquity = update.ExpectedTotalEquityPrice;
+
+                    //responseObject = await RetrieveFarmerInputDisbursementReceipt(model, args);
 
 
-                    return (true, getInputInventory);
+                    return (true, update);
 
                 }
                 catch (Exception ex)
@@ -408,7 +397,63 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     throw new Exception($"{ex.Message}", ex);
                 }
             });
-            return (true, responseObject);
+            return (true, update);
+        }
+
+        public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
+        {
+
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                 ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+           // var subscription = await _repository.GetPaidSubscriptionByFarmer(business.BusinessCode, model.FarmerUserId, model.Reference);
+            var subscription = await _repository.RetrieveFarmerInputDisbursementReceipt(business.BusinessCode, model.FarmerUserId, model.Reference);
+            if (subscription == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Subscription Detail not found");
+
+            var bundle = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, subscription.SubscriptionInterest.InterestedBundleId)
+                            ?? throw new Exception("Bundle does not exist");
+            foreach(var item in bundle.BundlePackage)
+            {
+                var input = await _warehouseManagementRepository.GetInputBYIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
+                item.Price = input.Price;
+            }
+            
+            return await GenerateReceipt(subscription, bundle,business ,subscription.SubscriptionInterest.CommissionPrice);
+
+        }
+
+        public async Task<BundleInterestReceiptModel> GenerateReceipt(BundleInterestReceiptModel subscription, BundleModel bundle, BusinessModel business,decimal settlementPlatformSplitAmount)
+        {
+            return new BundleInterestReceiptModel
+            {
+                Id = subscription.SubscriptionInterest.Id,
+                Description = bundle.Description,
+                EquityPaymentBalanceDeficit = (bundle.BundlePrice * subscription.QuantityOfInterest) - subscription.TotalEquityPaid,
+                PaymentDate = subscription.SubscriptionInterest.PaymentDate,
+                BundlePackage = bundle.BundlePackage,
+                BundlePrice = bundle.BundlePrice * subscription.SubscriptionInterest.QuantityOfInterest,
+                FarmerName = subscription.SubscriptionInterest.FarmerName,
+                FarmerUserId = subscription.SubscriptionInterest.FarmerUserId,
+                BundleType = bundle.Name,
+                OtherBundlePaymentCosts = bundle.OtherBundlePaymentCosts,
+                PaymentStatus = subscription.SubscriptionInterest.PaymentStatus,
+                QuantityOfInterest = subscription.SubscriptionInterest.QuantityOfInterest,
+                Status = subscription.SubscriptionInterest.Status,
+                TotalEquityPaid = subscription.SubscriptionInterest.TotalEquityPaid + settlementPlatformSplitAmount,
+                OnBoardedOn = subscription.SubscriptionInterest.OnBoardedOn,
+                Farmer=subscription.Farmer,
+                Cooperative=subscription.Cooperative,
+                SubscriptionInterest=subscription.SubscriptionInterest,
+                MaturityDate=subscription.SubscriptionInterest.MaturityDate,
+                BelongToBusinessCode=subscription.SubscriptionInterest.BelongToBusinessCode,
+                BusinessLogo=business.BusinessLogo,
+                BusinessName=business.BusinessName,
+                BusinessPhoneNumber=business.PhoneNumber,
+                Reference=subscription.SubscriptionInterest.Reference,
+                WarehouseName=bundle.WarehouseName,
+                ExpectedEquity = subscription.SubscriptionInterest.ExpectedTotalEquityPrice,
+            };
         }
         public async Task<(bool status, BundleSubscriptionInterestResponseModel data)> CreateInputFinancingInterest(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
         {
@@ -426,7 +471,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     var existingInterest = await _repository.GetExistingSubscription(model);
-                    if(existingInterest !=null) { throw new Exception("You've indicated interest in this previously, kindly pay for the existing interest"); }
+                    if (existingInterest != null) { throw new Exception("You've indicated interest in this previously, kindly pay for the existing interest"); }
                     var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
                          ?? throw new Exception("Bundle does not exist");
                     var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId) ?? throw new Exception("Farmer does not exist");
@@ -460,11 +505,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.ExpectedTotalEquityPrice = expectedPayment;// + sterlingCharge;
 
 
-                    
+
 
                     var userWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
 
-                   if(userWallet != null)
+                    if (userWallet != null)
                     {
                         getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
                         var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
@@ -502,7 +547,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
 
                     status = false;
-                   
+
                     //return (status, response);
 
                     // (status, response);
@@ -517,19 +562,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return (status, response);
         }
 
+        public async Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+               ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+
+            var updateSubsubcriptionStatus = new BundleSubscriptionInterestModel();
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    
+                    var subscription = await _repository.GetPaidSubscriptionByFarmer(business.BusinessCode, model.FarmerUserId, model.Reference);
+                    if (subscription == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Subscription Detail not found");
+
+                    var bundleByWaresbouse = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId);
+                    if (bundleByWaresbouse == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Bundle not found in warehouse");
+
+                 
+                    var warehouseUSer = await _warehouseManagementRepository.GetWarehouseManagerByBusiness(args.businessCode, bundleByWaresbouse.WarehouseId);
+                    if (warehouseUSer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Warehouse user not available");
+                    var user = await _authenticationRepository.GetUserById(warehouseUSer.UserId);
+                    if(!user.status) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found");
+
+                    var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
+                            ?? throw new Exception("Bundle does not exist");
+
+                    subscription.EquitySubscriptionStatus = model.EquitySubscriptionStatus; //InputFinancingStatus.Approved;
+                     updateSubsubcriptionStatus = await _repository.UpdateEquitySubcriiptonStatus(subscription);
+                    if (model.EquitySubscriptionStatus == InputFinancingStatus.Approved)
+                    {
+
+                        SendDisbursementApprovalEmail(user.model, subscription, business, getInputInventory);
+                        //notify agent via mail to disburse input
+                    }
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                    return updateSubsubcriptionStatus;
+                    
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return updateSubsubcriptionStatus;
+        }
+        private static void SendDisbursementApprovalEmail(UserModel bWorker, BundleSubscriptionInterestModel args, BusinessModel business, BundleModel bundle)
+        {
+            var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+            var mailRequest = new InputDisbursementApprovalMailBody
+            {
+                To = bWorker.Email,
+                ToName = $"{bWorker.Name}",
+                Subject = $" {business.BusinessName} Input Disbursement Notification",
+                From = business.BusinessEmail,
+                FromName = business.BusinessName,
+                Bundle= args.InterestedBundleName,
+                Quantity=args.TotalQuantityPaidFor.ToString(),
+                BundlePackage=bundle.BundlePackage,
+                CompanyLogo= business.BusinessLogo,
+                Reference =args.Reference,
+                PropagateUrl = $"{propagationUrl}/agent/disbursement?userId={args.FarmerUserId}&reference={args.Reference}",
+            };
+            var mail = SendGridService.DynamicInputDisbursementApproval(mailRequest);
+        }
 
         //method get all successful payment for input subscription
         //method disburse input bundle to farmers and mark disbursement as completed,, deplete inventory in the warehouse based on what has been disbursed
-        public async Task<BundleDisbursementModel> UpdateInputDisbursement(BundleDisbursementModel model, BusinessRegistrationArgs args)
+        public async Task<BundleDisbursementModel> DisburseInput(BundleDisbursementModel model, BusinessRegistrationArgs args)
         {
 
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var updateDisbursement = new BundleDisbursementModel(); ;
+            var updateDisbursement = new BundleDisbursementModel();
             var strategy = _context.Database.CreateExecutionStrategy();
-
+            var user = await _authenticationRepository.GetUserById(args.UserId);
+            if(!user.status) throw new Exception("Business does not exist");
             await strategy.ExecuteAsync(async () =>
             {
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
@@ -545,12 +662,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         //compare with what we have in AWS rekognition
                         //if image matches, proceed with disbursement else, terminate execution
-
-                        var hasBeenDisbursed = await _repository.GetDisbursedSubscription(business.BusinessCode, model.FarmerUserId, model.Reference);
-                        if (hasBeenDisbursed != null || hasBeenDisbursed.InputAlreadyCollected) throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Input already collected by farmer");
-
                         var subscription = await _repository.GetPaidSubscriptionByFarmer(business.BusinessCode, model.FarmerUserId, model.Reference);
                         if (subscription == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Subscription Detail not found");
+
+                        var hasBeenDisbursed = await _repository.GetDisbursedSubscription(business.BusinessCode, model.FarmerUserId, model.Reference);
+                        if (hasBeenDisbursed != null && hasBeenDisbursed.InputAlreadyCollected) throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Input already collected by farmer");
+
                         //get bundle detail
                         var bundle = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId);
 
@@ -560,27 +677,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             if (item.WarehouseInputInventoryId <= 0)
                                 throw new ArgumentException($"Invalid inventory ID for item: {item.Name}");
                             var getInputInventory = await _warehouseManagementRepository.GetInputBYIdAsync(business.BusinessCode, item.WarehouseInputInventoryId);
+
                             if (getInputInventory == null || getInputInventory.IsAvailable == false)
                                 throw new ArgumentException($"This item does not exist: {item.Name}");
+
                             item.Name = getInputInventory.InputName;
                             //depletes input based on bundle package quantity
-                            var quantity = model.TotalQuantityPaidFor;
-                            var quantityToremove = item.Unit * quantity;
+
+
+                            var quantityToremove = item.Unit * subscription.TotalQuantityPaidFor;
                             if (getInputInventory.UnitBalance < quantityToremove)
                             {
                                 throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "No more stock available");
                             }
                             var depleteInput = await _warehouseManagementRepository.DepleteAsync(getInputInventory.Id, quantityToremove);
                         }
-                        bundle.TotalBundlePackageDisbursed = model.TotalQuantityPaidFor;
-                        var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(bundle);
+                        bundle.TotalBundlePackageDisbursed = subscription.TotalQuantityPaidFor;
 
-                        subscription.Status = EquityPaymentStatus.Disbursed;
+
+                        var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(bundle);
+                        model.DisbursedBy = user.model.Name;
+                        // subscription.Status = EquityPaymentStatus.Disbursed;
+                        subscription.EquitySubscriptionStatus = InputFinancingStatus.Disbursed;
                         var updateSubsubcriptionStatus = await _repository.UpdateEquitySubcriiptonStatus(subscription);
 
                         model.InterestedBundleName = bundle.Name;
                         model.InterestedBundleId = bundle.Id;
-                        model.Location = model.Location;
+                        model.Location = bundle.WarehouseName;
                         model.Reference = subscription.Reference;
                         model.CooperativeId = subscription.CooperativeId;
                         model.InputCollectedByPictureOf = model.InputCollectedByPictureOf;
@@ -592,18 +715,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
                         model.InputAlreadyCollected = true;
                         model.InputCollectedByPictureOf = compareFace.ImageKey;
-
+                        
 
                         updateDisbursement = await _repository.UpdateDisbursement(model);
 
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
-
+                        return updateDisbursement;
                     }
                     //get farmer imagekey from db
                     else
                     {
-                        throw new Exception("No record was founding matching the captured user image");
+                        throw new Exception("This image does not match the farmer's profile previously submitted");
                     }
 
                 }

@@ -30,6 +30,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<WarehouseUserModel>> GetWarehousesManagersByBusiness(string belongToBusiness, long warehouseId);
         Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode);
         Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model);
+        Task<List<WarehouseSummaryMetrics>> StockSummaryByWarehouse(string businessCode, long warehouseId);
+        Task<List<WarehouseSummaryMetrics>> StockSummaryByWarehouseByAgent(string businessCode, string userId);
         Task<BundleModel> UpdateBundleEquitPrice(BundleModel model);
         Task<BundleModel> UpdateBundleSubscriptions(BundleModel model);
         Task<bool> UpdateInputReceiptStatus(string belongToBusiness, long Id, string status, string receivedBy, DateTimeOffset date, long unitstoadd);

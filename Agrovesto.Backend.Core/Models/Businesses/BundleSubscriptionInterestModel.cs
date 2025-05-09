@@ -9,16 +9,25 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class BundleInterestReceiptModel
     {
-       
-        public long Id { get; set; }
-        public string? Name { get; set; }
-        public string? Description { get; set; }
-        public List<BundleItemsModel>? BundlePackage { get; set; }
-        public List<OtherBundlePaymentCostModel>? OtherBundlePaymentCosts { get; set; }
-       
-        public decimal BundlePrice { get; set; }
+        public string BusinessLogo { get; set; }
+        public string BusinessName { get; set; }
+        public string BusinessPhoneNumber { get; set; }
         public string FarmerUserId { get; set; }
         public string? FarmerName { get; set; }
+        public string WarehouseName { get; set; }
+        public string Reference { get; set; }
+        public DateTimeOffset? MaturityDate { get; set; }
+        public long Id { get; set; }
+        public string? BundleType { get; set; }
+        public string BelongToBusinessCode { get; set; }
+        public string? Description { get; set; }
+        public BundleSubscriptionInterestModel SubscriptionInterest { get; set; }
+        public List<BundleItemsModel>? BundlePackage { get; set; }
+        public List<OtherBundlePaymentCostModel>? OtherBundlePaymentCosts { get; set; }
+        // Add these new properties:
+        public FarmerModel Farmer { get; set; }
+        public CooperativeModel Cooperative { get; set; }
+        public decimal BundlePrice { get; set; }
         public long QuantityOfInterest { get; set; }
         public decimal TotalEquityPaid { get; set; }
         public decimal ExpectedEquity { get; set; }
@@ -27,6 +36,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? PaymentStatus { get; set; }
+        public string? RepaymentDeadline { get; set; }
     }
     public class BundleSubscriptionInterestResponseModel
     {
@@ -50,6 +60,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal EquityPaymentBalanceDeficit { get; set; }
         public long TotalQuantityPaidFor { get; set; }
         public EquityPaymentStatus Status { get; set; }
+        public InputFinancingStatus EquitySubscriptionStatus { get; set; }
         public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public decimal EquityPlusCommission { get; set; }
@@ -66,5 +77,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long CooperativeId { get; set; }
         public string? AccountBalance { get; set; }
         public string? PaymentStatus { get; set; }
+        public string? SubscriptionStatus { get; set; }
+
+        public DateTimeOffset? MaturityDate { get; set; }
     }
 }

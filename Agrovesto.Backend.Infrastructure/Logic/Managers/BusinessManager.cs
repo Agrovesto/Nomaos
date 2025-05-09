@@ -430,7 +430,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
                 logincred = $"login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
             };
-            // var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
+            var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
         }
 
         private string ConvertedDate(string date)

@@ -144,7 +144,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             {
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == query.businessCode && c.IsAssignedToAgentId == agentId),
-                TotalFarmer = farmers.Count(),
+                TotalFarmer = farmers.Count,
                 TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == query.businessCode && w.ManagedByUserId == agentId),
                 PercentageFarmerPerformance = percentageChange,
                 PercentageCooperativePerformance = cooperativePercentageChange,
@@ -202,6 +202,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == businessCode),
                 TotalFarmer = await _context.Farmers.CountAsync(f => f.BelongToBusinessCode == businessCode),
                 TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode),
+                
                 PercentageFarmerPerformance = percentageChange,
                 PercentageCooperativePerformance = cooperativePercentageChange,
                 PercentageAgentPerformance = agentPercentageChange,

@@ -32,6 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long WarehouseId { get; set; }
         public decimal BundleEquityPrice { get; set; }
 
+        public DateTimeOffset? MaturityDate { get; set; }
         public List<OtherBundlePaymentCost> OtherBundlePaymentCosts { get; set; }
     }
 

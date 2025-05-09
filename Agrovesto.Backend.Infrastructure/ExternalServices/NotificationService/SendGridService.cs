@@ -79,6 +79,40 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 await response.Body.ReadAsStringAsync();
             }
         }
+
+
+        public static async Task DynamicInputDisbursementApproval(InputDisbursementApprovalMailBody model)
+        {
+            var key = AppSettingsHelper.Setting("SendGrid:key");
+            var apiKey = key;//Environment.GetEnvironmentVariable("NAME_OF_THE_ENVIRONMENT_VARIABLE_FOR_YOUR_SENDGRID_KEY");
+
+            var emailMessage = MailHelper.CreateSingleTemplateEmail(
+                   new EmailAddress(model.From, model.FromName),
+                   new EmailAddress(model.To, model.ToName),
+                   "d-d89c73d0530d4106b600178cafc368a1",
+                   new
+                   {
+                       logo= model.CompanyLogo,
+                       merchantName = model.FromName,
+                       ToName = model.ToName,
+                       Quantity =model.Quantity,
+                       BundlePackage= model.BundlePackage,
+                       Reference = model.Reference,
+
+                       propagateUrl = model.PropagateUrl
+                   });
+
+            // emailMessage = AddBcc(emailMessage);
+            var _sendGridClient = new SendGridClient(apiKey);
+
+            var response = await _sendGridClient.SendEmailAsync(emailMessage);
+
+            if (response.StatusCode != HttpStatusCode.Accepted)
+            {
+                await response.Body.ReadAsStringAsync();
+            }
+        }
+
         public static async Task DynamicBusinessStaffOnboarding(WelcomeMailBody model)
         {
             var key = AppSettingsHelper.Setting("SendGrid:key");
@@ -208,4 +242,23 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         public string BusinessName { get; set; }
     }
 
+
+    public class InputDisbursementApprovalMailBody
+    {
+        public string From { get; set; }
+        public string CompanyLogo { get; set; }
+        public string FromName { get; set; }
+        public string To { get; set; }
+        public string Subject { get; set; }
+        public string Body { get; set; }
+        public string ToName { get; set; }
+        public string DeliveredTo { get; set; }
+        public string Bundle { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Reference { get; set; }
+        public string Quantity { get; set; }
+        public string BusinessName { get; set; }
+        public string PropagateUrl { get; set; }
+        public List<BundleItemsModel>? BundlePackage { get; set; }
+    }
 }

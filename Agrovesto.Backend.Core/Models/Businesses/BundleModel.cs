@@ -34,6 +34,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal BundleEquityPlusCommission { get; set; }
         public long WarehouseId { get; set; }
         public string? WarehouseName { get; set; }
+
+        public DateTimeOffset? MaturityDate { get; set; }
     }
     public class OtherBundlePaymentCostModel
     {
@@ -51,6 +53,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long BundleId { get; set; }
         public string? Name { get; set; } //is the warehouse inventory item name same as the bundle item selected
         public long Unit { get; set; }
+        public decimal Price { get; set; }
         public long WarehouseInputInventoryId { get; set; } //i. bunlde item must exist in the warehouse
     }
 

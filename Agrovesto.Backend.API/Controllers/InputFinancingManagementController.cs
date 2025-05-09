@@ -147,13 +147,47 @@ namespace Agrovesto.Backend.API.Controllers
                 var result = await _inputFinancingManagement.GetInterestRequestByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
-                    Data = result,
-                    Message = result.Any() ?  "Successful" : "No Record",
-                    Succeeded = result.Any() ? true : false,
+                    Data = result.Data,
+                    Message = result.Data.Any() ?  "Successful" : "No Record",
+                    Succeeded = result.Data.Any() ? true : false,
                     Count = result.Count,
                     //PageNumber = ,
                     PageSize = 10,
-                    Code = result.Any() ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                    Code = result.Data.Any() ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpPost("subscription-receipt")]
+        public async Task<IActionResult> GetSubscriptionIntesrest([FromBody]BundleSubscriptionInterestModel model, [FromQuery]BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _inputFinancingManagement.RetrieveFarmerInputDisbursementReceipt(model, query);
+                return Ok(new Response<BundleInterestReceiptModel>()
+                {
+                    Data = result,
+                    Succeeded = true,
+                    Code = Constants.ResponseCodes.Success
                 });
             }
             catch (BaseException ex)
@@ -276,7 +310,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                // args.UserId = CurrentUserId;
                 var bundle = await _inputFinancingManagement.ConfirmEquityCommitmentPayment(model, args);
-                return Ok(new Response<BundleInterestReceiptModel>()
+                return Ok(new Response<BundleSubscriptionInterestModel>()
                 {
                     Code = (bundle.status) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
@@ -348,7 +382,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("confirm-disbursement")]
-        public async Task<IActionResult> SubmitDisbursement([FromBody] BundleDisbursementModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> SubmitDisbursement([FromForm] BundleDisbursementModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -371,8 +405,63 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
-                var input = await _inputFinancingManagement.UpdateInputDisbursement(model, args);
+                var input = await _inputFinancingManagement.DisburseInput(model, args);
                 return Ok(new Response<BundleDisbursementModel>()
+                {
+                    Code = (input != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = input
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+           [HttpPost("approve-disbursement")]
+        public async Task<IActionResult> ApproveEquityForDisbursement([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                var input = await _inputFinancingManagement.ApproveEquityForDisbursement(model, args);
+                return Ok(new Response<BundleSubscriptionInterestModel>()
                 {
                     Code = (input != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
