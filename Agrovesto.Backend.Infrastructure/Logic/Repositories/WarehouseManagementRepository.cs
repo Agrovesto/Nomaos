@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return warehouse.Select(x => x.Map()).ToList();
         }
-           public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
+        public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
         {
             var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness && x.ManagedByUserId == agentId).ToListAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
@@ -135,7 +135,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                               //on w.WarehouseId equals d.WarehouseId
                               // Where w.BelongToBusinessCode == businessCode
                               _context.InputDeliveryTrackers.Where(w => w.BusinessCode == businessCode)
-                               .Select(w=> new WarehouseInputTransitModel
+                               .Select(w => new WarehouseInputTransitModel
                                {
                                    WarehouseId = w.WarehouseId,
                                    WarehouseInputInventoryId = w.Id,
@@ -151,15 +151,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                                    DeliveryContact = w.DeliveryContact,
                                    PickupLocation = w.PickupLocation,
                                    DeliveryLocation = w.DeliveryLocation,
-                                  // LogisticType = d.LogisticType,
+                                   // LogisticType = d.LogisticType,
                                    LogisticNumber = w.LogisticNumber,
                                    DateReceived = w.DeliveryDate,
-                                    DateShipped=w.Shipmentdate,
-                                    From= w.PickupLocation,
-                                    To= w.DeliveredTo,
-                                    TrackingId= w.Reference
+                                   DateShipped = w.Shipmentdate,
+                                   From = w.PickupLocation,
+                                   To = w.DeliveredTo,
+                                   TrackingId = w.Reference
                                }).ToListAsync();
 
+            return query;
+        }
+
+        public async Task<List<WarehouseSummaryMetrics>> StockSummaryByWarehouse(string businessCode, long warehouseId)
+        {
+            var query = await _context.Warehouses
+     .Where(w => w.BelongToBusinessCode == businessCode && w.Id == warehouseId)
+     .Select(w => new WarehouseSummaryMetrics
+     {
+         WarehouseName = w.Name,
+         Location = w.Location,
+         StockSummary = _context.WarehouseInputInventories
+             .Where(wi => wi.WarehouseId == w.Id)
+             .GroupBy(wi => wi.InputName)
+             .Select(g => new WarehouseSummary
+             {
+                 Name = g.Key,
+                 Value = g.Sum(wi => wi.UnitBalance),
+                 InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
+             })
+             .ToList()
+     })
+     .ToListAsync();
+            if (query.Count == 0) { return null; }
+            return query;
+        }
+        public async Task<List<WarehouseSummaryMetrics>> StockSummaryByWarehouseByAgent(string businessCode, string userId)
+        {
+            var query = await _context.Warehouses
+     .Where(w => w.BelongToBusinessCode == businessCode && w.ManagedByUserId== userId)
+     .Select(w => new WarehouseSummaryMetrics
+     {
+         WarehouseName = w.Name,
+         Location = w.Location,
+         StockSummary = _context.WarehouseInputInventories
+             .Where(wi => wi.WarehouseId == w.Id)
+             .GroupBy(wi => wi.InputName)
+             .Select(g => new WarehouseSummary
+             {
+                 Name = g.Key,
+                 Value = g.Sum(wi => wi.UnitBalance),
+                 InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
+             })
+             .ToList()
+     })
+     .ToListAsync();
+            if (query.Count == 0) { return null; }
             return query;
         }
 
@@ -187,11 +234,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
      .Where(w => w.BelongToBusinessCode == businessCode)
      .Select(w => new WarehouseSummaryMetrics
      {
-          WarehouseName= w.Name,
+         WarehouseName = w.Name,
          Location = w.Location,
          StockSummary = _context.WarehouseInputInventories
              .Where(wi => wi.WarehouseId == w.Id)
-             .GroupBy(wi => wi.InputName) 
+             .GroupBy(wi => wi.InputName)
              .Select(g => new WarehouseSummary
              {
                  Name = g.Key,
@@ -201,7 +248,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              .ToList()
      })
      .ToListAsync();
-            if(query.Count == 0) { return null; }
+            if (query.Count == 0) { return null; }
             return query;
         }
         public async Task<BundleModel> CreateBundle(BundleModel model)
@@ -212,7 +259,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 Description = model.Description,
                 BundlePrice = model.BundlePrice,
                 WarehouseId = model.WarehouseId,
-                
+
                 BundlePackage = model.BundlePackage.Select(i => new BundleItems
                 {
                     Name = i.Name,
@@ -220,7 +267,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     WarehouseInputInventoryId = i.WarehouseInputInventoryId,
 
                 }).ToList(),
-                OtherBundlePaymentCosts= model.OtherBundlePaymentCosts.Select(o=> new OtherBundlePaymentCost
+                OtherBundlePaymentCosts = model.OtherBundlePaymentCosts.Select(o => new OtherBundlePaymentCost
                 {
                     Description = o.Description,
                     Amount = o.Amount,
@@ -233,9 +280,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 AvailableBundlePackagePacked = 0,
                 TotalBundlePackageRequested = 0,
                 TotalBundlePackageDisbursed = 0,
-                CommissionPrice= model.CommissionPrice,
-                ShouldAddCommission=model.ShouldAddCommission,
-                
+                CommissionPrice = model.CommissionPrice,
+                ShouldAddCommission = model.ShouldAddCommission,
+
                 BundleEquityPrice = model.BundleEquityPrice,
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
             };
@@ -247,13 +294,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<BundleModel> UpdateBundleEquitPrice(BundleModel model)
         {
-            var bundle = await _context.Bundles.Include(x=>x.BundlePackage)
+            var bundle = await _context.Bundles.Include(x => x.BundlePackage)
 
                 .Include(b => b.OtherBundlePaymentCosts).Where(x => x.Id == model.Id && x.BelongToBusinessCode == model.BelongToBusinessCode).FirstOrDefaultAsync();
             if (bundle != null)
             {
                 bundle.BundleEquityPrice = model.BundleEquityPrice;
-                 bundle.CommissionPrice = model.CommissionPrice;
+                bundle.CommissionPrice = model.CommissionPrice;
                 bundle.BundleEquityPlusCommission = model.BundleEquityPrice + model.CommissionPrice;
 
                 bundle.ShouldAddCommission = model.ShouldAddCommission;
@@ -266,11 +313,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<BundleModel> UpdateBundleSubscriptions(BundleModel model)
         {
             var bundle = await _context.Bundles.Include(x => x.BundlePackage)
-
                 .Include(b => b.OtherBundlePaymentCosts).Where(x => x.Id == model.Id && x.BelongToBusinessCode == model.BelongToBusinessCode).FirstOrDefaultAsync();
             if (bundle != null)
             {
-               bundle.TotalBundlePackageRequested += model.TotalBundlePackageRequested;
+                bundle.TotalBundlePackageRequested += model.TotalBundlePackageRequested;
                 bundle.TotalBundlePackageDisbursed += model.TotalBundlePackageDisbursed;
                 bundle.TotalBundlePackagePacked += model.TotalBundlePackagePacked;
 
@@ -321,7 +367,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var bundle = await _context.Bundles
                 .Include(b => b.BundlePackage)
-                .Include(b=>b.OtherBundlePaymentCosts)
+                .Include(b => b.OtherBundlePaymentCosts)
                 .Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == bundleId)
                 .FirstOrDefaultAsync();
 
@@ -354,7 +400,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WarehouseInputInventoryModel> CreateAsync(WarehouseInputInventoryModel inventory)
         {
             var entity = inventory.Map();
-           // entity.UnitBalance = inventory.UnitStockedUp;
+            // entity.UnitBalance = inventory.UnitStockedUp;
             entity.IsAvailable = true;
             _context.Add(entity);
             await _context.SaveChangesAsync();
@@ -362,7 +408,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-   
+
 
         public async Task<List<WarehouseInputInventoryModel>> GetInputByWarehouse(string belongToBusiness, long warehouseId)
         {
@@ -389,10 +435,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var warehouse = await _context.WarehouseInputInventories.Where(x => x.BelongToBusinessCode == belongToBusiness && x.Id == Id).FirstOrDefaultAsync();
             if (warehouse == null) { throw new Exception("No record found"); }
-           if( !string.IsNullOrEmpty(receivedBy)) {
+            if (!string.IsNullOrEmpty(receivedBy))
+            {
                 warehouse.InventoryStockedOn = date;
-            }else { 
-                warehouse.Shipmentdate = date; 
+            }
+            else
+            {
+                warehouse.Shipmentdate = date;
             }
             warehouse.ReceivedBy = receivedBy;
             warehouse.UnitAdded += unitstoadd;
@@ -405,22 +454,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<InputDeliveryTrackerModel> GetInputTracker(string reference)
         {
-            var input= await _context.Set<InputDeliveryTracker>().FirstOrDefaultAsync(i => i.Reference == reference);
+            var input = await _context.Set<InputDeliveryTracker>().FirstOrDefaultAsync(i => i.Reference == reference);
             if (input == null) return null;
             return input.Map();
         }
 
         public async Task<bool> LogDeliveryTracker(InputDeliveryTrackerModel model)
         {
-           
+
 
             var delivery = await _context.InputDeliveryTrackers.Where(x => x.BusinessCode == model.BusinessCode && x.Reference == model.Reference).FirstOrDefaultAsync();
-            if(delivery == null)
+            if (delivery == null)
             {
                 var newDelivery = model.Map();
                 _context.Add(newDelivery);
             }
-            else {
+            else
+            {
                 delivery.QuantityDelivered = model.QuantityDelivered;
                 delivery.QuantityReceived = model.QuantityReceived;
                 delivery.DeliveryDate = DateTimeOffset.Now;

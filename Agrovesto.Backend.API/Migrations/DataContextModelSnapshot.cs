@@ -110,6 +110,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("MaturityDate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -290,6 +293,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTimeOffset?>("MaturityDate")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("OfficerInChargeUserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -309,6 +315,10 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<bool>("ShouldAddCommission")
                         .HasColumnType("bit");
+
+                    b.Property<string>("SubscriptionStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("TotalEquityPaid")
                         .HasColumnType("decimal(18,2)");

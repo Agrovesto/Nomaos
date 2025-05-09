@@ -247,6 +247,7 @@ namespace Agrovesto.Backend.Infrastructure
                 EquityPlusCommission = entity.EquityPlusCommission,
                 ShouldAddCommission = entity.ShouldAddCommission,
                 Status = entity.PaymentStatus.ToEnum<EquityPaymentStatus>(),
+                EquitySubscriptionStatus = entity.SubscriptionStatus.ToEnum<InputFinancingStatus>(),
                 EquityPaymentBalanceDeficit = entity.EquityPaymentBalanceDeficit,
                 ExpectedEquityPricePerBundle = entity.ExpectedEquityPricePerBundle,
                 ExpectedTotalEquityPrice = entity.ExpectedTotalEquityPrice,
@@ -264,7 +265,10 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = entity.Reference,
                 Location = entity.Location,
                 CooperativeId = entity.CooperativeId,
-                PaymentStatus = entity.PaymentStatus
+                PaymentStatus = entity.PaymentStatus,
+                SubscriptionStatus=entity.SubscriptionStatus,
+                
+               MaturityDate=entity.MaturityDate
             };
         }
 
@@ -277,6 +281,7 @@ namespace Agrovesto.Backend.Infrastructure
             return new BundleSubscriptionInterest
             {
                 PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status),
+                SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus),
                 OfficerInChargeUserId = model.OfficerInChargeUserId,
                 CreatedOn = model.OnBoardedOn,
                 CommissionPercentage = model.CommissionPercentage,
@@ -299,6 +304,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = model.Reference,
                 Location = model.Location,
                 CooperativeId = model.CooperativeId,
+                MaturityDate=model.MaturityDate
             };
         }
 
@@ -386,6 +392,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BundleEquityPrice = entity.BundleEquityPrice,
                 WarehouseId = entity.WarehouseId,
                 OtherBundlePaymentCosts= entity.OtherBundlePaymentCosts.Select(x => x.Map()).ToList(),
+                MaturityDate=entity.MaturityDate
             };
         }
 
@@ -414,6 +421,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ShouldAddCommission = model.ShouldAddCommission,
                 BundleEquityPrice = model.BundleEquityPrice,
                 WarehouseId = model.WarehouseId,
+                MaturityDate= model.MaturityDate
             };
         }
         public static BundleItemsModel Map(this BundleItems entity)
