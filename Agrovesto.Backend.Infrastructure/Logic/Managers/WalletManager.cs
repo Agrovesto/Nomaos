@@ -124,7 +124,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             if (business == null) { throw new Exception($"Business does not exist"); }
 
-            //var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+//var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
             //{
             //    number = model.Bvn
             //});
@@ -140,9 +140,75 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     try
                     {
-                        DateTime date = DateTime.ParseExact(model.DOB, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+                        var existingCustomer = await _walletRepository.GetSterlingWallet(args.UserId);
+                        if (existingCustomer != null && existingCustomer.AccountNumber == null)
+                        {
+                            var auth = await _walletRepository.GetSubAccount(args.UserId);
+                            var updateKYC = await _cafeOneWalletService.UpdateCustomerKyc(new CafeOneCustomerKYCRequest
+                            {
+                                firstName = auth.FirstName,
+                                CustomerId =existingCustomer.CustomerId,
+                                dob = auth.DOB,
+                                lastName = auth.LastName,
+                                Nin = auth.NIN
+                            }, null, args.Env);
+                            var createCustomerWallet = await _cafeOneWalletService.CreateCustomerWallet(
+                                            new CafeOneCustomerWalletCreationRequest
+                                            {
+                                                Name = $"{model.FirstName} {model.LastName}",
+                                                CustomerId = existingCustomer.CustomerId,
+                                                WalletGroupId = null
+                                            }
+                                           , args.Env);
+
+                            if (createCustomerWallet != null)
+                            {
+                                var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                                {
+
+                                    CustomerId = existingCustomer.CustomerId,
+                                    customerTypeId = createCustomerWallet.customerTypeId,
+                                    currencyId = createCustomerWallet.currencyId,
+                                    BankCode = createCustomerWallet.virtualAccount.bankCode,
+                                    walletClassificationId = createCustomerWallet.walletClassificationId,
+                                    AccountName = createCustomerWallet.name,
+                                    BankName = createCustomerWallet.virtualAccount.bankName,
+
+                                    AccountNumber = createCustomerWallet.virtualAccount.accountNumber,
+                                    AgrovestoUserId = args.UserId,
+                                    CreatedOn = DateTime.UtcNow,
+                                    // InternalAccountId = createCustomerWallet.InternalAccountId,
+                                    IsABusinessAccount = true,
+                                    // LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
+                                    OrganizationId = existingCustomer.OrganizationId,
+                                    OwnerId = existingCustomer.CustomerId,
+                                    UserId = existingCustomer.CustomerId,
+                                    WalletId = createCustomerWallet.Id,
+                                });
+
+                                model.WalletCode = createCustomerWallet.Id;
+                                model.SubAccountName = $"{model.FirstName} {model.LastName}";
+                                model.UserId = args.UserId;
+                                model.IsMainAccount = true;
+                                model.CreatedBy = business.BusinessName;
+                                model.OnBoardedOn = DateTimeOffset.Now;
+                                model.BusinessId = business.BusinessId;
+
+                                model.Status = BusinessStatus.Live.ToString();
+                                var createSubaccount = await _walletRepository.CreateSubAccount(model);
+
+                            }
+
+                        }
+                        else
+                        {
+
+                          DateTime date = DateTime.ParseExact(model.DOB, "yyyy-MM-dd", CultureInfo.InvariantCulture);
                         string dobOfBirth = date.ToString("dd-MM-yyyy");
                          model.DOB = dobOfBirth;
+
+                        model.DOB = ConvertedDate(model.DOB);
                         var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
                         {
                             mobileNumber =  model.PhoneNumber,
@@ -157,6 +223,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             City=model.City,
                             
                         }, args.Env);
+
 
                         //if successful, create subaccount
                         if (createCustomer != null)
@@ -212,6 +279,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
 
+                        }
 
                         //send email to business on their wallet creation
                         return model;
@@ -286,6 +354,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (business == null) { throw new Exception($"Business does not exist"); }
             var strategy = _context.Database.CreateExecutionStrategy();
             model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : GenerateEmail(model.FirstName, business.BusinessEmail);
+
+          
+            string firstName = "";
+            string lastName = "";
+           
+            var nameParts = model.FirstName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (nameParts.Length == 1)
+            {
+                firstName = nameParts[0];
+                model.FirstName = firstName;
+            }
+            else if (nameParts.Length >= 2)
+            {
+                firstName = nameParts[0];
+                model.FirstName = firstName;
+                lastName = nameParts[^1];
+                model.LastName = lastName;
+            }
             await strategy.ExecuteAsync(async () =>
             {
                 using (var dbTransaction = _context.Database.BeginTransaction())

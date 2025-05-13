@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
         public string Capacity { get; set; }
-        public string ManagedByUserId { get; set; }
+        public string? ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
         public string BelongToBusinessCode { get; set; }
         public bool IsActive { get; set; }

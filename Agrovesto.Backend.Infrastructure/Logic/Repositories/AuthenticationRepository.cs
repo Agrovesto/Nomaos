@@ -157,10 +157,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              //   new Claim("WalletId", userWallet.WalletId.ToString()),
                 new Claim("Role", string.Join(',' ,userRole)),
                 new Claim("UserType", user.UserType),
+                new Claim("User", user.Name),
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-               // new Claim("BelongToBusiness", user.BusinessCode),
+                //new Claim("BelongToBusiness", user.BusinessCode),
 
 
 

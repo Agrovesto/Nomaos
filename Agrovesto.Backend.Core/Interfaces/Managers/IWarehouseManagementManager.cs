@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<(bool status, WarehouseUserModel data)> CreateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args);
         Task<bool> DepleteFromInput(InputUpdateModel model, BusinessRegistrationArgs args);
         Task<Response<BundleModel>> GetBundle(string userId, long bundleId);
+        Task<PagedListResponse<List<BundleModel>>> GetBundleByWarehouseManager(string userId, ListQueryParams query);
         Task<PagedListResponse<List<BundleModel>>> GetBundlesByBusiness(string userId, ListQueryParams query);
         Task<Response<WarehouseInputInventoryModel>> GetInput(string userId, long warehouseId);
         Task<PagedListResponse<List<WarehouseInputInventoryModel>>> GetInputByWarehouse(string userId, ListQueryParams query);

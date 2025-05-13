@@ -10,20 +10,20 @@ namespace Agrovesto.Backend.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ProviderId",
-                table: "PaymentProviderParameters");
+            //migrationBuilder.DropColumn(
+            //    name: "ProviderId",
+            //    table: "PaymentProviderParameters");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<long>(
-                name: "ProviderId",
-                table: "PaymentProviderParameters",
-                type: "bigint",
-                nullable: false,
-                defaultValue: 0L);
+            //migrationBuilder.AddColumn<long>(
+            //    name: "ProviderId",
+            //    table: "PaymentProviderParameters",
+            //    type: "bigint",
+            //    nullable: false,
+            //    defaultValue: 0L);
         }
     }
 }

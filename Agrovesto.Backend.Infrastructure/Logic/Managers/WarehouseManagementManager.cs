@@ -976,6 +976,47 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
             return createBundle;
         }
+        
+        public async Task<PagedListResponse<List<BundleModel>>> GetBundleByWarehouseManager(string userId,
+  ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var business = !string.IsNullOrEmpty(query.businessCode)
+       ? await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+       : await _businessRepository.GetBusinessByUserIdAsync(userId);
+
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var bundles = await _repository.GetBundleByWarehouseManager(business.BusinessCode, userId);
+                if (bundles == null) return new PagedListResponse<List<BundleModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<BundleModel>>
+                {
+                    Succeeded = true,
+                    Data = bundles,
+                    Count = bundles.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
 
         public async Task<PagedListResponse<List<BundleModel>>> GetBundlesByBusiness(string userId,
      ListQueryParams query)

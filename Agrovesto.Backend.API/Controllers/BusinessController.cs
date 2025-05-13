@@ -1139,8 +1139,44 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
 
-        }   
-        
+        }
+
+        [HttpGet("farmer-image/{imageKey}")]
+        public async Task<IActionResult> GetFarmerImage([FromQuery] ListQueryParams query, string imageKey)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmerDetailWithImage(query, imageKey);
+                return Ok(new Response<FarmerModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("farmers")]
         public async Task<IActionResult> GetFarmersByBusinessCode([FromQuery] ListQueryParams query)
         {

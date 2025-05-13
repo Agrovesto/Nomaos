@@ -25,7 +25,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
         Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string customerId, string walletId, string Env);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string Env);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string Env);
-        Task<bool> UpdateCustomerKyc(CafeOneCustomerKYCRequest model, CafeOneParams @params);
+        Task<bool> UpdateCustomerKyc(CafeOneCustomerKYCRequest model, CafeOneParams @params, string env);
         Task<CafeOnWalletResponse<WalletResponseData>> UserWalletToAgrovestoTransfer(string reference, string ownerId, decimal amount, string fromAccount, string Env);
         Task<CafeOnWalletResponse<WalletTransferResult>> UserWalletToBusinessWalletTransfer(WalletToWalletTransferRequest request);
         Task<CafeOneExternalTransferResponse> UserWalletToExternalBankTransfer(ExternalBankTransferModel extmodel, string Env);
