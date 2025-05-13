@@ -86,14 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 if (response.success)
                 {
                     //Step 2
-                    var updateKYC = await UpdateCustomerKyc(new CafeOneCustomerKYCRequest
-                    {
-                        firstName = model.firstName,
-                        CustomerId = response.data.Id,
-                        dob = model.dob,
-                        lastName = model.lastName,
-                        Nin = model.nin
-                    }, @params);
+                    await VerifyKYC(model, @params, response, Env);
                     return response.data;
                 }
                 else
@@ -110,9 +103,24 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
         }
 
-        public async Task<bool> UpdateCustomerKyc(CafeOneCustomerKYCRequest model, CafeOneParams @params)
+        private async Task VerifyKYC(CafeoneCustomerRequest model, CafeOneParams @params, CafeoneResponseModel<CafeoneDataModel>? response, string env)
         {
-            
+            var updateKYC = await UpdateCustomerKyc(new CafeOneCustomerKYCRequest
+            {
+                firstName = model.firstName,
+                CustomerId = response.data.Id,
+                dob = model.dob,
+                lastName = model.lastName,
+                Nin = model.nin
+            }, @params, env);
+        }
+
+        public async Task<bool> UpdateCustomerKyc(CafeOneCustomerKYCRequest model, CafeOneParams @params, string env)
+        {
+            if(@params == null)
+            {
+                @params = await RetrieveParams(env);
+            }
 
             try
             {
@@ -171,6 +179,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     name = model.Name,
                     currencyId = model.CurrencyId,
                 };
+
                 var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
 
 
@@ -280,12 +289,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
-                //query.EnsureSuccessStatusCode();
+                query.EnsureSuccessStatusCode();
 
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
-                //TODO: remove this before deployment
-                response = new CafeoneResponseModel<CafeOneCustomerWalletResponse>();
-                response.success = true;
+                  response.success = true;
                 if (response.success)
                 {
 
@@ -340,13 +347,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var query = await _httpService.Post($"{@params.Url}/wallets/wallet/transaction/account-number/post", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
-                //query.EnsureSuccessStatusCode();
+                query.EnsureSuccessStatusCode();
              
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
 
-                //TODO: remove this before deployment
-                response = new CafeoneResponseModel<CafeOneCustomerWalletResponse>();
-                response.success = true;
+                
                 if (response.success)
                 {
 

@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             account.NIN = model.NIN;
             account.Status = BusinessStatus.Registered.ToString();//model.Status;
             account.SubAccountName = model.SubAccountName;  
-            
+           
 
             await _context.SaveChangesAsync();
             return account.Map();
@@ -95,6 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.UserId = model.UserId;
                 entity.walletClassificationId = model.walletClassificationId;
                 entity.WalletId = model.WalletId;
+                
             }
           
 

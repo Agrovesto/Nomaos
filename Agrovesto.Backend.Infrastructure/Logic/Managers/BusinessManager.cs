@@ -56,7 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             IAgentRepository agentRepository, ISMSService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
             ITraderRepository traderRepository,
-          
+
                 IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
@@ -86,8 +86,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 var user = await _authenticationRepository.GetUserById(query.UserId);
                 if (user.model == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found"); }
 
-                var accountDetails = await _walletManager.GetUserSterlingAccount(query.UserId); 
-                if(accountDetails == null) {
+                var accountDetails = await _walletManager.GetUserSterlingAccount(query.UserId);
+                if (accountDetails == null)
+                {
                     return new Response<UserAccountDetailsModel>
                     {
                         Succeeded = true,
@@ -99,7 +100,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     WalletId = accountDetails.WalletId,
                     CustomerId = accountDetails.CustomerId,
-                    AccountName=accountDetails.AccountName,
+                    AccountName = accountDetails.AccountName,
                     AccountNumber = accountDetails.AccountNumber,
                     BankCode = accountDetails.BankCode,
                     BankName = accountDetails.BankName,
@@ -138,12 +139,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (userBalance == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
                 var accountDetails = new UserWalletBalanceModel
                 {
-                    AvailableBalance=userBalance.availableBalance,
-                    LedgerBalance=userBalance.ledgerBalance,
+                    AvailableBalance = userBalance.availableBalance,
+                    LedgerBalance = userBalance.ledgerBalance,
                     //Status=userBalance,
-                    WalletId=userBalance.Id,
-                    Currency=userBalance.currencyId,
-                    CustomerId=userBalance.customerId,
+                    WalletId = userBalance.Id,
+                    Currency = userBalance.currencyId,
+                    CustomerId = userBalance.customerId,
                 };
                 return new Response<UserWalletBalanceModel>
                 {
@@ -484,7 +485,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     assignAgentToCooperative = await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
 
-                     var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
+                    var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
                 }
@@ -618,7 +619,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         // Optional: send notification
                         await NotifyUserOfRoleReuse(existingUser.PhoneNumber, model.UserType);
-                        
+
                     }
                     else
                     {
@@ -642,7 +643,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     else
                     {
-             
+
                         subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
                     }
 
@@ -655,7 +656,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                   
+
                     subAccount.UserId = finalUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
@@ -669,7 +670,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
             });
         }
-        
+
         private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
         {
             try
@@ -720,16 +721,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-         private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
+        private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
         {
-            if(userType != null)
+            if (userType != null)
             {
                 subaccount.SubAccountType = userType.ToEnum<SubAccountType>();
             }
             switch (subaccount.SubAccountType)
             {
                 case SubAccountType.Trader:
-                    await CreateTraderProfile(model, business, registeredUser.model.Id);                   
+                    await CreateTraderProfile(model, business, registeredUser.model.Id);
                     break;
                 case SubAccountType.Agent:
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
@@ -1452,6 +1453,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
 
+        public async Task<Response<FarmerModel>> GetFarmerDetailWithImage(
+ListQueryParams query, string imageKey)
+        {
+            try
+            {
+
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+
+                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Access Forbidden");
+
+                var farmer = await _farmerRepository.GetFarmerByUserId(query.UserId);
+
+                if (farmer == null)
+                {
+                    return new Response<FarmerModel>
+                    {
+                        Succeeded = true,
+                        Data = null,
+                        Message = "No Record Found"
+                    };
+                }
+
+                // Fetch actual image URLs from Amazon S3 using the stored image keys
+
+                if (!string.IsNullOrEmpty(farmer.FarmerImage) && farmer.FarmerImage == imageKey)
+                {
+                    farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+                }
+
+
+                return new Response<FarmerModel>
+                {
+                    Succeeded = true,
+                    Data = farmer,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Farmer: {ex.Message}");
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
 
     }
 }

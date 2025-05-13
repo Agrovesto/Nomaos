@@ -355,6 +355,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }).ToList();
         }
 
+
+        public async Task<List<BundleModel>> GetBundleByWarehouseManager(string belongToBusiness, string warehouseMangerId)
+        {
+            var bundles = await _context.Bundles
+                .Include(b => b.BundlePackage)
+                .Include(b => b.OtherBundlePaymentCosts)
+
+                .Where(x => x.BelongToBusinessCode == belongToBusiness)
+                .ToListAsync();
+
+            if (bundles == null || !bundles.Any())
+            {
+                return null;
+            }
+
+            // Fetch warehouse names for all distinct WarehouseIds in bundles
+            var warehouseIds = bundles.Select(b => b.WarehouseId).Distinct().ToList();
+            var warehouses = await _context.Warehouses
+                .Where(w => warehouseIds.Contains(w.Id) && w.ManagedByUserId == warehouseMangerId)
+                .ToDictionaryAsync(w => w.Id, w => w.Name);
+
+            return bundles.Select(bundle =>
+            {
+                var mappedBundle = bundle.Map();
+                if (warehouses.TryGetValue(bundle.WarehouseId, out var warehouseName))
+                {
+                    mappedBundle.WarehouseName = warehouseName;
+                }
+                return mappedBundle;
+            }).ToList();
+        }
+
         //public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
         //{
         //    var bundles = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness

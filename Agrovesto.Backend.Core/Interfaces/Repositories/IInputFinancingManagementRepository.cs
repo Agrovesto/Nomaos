@@ -36,5 +36,10 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<BundleSubscriptionInterestModel>> GetExistingSubscription(BundleSubscriptionInterestModel data);
         Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model);
         Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference);
+        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(string businessCode, string warehouseManger, int pageNumber = 1, int pageSize = 10, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null, string? disbursedBy = null);
+        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(string businessCode, int pageNumber = 1, int pageSize = 10, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null, string? disbursedBy = null);
+        Task<List<BundleDisbursementModel>> FilterDisbursementForDownload(string? businessCode, string? disbursedBy, string? state, DateTime? startDate, DateTime? endDate);
+        Task<List<BundleSubscriptionInterestModel>> FilterSubscriptionForDownload(string? businessCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
+        Task<List<BundleSubscriptionInterestModel>> GetFarmerSubscriptionInterestDetails(BundleSubscriptionInterestModel data);
     }
 }

@@ -25,5 +25,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(BusinessRegistrationArgs args);
         Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args);
         Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args);
+        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(BusinessRegistrationArgs args);
+        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(BusinessRegistrationArgs args);
+        Task<BundleSubscriptionInterestResponseModel> RetrievePaymentSlip(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args);
     }
 }

@@ -40,6 +40,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public string? Location { get; set; }
+        public string? WarehouseManger { get; set; }
         public string? UserType { get; set; }
         public string? RoleName { get; set; }
         public string? UserId { get; set; }

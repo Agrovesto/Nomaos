@@ -176,6 +176,8 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+       
+        
         [HttpPost("subscription-receipt")]
         public async Task<IActionResult> GetSubscriptionIntesrest([FromBody]BundleSubscriptionInterestModel model, [FromQuery]BusinessRegistrationArgs query)
         {
@@ -184,6 +186,41 @@ namespace Agrovesto.Backend.API.Controllers
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.RetrieveFarmerInputDisbursementReceipt(model, query);
                 return Ok(new Response<BundleInterestReceiptModel>()
+                {
+                    Data = result,
+                    Succeeded = true,
+                    Code = Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+     [HttpPost("retrieve-bundle-payment-slip")]
+        public async Task<IActionResult> RetrievePaymentSlip([FromBody] BundleSubscriptionInterestModel model, [FromQuery]BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _inputFinancingManagement.RetrievePaymentSlip(model, query);
+                return Ok(new Response<BundleSubscriptionInterestResponseModel>()
                 {
                     Data = result,
                     Succeeded = true,
@@ -491,7 +528,85 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+        [HttpGet("business-disbursement")]
+        public async Task<IActionResult> GetDisbursementByBusiness([FromQuery] BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
+                var result = await _inputFinancingManagement.GetDisbursementByBusiness(query);
+                return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count !=0 ? "Successful" : "No Record",
+                    Succeeded = result.Count != 0 ? true : false,
+                    Count = result.Count,
+                   PageNumber = result.PageNumber,
+                    PageSize = 10,
+                    Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                }); ;
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("agent-disbursement")]
+        public async Task<IActionResult> GetDisbursementByBusinessAgent([FromQuery] BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _inputFinancingManagement.GetDisbursementByAgent(query);
+                return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count != 0 ? "Successful" : "No Record",
+                    Succeeded = result.Count != 0 ? true : false,
+                    Count = result.Count,
+                    PageNumber = result.PageNumber,
+                    PageSize = 10,
+                    Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                }); ;
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
         [HttpGet("paidsubscription-interests-byagent")]
         public async Task<IActionResult> GetPaidSubscriptionInterestByBusinessAgent([FromQuery] BusinessRegistrationArgs query)
