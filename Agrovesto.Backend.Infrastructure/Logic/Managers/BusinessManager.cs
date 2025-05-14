@@ -292,7 +292,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var registrationMode = new UserModel
                         {
                             Email = business.BusinessEmail,
-                            Name = business.BusinessName,
+                            FirstName = business.BusinessName,
                             Password = args.DefaultPassword,
                             PhoneNumber = business.PhoneNumber,
                             UserType = Enum.GetName(typeof(UserType), UserType.Business),//UserType.Business,
@@ -325,7 +325,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             To = business.BusinessEmail,
                             ToName = $"{business.BusinessName}",
                             Subject = $"Welcome OnBoard {business.BusinessName}",
-                            AccountOfficer = accountOfficer.model.Name,
+                            AccountOfficer = accountOfficer.model.FirstName,
                             DefaultPassword = args.DefaultPassword,
                             Email = accountOfficer.model.Email,
                             PhoneNumber = accountOfficer.model.PhoneNumber,
@@ -374,7 +374,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         var registrationMode = new UserModel
                         {
                             Email = bWorker.Email,
-                            Name = bWorker.FullName,
+                            FirstName = bWorker.FullName,
                             Password = args.DefaultPassword,
                             PhoneNumber = bWorker.PhoneNumber,
                             UserType = Enum.GetName(typeof(UserType), UserType.Business),
@@ -524,7 +524,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     changeRole.model.Location = cooperative.Location;
                     changeRole.model.Email = cooperative.Email;
                     changeRole.model.PhoneNumber = cooperative.PhoneNumber;
-                    changeRole.model.Name = cooperative.Name;
+                    changeRole.model.FirstName = cooperative.Name;
 
                     await CreateAgentProfileAsync(changeRole.model, business, args.UserId);
                     await _context.SaveChangesAsync();
@@ -623,6 +623,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     else
                     {
+                       if(model.UserType != "Cooperative")
+                        {
+                            model.Name = model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                        }
                         var registrationResult = await RegisterUserAsync(model, args);
                         if (!registrationResult.status)
                             throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
@@ -636,7 +640,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     SubAccountModel subAccount;
                     model.Email = !string.IsNullOrWhiteSpace(model.Email)
             ? model.Email
-            : GenerateEmail(model.Name, business.BusinessEmail);
+            : GenerateEmail(model.FirstName, business.BusinessEmail);
                     if (existingSubAccount != null)
                     {
                         subAccount = existingSubAccount;
@@ -660,6 +664,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     subAccount.UserId = finalUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
+                    subAccount.FirstName = model.FirstName;
+                    subAccount.LastName = model.LastName;
+                    subAccount.MiddleName = model.MiddleName;
                     subAccount.Alias = model.Alias;
                     return subAccount;
                 }
@@ -730,16 +737,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             switch (subaccount.SubAccountType)
             {
                 case SubAccountType.Trader:
+                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateTraderProfile(model, business, registeredUser.model.Id);
                     break;
                 case SubAccountType.Agent:
+                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
 
                     bWorker.BusinessId = business.BusinessId;
                     bWorker.UserId = registeredUser.model.Id;
                     bWorker.CreatedOn = DateTimeOffset.Now;
                     bWorker.Email = model.Email;
-                    bWorker.FullName = model.Name;
+                    bWorker.FullName = model.FirstName;
                     bWorker.PhoneNumber = model.PhoneNumber;
 
                     newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
@@ -753,12 +762,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     var coop = await CreateCooperativeProfileAsync(model, business, args.UserId);
                     args.UserId = registeredUser.model.Id;
                     //then create user as a farmer as well
-
+                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
 
                     break;
 
                 case SubAccountType.Farmer:
+                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     model.Id = registeredUser.model.Id;
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
                     break;
@@ -782,7 +792,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var user = new UserModel
             {
                 Email = model.Email,
-                Name = model.Name,
+                FirstName = model.FirstName,
                 Password = model.Password,
                 PhoneNumber = model.PhoneNumber,
                 UserType = args.UserType,//Enum.GetName(typeof(UserType), args.UserType),//args.UserType.ToEnum<UserType>(),
@@ -805,8 +815,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 BusinessId = business.BusinessId,
                 UserId = userId,
-                FirstName = model.Name,
-                LastName = model.Name,
+                FirstName = model.FirstName,
+                LastName = model.FirstName,
+                MiddleName=model.MiddleName,
                 SubAccountType = args.SubAccountType.ToEnum<SubAccountType>(),
                 PhoneNumber = model.PhoneNumber,
                 DOB = model.DateOfBirth,
@@ -875,7 +886,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 BelongToBusinessCode = business.BusinessCode,
                 State = model.State,
                 Lga = model.Lga,
-                ContactPerson = model.Name,//string.Empty,
+                ContactPerson = model.FirstName,//string.Empty,
                 Email = model.Email,
                 Location = model.Location,
                 Name = model.Name,
@@ -895,7 +906,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             if (string.IsNullOrEmpty(model.Email))
             {
-                model.Email = GenerateEmail(model.Name, business.BusinessEmail);
+                model.Email = GenerateEmail(model.FirstName, business.BusinessEmail);
             }
             var farmer = new FarmerModel
             {
