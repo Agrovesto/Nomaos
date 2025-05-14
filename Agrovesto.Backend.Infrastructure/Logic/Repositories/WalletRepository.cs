@@ -47,6 +47,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             account.DOB = model.DOB;
             account.FirstName = model.FirstName;
             account.LastName = model.LastName;
+            account.MiddleName = model.MiddleName;
             account.WalletCode = model.WalletCode;
             account.IsMainAccount = false;
             account.NIN = model.NIN;

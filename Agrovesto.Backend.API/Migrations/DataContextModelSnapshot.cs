@@ -1054,6 +1054,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("LastName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("MiddleName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("NIN")
                         .HasColumnType("nvarchar(max)");
 

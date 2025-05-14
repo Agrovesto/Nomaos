@@ -653,7 +653,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var mailRequest = new InputDisbursementApprovalMailBody
             {
                 To = bWorker.Email,
-                ToName = $"{bWorker.Name}",
+                ToName = $"{bWorker.FirstName}",
                 Subject = $" {business.BusinessName} Input Disbursement Notification",
                 From = business.BusinessEmail,
                 FromName = business.BusinessName,
@@ -729,7 +729,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
                         var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(bundle);
-                        model.DisbursedBy = user.model.Name;
+                        model.DisbursedBy = user.model.FirstName;
                         // subscription.Status = EquityPaymentStatus.Disbursed;
                         subscription.EquitySubscriptionStatus = InputFinancingStatus.Disbursed;
                         var updateSubsubcriptionStatus = await _repository.UpdateEquitySubcriiptonStatus(subscription);

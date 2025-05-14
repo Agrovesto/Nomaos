@@ -881,6 +881,7 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = model.WalletCode,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
+                MiddleName= model.MiddleName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType)
 
             };
@@ -911,6 +912,7 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = entity.WalletCode,
                 FirstName = entity.FirstName,
                 LastName = entity.LastName,
+                MiddleName= entity.MiddleName,
                 SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
             };
         }
@@ -1338,7 +1340,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Email = model.Email,
                 LastLoginDate = model.LastLoginDate,
                 PhoneNumber = model.PhoneNumber,
-                Name = model.Name,
+                Name = model.FirstName,
                 UserType = model.UserType,
                 BusinessCode = model.BusinessCode,
                 //Gender=model.Gender,
@@ -1371,7 +1373,7 @@ namespace Agrovesto.Backend.Infrastructure
                 PhoneNumber = model.PhoneNumber,
                 Pin = model.Pin,
                 UserName = model.Email,
-                Name = model.Name,
+                Name = model.FirstName,
                 UserType = model.UserType,
                 BusinessCode = model.BusinessCode
                 //UserType=model.UserType.ToString()
@@ -1403,7 +1405,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //UserType = Enum.GetName(typeof(UserType), entity.UserType),//entity.UserType.ToEnum<UserType>(),
                 IsActive = entity.IsActive,
                 Id = entity.Id,
-                Name = entity.Name,
+                FirstName = entity.Name,
                 BusinessCode = entity.BusinessCode
             };
         }

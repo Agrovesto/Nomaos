@@ -23,7 +23,63 @@ namespace Agrovesto.Backend.API.Controllers
             
             _farmPlotDetailsManager = farmPlotDetailsManager;
         }
-        [HttpPost("update-plot-details")]    
+        [HttpPost("farm-plot-details")]    
+        public async Task<IActionResult> UpdateFarmCoordinateDetails([FromBody] FarmPlotDetailsModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+               
+                var updateDetail = await _farmPlotDetailsManager.UpdateFarmCoordinateDetails(model, args);
+                
+
+                return Ok(new Response<FarmPlotDetailsModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = updateDetail
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+         [HttpPost("update-plot-details")]    
         public async Task<IActionResult> UpdateFarmPlotDetails([FromBody] FarmPlotDetailsModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
@@ -46,7 +102,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
+               
                 var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
                 
 
@@ -356,13 +412,17 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        [HttpGet("visitation-logs-by-farmer/{farmerUserId}")]
-        public async Task<IActionResult> GetVisitationLogByFarmer([FromQuery] BusinessRegistrationArgs query, string farmerId)
+        [HttpGet("visitation-logs-by-farmer")]
+        public async Task<IActionResult> GetVisitationLogByFarmer([FromQuery] BusinessRegistrationArgs query)
         {
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _farmPlotDetailsManager.GetVisitationLogByFarmer(query, farmerId);
+                if(CurrentUserRole == "Fsrmer")
+                {
+                    query.UserId = CurrentUserId;
+                }
+                var result = await _farmPlotDetailsManager.GetVisitationLogByFarmer(query, query.UserId);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()
                 {
                     Data = result,

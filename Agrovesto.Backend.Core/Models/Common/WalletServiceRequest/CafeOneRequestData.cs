@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
         public string mobileNumber { get; set; }
         public string firstName { get; set; }
         public string lastName { get; set; }
+        public string middleName { get; set; }
         public string EmailAddress { get; set; }
         public string dob { get; set; }
         public string bvnNumber { get; set; }
@@ -39,6 +40,7 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
         public string Nin { get; set; }
         public string firstName { get; set; }
         public string lastName { get; set; }
+        public string middleName { get; set; }
         public string dob { get; set; }
     }
 

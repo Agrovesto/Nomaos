@@ -637,7 +637,25 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
-
+               if(CurrentUserRole != "Farmer" && string.IsNullOrEmpty(model.FarmerUserId))
+                {
+                    return BadRequest(new Response<Dictionary<string, string>>()
+                    {
+                        Message = "Validation failed.",
+                        Succeeded = false,
+                        Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                    });
+                }
+                if(CurrentUserRole == "Farmer")
+                {
+                    model.FarmerUserId = CurrentUserId;
+                }
+                
                 var saveFarmerFace = await _businessManager.SaveFarmerImage(model, args);
 
 

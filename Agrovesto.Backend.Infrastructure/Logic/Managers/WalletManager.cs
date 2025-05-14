@@ -148,6 +148,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             var updateKYC = await _cafeOneWalletService.UpdateCustomerKyc(new CafeOneCustomerKYCRequest
                             {
                                 firstName = auth.FirstName,
+                               middleName=auth.MiddleName,
                                 CustomerId =existingCustomer.CustomerId,
                                 dob = auth.DOB,
                                 lastName = auth.LastName,
@@ -194,9 +195,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 model.CreatedBy = business.BusinessName;
                                 model.OnBoardedOn = DateTimeOffset.Now;
                                 model.BusinessId = business.BusinessId;
-
+                                
                                 model.Status = BusinessStatus.Live.ToString();
-                                var createSubaccount = await _walletRepository.CreateSubAccount(model);
+                                var createSubaccount = await _walletRepository.UpdateSubAccount(model);
 
                             }
 
@@ -213,6 +214,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         {
                             mobileNumber =  model.PhoneNumber,
                             firstName = model.FirstName,
+                            middleName=model.MiddleName,
                             lastName = model.LastName,
                             dob = model.DOB,
                             bvnNumber = model.Bvn,
@@ -359,20 +361,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             string firstName = "";
             string lastName = "";
            
-            var nameParts = model.FirstName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            //var nameParts = model.FirstName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            if (nameParts.Length == 1)
-            {
-                firstName = nameParts[0];
-                model.FirstName = firstName;
-            }
-            else if (nameParts.Length >= 2)
-            {
-                firstName = nameParts[0];
-                model.FirstName = firstName;
-                lastName = nameParts[^1];
-                model.LastName = lastName;
-            }
+            //if (nameParts.Length == 1)
+            //{
+            //    firstName = nameParts[0];
+            //    model.FirstName = firstName;
+            //}
+            //else if (nameParts.Length >= 2)
+            //{
+            //    firstName = nameParts[0];
+            //    model.FirstName = firstName;
+            //    lastName = nameParts[^1];
+            //    model.LastName = lastName;
+            //}
             await strategy.ExecuteAsync(async () =>
             {
                 using (var dbTransaction = _context.Database.BeginTransaction())
@@ -385,6 +387,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             mobileNumber = model.PhoneNumber,
                             firstName = model.FirstName,
                             lastName = model.LastName,
+                            middleName=model.MiddleName,
                             dob = model.DOB,
                             bvnNumber = model.Bvn,
                             EmailAddress = model.Email,
