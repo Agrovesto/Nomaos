@@ -1376,6 +1376,53 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("PaymentProviderParameters");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Payout", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset?>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DestinationAccountName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DestinationAccountNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DestinationBank")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsSuccessfulTransaction")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Reference")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SourceAccountName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SourceAccountNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("SourceBankCode")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Payouts");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
                 {
                     b.Property<string>("Id")

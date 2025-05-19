@@ -41,6 +41,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _walletRepository = walletRepository;   
         }
 
+        #region intrabankpayout
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToBusinessAccount(PostWalletToWalletTransferRequestModel request, string env)
+        {
+            try
+            {
+
+               
+                var postIntrabank = await _cafeOneWalletService.PayoutTransferFromUserAccountToBusinessAccount(request, env);
+                if (postIntrabank == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                return postIntrabank;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToAgrovestoAccount(PostWalletToWalletTransferRequestModel request, string env)
+        {
+            try
+            {
+
+               
+                var postIntrabank = await _cafeOneWalletService.PayoutTransferFromUserAccountToAgrovestoAccount(request, env);
+                if (postIntrabank == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+
+                return postIntrabank;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception(ex.Message);
+            }
+        }
+        #endregion intrabankpayout
         public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string env)
         {
             try
@@ -86,13 +120,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
 
                 var retrieveWalletDetails = await _cafeOneWalletService.RetrieveCustomerWallet(userWallet.CustomerId, userWallet.WalletId, env);
-                if (retrieveWalletDetails == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+                if(retrieveWalletDetails != null)
+                {
+                    var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                    {
+                        CustomerId = userWallet.CustomerId,
+                        OwnerId = userWallet.OwnerId,
+                        UserId = userWallet.UserId,
+                        LedgerAccountNumber = userWallet.LedgerAccountNumber,
+                        InternalAccountId = userWallet.InternalAccountId,
+                        CreatedOn = userWallet.CreatedOn,
+                        IsABusinessAccount = userWallet.IsABusinessAccount,
+                        OrganizationId = userWallet.OrganizationId,
+                        customerTypeId = retrieveWalletDetails.customerTypeId,
+                        currencyId = retrieveWalletDetails.currencyId,
+                        BankCode = retrieveWalletDetails.virtualAccount.bankCode,
+                        walletClassificationId = retrieveWalletDetails.walletClassificationId,
+                        AccountName = retrieveWalletDetails.name,
+                        BankName = retrieveWalletDetails.virtualAccount.bankName,
+
+                        AccountNumber = retrieveWalletDetails.virtualAccount.accountNumber,
+                        AgrovestoUserId = userId,
+
+                        WalletId = retrieveWalletDetails.Id,
+                    });
+                }
+
 
                 return retrieveWalletDetails;
             }
             catch (Exception ex)
             {
-                throw new Exception(ex.Message);
+                return null;
+                //throw new Exception(ex.Message);
             }
         }
 
@@ -162,7 +222,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                                 WalletGroupId = null
                                             }
                                            , args.Env);
-
+                     
                             if (createCustomerWallet != null)
                             {
                                 var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
@@ -381,7 +441,70 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     try
                     {
+                        var existingCustomer = await _walletRepository.GetSterlingWallet(args.UserId);
 
+
+                        if (existingCustomer != null && existingCustomer.AccountNumber == null)
+                        {
+                            var auth = await _walletRepository.GetSubAccount(args.UserId);
+                            var updateKYC = await _cafeOneWalletService.UpdateCustomerKyc(new CafeOneCustomerKYCRequest
+                            {
+                                firstName = auth.FirstName,
+                                middleName = auth.MiddleName,
+                                CustomerId = existingCustomer.CustomerId,
+                                dob = auth.DOB,
+                                lastName = auth.LastName,
+                                Nin = auth.NIN
+                            }, null, args.Env);
+                            var createCustomerWallet = await _cafeOneWalletService.CreateCustomerWallet(
+                                            new CafeOneCustomerWalletCreationRequest
+                                            {
+                                                Name = $"{model.FirstName} {model.LastName}",
+                                                CustomerId = existingCustomer.CustomerId,
+                                                WalletGroupId = null
+                                            }
+                                           , args.Env);
+
+                            if (createCustomerWallet != null)
+                            {
+                                var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
+                                {
+
+                                    CustomerId = existingCustomer.CustomerId,
+                                    customerTypeId = createCustomerWallet.customerTypeId,
+                                    currencyId = createCustomerWallet.currencyId,
+                                    BankCode = createCustomerWallet.virtualAccount.bankCode,
+                                    walletClassificationId = createCustomerWallet.walletClassificationId,
+                                    AccountName = createCustomerWallet.name,
+                                    BankName = createCustomerWallet.virtualAccount.bankName,
+
+                                    AccountNumber = createCustomerWallet.virtualAccount.accountNumber,
+                                    AgrovestoUserId = args.UserId,
+                                    CreatedOn = DateTime.UtcNow,
+                                    // InternalAccountId = createCustomerWallet.InternalAccountId,
+                                    IsABusinessAccount = true,
+                                    // LedgerAccountNumber = createCustomerWallet.LedgerAccountNumber,
+                                    OrganizationId = existingCustomer.OrganizationId,
+                                    OwnerId = existingCustomer.CustomerId,
+                                    UserId = existingCustomer.CustomerId,
+                                    WalletId = createCustomerWallet.Id,
+                                });
+
+                                model.WalletCode = createCustomerWallet.Id;
+                                model.SubAccountName = $"{model.FirstName} {model.LastName}";
+                                model.UserId = args.UserId;
+                                model.IsMainAccount = true;
+                                model.CreatedBy = business.BusinessName;
+                                model.OnBoardedOn = DateTimeOffset.Now;
+                                model.BusinessId = business.BusinessId;
+
+                                model.Status = BusinessStatus.Live.ToString();
+                                var createSubaccount = await _walletRepository.UpdateSubAccount(model);
+
+                            }
+
+                        }
+                        else { 
                         var createCustomer = await _cafeOneWalletService.CreateCustomer(new CafeoneCustomerRequest
                         {
                             mobileNumber = model.PhoneNumber,
@@ -444,6 +567,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                             }
 
+                        }
                         }
 
                         await _context.SaveChangesAsync();
