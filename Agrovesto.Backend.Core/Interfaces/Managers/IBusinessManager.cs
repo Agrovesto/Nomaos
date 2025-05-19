@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -39,5 +40,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(ListQueryParams query);
         Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(ListQueryParams query);
         Task<Response<FarmerModel>> GetFarmerDetailWithImage(ListQueryParams query, string imageKey);
+        Task<Response<CafeOneCustomerWalletResponse>> RetrieveCustomerWallet(ListQueryParams query);
     }
 }

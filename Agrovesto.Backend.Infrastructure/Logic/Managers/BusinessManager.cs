@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -125,6 +126,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
 
+        public async Task<Response<CafeOneCustomerWalletResponse>> RetrieveCustomerWallet(
+
+        ListQueryParams query)
+        {
+            try
+            {
+                var user = await _authenticationRepository.GetUserById(query.UserId);
+                if (user.model == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found"); }
+
+
+                var walletDetails = await _walletManager.RetrieveCustomerWallet(query.UserId, query.env);
+               
+                return new Response<CafeOneCustomerWalletResponse>
+                {
+                    Succeeded = true,
+                    Data = walletDetails,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving User Account: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        
         public async Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(
 
         ListQueryParams query)
@@ -667,7 +699,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     subAccount.FirstName = model.FirstName;
                     subAccount.LastName = model.LastName;
                     subAccount.MiddleName = model.MiddleName;
-                    subAccount.Alias = model.Alias;
+                    subAccount.Alias = !string.IsNullOrEmpty(model.Alias) ? model.Alias : "Mr";
                     return subAccount;
                 }
                 catch (Exception ex)

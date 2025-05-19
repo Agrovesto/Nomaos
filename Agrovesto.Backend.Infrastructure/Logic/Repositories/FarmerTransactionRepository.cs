@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common.Dashboard;
 using Agrovesto.Backend.Infrastructure.DB;
 using Microsoft.EntityFrameworkCore;
 using System;

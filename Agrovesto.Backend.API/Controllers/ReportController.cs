@@ -3,6 +3,8 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.Dashboard;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
@@ -15,10 +17,47 @@ namespace Agrovesto.Backend.API.Controllers
     public class ReportController : BaseController
     {
         private readonly IReportManager _reportManager;
+        private readonly IDashboardManager _dashboardManager;
         public ReportController(IHttpContextAccessor httpContextAccessor,
-            IReportManager reportManager) : base(httpContextAccessor)
+            IReportManager reportManager,
+            IDashboardManager dashboardManager) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
+            _dashboardManager = dashboardManager;
+        }
+        [HttpGet("farmer-dashboard")]
+        public async Task<IActionResult> GetFarmerDashboardSummaryAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _dashboardManager.GetFarmerDashboardSummaryAsync(query);
+                return Ok(new Response<FarmerSalesSummary>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
         }
 
         [HttpGet("download-input-subscription")]

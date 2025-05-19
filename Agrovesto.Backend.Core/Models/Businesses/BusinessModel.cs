@@ -33,6 +33,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long warehouseId { get; set; }
         public string? businessCode { get; set; }
         public string? env { get; set; }
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
         public long CooperativeId { get; set; }
     }
     public class BusinessRegistrationArgs

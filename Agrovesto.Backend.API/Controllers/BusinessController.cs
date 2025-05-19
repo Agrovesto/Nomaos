@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -744,7 +745,42 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-        [HttpGet("staffs")] //accessed by agrovesto
+        [HttpGet("wallet-details")] //accessed by agrovesto
+        public async Task<IActionResult> RetrieveCustomerWallet([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.RetrieveCustomerWallet(query);
+                return Ok(new Response<CafeOneCustomerWalletResponse>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+       [HttpGet("staffs")] //accessed by agrovesto
         public async Task<IActionResult> GetWorkersByBusiness([FromQuery] ListQueryParams query)
         {
             try
@@ -782,6 +818,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+     
         [HttpPost("create-staff")]
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {

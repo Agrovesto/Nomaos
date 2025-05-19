@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -15,6 +16,51 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        #region payout
+        public static Payout Map(this PayoutModel model)
+        {
+            if(model ==null)
+            {
+                return null;
+            }
+            return new Payout
+            {
+                Amount = model.Amount,
+                CreatedOn = model.CreatedOn,
+                DestinationAccountName = model.DestinationAccountName,
+                DestinationAccountNumber = model.DestinationAccountNumber,
+                DestinationBank=model.DestinationBank,
+                IsSuccessfulTransaction=model.IsSuccessfulTransaction,
+                SourceAccountName = model.SourceAccountName,
+                SourceAccountNumber = model.SourceAccountNumber,
+                SourceBankCode=model.SourceBankCode,
+                UserId=model.UserId,
+                Reference=model.Reference
+            };
+        }
+
+        public static PayoutModel Map(this Payout model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new PayoutModel
+            {Id=model.Id,
+                Amount = model.Amount,
+                CreatedOn = model.CreatedOn,
+                DestinationAccountName = model.DestinationAccountName,
+                DestinationAccountNumber = model.DestinationAccountNumber,
+                DestinationBank = model.DestinationBank,
+                IsSuccessfulTransaction = model.IsSuccessfulTransaction,
+                SourceAccountName = model.SourceAccountName,
+                SourceAccountNumber = model.SourceAccountNumber,
+                SourceBankCode = model.SourceBankCode,
+                UserId = model.UserId,
+                Reference=model.Reference
+            };
+        }
+        #endregion payout
         #region paymentProvider
         public static PaymentProvider Map(this PaymentProviderModel model)
         {

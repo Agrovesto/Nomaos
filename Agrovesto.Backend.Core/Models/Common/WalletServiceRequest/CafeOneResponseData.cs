@@ -6,6 +6,31 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
 {
+    public class FundTransferResponse
+    {
+        public string data { get; set; }
+    }
+    public class FundWithdrawalRequestModel
+    {
+        public string destinationBankCode { get; set; }
+        public string destinationAccountNumber { get; set; }
+        public string destinationAccountName { get; set; }
+        public string sourceAccountNumber { get; set; }
+        public string sourceAccountName { get; set; }
+        public string remarks { get; set; }//get from db, default to NGN
+        public decimal Amount { get; set; }
+        public string currencyId { get; set; }
+    }
+    public class PostWalletToWalletTransferRequestModel
+    {
+        public string destinationBankCode { get; set; }
+        public string destinationAccountNumber { get; set; }
+        public string destinationAccountName { get; set; }
+        public string sourceAccountNumber { get; set; }
+        public string sourceAccountName { get; set; }
+        public string remarks { get; set; }//get from db, default to NGN
+        public decimal Amount { get; set; }
+    }
     public class WalletToWalletTransferRequestModel
     {
         public string CustomerId { get; set; }
