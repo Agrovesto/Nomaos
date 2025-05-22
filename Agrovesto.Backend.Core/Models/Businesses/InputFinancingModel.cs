@@ -38,8 +38,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public enum InputFinancingStatus
     {
         Requested,
-        Disbursed,
-        PartiallyDisbursed
+        Approved,
+        Rejected,
+        Disbursed
     }
 
     //public class BundlePlanSubcription

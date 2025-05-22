@@ -30,6 +30,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string LogisticType { get; set; } //truck, bike, cab
         public string LogisticNumber { get; set; } //plate number
         public DateTimeOffset PickUpDate { get; set; }
+        public DateTimeOffset Shipmentdate { get; set; } =  DateTimeOffset.Now;
         public DateTimeOffset? DeliveryDate { get; set; }
     }
 }

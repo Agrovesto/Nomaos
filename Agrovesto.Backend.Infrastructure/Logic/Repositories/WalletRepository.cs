@@ -47,12 +47,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             account.DOB = model.DOB;
             account.FirstName = model.FirstName;
             account.LastName = model.LastName;
+            account.MiddleName = model.MiddleName;
             account.WalletCode = model.WalletCode;
             account.IsMainAccount = false;
             account.NIN = model.NIN;
             account.Status = BusinessStatus.Registered.ToString();//model.Status;
             account.SubAccountName = model.SubAccountName;  
-            
+           
 
             await _context.SaveChangesAsync();
             return account.Map();
@@ -95,6 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.UserId = model.UserId;
                 entity.walletClassificationId = model.walletClassificationId;
                 entity.WalletId = model.WalletId;
+                
             }
           
 

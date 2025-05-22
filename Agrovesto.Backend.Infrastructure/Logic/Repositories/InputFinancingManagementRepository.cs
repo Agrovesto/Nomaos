@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -49,24 +50,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     };
         }
 
-       
+        #region report
+        public async Task<List<BundleSubscriptionInterestModel>> FilterSubscriptionForDownload(
+string? businessCode,
+string? cooperativeName,
+string? state,
+DateTime? startDate,
+DateTime? endDate)
+        {
+            var query = _context.BundleSubscriptionInterests.AsQueryable();
 
-        //public async Task<SubscriptionMetrics> FarmerBundleSubscriptions(string businessCode)
-        //{
-        //    var query = await _context.BundleSubscriptionInterests
-        //        .Where(w => w.BelongToBusinessCode == businessCode)
-        //.GroupBy(b => 1) // Group everything together to get overall counts
-        //.Select(g => new SubscriptionMetrics
-        //{
-        //    TotalActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
-        //    PendingSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
-        //    b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
-        //    PartialPaymentSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
-        //})
-        //.FirstOrDefaultAsync(); // We expect a single object as output
-        //    if (query == null) { return null; }
-        //    return query;
-        //}
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+            }
+
+            if (!string.IsNullOrWhiteSpace(state))
+            {
+                query = query.Where(x => x.Location == state);
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.PaymentDate >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.PaymentDate <= endDate.Value);
+            }
+
+            var subscriptions = await query.ToListAsync();
+
+            if (subscriptions == null || !subscriptions.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            return subscriptions.Select(x => x.Map()).ToList();
+        }
+
+
+        public async Task<List<BundleDisbursementModel>> FilterDisbursementForDownload(
+string? businessCode,
+string? disbursedBy,
+string? state,
+DateTime? startDate,
+DateTime? endDate)
+        {
+            var query = _context.BundleSubscriptionDisbursements.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+            }
+
+            if (!string.IsNullOrWhiteSpace(state))
+            {
+                query = query.Where(x => x.Location == state);
+            }  if (!string.IsNullOrWhiteSpace(disbursedBy))
+            {
+                query = query.Where(x => x.DisbursedBy == disbursedBy);
+            }
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn <= endDate.Value);
+            }
+
+            var subscriptions = await query.ToListAsync();
+
+            if (subscriptions == null || !subscriptions.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            return subscriptions.Select(x => x.Map()).ToList();
+        }
+
+        #endregion report
+
         public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode)
         {
             var query = await _context.BundleSubscriptionInterests
@@ -89,7 +157,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return (true, entity.Map());
         }
+        public async Task<List<BundleSubscriptionInterestModel>> GetExistingSubscription(BundleSubscriptionInterestModel data)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId && x.PaymentStatus != EquityPaymentStatus.Paid.ToString()
+            && x.InterestedBundleId == data.InterestedBundleId).ToListAsync();
 
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
+        public async Task<List<BundleSubscriptionInterestModel>> GetFarmerSubscriptionInterestDetails(BundleSubscriptionInterestModel data)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId).ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
+        }
         public async Task<List<BundleSubscriptionInterestModel>> GetUnpaidSubscriptionInterestByFarmer(BundleSubscriptionInterestModel data)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId && x.PaymentStatus != EquityPaymentStatus.Paid.ToString()).ToListAsync();
@@ -114,60 +198,149 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return interest.Select(x => x.Map()).ToList();
         }
-          public async Task<List<BundleSubscriptionInterestModel>> GetInterestRequestByAgent(string businessCode, string userId)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
+    int pageSize = 10)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode 
-            && x.OfficerInChargeUserId == userId).ToListAsync();
+            var interest = _context.BundleSubscriptionInterests
+                .Where(x => x.BelongToBusinessCode == businessCode
+            && x.OfficerInChargeUserId == userId).AsQueryable();
 
-            if (!interest.Any()) { return null; }
+            if (interest.Count() == 0) { return null; }
+            var totalCount = await interest.CountAsync();
 
-            return interest.Select(x => x.Map()).ToList();
+            var pagedResult = await interest
+              .OrderByDescending(x => x.CreatedOn)
+                //.Skip((pageNumber) * pageSize)
+                //.Take(pageSize)
+                .ToListAsync();
+
+            return new PagedListResponse<List<BundleSubscriptionInterestModel>>
+            {
+                Data = pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference)
+        {
+            var receipt = new BundleInterestReceiptModel();
+            // Retrieve the bundle subscription interest
+            var interest = await _context.BundleSubscriptionInterests
+                .FirstOrDefaultAsync(x =>
+                    x.BelongToBusinessCode == businessCode &&
+                    x.FarmerUserId == farmerUserId &&
+                    x.Reference == reference);
+
+            if (interest == null)
+            {
+                return null;
+            }
+
+            // Fetch the farmer details
+            var farmer = await _context.Farmers
+                .FirstOrDefaultAsync(f => f.UserId == farmerUserId);
+
+            if (farmer == null)
+            {
+                return null;
+            }
+
+            // Fetch the cooperative details
+            var cooperative = await _context.Cooperatives
+                .FirstOrDefaultAsync(c => c.Id == farmer.BelongToCooperativeId);
+
+            // Map and return the result (assuming your model can handle these details)
+            receipt.SubscriptionInterest = interest.Map(); // Assuming Map returns BundleSubscriptionInterestModel
+
+            // If your model supports it, populate additional details
+            receipt.Farmer = farmer.Map(); // You may need to create a mapping method
+            receipt.Cooperative = cooperative?.Map(); // Optional chaining if cooperative is null
+
+            return receipt;
         }
 
         public async Task<BundleSubscriptionInterestModel> GetPaidSubscriptionByFarmer(string businessCode, string farmerUserId, string reference)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference== reference).FirstOrDefaultAsync();
+            var interest = await _context.BundleSubscriptionInterests.
+                Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference == reference)
+                .FirstOrDefaultAsync();
 
             if (interest == null) { return null; }
 
             return interest.Map();
         }
-        public async Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByBusiness(string businessCode)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetSubscriptionInterestByBusiness(string businessCode, int pageNumber = 1,
+      int pageSize = 10,
+         DateTimeOffset? startDate = null,
+         DateTimeOffset? endDate = null,
+         string? location = null)
         {
-            var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
+            var query = _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode
+            ).AsQueryable();
 
-            if (!interest.Any()) { return null; }
 
-            return interest.Select(x => x.Map()).ToList();
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.CreatedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.CreatedOn <= endDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                query = query.Where(x => x.Location == location);
+            }
+            if (query.Count() == 0) { return null; }
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Map()).ToListAsync();
+            return new PagedListResponse<List<BundleSubscriptionInterestModel>>
+            {
+                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
         }
-
         public async Task<BundleSubscriptionInterestModel> UpdateSubscriptionPayment(BundleSubscriptionInterestModel model)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
 
-            if (interest != null)
-            {
-                interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
-                interest.PaymentDate = model.PaymentDate;
-                interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
-                interest.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
-                interest.TotalEquityPaid = model.TotalEquityPaid;
-                interest.Reference = model.Reference;
+            if (interest == null) return null;
 
+            interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
+            interest.SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus);
+            interest.PaymentDate = model.PaymentDate;
+            interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
+            interest.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
+            interest.TotalEquityPaid = model.TotalEquityPaid;
+            interest.Reference = model.Reference;
+            interest.MaturityDate = model.MaturityDate;
 
-                await _context.SaveChangesAsync();
-            }
-            return null;
+            await _context.SaveChangesAsync();
+
+            return interest.Map();
+
 
         }
 
         public async Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model)
         {
             var disbursement = model.Map();
+            disbursement.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid);
+            disbursement.TotalQuantityReceived = model.TotalQuantityPaidFor;
             await _context.AddAsync(disbursement);
             await _context.SaveChangesAsync();
 
-            return  disbursement.Map();
+            return disbursement.Map();
         }
         public async Task<List<BundleDisbursementModel>> GetDisbursedSubscriptions(string businessCode)
         {
@@ -175,16 +348,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (interest.Count == 0) { return null; }
 
-            return interest.Select(x=>x.Map()).ToList();
+            return interest.Select(x => x.Map()).ToList();
         }
-        public async Task<BundleDisbursementModel> GetDisbursedSubscription(string businessCode, string farmerUserId, string reference)
-        {
-            var interest = await _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference == reference).FirstOrDefaultAsync();
-
-            if (interest == null) { return null; }
-
-            return interest.Map();
-        }
+     
 
         public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(string businessCode)
         {
@@ -207,55 +373,143 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId && x.PaymentStatus == "Paid")
-                .OrderByDescending(x=> x.CreatedOn).ToListAsync();
+                .OrderByDescending(x => x.CreatedOn).ToListAsync();
 
             if (!interest.Any()) { return null; }
 
             return interest.Select(x => x.Map()).ToList();
         }
-        //update input interest payment
-        //fetch account details with balance from cafeone
 
-        //public async Task<bool> UpdateInterestPayment(BundleSubscriptionInterestModel data, CafeOnWalletResponse<WalletTransferResult> deduction)
-        //{
-        //    var interest = await _context.Set<BundleSubscriptionInterest>().FindAsync(data.Id);
-        //    if (interest == null) return false;
-
-        //    interest.TotalEquityPaid = data.TotalEquityPaid;
-        //    interest.TotalQuantityPaidFor = ((long)data.TotalEquityPaid / interest.QuantityOfInterest);
-        //    interest.EquityPaymentBalanceDeficit = interest.ExpectedTotalEquityPrice - interest.TotalEquityPaid;
-        //    if (interest.EquityPaymentBalanceDeficit == 0 && deduction.Data.success) 
-        //      {
-        //        interest.PaymentStatus = EquityPaymentStatus.Paid.ToString();
-
-        //    }
-        //    else if(interest.EquityPaymentBalanceDeficit > 0 )
-        //    {
-        //        interest.PaymentStatus = EquityPaymentStatus.Partial_Payment.ToString();
-        //    }
-        //    else
-        //    {
-        //        interest.PaymentStatus = EquityPaymentStatus.Pending.ToString();
-        //    }
-        //    interest.CommissionPrice = data.CommissionPrice;
-        //    interest.
-
-
-        //    _context.Set<WarehouseInputInventory>().Update(interest);
-        //    await _context.SaveChangesAsync();
-        //    return true;
-        //}
         public async Task<BundleSubscriptionInterestModel> UpdateEquitySubcriiptonStatus(BundleSubscriptionInterestModel model)
         {
             var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
 
             if (interest != null)
             {
-                interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);               
+                // interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status); 
+                interest.SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus);
 
                 await _context.SaveChangesAsync();
+                return interest.Map();
             }
             return null;
+
+        }
+
+        public async Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
+
+            if (interest != null)
+            {
+                interest.SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus);
+
+                await _context.SaveChangesAsync();
+                return interest.Map();
+            }
+            return null;
+
+        }
+
+        public async Task<BundleDisbursementModel> GetDisbursedSubscription(string businessCode, string farmerUserId, string reference)
+        {
+            var interest = await _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode && x.FarmerUserId == farmerUserId && x.Reference == reference).FirstOrDefaultAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Map();
+        }
+
+        public async Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(string businessCode, int pageNumber = 1,
+int pageSize = 10,
+  DateTimeOffset? startDate = null,
+  DateTimeOffset? endDate = null,
+  string? location = null,
+  string? disbursedBy =null)
+        {
+            var query = _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode
+            ).AsQueryable();
+
+
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn <= endDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                query = query.Where(x => x.Location == location);
+            }
+            if (!string.IsNullOrWhiteSpace(disbursedBy))
+            {
+                query = query.Where(x => x.DisbursedBy == disbursedBy);
+            }
+            if (query.Count() == 0) { return null; }
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.DisbursedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Map()).ToListAsync();
+            return new PagedListResponse<List<BundleDisbursementModel>>
+            {
+                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+
+        }
+
+
+        public async Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(string businessCode, string warehouseManger,int pageNumber = 1,
+int pageSize = 10,
+DateTimeOffset? startDate = null,
+DateTimeOffset? endDate = null,
+string? location = null,
+string? disbursedBy = null)
+        {
+            var query = _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == warehouseManger
+            ).AsQueryable();
+
+
+
+            if (startDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn >= startDate.Value);
+            }
+
+            if (endDate.HasValue)
+            {
+                query = query.Where(x => x.DisbursedOn <= endDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(location))
+            {
+                query = query.Where(x => x.Location == location);
+            }
+            if (!string.IsNullOrWhiteSpace(disbursedBy))
+            {
+                query = query.Where(x => x.DisbursedBy == disbursedBy);
+            }
+            if (query.Count() == 0) { return null; }
+            var totalCount = await query.CountAsync();
+            var data = await query.OrderByDescending(x => x.DisbursedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => x.Map()).ToListAsync();
+            return new PagedListResponse<List<BundleDisbursementModel>>
+            {
+                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
 
         }
 

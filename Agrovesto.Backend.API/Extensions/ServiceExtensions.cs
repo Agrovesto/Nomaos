@@ -6,6 +6,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -42,6 +43,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IInputFinancingManagementRepository, InputFinancingManagementRepository>();
            services.AddScoped<IFarmerTransactionRepository, FarmerTransactionRepository>();
             services.AddScoped<ITraderRepository, TraderRepository>();
+            services.AddScoped<IPaymentProviderRepository, PaymentProviderRepository>();
+            services.AddScoped<IDashboardRepository, DashboardRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -53,6 +56,9 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFaceManager, FaceManager>();
             services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
             services.AddScoped<IReportManager, ReportManager>();
+            services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
+            services.AddScoped<IDashboardManager, DashboardManager>();
+            services.AddScoped<IPayoutManager, PayoutManager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
@@ -60,6 +66,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
+            services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
         }
     }
 }

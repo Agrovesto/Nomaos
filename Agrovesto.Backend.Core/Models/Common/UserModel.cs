@@ -63,7 +63,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class ImageModel
     {
         public IFormFile File { get; set; }
-        public string FarmerUserId { get; set; }
+        public string? FarmerUserId { get; set; }
     }
     public class UserModel
     {
@@ -83,7 +83,10 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
+        public string? FirstName { get; set; }
         public string? Name { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
@@ -129,16 +132,25 @@ namespace Agrovesto.Backend.Core.Models.Common
         public LoginType LoginMethod { get; set; }
     }
 
-
+    public class UserObject
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public string Phone_number
+        { get; set; }
+    }
     public class TokenModel
     {
         public string Token { get; set; }
         public TokenType TokenType { get; set; }
+
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
+      //  public UserObject User { get; set; }
     }
 
     public enum TokenType

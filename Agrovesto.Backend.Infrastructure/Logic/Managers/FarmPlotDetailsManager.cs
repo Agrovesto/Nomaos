@@ -77,6 +77,57 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return areaInSquareMeters / 10000; // 1 hectare = 10,000 m²
         }
+        public async Task<FarmPlotDetailsModel> UpdateFarmCoordinateDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+
+            (bool status, FarmPlotDetailsModel data) update = new(false, new FarmPlotDetailsModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                    if (farmer == null) throw new Exception("Farmer does not exist");
+                    var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
+                    if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
+                    var getAreaInDegrees = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2,
+                                                             model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
+
+                    var getAreaInSqMetre = CalculateLandArea(model.Latitude1, model.Longitude1, model.Latitude2, model.Longitude2,
+                                                             model.Latitude3, model.Longitude3, model.Latitude4, model.Longitude4);
+                    var getAreaInHectare = ConvertSquareMetersToHectares(getAreaInSqMetre);
+                    model.AreaInDegress = getAreaInDegrees;
+                    model.AreaInSqMetre = getAreaInSqMetre;
+                    model.AreaInHectare = getAreaInHectare;
+                    model.BelongToBusinessCode = business.BusinessCode;
+                    model.FarmerName = farmer.Name;
+                    model.CoordinateTakenByUserId = args.UserId;
+                    model.CoordinateTakenBy = getUserCred.model.FirstName;
+                    model.FarmerId = farmer.Id;
+
+                    update = await _farmPlotDetailRepository.UpdateFarmerFarmPlot(model);
+
+
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    return update.data;
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+            return update.data;
+        }
 
         public async Task<FarmPlotDetailsModel> UpdateFarmPlotDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args)
         {
@@ -109,7 +160,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = business.BusinessCode;
                     model.FarmerName = farmer.Name;
                     model.CoordinateTakenByUserId = args.UserId;
-                    model.CoordinateTakenBy = getUserCred.model.Name;
+                    model.CoordinateTakenBy = getUserCred.model.FirstName;
 
                     update = await _farmPlotDetailRepository.UpdateFarmerFarmPlot(model);
 
@@ -236,8 +287,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.FarmActivityId = activityType.Id;
                     model.CooperativeId = farmer.BelongToCooperativeId;                    
                     model.OfficerInChargeId = args.UserId;
-                    model.OfficerName = getUserCred.model.Name;
-                    model.CreatedBy = getUserCred.model.Name;
+                    model.OfficerName = getUserCred.model.FirstName;
+                    model.CreatedBy = getUserCred.model.FirstName;
 
                     update = await _farmPlotDetailRepository.VisitationLog(model);
 

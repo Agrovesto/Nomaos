@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Payment;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
@@ -36,10 +37,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         Update, Create, Remove
     }
-    public enum ProviderStatus
-    {
-        Active, Suspended, Disabled
-    }
+
     public enum Env
     {
         Demo, Live
