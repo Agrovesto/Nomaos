@@ -157,10 +157,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              //   new Claim("WalletId", userWallet.WalletId.ToString()),
                 new Claim("Role", string.Join(',' ,userRole)),
                 new Claim("UserType", user.UserType),
+                new Claim("User", user.Name),
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-               // new Claim("BelongToBusiness", user.BusinessCode),
+                //new Claim("BelongToBusiness", user.BusinessCode),
 
 
 
@@ -180,6 +181,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 var response = new TokenModel
                 {
+                    
+                    Id= user.Id,
                     ExpiresOn = DateTime.Now.AddDays(1),
                     Roles = userRole.ToList(),
                     Token = token,
@@ -319,7 +322,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var model = await _userManager.FindByIdAsync(userId);
             if (model == null) return (null, false, "");
-            model.Name = user.Name;
+            model.Name = user.FirstName;
            var update= await _userManager.UpdateAsync(model);
             if (!update.Succeeded) throw new Exception($"Could not update user details");
             return (model.Map(), true, "Success");
@@ -377,7 +380,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
                     }
 
-                    if (!createUser.Succeeded) throw new Exception($"Could not create account for {model.Name} {entity.UserType}");
+                    if (!createUser.Succeeded) throw new Exception($"Could not create account for {model.FirstName} {entity.UserType}");
                     entity = await _userManager.FindByNameAsync(entity.Email);
 
                     var uniqueRole = await _roleManager.FindByNameAsync(roleName);

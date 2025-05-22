@@ -52,6 +52,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class BusinessEntitiesMetrics
     {
         public long TotalWarehouse { get; set; }
+        
         public long TotalAgents { get; set; }
         public long TotalCooperative { get; set; }
         public long TotalFarmer { get; set; }

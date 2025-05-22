@@ -29,6 +29,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<SubAccount> SubAccounts { get; set; }
         public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
 
+        public DbSet<PaymentProvider> PaymentProviders { get; set; }
+        public DbSet<PaymentProviderParameter> PaymentProviderParameters { get; set; }
         public DbSet<WalletProvider> WalletProviders { get; set; }
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }
@@ -41,6 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WarehouseUser> WarehouseUsers { get; set; }
         public DbSet<Bundle> Bundles { get; set; }
         public DbSet<BundleItems> BundleItems { get; set; }
+        public DbSet<OtherBundlePaymentCost> OtherBundlePaymentCosts { get; set; }
         public DbSet<BundleSubscriptionInterest> BundleSubscriptionInterests { get; set; }
         public DbSet<FarmerImages> FarmerImages { get; set; }
         public DbSet<BundleSubscriptionDisbursement> BundleSubscriptionDisbursements { get; set; }
@@ -49,6 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<InputDeliveryTracker> InputDeliveryTrackers { get; set; }
         public DbSet<FarmerSalesTracker> FarmerSalesTracker { get; set; }
         public DbSet<Trader> Traders { get; set; }
+        public DbSet<Payout> Payouts { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
@@ -56,8 +60,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DataContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-          optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
-            //optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
+         //optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
+           optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
               
                 options =>
             options.MigrationsAssembly("Agrovesto.Backend.API"));

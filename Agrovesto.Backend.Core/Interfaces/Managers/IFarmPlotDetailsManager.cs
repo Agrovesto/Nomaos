@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByCooperative(BusinessRegistrationArgs args);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(BusinessRegistrationArgs args);
         Task<FarmVisitationActivityModel> LogFarmVisit(FarmVisitationActivityModel model, BusinessRegistrationArgs args);
+        Task<FarmPlotDetailsModel> UpdateFarmCoordinateDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args);
         Task<FarmPlotDetailsModel> UpdateFarmPlotDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args);
     }
 }

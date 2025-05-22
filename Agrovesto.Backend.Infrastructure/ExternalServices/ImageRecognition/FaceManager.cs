@@ -72,7 +72,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var targetImageRecord = await _farmerRepository.GetFarmerImage(args.FarmerUserId, args.BusinessCode);
                 if (targetImageRecord == null)
                 {
-                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for the specified farmer");
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Image Record Found for the specified farmer");
                 }
 
 
@@ -86,7 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var targetImage = await GetImageFromS3(bucketName, targetImageRecord.ImageKey);
                 if (targetImage == null)
                 {
-                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Image Record Found, Kindy capture farmer image");
                 }
 
                 var compareFacesRequest = new CompareFacesRequest
@@ -107,7 +107,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             {
                 _log.LogError($"Error retrieving Inventory: {ex.Message}");
 
-                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found, Kindy capture farmer image");
             }
             catch (Exception ex)
             {

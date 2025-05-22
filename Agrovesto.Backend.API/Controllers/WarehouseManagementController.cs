@@ -135,6 +135,46 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
 
+        [HttpGet("bundles/warehouse-manager")]
+        public async Task<IActionResult> GetBundleByWarehouseManager([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _warehouseManagementManager.GetBundleByWarehouseManager(query.UserId, query);
+                return Ok(new PagedListResponse<List<BundleModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        
         [HttpGet("bundles")]
         public async Task<IActionResult> GetBundlesByBusiness([FromQuery] ListQueryParams query)
         {

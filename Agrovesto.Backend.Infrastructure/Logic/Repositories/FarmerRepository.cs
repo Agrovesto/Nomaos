@@ -81,6 +81,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return mappedFarmer;
             }).ToList();
         }
+    
         #endregion report
         #region agent
         public async Task<BusinessEntitiesMetrics> GetAgentEntitiesMetricsAsync(string businessCode, string userId)
@@ -144,7 +145,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             {
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == query.businessCode && c.IsAssignedToAgentId == agentId),
-                TotalFarmer = farmers.Count(),
+                TotalFarmer = farmers.Count,
                 TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == query.businessCode && w.ManagedByUserId == agentId),
                 PercentageFarmerPerformance = percentageChange,
                 PercentageCooperativePerformance = cooperativePercentageChange,
@@ -202,6 +203,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 TotalCooperative = await _context.Cooperatives.CountAsync(c => c.BelongToBusinessCode == businessCode),
                 TotalFarmer = await _context.Farmers.CountAsync(f => f.BelongToBusinessCode == businessCode),
                 TotalWarehouse = await _context.Warehouses.CountAsync(w => w.BelongToBusinessCode == businessCode),
+                
                 PercentageFarmerPerformance = percentageChange,
                 PercentageCooperativePerformance = cooperativePercentageChange,
                 PercentageAgentPerformance = agentPercentageChange,
@@ -276,24 +278,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, entity.Map());
         }
 
-        //public async Task<(bool status, FarmerModel data)> UpdateFarmerProfile(FarmerModel model)
-        //{
-        //    var exist = await _context.Farmers.Where(c => c.UserId == model.UserId).FirstOrDefaultAsync();
-        //    if (exist != null)
-        //    {
-        //        exist.AccountNumber = model.AccountNumber != null ? model.AccountNumber : exist.AccountNumber;
-        //        exist.BankName = model.BankName != null ? model.BankName : exist.BankName;
-        //        exist.BankCode = model.BankCode != null ? model.BankCode : exist.BankCode;
-        //        exist.Location = model.Location != null ? model.Location : exist.Location;
-        //        exist.Name = model.Name != null ? model.Name : exist.Name;
-
-        //        await _context.SaveChangesAsync();
-
-
-        //        return (true, exist.Map());
-        //    }
-        //    return (false, model);
-        //}
+  
 
         public async Task<FarmerModel> GetFarmerByUserId(string userId)
         {

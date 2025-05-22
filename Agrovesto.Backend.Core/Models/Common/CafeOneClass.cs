@@ -17,12 +17,25 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Env { get; set; }
     }
 
+    public class NameEnquiry
+    {
+        public string Status { get; set; }
+        public string Message { get; set; }
+        public int StatusCode { get; set; }
+        public NameEnquiryData data { get; set; }
+    }
+    public class NameEnquiryData { 
+        public string destinationBankCode { get; set; }
+        public string destinationInstitutionCode { get; set; }
+        public string accountNumber { get; set; }
+        public string accountName { get; set; }
+    }
     public class CafeOneBankData
     {
         public int id { get; set; }
         public string cbn { get; set; }
-        public string code { get; set; }
-        public string name { get; set; }
+        public string bankcode { get; set; }
+        public string bankname { get; set; }
         public bool is_active { get; set; }
         public bool supports_readycash_ussd_funding { get; set; }
     }
@@ -64,6 +77,13 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string customerTypeId { get; set; }
         public string countryId { get; set; }
         public string currencyId { get; set; }
+        public string currency { get; set; }
+        public string debitdirection { get; set; }
+        public string creditdirection { get; set; }
+        public string productCredit { get; set; }
+        public string productDebit { get; set; }
+        public string payoutUrl { get; set; }
+
     }
     public class ExternalBankTransferModel
 

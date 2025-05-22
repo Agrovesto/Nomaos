@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
 
@@ -12,12 +13,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     {
         private readonly IFarmerRepository _farmerRepository;
         private readonly IFarmerTransactionRepository _farmerTransactionRepository;
+        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IExcelConverterService _excelConverterService;
         private readonly ILogger<ReportManager> _log;
         public ReportManager(IFarmerRepository farmerRepository,
             IFarmerTransactionRepository transactionRepository,
+            IInputFinancingManagementRepository inputFinancingManagementRepository,
             ILogger<ReportManager> log, IExcelConverterService excelConverterService)
         {
+            _inputFinancingManagementRepository= inputFinancingManagementRepository;
             _farmerRepository = farmerRepository;
             _farmerTransactionRepository = transactionRepository;
             _excelConverterService = excelConverterService;
@@ -34,6 +38,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return parsedDate;
         }
+
+        public async Task<FileDownloadModel> FilterSubscription(string? businessCode,
+string? cooperativeName, string? state,
+string? startDate, string? endDate, string? exportFormat)
+        {
+            try
+            {
+
+
+                DateTime? dateFrom = null;
+                DateTime? dateTo = null;
+
+                if (!string.IsNullOrWhiteSpace(startDate) || !string.IsNullOrWhiteSpace(endDate))
+                {
+                    dateFrom = ParseDate(startDate, "Start date");
+                    dateTo = ParseDate(endDate, "End date");
+
+                    dateFrom = dateFrom?.Date;
+                    dateTo = dateTo?.Date.AddDays(1).AddSeconds(-1);
+                }
+
+
+
+                var result = await _inputFinancingManagementRepository.FilterSubscriptionForDownload(businessCode,
+                    cooperativeName, state, dateFrom, dateTo);
+
+                if (result.Count == 0)
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+
+
+                var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                var model = new FileDownloadModel();
+
+                // if schedule reference is not provided
+                bool onlyZipCriteria =
+                    (!string.IsNullOrWhiteSpace(startDate) || !string.IsNullOrWhiteSpace(endDate)
+                    && string.IsNullOrWhiteSpace(businessCode));
+
+                if (onlyZipCriteria)
+                {
+
+                    var excelBytes = _excelConverterService.ConvertSubscriptionToExcel(result);
+                    using var ms = new MemoryStream();
+                    using (var archive = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, true))
+                    {
+                        var entry = archive.CreateEntry($"input_subscription_{timestamp}.xlsx");
+                        using var entryStream = entry.Open();
+                        entryStream.Write(excelBytes, 0, excelBytes.Length);
+                    }
+
+                    model.FileBytes = ms.ToArray();
+                    model.MimeType = "application/zip";
+                    model.FileName = $"farmer_{timestamp}.zip";
+                }
+                else
+                {
+
+                    switch (exportFormat?.ToLower())
+                    {
+                        case "pdf":
+                            model.FileBytes = _excelConverterService.ConvertSubscriptionToPDF(result);
+                            model.MimeType = "application/pdf";
+                            model.FileName = $"input_subscription_{timestamp}.pdf";
+                            break;
+
+                        case "csv":
+                        default:
+                            model.FileBytes = _excelConverterService.ConvertSubscriptionToExcel(result);
+                            model.MimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                            model.FileName = $"input_subscription_{timestamp}.xlsx";
+                            break;
+                    }
+                }
+
+                return model;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError($"Error retrieving Input Subscription  detail: {ex.Message}");
+                throw new NotFoundException($"No Record Found: {ex.Message}");
+            }
+        }
+
+
         public async Task<FileDownloadModel> FilterFarmerDetailsForDownload(string? businessCode,
  string? cooperativeName, string? state,
 string? startDate, string? endDate, string? exportFormat)
@@ -115,6 +203,8 @@ string? startDate, string? endDate, string? exportFormat)
                 throw new NotFoundException($"No Record Found: {ex.Message}");
             }
         }
+
+
 
 
         public async Task<FileDownloadModel> FilterFarmerTransactionForDownload(

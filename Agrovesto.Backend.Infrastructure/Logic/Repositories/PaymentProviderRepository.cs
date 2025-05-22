@@ -103,7 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<ProviderParameterModel[]> GetParametersByProvider(long providerId, string Env)
         {
             PaymentProviderParameter[] entities = await _context.Set<PaymentProviderParameter>()
-                                   .Where(x => x.ProviderId == providerId && x.Env == Env)
+                                   .Where(x => x.PaymentProviderProviderId == providerId && x.Env == Env)
                                    .ToArrayAsync();
 
             return entities.Select(c => c.Map()).ToArray();
@@ -142,22 +142,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                                                                .FirstOrDefaultAsync(y => y.ProviderId == model.ProviderId);
 
                         PaymentProviderParameter[] creates = model.PaymentProviderParameters
-                                                   .Where(x => (x.ParamStatus == ParameterStatus.Create) && (x.Key != null || x.Value != null || x.Description != null))
+                                                   .Where(x => (x.Key != null || x.Value != null || x.Description != null))
                                                    .Select(x => x.Map())
                                                    .ToArray();
 
-                        var createList = creates.Select(y => new PaymentProviderParameter() { Key = y.Key, Description = y.Description, Value = y.Value, Env = y.Env, ProviderId = entity.ProviderId });
+                        var createList = creates.Select(y => new PaymentProviderParameter() { Key = y.Key, Description = y.Description, Value = y.Value, Env = y.Env, PaymentProviderProviderId = entity.ProviderId });
                         _context.AddRange(createList);
                         await _context.SaveChangesAsync();
 
-                        PaymentProviderParameter[] removeList = model.PaymentProviderParameters.Where(x => (x.ParamStatus == ParameterStatus.Remove) && (x.ParameterId != 0))
-                        .Select(x => x.Map()).ToArray();
-                        _context.RemoveRange(removeList);
-                        await _context.SaveChangesAsync();
+                        //PaymentProviderParameter[] removeList = model.PaymentProviderParameters.Where(x => (x.ParamStatus == ParameterStatus.Remove) && (x.ParameterId != 0))
+                        //.Select(x => x.Map()).ToArray();
+                        //_context.RemoveRange(removeList);
+                        //await _context.SaveChangesAsync();
 
-                        PaymentProviderParameter[] updates = model.PaymentProviderParameters.Where(x => x.ParamStatus == ParameterStatus.Update).Select(x => x.Map()).ToArray();
-                        _context.UpdateRange(updates);
-                        await _context.SaveChangesAsync();
+                        //PaymentProviderParameter[] updates = model.PaymentProviderParameters.Where(x => x.ParamStatus == ParameterStatus.Update).Select(x => x.Map()).ToArray();
+                        //_context.UpdateRange(updates);
+                        //await _context.SaveChangesAsync();
 
                         transaction.Commit();
 

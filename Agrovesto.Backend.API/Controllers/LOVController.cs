@@ -15,11 +15,16 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly ICafeOneWalletService _cafeOneWalletService;
 
+        private readonly IFlutterwaveService _flutterwaveService;
+
         private readonly IWebHostEnvironment _hostingEnvironment;
-        public LOVController(ICafeOneWalletService cafeOneWalletService, IWebHostEnvironment hostingEnvironment)
+        public LOVController(ICafeOneWalletService cafeOneWalletService,
+             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
+
+            _flutterwaveService = flutterwaveService;
         }
 
         [AllowAnonymous]
@@ -50,8 +55,8 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> ResolveAccountNumber(string accountNumber, string bankCode, [FromQuery] string env)
         {
 
-            var request = await _cafeOneWalletService.ResolveUserAccount(accountNumber, bankCode, env);
-            return Ok(new Response<AccountResolutionResolutionResponseData>()
+            var request = await _cafeOneWalletService.InterBankNameEnquiry(accountNumber, bankCode, env);
+            return Ok(new Response<NameEnquiry>()
             {
                 Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
                 Succeeded = request != null,
@@ -59,6 +64,27 @@ namespace Agrovesto.Backend.API.Controllers
                 Data = request != null ? request : null
             });
         }
+        //[AllowAnonymous]
+        //[HttpGet("banks")]
+        //[ProducesResponseType(typeof(Response<object>), 200)]
+        //[ProducesResponseType(typeof(Response<object>), 400)]
+        //[ProducesResponseType(typeof(Response<object>), 422)]
+        //[ProducesResponseType(typeof(Response<object>), 500)]
+        //public async Task<IActionResult> Banks([FromQuery] string env, [FromQuery] string? countryCode = "NG")
+        //{
+        //    var getbanks = await _flutterwaveService.GetBanks(env, countryCode);
+
+        //    return Ok(getbanks);
+        //    //return Ok(new Response<BankResponseModel>()
+        //    //{
+        //    //    Code = ResponseCodes.Success,
+        //    //    Succeeded = true,
+        //    //    Message = "Success",
+        //    //    Data = await _flutterwaveService.GetBanks(countryCode)
+        //    //});
+
+        //}
+
 
         [AllowAnonymous]
         [HttpGet("states")]
