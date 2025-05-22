@@ -23,13 +23,13 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<WarehouseInputInventoryModel>> GetInput(string userId, long warehouseId);
         Task<PagedListResponse<List<WarehouseInputInventoryModel>>> GetInputByWarehouse(string userId, ListQueryParams query);
         Task<Response<WarehouseModel>> GetWarehouseByBusiness(string userId, long warehouseId);
-        Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId);
+        Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId, ListQueryParams query);
         Task<Response<WarehouseUserModel>> GetWarehouseManagerByBusiness(string userId, long warehouseId);
         Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagerByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagersByBusiness(string userId, long warehouseId, ListQueryParams query);
-        Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId);
+        Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId, ListQueryParams query);
         Task<Response<List<WarehouseSummaryMetrics>>> StockSummaryByWarehouseByAgent(string userId, string businessCode);
         Task<Response<List<WarehouseSummaryMetrics>>> StockSummaryByWarehouseId(string userId, long warehouseId, string businessCode);
         Task<WarehouseInputInventoryModel> StockUpInput(WarehouseInputInventoryModel model, BusinessRegistrationArgs args);

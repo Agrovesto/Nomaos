@@ -282,7 +282,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 TotalBundlePackageDisbursed = 0,
                 CommissionPrice = model.CommissionPrice,
                 ShouldAddCommission = model.ShouldAddCommission,
-
+                MaturityDate=model.MaturityDate,
                 BundleEquityPrice = model.BundleEquityPrice,
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
             };

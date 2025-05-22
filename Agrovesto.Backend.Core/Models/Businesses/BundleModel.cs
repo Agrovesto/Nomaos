@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class BundleModel
     {
         public bool IsPercentageEquity { get; set; }
-        public double EquityPercentage { get; set; }
+        public double EquityPercentage { get; set; } = 0;
 
         public decimal BundleEquityPrice { get; set; }
         public long Id { get; set; }
@@ -30,7 +30,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? BelongToBusinessCode { get; set; }
 
         public bool ShouldAddCommission { get; set; }
-        public decimal CommissionPrice { get; set; }
+        public decimal CommissionPrice { get; set; } = 0;
         public decimal BundleEquityPlusCommission { get; set; }
         public long WarehouseId { get; set; }
         public string? WarehouseName { get; set; }

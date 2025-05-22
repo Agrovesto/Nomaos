@@ -66,6 +66,7 @@ namespace Agrovesto.Backend.API.Controllers
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
                 var result = await _inputFinancingManagement.GetInterestRequestByAgent(query);
+                
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
                     Data = result.Data,

@@ -45,6 +45,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string AccountName { get; set; }
         public string Reference { get; set; }
         public decimal Amount { get; set; }
+        public decimal RepaymentBalance { get; set; }
     }
     public class BundleSubscriptionInterestModel
     {

@@ -67,7 +67,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
 
                 var bizEntities = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
                 if (bizEntities == null) return new Response<List<SubscriptionData>>
@@ -111,9 +118,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (userSterlinWallet != null)
                 {
                     var accouuntBalance = await _walletManager.RetrieveCustomerWallet(request.FarmerUserId, args.Env);
-                    if(accouuntBalance != null)
+                    if (accouuntBalance != null)
                     {
-                        if(accouuntBalance != null)
+                        if (accouuntBalance != null)
                         {
 
                             request.AccountBalance = accouuntBalance.availableBalance.ToString();
@@ -134,7 +141,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
 
                 var subscription = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
                 if (subscription == null) return new Response<List<SubscriptionData>>
@@ -168,7 +182,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
 
                 var subscription = await _repository.FarmerBundleSubscriptionInterests(business.BusinessCode);
                 if (subscription == null) return new Response<List<BundleSubscriptionSummary>>
@@ -212,7 +233,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
-                   var accouuntBalance = await _walletManager.RetrieveCustomerWallet(request.FarmerUserId, args.Env);
+                    var accouuntBalance = await _walletManager.RetrieveCustomerWallet(request.FarmerUserId, args.Env);
                     if (accouuntBalance != null)
                     {
 
@@ -316,9 +337,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     ? ((getInputInventory.BundleEquityPrice * selectedBundle.QuantityOfInterest) - (getInputInventory.CommissionPrice))
                     : (getInputInventory.BundlePrice + getInputInventory.CommissionPrice);
 
-                    var settlementPlatformSplitAmount = getInputInventory.CommissionPrice; //- sterlingCharge;
+                    var settlementPlatformSplitAmount = getInputInventory.CommissionPrice;
 
-                    //TODO: Remove this before production
+                    //TODO: check if commission is enabled, then add the commission value, else don't
 
 
                     if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
@@ -332,70 +353,59 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     var reference = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
 
-                    //var createBusinessSettlement = await _walletManager.TransferFromUserAccountToBusinessAccount(new WalletToWalletTransferRequestModel
-                    //{
-                    //    Amount = settlementSplitAmountBusiness,
-                    //    WalletId = userSterlinWallet.WalletId,
-                    //    TransactionReference = reference,
-                    //    BatchReference = reference,
-                    //    AccountNumber = businessAccount.AccountNumber,
-                    //    Remarks = $"Farmer purchase for {selectedBundle}",
-                    //    CustomerId = userSterlinWallet.CustomerId,
-                    //    AgrovestoUserId = userSterlinWallet.AgrovestoUserId,
-                    //}, args.Env);  
+
                     var createBusinessSettlement = await _walletManager.PayoutTransferFromUserAccountToBusinessAccount(new PostWalletToWalletTransferRequestModel
                     {
                         Amount = settlementSplitAmountBusiness,
                         sourceAccountName = farmerWallet.name,
                         sourceAccountNumber = farmerWallet.virtualAccount.accountNumber,
-                        destinationAccountNumber=businessAccount.AccountNumber,
-                        destinationAccountName=businessAccount.AccountName,
+                        destinationAccountNumber = businessAccount.AccountNumber,
+                        destinationAccountName = businessAccount.AccountName,
 
                         remarks = $"Farmer purchase for {selectedBundle.InterestedBundleName}",
                     }, args.Env);
-
-                    _log.LogInformation($"Response from user transfer to User Business {business.BusinessCode} Wallet", JsonConvert.SerializeObject(createBusinessSettlement));
-                    var @ref = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
-
-                    //var createPlatformSettlement = await _walletManager.TransferFromUserAccountToAgrovestoAccount(new WalletToWalletTransferRequestModel
-                    //{
-                    //    Amount = settlementPlatformSplitAmount,
-                    //    WalletId = userSterlinWallet.WalletId,
-                    //    TransactionReference = @ref,
-                    //    BatchReference = @ref,
-                    //    //AccountNumber = //businessAccount.AccountNumber,
-                    //    Remarks = $"Farmer purchase for {selectedBundle}",
-                    //    CustomerId = userSterlinWallet.CustomerId,
-                    //    AgrovestoUserId = userSterlinWallet.AgrovestoUserId,
-                    //}, args.Env); 
-                    var createPlatformSettlement = await _walletManager.PayoutTransferFromUserAccountToAgrovestoAccount(new PostWalletToWalletTransferRequestModel
-                    {
-                        Amount = settlementPlatformSplitAmount,
-                        sourceAccountName = farmerWallet.name,
-                        sourceAccountNumber= farmerWallet.virtualAccount.accountNumber,
-                        
-                        //AccountNumber = //businessAccount.AccountNumber,
-                        remarks = $"Farmer purchase for {selectedBundle.InterestedBundleName}",
-                    }, args.Env);
-
-
-
-                    _log.LogInformation("Response from user transfer to Agrovesto Wallet", JsonConvert.SerializeObject(createPlatformSettlement));
-                    //log reeponse
-                    if (createBusinessSettlement == null && (createPlatformSettlement == null))
+                    if (createBusinessSettlement == null )
                     {
                         throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement challenge: Could not confirm payment");
                     }
+                    
+                    _log.LogInformation($"Response from user transfer to User Business {business.BusinessCode} Wallet", JsonConvert.SerializeObject(createBusinessSettlement));
+                    var @ref = $"Bun{getInputInventory.Id}-{selectedBundle.QuantityOfInterest}-{business.BusinessCode}-{ReferenceUtil.GenerateTransferReference()}";
+                    if (settlementPlatformSplitAmount != 0M)
+                    {
+                        var createPlatformSettlement = await _walletManager.PayoutTransferFromUserAccountToAgrovestoAccount(new PostWalletToWalletTransferRequestModel
+                        {
+                            Amount = settlementPlatformSplitAmount,
+                            sourceAccountName = farmerWallet.name,
+                            sourceAccountNumber = farmerWallet.virtualAccount.accountNumber,
+
+                            //AccountNumber = //businessAccount.AccountNumber,
+                            remarks = $"Farmer purchase for {selectedBundle.InterestedBundleName}",
+                        }, args.Env);
+
+
+                        _log.LogInformation("Response from user transfer to Agrovesto Wallet", JsonConvert.SerializeObject(createPlatformSettlement));
+                        if (createPlatformSettlement == null)
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Settlement challenge: Could not confirm payment");
+                        }
+                        var platformstatus = createPlatformSettlement.success;
+                        model.IsCommissionPaidOut = platformstatus ? true : false;
+
+                    }
+
+
+
+                    //log reeponse
                     selectedBundle.ExpectedEquityPricePerBundle = selectedBundle.ExpectedEquityPricePerBundle != 0m ? selectedBundle.ExpectedEquityPricePerBundle : 1;
                     var status = createBusinessSettlement.success;
-                    var platformstatus = createPlatformSettlement.success;
+                   
 
                     model.Status = status ? EquityPaymentStatus.Paid : EquityPaymentStatus.Failed;
                     model.PaymentDate = status ? DateTimeOffset.Now : null;
-                    model.IsCommissionPaidOut = platformstatus ? true : false;
-                    model.TotalQuantityPaidFor = (long)(totalSettlment / selectedBundle.ExpectedEquityPricePerBundle); //(long)(settlementSplitAmountBusiness / selectedBundle.ExpectedEquityPricePerBundle);
+                          model.TotalQuantityPaidFor = (long)(totalSettlment / selectedBundle.ExpectedEquityPricePerBundle); //(long)(settlementSplitAmountBusiness / selectedBundle.ExpectedEquityPricePerBundle);
                     model.TotalEquityPaid = totalSettlment;
-                    
+
 
                     model.Reference = reference;
 
@@ -522,7 +532,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.FarmerName = farmer.Name;
                     model.CooperativeId = farmer.BelongToCooperativeId;
                     model.Location = farmer.State;
-                    if (getInputInventory.ShouldAddCommission)
+                       if (getInputInventory.ShouldAddCommission)
                     {
                         model.ShouldAddCommission = true;
                         model.CommissionPrice = getInputInventory.CommissionPrice;
@@ -543,6 +553,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.ExpectedTotalEquityPrice = expectedPayment;// + sterlingCharge;
 
 
+                    model.EquityPaymentBalanceDeficit = (getInputInventory.BundlePrice * model.QuantityOfInterest) - (getInputInventory.BundleEquityPrice * model.QuantityOfInterest);
 
 
                     var userWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
@@ -557,7 +568,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
 
+                        response.RepaymentBalance = model.EquityPaymentBalanceDeficit;
                         response = await GenerateInputSubscriptionInterestPaymentSlip(response, userWallet, createWarehouse.data.ExpectedTotalEquityPrice);
+
 
                         await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer);
                         status = true;
@@ -586,7 +599,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-     
+
             var userWallet = await _walletManager.GetUserSterlingAccount(model.FarmerUserId);
 
             var bundleOfInterest = await _repository.GetFarmerSubscriptionInterestDetails(model);
@@ -599,14 +612,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return response;
         }
-        private async Task<BundleSubscriptionInterestResponseModel> GenerateInputSubscriptionInterestPaymentSlip(BundleSubscriptionInterestResponseModel response, 
-           SterlingBankWalletModel userWallet, 
+        private async Task<BundleSubscriptionInterestResponseModel> GenerateInputSubscriptionInterestPaymentSlip(BundleSubscriptionInterestResponseModel response,
+           SterlingBankWalletModel userWallet,
            decimal ExpectedTotalEquityPrice)
         {
             response.AccountName = userWallet.AccountName;
             response.AccountNumber = userWallet.AccountNumber;
             response.BankName = userWallet.BankName;
             response.Amount = ExpectedTotalEquityPrice;
+            response.RepaymentBalance = response.RepaymentBalance;
 
             return response;
         }
@@ -699,7 +713,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 FromName = business.BusinessName,
                 Bundle = args.InterestedBundleName,
                 Quantity = args.TotalQuantityPaidFor.ToString(),
-                BundlePackage = bundle.BundlePackage,
+                BundlePackage = bundle.Name,
                 CompanyLogo = business.BusinessLogo,
                 Reference = args.Reference,
                 PropagateUrl = $"{propagationUrl}/agent/disbursement?userId={args.FarmerUserId}&reference={args.Reference}",
@@ -786,7 +800,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.OfficerInChargeUserId = args.UserId;
                         model.TotalQuantityPaidFor = subscription.TotalQuantityPaidFor;
                         model.InputAlreadyCollected = true;
-                       
+
                         model.InputCollectedByPictureOf = compareFace.ImageKey;
 
 
