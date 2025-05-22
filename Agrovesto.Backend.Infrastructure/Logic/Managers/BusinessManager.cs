@@ -293,6 +293,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
+        private async Task SendOnboardingSMSM(string businessName, string phoneNumber)
+        {
+            var messageBody = $"A new business {businessName} has been added to your merchant list for Farmer Management Platform." +
+                         $"You can always reach out to the business using {phoneNumber} ";
+
+            var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+            {
+                campaign_name = "Onboarding",
+                contacts = new List<string> { "09061562512"},
+                message = messageBody,
+            });
+            var sms1 = await _whisperSMSService.HandleAfricasTalkingSMS(new WhisperSMSModel
+            {
+                campaign_name = "Onboarding",
+                contacts = new List<string> { $"+2349061562512" },
+                message = messageBody,
+            });
+            var sms2 = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+            {
+                to = $"2349061562512",
+                sms = messageBody
+            });
+        }
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
         {
@@ -365,7 +388,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             logincred = $"login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
                         };
                         var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-
+                        var sendSms = SendOnboardingSMSM(business.BusinessName, business.PhoneNumber);
                         return newBusiness;
                     }
                     catch (Exception ex)
@@ -413,8 +436,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             //UserType.Business,
                             CreatedBy = args.UserId,
                             CreatedOn = DateTimeOffset.Now,
-                            BusinessCode = business.BusinessCode
-
+                            BusinessCode = business.BusinessCode,
+                            Name = bWorker.FullName
+                        
                         };
                         var registerBusinessWorker = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from businesses*/);
                         if (!registerBusinessWorker.status)
@@ -655,8 +679,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     else
                     {
-                       if(model.UserType != "Cooperative")
+                        if (string.IsNullOrEmpty(model.Name))
                         {
+
                             model.Name = model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                         }
                         var registrationResult = await RegisterUserAsync(model, args);
@@ -704,6 +729,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
                 catch (Exception ex)
                 {
+                    _log.LogInformation("error occurred", ex.Message);
                     await transaction.RollbackAsync();
                     throw new Exception(ex.Message);
                 }
@@ -769,11 +795,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             switch (subaccount.SubAccountType)
             {
                 case SubAccountType.Trader:
-                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                    //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateTraderProfile(model, business, registeredUser.model.Id);
                     break;
                 case SubAccountType.Agent:
-                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                    //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
 
                     bWorker.BusinessId = business.BusinessId;
@@ -800,7 +826,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     break;
 
                 case SubAccountType.Farmer:
-                    model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                  //  model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     model.Id = registeredUser.model.Id;
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
                     break;
@@ -831,7 +857,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
                 Pin = model.Pin,
-
+                Name= model.Name,
                 BusinessCode = args.businessCode,
             };
             //send mail
@@ -1002,41 +1028,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return yearOfBirth.ToString();
         }
 
-        public async Task<PagedListResponse<List<AgentModel>>> GetAgentsByBusinessCode(string userId,
-            ListQueryParams query)
+        public async Task<PagedListResponse<List<AgentModel>>> GetAgentsByBusinessCode(string userId, ListQueryParams query)
         {
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
-
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
-                var agent = await _agentRepository.GetAgentsByBusinessCode(business.BusinessCode, query);
-                if (agent == null) return new PagedListResponse<List<AgentModel>>
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
                 {
-                    Succeeded = true,
-                    Data = null,
-                    Count = 0,
-                    Message = "No Record Found"
-                };
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
+
+                var agents = await _agentRepository.GetAgentsByBusinessCode(business.BusinessCode, query);
+
+             
                 return new PagedListResponse<List<AgentModel>>
                 {
                     Succeeded = true,
-                    Data = agent,
-                    Count = agent.Count,
-                    Message = "Retrieved Successfully"
+                    Data = agents,
+                    Count = agents?.Count ?? 0,
+                    Message = agents == null || agents.Count == 0 ? "No Record Found" : "Retrieved Successfully"
                 };
             }
             catch (BaseException ex)
             {
                 _log.LogError($"Error retrieving Agents: {ex.Message}");
-
-                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                throw;
             }
             catch (Exception ex)
             {
-                throw new NotFoundException($"No Record Found");
+                _log.LogError($"Unexpected error retrieving Agents: {ex.Message}");
+                throw new NotFoundException("No Record Found");
             }
         }
 
@@ -1085,8 +1111,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
                 var agent = await _cooperativeRepository.GetCooperativesByBusinessCode(business.BusinessCode, query);
                 if (agent == null) return new PagedListResponse<List<CooperativeModel>>
                 {
@@ -1122,9 +1154,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
-
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
                 var farmers = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
 
                 if (farmers == null || !farmers.Any())
@@ -1397,8 +1434,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 var business = await _businessRepository.GetBusinessByUserIdAsync(query.UserId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
                 var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsync(business.BusinessCode);
                 if (bizEntities == null) return new Response<BusinessEntitiesMetrics>
                 {

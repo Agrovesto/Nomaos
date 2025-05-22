@@ -1419,7 +1419,7 @@ namespace Agrovesto.Backend.Infrastructure
                 PhoneNumber = model.PhoneNumber,
                 Pin = model.Pin,
                 UserName = model.Email,
-                Name = model.FirstName,
+                Name = model.Name,
                 UserType = model.UserType,
                 BusinessCode = model.BusinessCode
                 //UserType=model.UserType.ToString()

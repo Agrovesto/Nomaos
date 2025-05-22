@@ -173,7 +173,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId);
+                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId, query);
                 return Ok(new Response<List<WarehouseInputTransitModel>> ()
                 {
                     Data = result.Data,
@@ -317,7 +317,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId);
+                var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId, query);
                 return Ok(new Response<List<WarehouseSummaryMetrics>>()
                 {
                     Data = result.Data,

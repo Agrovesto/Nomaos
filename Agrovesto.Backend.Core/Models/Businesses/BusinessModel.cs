@@ -111,11 +111,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         [RegularExpression(ValidationRegex.General)]
         [MaxLength(50)]
-        public string BVN { get; set; }
+        public string? BVN { get; set; }
 
         [RegularExpression(ValidationRegex.General)]
         [MaxLength(13)]
-        public string NIN { get; set; }
+        public string? NIN { get; set; }
 
         [RegularExpression(ValidationRegex.General)]
         [MaxLength(200)]

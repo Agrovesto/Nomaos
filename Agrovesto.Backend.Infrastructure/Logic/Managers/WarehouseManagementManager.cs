@@ -42,14 +42,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
         #region warehousemgt
-        public async Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId)
+        public async Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId, ListQueryParams query)
         {
             {
                 try
                 {
                     var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
 
-                    if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                    if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                    {
+                        business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                    }
+                    if (business == null)
+                    {
+                        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                    }
 
                     var warehouse = await _repository.GetWarehouseInputTransit(business.BusinessCode);
                     if (warehouse == null) return new Response<List<WarehouseInputTransitModel>>
@@ -77,13 +84,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
             }
         }
-        public async Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId)
+        public async Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId, ListQueryParams query)
         {
             try
             {
                 var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
 
                 var warehouse = await _repository.GetWarehouseSummaryByBusiness(business.BusinessCode);
                 if (warehouse == null) return new Response<List<WarehouseSummaryMetrics>>
@@ -295,8 +309,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
 
-                if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                {
+                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                }
+                if (business == null)
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
+                }
                 var warehouse = await _repository.GetWarehousesByBusiness(business.BusinessCode);
                 if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                 {
