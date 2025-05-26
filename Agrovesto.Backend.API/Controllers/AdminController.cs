@@ -26,16 +26,92 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IWalletProviderManager _walletProvider;
 
+        private readonly IInputFinancingManagement _inputFinancingManagement;
         private readonly IPaymentProviderManager _providerManager;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IPaymentProviderManager providerManager,
-            IAuthenticationRepository authenticationRepository) : base(httpContextAccessor)
+            IAuthenticationRepository authenticationRepository,
+            IInputFinancingManagement inputFinancingManagement) : base(httpContextAccessor)
         {
 
             _providerManager = providerManager;
             _authenticationRepository = authenticationRepository;
             _walletProvider = walletProvider;
+            _inputFinancingManagement = inputFinancingManagement;
+        }
+
+
+        [HttpPost("input-subscription-settlement")]
+        public async Task<IActionResult> SettleBusiness([FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                var bundle = await _inputFinancingManagement.SettlePendingFarmerBundleSubscriptionEquityToBusiness(args);
+                if (bundle.status)
+                {
+                    return Ok(new Response<(bool status, BundleSubscriptionInterestModel data)>()
+                    {
+                        Code = (bundle.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = bundle
+                    });
+
+                }
+                else
+                {
+                    return Ok(new Response<(bool status, BundleSubscriptionInterestModel data)>()
+                    {
+                        Code = (bundle.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                        Succeeded = false,
+                        Message = "Please try again later",
+                        Data = bundle
+                    });
+                }
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
         [HttpPost("create-admin")]

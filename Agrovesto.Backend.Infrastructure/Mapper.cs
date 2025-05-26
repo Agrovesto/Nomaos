@@ -313,8 +313,10 @@ namespace Agrovesto.Backend.Infrastructure
                 CooperativeId = entity.CooperativeId,
                 PaymentStatus = entity.PaymentStatus,
                 SubscriptionStatus=entity.SubscriptionStatus,
-                
-               MaturityDate=entity.MaturityDate
+                FarmerIdentifier=entity.FarmerIdentifier,
+               MaturityDate=entity.MaturityDate,
+               IsDebitted=entity.IsDebitted
+
             };
         }
 
@@ -326,6 +328,7 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new BundleSubscriptionInterest
             {
+                FarmerIdentifier=model.FarmerIdentifier,
                 PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status),
                 SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus),
                 OfficerInChargeUserId = model.OfficerInChargeUserId,
@@ -350,7 +353,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = model.Reference,
                 Location = model.Location,
                 CooperativeId = model.CooperativeId,
-                MaturityDate=model.MaturityDate
+                MaturityDate=model.MaturityDate,
+                IsDebitted=model.IsDebitted
             };
         }
 

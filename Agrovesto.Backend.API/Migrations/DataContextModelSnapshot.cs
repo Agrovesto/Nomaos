@@ -271,6 +271,10 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("ExpectedTotalEquityPrice")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("FarmerIdentifier")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("FarmerName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -287,6 +291,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsCommissionPaidOut")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDebitted")
                         .HasColumnType("bit");
 
                     b.Property<string>("Location")

@@ -37,8 +37,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string OfficerInChargeUserId { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string Location { get; set; }
+        public string FarmerIdentifier { get; set; }
 
         public long CooperativeId { get; set; }
         public DateTimeOffset? MaturityDate { get; set; }
+        public bool IsDebitted { get; set; }
     }
 }
