@@ -76,17 +76,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //{
                     //    throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Insufficient Funds");
                     //}
+                    var datePart = DateTime.UtcNow.ToString("MM-dd"); // e.g., "05-24"
+                    var randomDigits = new Random().Next(100, 1000);
 
-                    var fundWithdrawal = await _cafeOneWalletService.FundWithdrawal(new FundWithdrawalRequestModel
+                    var fundWithdrawal = await _cafeOneWalletService.TransferFromUserAccountToBusinessAccount(new WalletToWalletTransferRequestModel
                     {
                         Amount = model.Amount,
-                        sourceAccountName = farmerWallet.name,
-                        sourceAccountNumber = farmerWallet.virtualAccount.accountNumber,
-                        destinationAccountName = model.DestinationAccountName,
-                        destinationAccountNumber = model.DestinationAccountNumber,
-                        destinationBankCode = model.DestinationBank,
-
-                        remarks = !string.IsNullOrEmpty(model.Narration) ? model.Narration : "Fund withdrawal"
+                        TransactionReference = $"{business.BusinessCode}-TRF-{datePart}-{randomDigits}",
+                        AccountNumber = model.DestinationAccountNumber,
+                        BatchReference = $"{business.BusinessCode}-WTH-{datePart}-{randomDigits}",
+                        Remarks = !string.IsNullOrEmpty(model.Narration) ? model.Narration : "Fund withdrawal",
+                        WalletId= userSterlinWallet.WalletId,
+                        CustomerId=userSterlinWallet.CustomerId
                     }, args.Env); 
 
                     var createPayout = model.Map();

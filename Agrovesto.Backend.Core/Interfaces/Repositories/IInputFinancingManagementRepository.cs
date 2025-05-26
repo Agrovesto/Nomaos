@@ -41,5 +41,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<BundleDisbursementModel>> FilterDisbursementForDownload(string? businessCode, string? disbursedBy, string? state, DateTime? startDate, DateTime? endDate);
         Task<List<BundleSubscriptionInterestModel>> FilterSubscriptionForDownload(string? businessCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
         Task<List<BundleSubscriptionInterestModel>> GetFarmerSubscriptionInterestDetails(BundleSubscriptionInterestModel data);
+        Task<List<BundleSubscriptionInterestModel>> isIdentifierPresent(BundleSubscriptionInterestModel data);
+        Task<BundleSubscriptionInterestModel> SettlePendingFarmerBundleSubscriptionEquityToBusiness(BundleSubscriptionInterestModel model);
     }
 }

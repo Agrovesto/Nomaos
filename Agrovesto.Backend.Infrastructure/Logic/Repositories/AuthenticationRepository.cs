@@ -368,7 +368,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     {
                         return (model, false, "A user with the same phone number exists on the system");
                     }
-                    entity.Id = Guid.NewGuid().ToString();
+                    if (!string.IsNullOrEmpty(model.BusinessCode))
+                    {
+                        var datePart = DateTime.UtcNow.ToString("yyyyMMdd"); // or any desired date format
+                        var randomDigits = new Random().Next(100, 999); // 3 random digits
+                        entity.Id = $"{model.BusinessCode}{datePart}{randomDigits}";
+                    }
+                    else
+                    {
+                        entity.Id = Guid.NewGuid().ToString();
+                    }
+
                     entity.UserType = model.UserType;//Enum.GetName(typeof(UserType), model.UserType);
 
                     if (string.IsNullOrEmpty(model.Password))

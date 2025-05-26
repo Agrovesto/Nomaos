@@ -563,29 +563,30 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                   //  { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
                 var nipNameEnquiry = await IntraBankNameEnquiry(request.destinationAccountNumber, Env);
-                if (nipNameEnquiry != null)
+                var payload = new
                 {
-                    request.destinationAccountNumber = nipNameEnquiry.data.accountNumber;
-                    request.destinationAccountName = nipNameEnquiry.data.accountName;
-                    request.destinationBankCode = !string.IsNullOrEmpty(nipNameEnquiry.data.destinationBankCode) ? nipNameEnquiry.data.destinationBankCode : "000001";
-                }
-                var content = new StringContent(JsonConvert.SerializeObject(request), Encoding.UTF8, "application/json");
+                    fromAccount = request.sourceAccountNumber,
+                    toAccount = request.destinationAccountNumber,
+                    amount = request.Amount,
+                    transactionReference = request.reference,
+                    remarks = request.remarks,
+                    transactionTypeId = 0
+                };
+                //if (nipNameEnquiry != null)
+                //{
+                //    request.destinationAccountNumber = nipNameEnquiry.data.accountNumber;
+                //    request.destinationAccountName = nipNameEnquiry.data.accountName;
+                //    request.destinationBankCode = !string.IsNullOrEmpty(nipNameEnquiry.data.destinationBankCode) ? nipNameEnquiry.data.destinationBankCode : "000001";
+                //}
+                var content = new StringContent(JsonConvert.SerializeObject(payload), Encoding.UTF8, "application/json");
 
-                var query = await _httpService.Post($"{@params.payoutUrl}/api/Payout/intrabank-funds-transfer", content, headers);
+                //var query = await _httpService.Post($"{@params.payoutUrl}/api/Payout/intrabank-funds-transfer", content, headers);
+                var query = await _httpService.Put($"{@params.Url}/api/v1/wallets/wallet/transaction/v2/wallet-to-wallet", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
-                query.EnsureSuccessStatusCode();
+                //query.EnsureSuccessStatusCode();
 
                 var response = JsonConvert.DeserializeObject<CafeoneResponseModel<CafeOneCustomerWalletResponse>>(readResponse);
-                response.success = true;
-                if (response.success)
-                {
-
-                    return response;
-                }
-                else
-                {
-                    return null;
-                }
+                return response;
 
             }
             catch (Exception ex)
@@ -660,15 +661,19 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
             var model = new
             {
-                organizationId = @params.OrganizationId,
                 productId = @params.productDebit,
+                organizationId = @params.OrganizationId,                
                 amount = request.Amount,
-                direction = @params.debitdirection,
-                currency = @params.currency,
-                walletId = request.WalletId,
                 transactionReference = request.TransactionReference,
+                walletId = request.WalletId,
                 customerId = request.CustomerId,
+                direction = @params.debitdirection,
                 remarks = request.Remarks,
+                currency = @params.currency,
+            
+              
+                
+              
                 batchReference = request.BatchReference,
                 accountNumber = request.AccountNumber
 
@@ -729,16 +734,26 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                   //  { "Authorization",  $"Bearer {token.AccessToken}"}
                 };
                 var nipNameEnquiry = await InterBankNameEnquiry(request.destinationAccountNumber, request.destinationBankCode, Env);
-                if (nipNameEnquiry != null)
+                //if (nipNameEnquiry != null)
+                //{
+                //    request.destinationAccountNumber = nipNameEnquiry.data.accountNumber;
+                //    request.destinationAccountName = nipNameEnquiry.data.accountName;
+                //    request.destinationBankCode = nipNameEnquiry.data.destinationInstitutionCode; //: "000001";
+                //}
+                //request.currencyId = @params.currencyId;
+
+                var payload = new
                 {
-                    request.destinationAccountNumber = nipNameEnquiry.data.accountNumber;
-                    request.destinationAccountName = nipNameEnquiry.data.accountName;
-                    request.destinationBankCode = nipNameEnquiry.data.destinationInstitutionCode; //: "000001";
-                }
-                request.currencyId = @params.currencyId;
+                    fromAccount = request.sourceAccountNumber,
+                    toAccount = request.destinationAccountNumber,
+                    amount = request.Amount,
+                    transactionReference = request.reference,
+                    remarks = request.remarks,
+                    transactionTypeId = 0
+                };
                 var content = new StringContent(JsonConvert.SerializeObject(request), Encoding.UTF8, "application/json");
 
-                var query = await _httpService.Post($"{@params.payoutUrl}/api/Payout/funds-transfer", content, headers);
+                var query = await _httpService.Put($"{@params.Url}/api/v1/wallets/wallet/transaction/account-number/post", content, headers);
                 var readResponse = await query.Content.ReadAsStringAsync();
                 query.EnsureSuccessStatusCode();
 

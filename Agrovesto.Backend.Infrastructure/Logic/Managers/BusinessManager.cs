@@ -650,6 +650,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             //    model.NIN = string.IsNullOrEmpty(model.NIN) ? bvnVerification.data.nin : model.NIN;
             //}
 
+            model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location; 
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {

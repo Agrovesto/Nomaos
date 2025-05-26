@@ -49,7 +49,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                
                 var postIntrabank = await _cafeOneWalletService.PayoutTransferFromUserAccountToBusinessAccount(request, env);
-                if (postIntrabank == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
+                
+               // if (postIntrabank == null) { throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Not Found"); }
 
                 return postIntrabank;
             }
@@ -405,7 +406,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
         {
-
+            model.City = !string.IsNullOrEmpty(model.City) ? model.City : model.Address;
             var user = await _walletRepository.GetSubAccount(model.UserId);
             //if(user !=null && user.WalletCode !=null)
             //{

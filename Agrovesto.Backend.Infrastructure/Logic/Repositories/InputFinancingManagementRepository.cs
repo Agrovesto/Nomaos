@@ -29,7 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .GroupBy(b => 1) // Group everything together to get overall counts
                 .Select(g => new
                 {
-                    ActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid)),
+                    ActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid) || b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.AllowedDebit)),
                     PendingSubscribers = g.Count(b =>
                         b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
                         b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
@@ -151,11 +151,20 @@ DateTime? endDate)
         }
         public async Task<(bool status, BundleSubscriptionInterestModel data)> CreateInputFinancingInterestThroughBundle(BundleSubscriptionInterestModel data)
         {
+            
             var entity = data.Map();
             await _context.AddAsync(entity);
             await _context.SaveChangesAsync();
 
             return (true, entity.Map());
+        }
+        public async Task<List<BundleSubscriptionInterestModel>> isIdentifierPresent(BundleSubscriptionInterestModel data)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == data.FarmerUserId).ToListAsync();
+
+            if (!interest.Any()) { return null; }
+
+            return interest.Select(x => x.Map()).ToList();
         }
         public async Task<List<BundleSubscriptionInterestModel>> GetExistingSubscription(BundleSubscriptionInterestModel data)
         {
@@ -324,7 +333,7 @@ DateTime? endDate)
             interest.TotalEquityPaid = model.TotalEquityPaid;
             interest.Reference = model.Reference;
             interest.MaturityDate = model.MaturityDate;
-
+            interest.IsDebitted = model.IsDebitted;
             await _context.SaveChangesAsync();
 
             return interest.Map();
@@ -332,6 +341,23 @@ DateTime? endDate)
 
         }
 
+
+
+        public async Task<BundleSubscriptionInterestModel> SettlePendingFarmerBundleSubscriptionEquityToBusiness(BundleSubscriptionInterestModel model)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == model.FarmerUserId && x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync();
+
+            if (interest == null) return null;
+
+            interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
+            interest.IsDebitted = model.IsDebitted;
+
+            await _context.SaveChangesAsync();
+
+            return interest.Map();
+
+
+        }
         public async Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model)
         {
             var disbursement = model.Map();
@@ -387,7 +413,14 @@ DateTime? endDate)
             if (interest != null)
             {
                 // interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status); 
+                   interest.PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status);
                 interest.SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus);
+                interest.PaymentDate = model.PaymentDate;
+                interest.IsCommissionPaidOut = model.IsCommissionPaidOut;
+                interest.TotalQuantityPaidFor = model.TotalQuantityPaidFor;
+                interest.TotalEquityPaid = model.TotalEquityPaid;
+                interest.Reference = model.Reference;
+                interest.MaturityDate = model.MaturityDate;
 
                 await _context.SaveChangesAsync();
                 return interest.Map();
