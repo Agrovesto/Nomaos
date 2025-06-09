@@ -31,6 +31,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public double InputQuantity { get; set; }
         public decimal OtherCost { get; set; }
         public decimal TotalCost { get; set; }
+
+        public string? SupportingImageUrl { get; set; }
     }
 
     public class FarmActivityTypeModel

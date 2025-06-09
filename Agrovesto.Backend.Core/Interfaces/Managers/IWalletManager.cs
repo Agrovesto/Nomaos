@@ -12,6 +12,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IWalletManager
     {
         Task<SubAccountModel> CreateSubAccount(SubAccountModel model);
+        Task<SubAccountModel> GetSubAccount(string userId);
         Task<SubAccountModel> GetSubAccountByUserId(string userId);
         Task<SterlingBankWalletModel> GetUserSterlingAccount(string userId);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToAgrovestoAccount(PostWalletToWalletTransferRequestModel request, string env);

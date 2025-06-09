@@ -46,13 +46,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string DeliveryLocation { get; set; }
         public LogisticType LogisticType { get; set; } //truck, bike, cab
         public string LogisticNumber { get; set; }
-     
 
+
+    }
+
+    public class AdminBusinessEntitiesMetrics
+    {
+        public long TotalBusiness { get; set; }
+
+        public long TotalFarmers { get; set; }
+        public long TotalTraders { get; set; }
+        public long TotalProcurement { get; set; }
     }
     public class BusinessEntitiesMetrics
     {
         public long TotalWarehouse { get; set; }
-        
+
         public long TotalAgents { get; set; }
         public long TotalCooperative { get; set; }
         public long TotalFarmer { get; set; }
@@ -69,7 +78,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Name { get; set; }
         public long InitialStockUp { get; set; }
         public long Value { get; set; }
-     
+
     }
     public class WarehouseSummaryMetrics
     {

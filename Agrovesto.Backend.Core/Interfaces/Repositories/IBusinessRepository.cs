@@ -17,7 +17,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BusinessModel> GetBusinessByIdAsync(long businessId);
         Task<BusinessModel> GetBusinessBySinageSaltAsync(string signagesalt);
         Task<BusinessModel> GetBusinessByUserIdAsync(string userId);
-        Task<List<BusinessModel>> GetBusinessesAsync(ListQueryParams query);
+        Task<List<BusinessModel>> GetBusinessesAsync();
         Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId);
     }
 }

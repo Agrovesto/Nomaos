@@ -16,6 +16,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? FarmerName { get; set; }
         public string WarehouseName { get; set; }
         public string Reference { get; set; }
+        public string FarmerIdentifier { get; set; }
         public DateTimeOffset? MaturityDate { get; set; }
         public long Id { get; set; }
         public string? BundleType { get; set; }
@@ -66,7 +67,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public decimal EquityPlusCommission { get; set; }
         public bool IsCommissionPaidOut { get; set; }//has Agrovesto commission been paid
-
+        public string? FarmerIdentifier { get; set; }
         public bool ShouldAddCommission { get; set; }
         public decimal CommissionPrice { get; set; }
         public double CommissionPercentage { get; set; }
@@ -76,10 +77,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Reference { get; set; }
         public string? Location { get; set; }
         public long CooperativeId { get; set; }
-        public string? AccountBalance { get; set; }
+        public long AccountBalance { get; set; }
         public string? PaymentStatus { get; set; }
         public string? SubscriptionStatus { get; set; }
 
         public DateTimeOffset? MaturityDate { get; set; }
+        public bool IsDebitted { get; set; }
     }
 }

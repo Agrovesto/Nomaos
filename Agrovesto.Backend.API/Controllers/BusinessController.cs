@@ -86,6 +86,42 @@ namespace Agrovesto.Backend.API.Controllers
 
         //retrieve agent by supervisor
 
+        [HttpGet("user-profile")]
+        public async Task<IActionResult> GetUserProfile([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _walletManager.GetSubAccount(query.UserId);
+                return Ok(new Response<SubAccountModel>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        
         [HttpGet("agents-bysupervisor")]
         public async Task<IActionResult> AgentsBySupervisor([FromQuery] ListQueryParams query)
         {
@@ -1079,6 +1115,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+      
         [HttpGet("businesses")]
         public async Task<IActionResult> GetBusinessesAsync([FromQuery] ListQueryParams query)
         {

@@ -20,10 +20,12 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
         public string remarks { get; set; }//get from db, default to NGN
         public decimal Amount { get; set; }
         public string currencyId { get; set; }
+        public string reference { get; set; }
     }
     public class PostWalletToWalletTransferRequestModel
     {
         public string destinationBankCode { get; set; }
+        public string reference { get; set; }
         public string destinationAccountNumber { get; set; }
         public string destinationAccountName { get; set; }
         public string sourceAccountNumber { get; set; }
@@ -75,6 +77,13 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest
         public T data { get; set; }
         public string code { get; set; }
         public bool success { get; set; }
+        public string message { get; set; }
+    }
+    public class PayoutCafeoneResponseModel<T>
+    {
+        public T data { get; set; }
+        public int statusCode { get; set; }
+        public bool succeeded { get; set; }
         public string message { get; set; }
     }
 

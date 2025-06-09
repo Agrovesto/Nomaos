@@ -136,6 +136,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                        businessName = model.BusinessName,
                        fullName = model.FullName,
                        platform = model.Platform,
+                       Url = model.Url
                    });
 
             emailMessage = AddBcc(emailMessage, model.From);
@@ -242,6 +243,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         public string FullName { get; set; }
         public string Platform { get; set; }
         public string BusinessName { get; set; }
+        public string Url { get; set; }
     }
 
 

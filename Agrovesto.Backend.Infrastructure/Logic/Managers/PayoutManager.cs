@@ -72,31 +72,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         farmerWallet = await _walletManager.RetrieveCustomerWallet(model.UserId, args.Env);
                     }
 
-                    //if (model.Amount > farmerWallet.availableBalance)
-                    //{
-                    //    throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Insufficient Funds");
-                    //}
+                    if (model.Amount > farmerWallet.availableBalance)
+                    {
+                        throw new BaseException(Core.Enums.ExceptionType.OPERATION_FAILED, "Insufficient Funds");
+                    }
+                    var datePart = DateTime.UtcNow.ToString("MM-dd"); // e.g., "05-24"
+                    var randomDigits = new Random().Next(100, 1000);
 
                     var fundWithdrawal = await _cafeOneWalletService.FundWithdrawal(new FundWithdrawalRequestModel
                     {
                         Amount = model.Amount,
-                        sourceAccountName = farmerWallet.name,
-                        sourceAccountNumber = farmerWallet.virtualAccount.accountNumber,
-                        destinationAccountName = model.DestinationAccountName,
-                        destinationAccountNumber = model.DestinationAccountNumber,
-                        destinationBankCode = model.DestinationBank,
-
-                        remarks = !string.IsNullOrEmpty(model.Narration) ? model.Narration : "Fund withdrawal"
+                        sourceAccountNumber = userSterlinWallet.AccountNumber,
+                        destinationAccountName=model.DestinationAccountName,
+                        destinationAccountNumber=model.DestinationAccountNumber,
+                        destinationBankCode=model.DestinationBank,
+                        sourceAccountName=userSterlinWallet.AccountName,
+                        
+                        //reference = $"{business.BusinessCode}-WTH-{datePart}-{randomDigits}",
+                        remarks = !string.IsNullOrEmpty(model.Narration) ? model.Narration : "Fund withdrawal",
+                      
                     }, args.Env); 
 
                     var createPayout = model.Map();
 
                     if (fundWithdrawal != null)
                     {
-                        if (fundWithdrawal.success)
+                        if (fundWithdrawal.success && !string.IsNullOrEmpty(fundWithdrawal.data))
                         {
                             createPayout.IsSuccessfulTransaction = true;
-                            //createPayout.Reference = fundWithdrawal.data.data;
+                            createPayout.Reference = fundWithdrawal.data;
                         }
                     }
                     await _context.AddAsync(createPayout);
