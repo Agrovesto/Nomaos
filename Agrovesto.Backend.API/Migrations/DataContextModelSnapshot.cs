@@ -406,6 +406,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("PropagateUrl")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("SupportEmail")
                         .HasColumnType("nvarchar(max)");
 

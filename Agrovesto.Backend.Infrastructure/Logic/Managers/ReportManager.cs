@@ -1,7 +1,9 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.Extensions.Logging;
@@ -15,17 +17,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IFarmerTransactionRepository _farmerTransactionRepository;
         private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IExcelConverterService _excelConverterService;
+        private readonly IBusinessRepository _businessRepository;
         private readonly ILogger<ReportManager> _log;
         public ReportManager(IFarmerRepository farmerRepository,
             IFarmerTransactionRepository transactionRepository,
             IInputFinancingManagementRepository inputFinancingManagementRepository,
-            ILogger<ReportManager> log, IExcelConverterService excelConverterService)
+            ILogger<ReportManager> log, IExcelConverterService excelConverterService, IBusinessRepository businessRepository)
         {
-            _inputFinancingManagementRepository= inputFinancingManagementRepository;
+            _inputFinancingManagementRepository = inputFinancingManagementRepository;
             _farmerRepository = farmerRepository;
             _farmerTransactionRepository = transactionRepository;
             _excelConverterService = excelConverterService;
             _log = log;
+            _businessRepository = businessRepository;
         }
         private DateTime ParseDate(string dateStr, string label)
         {
@@ -39,6 +43,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return parsedDate;
         }
 
+        #region admin
+        public async Task<Response<AdminBusinessEntitiesMetrics>> GetCoreBusinessMetrics()
+        {
+            var bizEntities = new AdminBusinessEntitiesMetrics();
+            try
+            {
+                //get farmer summary
+                //get trader summary
+                //get business summary
+                //get procurement summary
+                var business = await _businessRepository.GetBusinessesAsync();
+                var farmers = await _farmerRepository.GetFarmers();
+                var traders = 126;
+                var procurement = 6;
+
+                bizEntities.TotalBusiness = business.LongCount();
+                bizEntities.TotalFarmers = farmers.LongCount();
+                bizEntities.TotalTraders = traders;
+                bizEntities.TotalProcurement = procurement;
+                return new Response<AdminBusinessEntitiesMetrics>
+                {
+                    Succeeded = true,
+                    Data = bizEntities,
+                    Message = "Retrieved Successfully"
+                };
+
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Inventory: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        #endregion admin
         public async Task<FileDownloadModel> FilterSubscription(string? businessCode,
 string? cooperativeName, string? state,
 string? startDate, string? endDate, string? exportFormat)

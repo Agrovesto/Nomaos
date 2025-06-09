@@ -64,6 +64,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BusinessLogo { get; set; }
         public string Address { get; set; }
         public string Website { get; set; }
+        public string? PropagateUrl { get; set; }
     }
 
     public class BusinessModel :Model
@@ -131,6 +132,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? BusinessCodeSignage { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public long TotalStaffCount { get; set; }
+        public string? PropagateUrl { get; set; }
     }
     public enum BusinessStatus
     {

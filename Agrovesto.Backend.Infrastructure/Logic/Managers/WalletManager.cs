@@ -41,6 +41,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _walletRepository = walletRepository;   
         }
 
+        public async Task<SubAccountModel> GetSubAccount(string userId)
+        {
+            return await _walletRepository.GetSubAccount(userId);
+        }
         #region intrabankpayout
         public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToBusinessAccount(PostWalletToWalletTransferRequestModel request, string env)
         {

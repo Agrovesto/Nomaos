@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Descriptions = model.RoleDescription
             };
 
-             var result=await _roleManager.CreateAsync(role);
+            var result = await _roleManager.CreateAsync(role);
             //await _context.AddAsync(role);
             //await _context.SaveChangesAsync();
             //var result = 
@@ -105,7 +105,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
 
             var role = model.Map();
-            
+
             var result = await _roleManager.CreateAsync(role);
             if (result.Succeeded)
             {
@@ -135,6 +135,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var result = await _userManager.AddToRoleAsync(user, role.Name);
             return result.Succeeded;
         }
+
+        public async Task<bool> RemoveUserFromRole(string userId, string roleId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            var role = await _roleManager.FindByIdAsync(roleId);
+
+            if (user == null || role == null)
+                return false;
+
+            var result = await _userManager.RemoveFromRoleAsync(user, role.Name);
+            return result.Succeeded;
+        }
+
+
+        public async Task<bool> ReAssignUserRole(string userId, string prevroleId, string newroleId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            var role = await _roleManager.FindByIdAsync(prevroleId);
+
+            if (user == null || role == null)
+                return false;
+
+            var result = await _userManager.RemoveFromRoleAsync(user, role.Name);
+            if (!result.Succeeded) return false;
+
+            var assign = await AddUserToRole(userId, newroleId);
+            if (!assign) return false;
+            return true;
+
+
+        }
         public async Task<PagedListResponse<List<RoleModel>>> GetBusinessRoles()
         {
             var roles = await _roleManager.Roles.Where(x => x.IsAvailableToBusiness).ToListAsync();
@@ -153,21 +184,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             var roles = await _roleManager.Roles.ToListAsync();
 
-            var roleMap= roles.Select(x => x.Map()).ToList();
+            var roleMap = roles.Select(x => x.Map()).ToList();
             return new PagedListResponse<List<RoleModel>>
             {
                 Data = roleMap,
                 Code = "00",
-                Message="",
-                Count=roleMap.Count,
-                Succeeded=true,
+                Message = "",
+                Count = roleMap.Count,
+                Succeeded = true,
             };
         }
 
         public async Task<Response<RoleModel>> GetRoleByIdAsync(string roleId)
         {
             var roles = await _roleManager.Roles.ToListAsync();
-            var role =roles.Where(r=>r.Id == roleId).FirstOrDefault();
+            var role = roles.Where(r => r.Id == roleId).FirstOrDefault();
 
             var roleMap = role.Map();
             return new Response<RoleModel>
