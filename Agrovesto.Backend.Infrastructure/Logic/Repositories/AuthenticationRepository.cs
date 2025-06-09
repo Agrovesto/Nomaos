@@ -109,7 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
                     }
 
-                    if (user == null )
+                    if (user == null)
                     {
                         return (false, "User not found", null);
 
@@ -121,7 +121,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     }
                     byte[] salt = Convert.FromBase64String(user.Salt);
                     string transPin = model.pin.HashSecret(salt);
-                    if(string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
+                    if (string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
                     {
                         return (false, "Login with Email and Password, then enable login with Pin in settings", null);
                     }
@@ -181,8 +181,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 var response = new TokenModel
                 {
-                    
-                    Id= user.Id,
+
+                    Id = user.Id,
                     ExpiresOn = DateTime.Now.AddDays(1),
                     Roles = userRole.ToList(),
                     Token = token,
@@ -285,9 +285,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             result = (entity.Map(), true, "Success");
                             return result;
                         }
-                        else if(fetchuser !=null && fetchuser.UserType != "Admin")
+                        else if (fetchuser != null && fetchuser.UserType != "Admin")
                         {
                             var uniqueRole = await _roleManager.FindByNameAsync(roleName);
+                            
                             if (uniqueRole == null) throw new Exception($"Could not find specified role");
                             var addUserToRole = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
 
@@ -323,7 +324,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var model = await _userManager.FindByIdAsync(userId);
             if (model == null) return (null, false, "");
             model.Name = user.FirstName;
-           var update= await _userManager.UpdateAsync(model);
+            var update = await _userManager.UpdateAsync(model);
             if (!update.Succeeded) throw new Exception($"Could not update user details");
             return (model.Map(), true, "Success");
         }
@@ -532,6 +533,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (false, "Invalid username");
         }
 
+        //TODO: Rework delete user
+        public async Task<bool> DeletUserAsync(string userId, string roleId)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return false;
+            var role = await _roleManager.FindByIdAsync(roleId);
+
+            if (role == null) { }
+            var removeFromRole = await _userManager.RemoveFromRoleAsync(user, role.Name);
+            var delete = await _userManager.DeleteAsync(user);
+
+            return true;
+
+        }
 
     }
 }

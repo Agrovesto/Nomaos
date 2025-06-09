@@ -93,13 +93,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return businessWorker.Map();
         }
    
-        public async Task<List<BusinessModel>> GetBusinessesAsync(ListQueryParams query)
+        public async Task<List<BusinessModel>> GetBusinessesAsync()
         {
             var business = await _context.Set<Business>().Include(b =>b.BusinessWorkers)
                 .AsNoTracking()
                 .OrderByDescending(b=>b.CreatedOn)
-                 .Skip(query.PageNumber)
-                .Take(query.PageSize)
+                // .Skip(query.PageNumber)
+                //.Take(query.PageSize)
               .Select(s => new BusinessModel
               {
                   TotalStaffCount= s.BusinessWorkers.Count,

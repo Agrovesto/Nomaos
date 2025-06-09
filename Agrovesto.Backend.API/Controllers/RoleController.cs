@@ -165,5 +165,99 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
+            [HttpPatch("removeuser-from-role/{userId}/{roleId}")]
+        public async Task<IActionResult> RemoveUserFromRole(string userId, string roleId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var data = await _roleManager.RemoveUserFromRole(userId, roleId);
+
+                return Ok(new AgrovestoResponse<string>()
+                {
+                    Message = "",
+                    Result = data.ToString(),
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+                [HttpPatch("change-from-role/{userId}/{prevroleId}/{newroleId}")]
+        public async Task<IActionResult> ReAssignUserRole(string userId, string prevroleId, string newroleId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var data = await _roleManager.ReAssignUserRole(userId, prevroleId, newroleId);
+
+                return Ok(new AgrovestoResponse<string>()
+                {
+                    Message = "",
+                    Result = data.ToString(),
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
     }
 }

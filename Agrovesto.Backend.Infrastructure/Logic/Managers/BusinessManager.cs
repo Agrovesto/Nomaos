@@ -266,7 +266,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
 
-                var businesses = await _businessRepository.GetBusinessesAsync(query);
+                var businesses = await _businessRepository.GetBusinessesAsync();
                 if (businesses == null) return new PagedListResponse<List<BusinessModel>>
                 {
                     Succeeded = true,
@@ -482,6 +482,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 FromName = business.BusinessName,
                 FullName = bWorker.FullName,
                 Platform = business.BusinessName,
+                Url= business.PropagateUrl,
                 DefaultPassword = args.DefaultPassword,
                 BusinessName = business.BusinessName,
                 PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
