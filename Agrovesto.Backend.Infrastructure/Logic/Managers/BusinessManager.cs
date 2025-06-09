@@ -24,10 +24,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using System.Web;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 using User = Agrovesto.Backend.Infrastructure.Entities.Common.User;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
