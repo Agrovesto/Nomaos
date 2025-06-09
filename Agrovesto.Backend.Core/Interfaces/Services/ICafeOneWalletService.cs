@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
     {
         Task<CafeoneDataModel> CreateCustomer(CafeoneCustomerRequest model, string Env);
         Task<CafeOneCustomerWalletResponse> CreateCustomerWallet(CafeOneCustomerWalletCreationRequest model, string Env);
-        Task<CafeoneResponseModel<FundTransferResponse>> FundWithdrawal(FundWithdrawalRequestModel request, string Env);
+        Task<CafeoneResponseModel<string>> FundWithdrawal(FundWithdrawalRequestModel request, string Env);
         Task<List<CafeOneBankData>> GetBanks(string env);
         Task<NameEnquiry> InterBankNameEnquiry(string accountNumber, string bankCode, string env);
 

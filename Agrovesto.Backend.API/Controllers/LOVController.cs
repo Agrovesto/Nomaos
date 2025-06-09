@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -18,15 +19,43 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IFlutterwaveService _flutterwaveService;
 
         private readonly IWebHostEnvironment _hostingEnvironment;
+        private readonly ISMSService _smsService;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
-             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment)
+             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, ISMSService smsService)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
 
             _flutterwaveService = flutterwaveService;
+            _smsService = smsService;
         }
 
+        [AllowAnonymous]
+        [HttpPost("send-sms")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> SendSMS()
+        {
+            var messageBody = $"A new business  has been added to your merchant list for Farmer Management Platform." +
+                        $"You can always reach out to the business using  ";
+
+
+            var sms2 = await _smsService.HandleTermiiSMS(new TermiiSmsRequest
+            {
+                to = $"2349061562512",
+                sms = messageBody
+            });
+        
+            return Ok(new Response<(TermiiResponse response, bool status)>()
+            {
+                Code = ResponseCodes.Success,
+                Succeeded = true,
+                Message = "success",
+                Data =sms2
+            });
+        }
         [AllowAnonymous]
         [HttpGet("banks")]
         [ProducesResponseType(200)]
@@ -56,6 +85,8 @@ namespace Agrovesto.Backend.API.Controllers
         {
 
             var request = await _cafeOneWalletService.InterBankNameEnquiry(accountNumber, bankCode, env);
+           
+         
             return Ok(new Response<NameEnquiry>()
             {
                 Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,

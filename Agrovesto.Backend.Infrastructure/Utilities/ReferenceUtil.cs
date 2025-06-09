@@ -77,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
         public static string GenerateTransferReference()
         {
             Random gen = new Random();
-            string r = gen.Next(0, 1000000).ToString("D7");
+            string r = gen.Next(0, 1000000).ToString("D3");
             if (r.Distinct().Count() == 1)
             {
                 r = GenerateTransferReference();

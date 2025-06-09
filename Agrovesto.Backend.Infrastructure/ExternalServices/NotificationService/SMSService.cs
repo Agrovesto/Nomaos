@@ -65,7 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             request.send_date = DateTime.Now.ToString("dd-MM-yyyy HH:ss");
             var client = new HttpClient();
             SMSResponseModel response;
-           // client.DefaultRequestHeaders.Add("Authorization", $"Api_key {token}");
+            // client.DefaultRequestHeaders.Add("Authorization", $"Api_key {token}");
             client.DefaultRequestHeaders.Add("Authorization", token);
             var data = JsonConvert.SerializeObject(request);
 
@@ -84,69 +84,50 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             var channel = _config["TermiSMS:channel"];
             var type = _config["TermiSMS:type"];
             var url = _config["TermiSMS:url"];
+
             request.api_key = apikey;
             request.from = from;
             request.channel = channel;
             request.type = type;
-         
-
-            //var client = new HttpClient();
 
             var payload = new
             {
-                to = "ffff",
-                from = "ht",
-                sms = "Hi there, testing Termii",
+                to = request.to,
+                from = from,
+                sms = request.sms,
                 type = "plain",
-                api_key = "Your API key",
-                channel = "generic",
-                media = new
-                {
-                    url = "https://media.example.com/file",
-                    caption = "your media file"
-                }
+                api_key = apikey,
+                channel = "generic"
+                // Remove media if it's not accepted by the API
+                // media = new { url = "...", caption = "..." }
             };
 
             var json = JsonConvert.SerializeObject(payload);
-            using var client = new HttpClient();
-            client.DefaultRequestHeaders.Accept.Clear();
-            client.DefaultRequestHeaders.Accept.Add(
-                new MediaTypeWithQualityHeaderValue("application/json"));
 
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var client = new HttpClient();
+            var content = new StringContent(json, Encoding.UTF8);
+            content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
 
             try
             {
                 var response = await client.PostAsync(url, content);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
-                   var result = JsonConvert.DeserializeObject<TermiiResponse>(responseBody);
+                var result = JsonConvert.DeserializeObject<TermiiResponse>(responseBody);
+
                 Console.WriteLine($"Status Code: {response.StatusCode}");
                 Console.WriteLine($"Response: {responseBody}");
-                return (result, true);
+
+                return (result, response.IsSuccessStatusCode);
             }
             catch (HttpRequestException ex)
             {
                 Console.WriteLine($"Request error: {ex.Message}");
                 return (new TermiiResponse(), false);
             }
-            //var data = JsonConvert.SerializeObject(request);
 
-            //try
-            //{
-            //    var response = await client.PostAsync(url, new StringContent(data, Encoding.UTF8, "application/json"));
-            //    var responseString = await response.Content.ReadAsStringAsync();
-            //    Console.WriteLine(responseString);
-            //    var result = JsonConvert.DeserializeObject<TermiiResponse>(responseString);
-            //    return (result, true);
-            //}
-            //catch (Exception ex)
-            //{
-            //    Console.WriteLine($"Error: {ex.Message}");
-            //    return (new TermiiResponse(), false);
-            //}
+
         }
-
     }
 }
 

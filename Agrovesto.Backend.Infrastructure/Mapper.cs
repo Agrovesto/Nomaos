@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using System;
@@ -17,36 +18,28 @@ namespace Agrovesto.Backend.Infrastructure
     public static class Mapper
     {
         #region payout
-        public static Payout Map(this PayoutModel model)
-        {
-            if(model ==null)
-            {
-                return null;
-            }
-            return new Payout
-            {
-                Amount = model.Amount,
-                CreatedOn = model.CreatedOn,
-                DestinationAccountName = model.DestinationAccountName,
-                DestinationAccountNumber = model.DestinationAccountNumber,
-                DestinationBank=model.DestinationBank,
-                IsSuccessfulTransaction=model.IsSuccessfulTransaction,
-                SourceAccountName = model.SourceAccountName,
-                SourceAccountNumber = model.SourceAccountNumber,
-                SourceBankCode=model.SourceBankCode,
-                UserId=model.UserId,
-                Reference=model.Reference
-            };
-        }
-
-        public static PayoutModel Map(this Payout model)
+        public static NameEnquiryData Map(this PaymentTransferResponseDataModel model)
         {
             if (model == null)
             {
                 return null;
             }
-            return new PayoutModel
-            {Id=model.Id,
+            return new NameEnquiryData
+            {
+                destinationBankCode=model.bank_code,
+                destinationInstitutionCode=model.bank_code,
+                accountName=model.account_name,
+                accountNumber=model.account_number
+            };
+        }
+        public static Payout Map(this PayoutModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Payout
+            {
                 Amount = model.Amount,
                 CreatedOn = model.CreatedOn,
                 DestinationAccountName = model.DestinationAccountName,
@@ -57,7 +50,30 @@ namespace Agrovesto.Backend.Infrastructure
                 SourceAccountNumber = model.SourceAccountNumber,
                 SourceBankCode = model.SourceBankCode,
                 UserId = model.UserId,
-                Reference=model.Reference
+                Reference = model.Reference
+            };
+        }
+
+        public static PayoutModel Map(this Payout model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new PayoutModel
+            {
+                Id = model.Id,
+                Amount = model.Amount,
+                CreatedOn = model.CreatedOn,
+                DestinationAccountName = model.DestinationAccountName,
+                DestinationAccountNumber = model.DestinationAccountNumber,
+                DestinationBank = model.DestinationBank,
+                IsSuccessfulTransaction = model.IsSuccessfulTransaction,
+                SourceAccountName = model.SourceAccountName,
+                SourceAccountNumber = model.SourceAccountNumber,
+                SourceBankCode = model.SourceBankCode,
+                UserId = model.UserId,
+                Reference = model.Reference
             };
         }
         #endregion payout
@@ -312,9 +328,11 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = entity.Location,
                 CooperativeId = entity.CooperativeId,
                 PaymentStatus = entity.PaymentStatus,
-                SubscriptionStatus=entity.SubscriptionStatus,
-                
-               MaturityDate=entity.MaturityDate
+                SubscriptionStatus = entity.SubscriptionStatus,
+                FarmerIdentifier = entity.FarmerIdentifier,
+                MaturityDate = entity.MaturityDate,
+                IsDebitted = entity.IsDebitted
+
             };
         }
 
@@ -326,6 +344,7 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new BundleSubscriptionInterest
             {
+                FarmerIdentifier = model.FarmerIdentifier,
                 PaymentStatus = Enum.GetName(typeof(EquityPaymentStatus), model.Status),
                 SubscriptionStatus = Enum.GetName(typeof(InputFinancingStatus), model.EquitySubscriptionStatus),
                 OfficerInChargeUserId = model.OfficerInChargeUserId,
@@ -350,7 +369,8 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = model.Reference,
                 Location = model.Location,
                 CooperativeId = model.CooperativeId,
-                MaturityDate=model.MaturityDate
+                MaturityDate = model.MaturityDate,
+                IsDebitted = model.IsDebitted
             };
         }
 
@@ -437,8 +457,8 @@ namespace Agrovesto.Backend.Infrastructure
                 ShouldAddCommission = entity.ShouldAddCommission,
                 BundleEquityPrice = entity.BundleEquityPrice,
                 WarehouseId = entity.WarehouseId,
-                OtherBundlePaymentCosts= entity.OtherBundlePaymentCosts.Select(x => x.Map()).ToList(),
-                MaturityDate=entity.MaturityDate
+                OtherBundlePaymentCosts = entity.OtherBundlePaymentCosts.Select(x => x.Map()).ToList(),
+                MaturityDate = entity.MaturityDate
             };
         }
 
@@ -467,7 +487,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ShouldAddCommission = model.ShouldAddCommission,
                 BundleEquityPrice = model.BundleEquityPrice,
                 WarehouseId = model.WarehouseId,
-                MaturityDate= model.MaturityDate
+                MaturityDate = model.MaturityDate
             };
         }
         public static BundleItemsModel Map(this BundleItems entity)
@@ -510,7 +530,8 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 BundleId = entity.BundleId,
                 Id = entity.Id,
-                Name = entity.Name,Amount = entity.Amount,
+                Name = entity.Name,
+                Amount = entity.Amount,
                 Description = entity.Description,
             };
         }
@@ -526,7 +547,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BundleId = model.BundleId,
                 Name = model.Name,
                 Amount = model.Amount,
-                Description= model.Description,
+                Description = model.Description,
             };
         }
         #endregion Bundle
@@ -927,7 +948,7 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = model.WalletCode,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
-                MiddleName= model.MiddleName,
+                MiddleName = model.MiddleName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType)
 
             };
@@ -958,7 +979,7 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = entity.WalletCode,
                 FirstName = entity.FirstName,
                 LastName = entity.LastName,
-                MiddleName= entity.MiddleName,
+                MiddleName = entity.MiddleName,
                 SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
             };
         }
@@ -1109,7 +1130,8 @@ namespace Agrovesto.Backend.Infrastructure
                 BusinessLogo = model.BusinessLogo,
                 KycCategory = Enum.GetName(typeof(Category), model.Category),
                 BusinessCodeSignage = model.BusinessCodeSignage,
-                BusinessCodeSignageSalt = model.BusinessCodeSignageSalt
+                BusinessCodeSignageSalt = model.BusinessCodeSignageSalt,
+                PropagateUrl = model.PropagateUrl
             };
         }
 
@@ -1133,7 +1155,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Website = model.Website,
 
                 BusinessLogo = model.BusinessLogo,
-
+                PropagateUrl = model.PropagateUrl
             };
         }
 
@@ -1165,7 +1187,8 @@ namespace Agrovesto.Backend.Infrastructure
                 NIN = entity.NIN,
                 UserId = entity.UserId,
                 BusinessCodeSignage = entity.BusinessCodeSignage,
-                BusinessCodeSignageSalt = entity.BusinessCodeSignageSalt
+                BusinessCodeSignageSalt = entity.BusinessCodeSignageSalt,
+                PropagateUrl = entity.PropagateUrl
             };
         }
         public static BusinessWorker Map(this BusinessWorkerModel model)

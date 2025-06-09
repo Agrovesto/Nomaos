@@ -949,7 +949,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             throw new ArgumentException($"This item does not exist: {item.Name}");
 
                         item.Name = getInputInventory.InputName;
-                        var depleteUnit = await _repository.DepleteAsync(item.WarehouseInputInventoryId, item.Unit);
+                      //TODO: ONLY DEPLETE after disbursement  var depleteUnit = await _repository.DepleteAsync(item.WarehouseInputInventoryId, item.Unit);
                         var cost = (item.Unit * getInputInventory.Price);
                         bundlecost += cost;
                     }
