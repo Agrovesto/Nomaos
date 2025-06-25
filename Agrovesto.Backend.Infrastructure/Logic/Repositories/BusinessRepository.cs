@@ -21,6 +21,48 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<int> OrganizationCount()
+        {
+            return await _context.Set<Organization>().CountAsync();
+        }
+        public async Task<OrganizationModel> CreateOrganization(OrganizationModel orgModel)
+        {
+            var orgExist = await _context.BusinessOrganizations
+              .FirstOrDefaultAsync(x => x.OrganizationCode == orgModel.OrganizationCode && x.OrganizationName == orgModel.OrganizationName);
+
+            if (orgExist != null)
+            {
+                // Organization already exists, return the existing one
+                return orgExist.Map();
+            }
+            Organization org = orgModel.Map();
+
+            _context.Set<Organization>().Add(org);
+            await _context.SaveChangesAsync();
+            return org.Map();
+        }
+
+        public async Task<OrganizationModel> GetOrganizationAsync(string organizationCode)
+        {
+            var org = await _context.Set<Organization>()
+                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode);
+            if (org == null)
+            {
+                return null;
+            }
+            return org.Map();
+        }
+
+        public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+        {
+            var org = await _context.Set<Organization>()
+                .Where(x => x.BusinessCode == businessCode).ToListAsync();
+            if (org == null)
+            {
+                return null;
+            }
+            return org.Select(x=>x.Map()).ToList();
+        }
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
         {

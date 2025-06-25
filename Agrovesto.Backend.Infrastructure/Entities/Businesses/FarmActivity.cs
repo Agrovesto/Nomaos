@@ -33,6 +33,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal OtherCost { get; set; }
         public decimal TotalCost { get; set; }
         public string? SupportingImageUrl { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     public class FarmActivityType
@@ -44,5 +45,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string Name { get; set; }
         public string Description { get; set; }
         public string BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

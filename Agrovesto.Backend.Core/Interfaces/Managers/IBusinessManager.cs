@@ -41,5 +41,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(ListQueryParams query);
         Task<Response<FarmerModel>> GetFarmerDetailWithImage(ListQueryParams query, string imageKey);
         Task<Response<CafeOneCustomerWalletResponse>> RetrieveCustomerWallet(ListQueryParams query);
+        Task<OrganizationModel> CreateOrganization(OrganizationModel org, BusinessRegistrationArgs args);
+        Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode);
+        Task<FarmerDetailDto> GetFarmerDetails( ListQueryParams query);
     }
 }

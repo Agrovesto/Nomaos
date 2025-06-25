@@ -32,6 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string SubAccountType { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     //when user signsup

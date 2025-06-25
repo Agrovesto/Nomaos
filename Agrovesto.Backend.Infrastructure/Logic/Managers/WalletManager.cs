@@ -412,10 +412,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             model.City = !string.IsNullOrEmpty(model.City) ? model.City : model.Address;
             var user = await _walletRepository.GetSubAccount(model.UserId);
-            //if(user !=null && user.WalletCode !=null)
-            //{
-            //    var createSubaccount = await _walletRepository.UpdateSubAccount(model);                
-            //}
+        
             var business = await _businessRepository.GetBusinessByIdAsync(user.BusinessId);
 
             if (business == null) { throw new Exception($"Business does not exist"); }
@@ -425,21 +422,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
           
             string firstName = "";
             string lastName = "";
-           
-            //var nameParts = model.FirstName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-
-            //if (nameParts.Length == 1)
-            //{
-            //    firstName = nameParts[0];
-            //    model.FirstName = firstName;
-            //}
-            //else if (nameParts.Length >= 2)
-            //{
-            //    firstName = nameParts[0];
-            //    model.FirstName = firstName;
-            //    lastName = nameParts[^1];
-            //    model.LastName = lastName;
-            //}
+      
             await strategy.ExecuteAsync(async () =>
             {
                 using (var dbTransaction = _context.Database.BeginTransaction())

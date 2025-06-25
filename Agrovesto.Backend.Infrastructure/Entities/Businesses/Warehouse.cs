@@ -24,6 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool HasbeenAssignedManager { get; set; }
         public string BelongToBusinessCode { get; set; }
         public bool IsActive { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     public class WarehouseInputInventory
@@ -54,6 +55,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string DeliveredTo { get; set; }
         public string? ReceivedBy { get; set; }
         public string? Reference { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class WarehouseUser
     {
@@ -67,7 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string PhoneNumber { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string UserId { get; set; }
-
+        public string? OrganizationCode { get; set; }
         public long WarehouseId { get; set; }
     }
 }

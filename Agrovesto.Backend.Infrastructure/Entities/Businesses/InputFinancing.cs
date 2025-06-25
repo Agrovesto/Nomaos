@@ -26,6 +26,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal EquityPaidForSubscription { get; set; }
         public decimal EquityToPayForSubscription { get; set; }
         public string EquityPaymentStatus { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
   

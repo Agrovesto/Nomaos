@@ -26,12 +26,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class ListQueryParams
     {
+        public long farmerId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
         public string? Location { get; set; }
         public string? UserId { get; set; }
         public long warehouseId { get; set; }
         public string? businessCode { get; set; }
+        public string? organizationCode { get; set; }
         public string? env { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
@@ -48,6 +50,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? UserId { get; set; }
         public string? DefaultPassword { get; set; }
         public string? businessCode { get; set; }
+        public string? organizationCode { get; set; }
         public string? SubAccountType { get; set; }
         public string? Env { get; set; }
         public long WarehouseId { get; set; }

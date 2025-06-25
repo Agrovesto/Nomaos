@@ -34,6 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset? MaturityDate { get; set; }
         public List<OtherBundlePaymentCost> OtherBundlePaymentCosts { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     public class OtherBundlePaymentCost
