@@ -30,5 +30,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public double AreaInHectare { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

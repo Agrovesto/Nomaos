@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -7,6 +8,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
+using DocumentFormat.OpenXml.Packaging;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -53,7 +55,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             User user = new User();
             if (string.IsNullOrEmpty(header)) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
 
+            var business = await _context.Businesses.Where(x => x.BusinessCode == businessCode).FirstOrDefaultAsync();
+            if(business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString()) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
             try
+
             {
                 IList<string> userRole = new List<string>();
                 if (model.LoginMethod == LoginType.Password)
@@ -161,6 +166,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
+                new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
                 //new Claim("BelongToBusiness", user.BusinessCode),
 
 
@@ -187,6 +193,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Roles = userRole.ToList(),
                     Token = token,
                     TokenType = TokenType.AccessToken,
+                    organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
                 };
                 return (true, "Successful", response);
             }
@@ -374,6 +381,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         var datePart = DateTime.UtcNow.ToString("yyyyMMdd"); // or any desired date format
                         var randomDigits = new Random().Next(100, 999); // 3 random digits
                         entity.Id = $"{model.BusinessCode}{datePart}{randomDigits}";
+                    }
+                    else if (!string.IsNullOrEmpty(model.OrganizationCode))
+                    {
+                       var datePart = DateTime.UtcNow.ToString("yyyyMMdd"); // or any desired date format
+                        var randomDigits = new Random().Next(100, 999); // 3 random digits
+                        entity.Id = $"{model.OrganizationCode}{datePart}{randomDigits}";
                     }
                     else
                     {

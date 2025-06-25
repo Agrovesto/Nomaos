@@ -25,6 +25,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
             base.OnModelCreating(modelBuilder);
         }
         public DbSet<Business> Businesses { get; set; }
+        public DbSet<Organization> BusinessOrganizations { get; set; }
         public DbSet<BusinessWorker> BusinessWorkers { get; set; }  
         public DbSet<SubAccount> SubAccounts { get; set; }
         public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
@@ -53,6 +54,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmerSalesTracker> FarmerSalesTracker { get; set; }
         public DbSet<Trader> Traders { get; set; }
         public DbSet<Payout> Payouts { get; set; }
+        public DbSet<States> States { get; set; }
+        public DbSet<LGA> LGAs { get; set; }
+        public DbSet<Ward> Wards { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>

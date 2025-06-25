@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     public class WarehouseInputInventoryModel
@@ -49,6 +50,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? DeliveredTo { get; set; }
         public string? ReceivedBy { get; set; }
         public string? TransitStatus { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public enum InputTransitStatus
     {
@@ -76,6 +78,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Lga { get; set; }
         public string PhoneNumber { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
         public string? UserId { get; set; }
         public long WarehouseId { get; set; }
     }

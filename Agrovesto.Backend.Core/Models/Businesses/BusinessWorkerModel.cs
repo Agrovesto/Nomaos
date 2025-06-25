@@ -104,6 +104,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string FullName { get; set; }
         public string? RoleId { get; set; }
         public string? RoleName { get; set; }
+        public string? OrganizationCode { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
     }
 }

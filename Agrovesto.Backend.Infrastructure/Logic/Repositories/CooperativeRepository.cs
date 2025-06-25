@@ -73,7 +73,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var cooperatives = await _context.Cooperatives
                 .AsNoTracking()
-                .Where(s => s.BelongToBusinessCode == businessCode)
+                .Where(s => 
+                (!string.IsNullOrEmpty(query.organizationCode) && (s.OrganizationCode.Contains(query.organizationCode)))
+           &&
+                s.BelongToBusinessCode == businessCode)
                 .OrderByDescending(s => s.OnBoardedOn)
                 //.Skip(query.PageNumber)
                 //.Take(query.PageSize)
@@ -249,6 +252,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     BelongToBusinessCode = s.BelongToBusinessCode,
                     Email = s.Email,
                     PhoneNumber = s.PhoneNumber,
+                    OrganizationCode=s.OrganizationCode,
+                    Ward=s.Ward,
+                    SupervisorUserId=s.SupervisorUserId,
                     UserId = s.UserId,// Count farmers per cooperative
                 })
                 .ToListAsync();

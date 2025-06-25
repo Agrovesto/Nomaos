@@ -167,6 +167,7 @@ string? startDate, string? endDate, string? exportFormat)
 
 
         public async Task<FileDownloadModel> FilterFarmerDetailsForDownload(string? businessCode,
+            string? organizationCode,
  string? cooperativeName, string? state,
 string? startDate, string? endDate, string? exportFormat)
         {
@@ -188,7 +189,7 @@ string? startDate, string? endDate, string? exportFormat)
 
 
 
-                var result = await _farmerRepository.FilterFarmerForDownload(businessCode,
+                var result = await _farmerRepository.FilterFarmerForDownload(businessCode, organizationCode,
                     cooperativeName, state,  dateFrom, dateTo);
 
                 if (result.Count == 0)

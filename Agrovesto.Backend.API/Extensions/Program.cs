@@ -1,7 +1,9 @@
 using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition;
 using Amazon.S3;
@@ -35,6 +37,7 @@ builder.Services.AddDbContext<DataContext>(options =>
                 errorNumbersToAdd: null);
             sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
         }));
+
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 
@@ -123,6 +126,12 @@ builder.Services.AddSwaggerGen(option =>
 
    // option.OperationFilter<AddCustomHeaderParameter>();
 });
+// Add logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
+// Register your service
+builder.Services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
 builder.Services.AddCors(options =>
@@ -172,6 +181,12 @@ app.UseSwaggerUI(c =>
 //        logger.LogError($"Database seeding encountered an error but will not stop application: {ex.Message}");
 //    }
 //}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
+//    await importer.ImportLocationsFromJsonAsync();
+//}
+
 
 app.UseCors();
 app.UseRouting();

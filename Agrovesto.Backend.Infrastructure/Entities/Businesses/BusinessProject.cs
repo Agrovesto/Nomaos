@@ -19,5 +19,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string To { get; set; }
         public string ProjectManager { get; set; }
         public IList<string> ProjectLocations { get; set; } //states
+        public string? OrganizationCode { get; set; }
     }
 }

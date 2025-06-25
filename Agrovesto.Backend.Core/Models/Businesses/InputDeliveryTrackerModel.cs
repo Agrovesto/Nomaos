@@ -30,5 +30,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? DeliveryDate { get; set; }
 
         public string? BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

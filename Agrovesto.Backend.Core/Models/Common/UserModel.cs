@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         //public string? Gender { get; set; }
         //public string? DateOfBirth { get; set; }
         public string BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class ImageComparisonResponse
     {
@@ -59,6 +60,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public string FarmerUserId { get; set; }
         public string BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class ImageModel
     {
@@ -90,6 +92,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Location { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
+        public string? Ward { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
 
@@ -99,6 +102,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? BankName { get; set; }
         public string? BusinessCode { get; set; }
         public string? Alias { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public enum UserType
     {
@@ -121,7 +125,10 @@ namespace Agrovesto.Backend.Core.Models.Common
         [Description("Buyer")]
         Buyer,
         [Description("Trader")]
-        Trader
+        Trader,
+
+        [Description("Organization")]
+        Organization
     }
     public class LoginModel
     {
@@ -147,6 +154,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
+        public string organizationCode { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }

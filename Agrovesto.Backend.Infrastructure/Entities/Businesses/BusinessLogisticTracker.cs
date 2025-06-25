@@ -25,6 +25,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ReceivedBy { get; set; }
         public long UnitReceived { get; set; }
         public string ReceiverUserId { get; set; }
-
+        public string? OrganizationCode { get; set; }
     }
 }

@@ -28,5 +28,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? DisbursedBy { get; set; }
         public bool InputAlreadyCollected { get; set; }
         public string? InputCollectedByPictureOf { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }
