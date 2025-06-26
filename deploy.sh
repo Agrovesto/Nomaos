@@ -29,6 +29,8 @@ if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks | grep -q "8\."; the
     # Update package list and install .NET 8 SDK
     sudo apt-get update
     sudo apt-get install -y dotnet-sdk-8.0
+    sudo apt-get install -y aspnetcore-runtime-8.0
+    sudo apt-get install -y dotnet-runtime-8.0
     
     echo ".NET 8 SDK installed successfully"
 else
