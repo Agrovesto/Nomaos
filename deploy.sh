@@ -11,6 +11,10 @@ USER_NAME="www-data"
 # Exit on error
 set -e
 
+# Fix for missing HOME env in CI environments like CodePipeline
+export HOME=/tmp
+export DOTNET_CLI_HOME=/tmp
+
 echo "Starting deployment process for $APP_NAME"
 
 ## 1. Install .NET 8 SDK (if not already installed)
