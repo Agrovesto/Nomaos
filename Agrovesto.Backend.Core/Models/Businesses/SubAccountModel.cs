@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? PhoneNumber { get; set; }
         public string? SubAccountName { get; set; }
         public string? WalletCode { get; set; }
+        public string? OrganizationCode { get; set; }
         public long BusinessId { get; set; }
         public string? Status { get; set; }
         public bool IsMainAccount { get; set; } //is main account is true for business, where as users account under the business is false

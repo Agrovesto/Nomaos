@@ -45,6 +45,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public ICollection<SubAccount> SubAccounts { get; set; } = new HashSet<SubAccount>(); //subaccounts are the business users
                                                                                               //  public List<Product> Products { get; set; } // product maps agrovesto offerings to the business configuration of selected products
         public ICollection<User> users { get; set; } = new List<User>();
+
+        
     }
 
 }

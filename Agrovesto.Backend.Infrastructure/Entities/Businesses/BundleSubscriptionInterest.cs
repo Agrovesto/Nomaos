@@ -42,5 +42,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long CooperativeId { get; set; }
         public DateTimeOffset? MaturityDate { get; set; }
         public bool IsDebitted { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

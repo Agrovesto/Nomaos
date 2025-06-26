@@ -99,6 +99,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
 
+
                 var warehouse = await _repository.GetWarehouseSummaryByBusiness(business.BusinessCode);
                 if (warehouse == null) return new Response<List<WarehouseSummaryMetrics>>
                 {

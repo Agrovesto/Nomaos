@@ -25,6 +25,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string Name { get; set; }
         public string? BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
 }
