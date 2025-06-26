@@ -1,0 +1,14 @@
+# All files require review from @teamleads
+* @teamleads
+
+# Frontend files go to frontend team
+/frontend/ @frontend
+
+# Backend API files go to backend team
+/backend/api/ @backend
+
+# CI/CD files go to DevOps lead
+.github/workflows/ @infra
+
+# Documentation requires @docwriter
+/docs/ @argovesto
