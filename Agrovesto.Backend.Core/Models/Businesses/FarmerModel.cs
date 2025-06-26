@@ -6,6 +6,18 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class FarmerDetailDto
+    {
+        public FarmerModel Farmer { get; set; }
+        public CooperativeModel Cooperative { get; set; }
+        public AgentModel? Agent { get; set; }
+        public FarmerImagesModel? FarmerImage { get; set; }
+        public List<FarmPlotDetailsModel> PlotDetails { get; set; }
+        public List<FarmVisitationActivityModel> Visitations { get; set; }
+    }
+
+
+
     public class FarmerModel
     {
         public string BelongToBusinessCode { get; set; }  //which business
@@ -13,6 +25,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
+        public string? Ward { get; set; }
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string UserId { get; set; }
@@ -24,5 +37,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long BelongToCooperativeId { get; set; }
         public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

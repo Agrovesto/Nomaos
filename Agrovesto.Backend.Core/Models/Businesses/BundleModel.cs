@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? WarehouseName { get; set; }
 
         public DateTimeOffset? MaturityDate { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class OtherBundlePaymentCostModel
     {

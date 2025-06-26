@@ -15,6 +15,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
+        public string? Ward { get; set; }
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }       
         public string UserId { get; set; }
@@ -27,5 +28,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? DateOfBirth { get; set; }
         public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
         public long BelongToCooperativeId { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

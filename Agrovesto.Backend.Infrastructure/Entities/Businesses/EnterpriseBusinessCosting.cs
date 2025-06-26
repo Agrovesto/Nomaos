@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal Total { get; set; }
 
         public string PaymentStatus { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class EnterpriseBusinessCostingPaymentDetail
     {
@@ -29,5 +30,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset PaidOn { get; set; }
         public decimal AmountPaid { get; set; }
         public decimal Balance { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

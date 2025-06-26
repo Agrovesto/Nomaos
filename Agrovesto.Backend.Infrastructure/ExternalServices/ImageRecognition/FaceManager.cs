@@ -69,7 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                     return null;
                 }
 
-                var targetImageRecord = await _farmerRepository.GetFarmerImage(args.FarmerUserId, args.BusinessCode);
+                var targetImageRecord = await _farmerRepository.GetFarmerImage(args.FarmerUserId, args.BusinessCode, args.OrganizationCode);
                 if (targetImageRecord == null)
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Image Record Found for the specified farmer");
@@ -156,7 +156,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             }
         }
 
-        public async Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode)
+        public async Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode, string? organizationCode)
         {
             if (image == null || image.Length == 0)
             {
@@ -183,7 +183,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                     await image.CopyToAsync(memoryStream);
                     imageBytes = memoryStream.ToArray();
                 }
-                var imageExist = await _farmerRepository.GetFarmerImage(userId, businessCode);
+                var imageExist = await _farmerRepository.GetFarmerImage(userId, businessCode, organizationCode);
                 if (imageExist != null)
                 {
                     try

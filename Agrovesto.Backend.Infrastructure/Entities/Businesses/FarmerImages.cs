@@ -13,5 +13,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string FarmerUserId { get; set; }
         public string IMageKey { get; set; }
         public string BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

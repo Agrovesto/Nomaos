@@ -23,8 +23,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
             public long Id { get; set; }
             public string BelongToBusinessCode { get; set; }  //which business
             public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-           // public string? SupervisorUserId { get; set; }
+        // public string? SupervisorUserId { get; set; }
 
-        
+        public string? OrganizationCode { get; set; }
     }
 }

@@ -15,20 +15,82 @@ namespace Agrovesto.Backend.API.Controllers
     public class LOVController : ControllerBase
     {
         private readonly ICafeOneWalletService _cafeOneWalletService;
-
+        private readonly INigeriaStateImporterService _nigeriaStateImporterService;
         private readonly IFlutterwaveService _flutterwaveService;
 
         private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly ISMSService _smsService;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
+            INigeriaStateImporterService nigeriaStateImporterService,
              IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, ISMSService smsService)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
-
+            _nigeriaStateImporterService = nigeriaStateImporterService;
             _flutterwaveService = flutterwaveService;
             _smsService = smsService;
         }
+
+
+        [AllowAnonymous]
+        [HttpGet("states")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> States()
+        {
+
+            var request = await _nigeriaStateImporterService.GetStatesAsync();
+            return Ok(new Response<List<StateModel>>()
+            {
+                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                Succeeded = request != null,
+                Message = request == null ? "Failed" : "Success",
+                Data = request.Count > 0 ? request : null
+            });
+        }
+        [AllowAnonymous]
+        [HttpGet("lga/{stateId}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> Cities(long stateId)
+        {
+
+            var request = await _nigeriaStateImporterService.GetLgasByState(stateId);
+
+            return Ok(new Response<List<LGAModel>>()
+            {
+                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                Succeeded = request != null,
+                Message = request == null ? "Failed" : "Success",
+                Data = request.Count > 0 ? request : null
+            });
+        }
+
+
+        [AllowAnonymous]
+        [HttpGet("wards/{lgaId}")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(422)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> Wards(long lgaId)
+        {
+
+            var request = await _nigeriaStateImporterService.GetWardsByLga(lgaId);
+
+            return Ok(new Response<List<WardModel>>()
+            {
+                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                Succeeded = request != null,
+                Message = request == null ? "Failed" : "Success",
+                Data = request.Count > 0 ? request : null
+            });
+        }
+
 
         [AllowAnonymous]
         [HttpPost("send-sms")]
@@ -116,7 +178,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         //}
 
-
+/**
         [AllowAnonymous]
         [HttpGet("states")]
         [ProducesResponseType(200)]
@@ -154,7 +216,7 @@ namespace Agrovesto.Backend.API.Controllers
             });
         }
 
-
+        **/
         //[AllowAnonymous]
         //[HttpGet("userTypes")]
         //[ProducesResponseType(200)]

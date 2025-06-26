@@ -32,5 +32,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset PickUpDate { get; set; }
         public DateTimeOffset Shipmentdate { get; set; } =  DateTimeOffset.Now;
         public DateTimeOffset? DeliveryDate { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

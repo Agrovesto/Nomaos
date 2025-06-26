@@ -31,6 +31,101 @@ namespace Agrovesto.Backend.API.Controllers
             _inputFinancingManagement = inputFinancingManagement;
             _warehouseManagementManager = warehouseManagementManager;
         }
+        [HttpGet("registered-organizations")] //accessed by agrovesto
+        public async Task<IActionResult> GetBusinessOrganization([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessOrganizationAsync(query.businessCode);
+                return Ok(new PagedListResponse<List<OrganizationModel>>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code =  Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpPost("register-organization")]
+        public async Task<IActionResult> CreateOrganization([FromBody] OrganizationModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = CurrentUserId;
+                var createMerchant = await _businessManager.CreateOrganization(model, args);
+
+                return Ok(new Response<string>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
 
         //assign supervisor to agent
         [HttpPost("assign-supervisor")]
@@ -127,6 +222,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.AgentsBySupervisor(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
@@ -170,6 +270,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetBusinessEntitiesMetricsAsyncByAgent(query);
                 return Ok(new Response<BusinessEntitiesMetrics>()
@@ -208,6 +313,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId, query);
                 return Ok(new Response<List<WarehouseInputTransitModel>> ()
@@ -245,6 +355,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetBusinessEntitiesMetricsAsync(query);
                 return Ok(new Response<BusinessEntitiesMetrics>()
@@ -352,6 +467,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId, query);
                 return Ok(new Response<List<WarehouseSummaryMetrics>>()
@@ -532,6 +653,12 @@ namespace Agrovesto.Backend.API.Controllers
             {
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
+
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 var registerUser = await _businessManager.CreateBusinessUser(model, args);
                 if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
@@ -692,7 +819,11 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     model.FarmerUserId = CurrentUserId;
                 }
-                
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 var saveFarmerFace = await _businessManager.SaveFarmerImage(model, args);
 
 
@@ -821,6 +952,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetStaffByBusinessCode(query.businessCode);
                 return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
@@ -880,6 +1016,11 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 var createWorker = await _businessManager.CreateBusinessWorkerAsync(model, args);
 
                 return Ok(new Response<BusinessWorkerModel>()
@@ -1044,6 +1185,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetStaffbyBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
@@ -1082,6 +1228,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetAgentsByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
@@ -1160,6 +1311,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
@@ -1274,6 +1430,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
@@ -1400,6 +1561,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
@@ -1594,5 +1760,44 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+        [HttpGet("farmer-detail")]
+        public async Task<IActionResult> GetFarmerDetails([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+               
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmerDetails(query);
+                return Ok(new Response<FarmerDetailDto>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded =true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success 
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
     }
 }

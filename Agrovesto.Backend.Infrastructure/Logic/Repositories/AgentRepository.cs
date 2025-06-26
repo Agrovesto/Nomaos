@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -94,23 +95,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<AgentModel>> GetAgentsByBusinessCode(string businessCode, ListQueryParams query)
         {
 
-            var agents = await _context.Agents
-                .AsNoTracking()
-                .Where(s
-                =>
-                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-                //|| s.Lga.Contains(query.Location))) 
-                //  &&
-                s.BelongToBusinessCode == businessCode)
+            var agents = _context.Agents
+              .Where(x => x.BelongToBusinessCode == businessCode)
+              .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                agents = agents.Where(x=> x.OrganizationCode == query.organizationCode);
+            }
+
+            //var agents = await _context.Agents
+            //    .AsNoTracking()
+            //    .Where(s
+            //    =>
+            //    (!string.IsNullOrEmpty(query.organizationCode) && (s.OrganizationCode.Contains(query.organizationCode)))
+            //    &&
+            //    //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
+            //    //|| s.Lga.Contains(query.Location))) 
+            //    //  &&
+            //    s.BelongToBusinessCode == businessCode)
+            //    .OrderByDescending(s => s.OnBoardedOn)
+            //    .Skip(query.PageNumber)
+            //    .Take(query.PageSize)
+            //     .Select(s => s.Map()).ToListAsync();
+
+            var result = await agents
                 .OrderByDescending(s => s.OnBoardedOn)
                 .Skip(query.PageNumber)
                 .Take(query.PageSize)
                  .Select(s => s.Map()).ToListAsync();
 
 
-            if (agents.Count > 0)
+            if (result.Count > 0)
             {
-                return agents;
+                return result;
             }
             return null;
 

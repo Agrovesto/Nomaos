@@ -45,5 +45,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public decimal PriceOfLowestUnit { get; set; }
         public double LowestUnitQuntity { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

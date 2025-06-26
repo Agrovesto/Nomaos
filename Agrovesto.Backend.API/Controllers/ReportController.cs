@@ -67,6 +67,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<FarmerModel[]>), 500)]
         public async Task<IActionResult> DownloadInputSubscription(
    [FromQuery] string? businessCode,
+   [FromQuery] string? organizationCode,
   [FromQuery] string? cooperativeName,
   [FromQuery] string? state,
    [MaxLength(100)][RegularExpression(Constants.ValidationRegex.General)][FromQuery] string startDate = null,
@@ -78,7 +79,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
 
 
-                var result = await _reportManager.FilterFarmerDetailsForDownload(businessCode, cooperativeName, state, startDate, endDate, exportFormat);
+                var result = await _reportManager.FilterFarmerDetailsForDownload(businessCode, organizationCode,cooperativeName, state, startDate, endDate, exportFormat);
 
                 Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
                 return File(result.FileBytes, result.MimeType);
@@ -116,6 +117,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<FarmerModel[]>), 500)]
         public async Task<IActionResult> FilterScheduleForDownload(
         [FromQuery] string? businessCode,
+        [FromQuery] string? organizationCode,
        [FromQuery] string? cooperativeName,
        [FromQuery] string? state,
         [MaxLength(100)][RegularExpression(Constants.ValidationRegex.General)][FromQuery] string startDate = null,
@@ -127,7 +129,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
 
 
-                var result = await _reportManager.FilterFarmerDetailsForDownload(businessCode, cooperativeName, state, startDate, endDate, exportFormat);
+                var result = await _reportManager.FilterFarmerDetailsForDownload(businessCode, organizationCode, cooperativeName, state, startDate, endDate, exportFormat);
 
                 Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
                 return File(result.FileBytes, result.MimeType);

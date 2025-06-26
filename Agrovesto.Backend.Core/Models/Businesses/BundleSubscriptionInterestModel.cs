@@ -83,5 +83,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public DateTimeOffset? MaturityDate { get; set; }
         public bool IsDebitted { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }
