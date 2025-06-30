@@ -59,6 +59,9 @@ sudo ufw default allow outgoing
 # Allow HTTP (port 80)
 sudo ufw allow 80/tcp
 
+# Allow HTTP (port 5000) - recommended for production
+sudo ufw allow 5000/tcp
+
 # Allow HTTPS (port 443) - recommended for production
 sudo ufw allow 443/tcp
 
