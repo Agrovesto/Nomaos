@@ -142,3 +142,37 @@ sudo ufw status numbered
 echo ""
 echo "=== .NET Version ==="
 dotnet --version
+
+echo "Installing and configuring Nginx..."
+
+# Install Nginx if not already installed
+if ! command -v nginx &> /dev/null; then
+    sudo apt-get update
+    sudo apt-get install -y nginx
+fi
+
+# Create Nginx config file
+NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
+sudo tee $NGINX_SITE > /dev/null <<EOF
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass         http://localhost:5000;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade \$http_upgrade;
+        proxy_set_header   Connection keep-alive;
+        proxy_set_header   Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+# Enable site and restart Nginx
+sudo ln -sf $NGINX_SITE /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl restart nginx
+
+echo "Nginx configured to reverse proxy to the .NET application."
