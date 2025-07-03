@@ -159,7 +159,7 @@ NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee $NGINX_SITE > /dev/null <<EOF
 server {
     listen 80;
-    server_name _;
+    server_name agrovesto-alb-83128556.eu-west-1.elb.amazonaws.com;
 
     location / {
         proxy_pass         http://localhost:5000;
