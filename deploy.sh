@@ -59,7 +59,7 @@ sudo ufw default allow outgoing
 sudo ufw allow 22/tcp
 
 # Allow HTTP (port 80) - for nginx
-sudo ufw allow 80/tcp
+sudo ufw allow 82/tcp
 
 # Allow HTTPS (port 443) - for nginx
 sudo ufw allow 443/tcp
