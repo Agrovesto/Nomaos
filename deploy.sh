@@ -149,7 +149,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee $NGINX_SITE > /dev/null <<EOF
 server {
-    listen 80;
+    listen 82;
     server_name $LOAD_BALANCER_DNS _;
     
     # Security headers
