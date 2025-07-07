@@ -7,6 +7,8 @@ SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 BUILD_PATH="./bin/Release/net8.0/"
 USER_NAME="www-data"
+# Replace with your actual load balancer DNS name
+LOAD_BALANCER_DNS="agrovesto-alb-83128556.eu-west-1.elb.amazonaws.com"
 
 # Exit on error
 set -e
@@ -49,21 +51,21 @@ if ! command -v ufw &> /dev/null; then
     sudo apt-get install -y ufw
 fi
 
-# Reset UFW to default settings (optional - comment out if you have existing rules)
-# sudo ufw --force reset
-
 # Set default policies
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 
-# Allow HTTP (port 80)
+# Allow SSH (important for remote access)
+sudo ufw allow 22/tcp
+
+# Allow HTTP (port 80) - for nginx
 sudo ufw allow 80/tcp
 
-# Allow HTTP (port 5000) - recommended for production
-sudo ufw allow 5000/tcp
-
-# Allow HTTPS (port 443) - recommended for production
+# Allow HTTPS (port 443) - for nginx
 sudo ufw allow 443/tcp
+
+# DON'T expose port 5000 externally - it should only be accessible internally
+# sudo ufw allow 5000/tcp  # REMOVED - we want nginx to handle external traffic
 
 # Enable UFW
 echo "Enabling UFW..."
@@ -93,13 +95,15 @@ sudo chown -R $USER_NAME:$USER_NAME $APP_PATH
 echo "Copying published files..."
 sudo cp -r $BUILD_PATH/* $APP_PATH/
 
-## 8. Create environment file (if needed)
+## 8. Create environment file (IMPROVED)
 echo "Creating environment file..."
 sudo tee $ENV_FILE > /dev/null <<EOF
 # Application environment variables
 ASPNETCORE_ENVIRONMENT=Production
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
 DOTNET_CLI_HOME=/tmp
+# IMPORTANT: Bind to all interfaces, not just localhost
+ASPNETCORE_URLS=http://0.0.0.0:5000
 # Add other variables here or use your existing .env file
 EOF
 
@@ -129,23 +133,7 @@ echo "Configuring systemd service..."
 sudo systemctl daemon-reload
 sudo systemctl enable $APP_NAME.service
 
-## 11. Restart the service
-echo "Restarting application service..."
-sudo systemctl restart $APP_NAME.service
-
-echo "Deployment completed successfully!"
-echo "Application is running and will start automatically on system boot."
-echo ""
-echo "=== Status Information ==="
-echo "To check application status: sudo systemctl status $APP_NAME"
-echo "To view application logs: journalctl -u $APP_NAME -f"
-echo ""
-echo "=== Firewall Status ==="
-sudo ufw status numbered
-echo ""
-echo "=== .NET Version ==="
-dotnet --version
-
+## 11. Install and configure Nginx
 echo "Installing and configuring Nginx..."
 
 # Install Nginx if not already installed
@@ -154,28 +142,89 @@ if ! command -v nginx &> /dev/null; then
     sudo apt-get install -y nginx
 fi
 
-# Create Nginx config file
+# Remove default site
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Create Nginx config file (IMPROVED)
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee $NGINX_SITE > /dev/null <<EOF
 server {
     listen 80;
-    server_name agrovesto-alb-83128556.eu-west-1.elb.amazonaws.com;
-
+    server_name $LOAD_BALANCER_DNS _;
+    
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    
+    # Health check endpoint for load balancer
+    location /health {
+        proxy_pass         http://127.0.0.1:5000/health;
+        proxy_http_version 1.1;
+        proxy_set_header   Host \$host;
+        proxy_set_header   X-Real-IP \$remote_addr;
+        proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 5s;
+        proxy_send_timeout 5s;
+        proxy_read_timeout 5s;
+    }
+    
+    # Main application
     location / {
-        proxy_pass         http://localhost:5000;
+        proxy_pass         http://127.0.0.1:5000;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade \$http_upgrade;
         proxy_set_header   Connection keep-alive;
         proxy_set_header   Host \$host;
         proxy_cache_bypass \$http_upgrade;
+        proxy_set_header   X-Real-IP \$remote_addr;
         proxy_set_header   X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header   X-Forwarded-Proto \$scheme;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+        
+        # Buffer settings
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
     }
 }
 EOF
 
-# Enable site and restart Nginx
+# Enable site
 sudo ln -sf $NGINX_SITE /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl restart nginx
 
-echo "Nginx configured to reverse proxy to the .NET application."
+# Test nginx configuration
+sudo nginx -t
+
+# Restart services
+echo "Restarting services..."
+sudo systemctl restart $APP_NAME.service
+sudo systemctl restart nginx
+
+# Wait for application to start
+echo "Waiting for application to start..."
+sleep 5
+
+echo "Deployment completed successfully!"
+echo "Application is running and will start automatically on system boot."
+echo ""
+echo "=== Status Information ==="
+echo "To check application status: sudo systemctl status $APP_NAME"
+echo "To view application logs: journalctl -u $APP_NAME -f"
+echo "To check nginx status: sudo systemctl status nginx"
+echo "To view nginx logs: journalctl -u nginx -f"
+echo ""
+echo "=== Testing Local Connection ==="
+echo "Testing local connection to application..."
+curl -I http://localhost:5000 || echo "Local connection test failed"
+echo ""
+echo "=== Firewall Status ==="
+sudo ufw status numbered
+echo ""
+echo "=== .NET Version ==="
+dotnet --version
