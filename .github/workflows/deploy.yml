@@ -1,0 +1,90 @@
+name: Build and Deploy .NET 8 App to Windows EC2
+
+on:
+  push:
+    branches:
+      - dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: [self-hosted, windows]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # - name: Setup .NET 8
+      #   uses: actions/setup-dotnet@v4
+      #   with:
+      #     dotnet-version: 8.0.x
+      #     install-dir: 'C:\Programs Files\dotnet'
+
+      - name: Set dotnet path
+        run: |
+          $dotnetPath = "C:\Program Files\dotnet"
+          echo "Adding dotnet path to the environment variable"
+          echo "$dotnetPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+     
+      - name: Restore dependencies
+        run: dotnet restore
+      
+      - name: Build application
+        run: dotnet build --configuration Release --no-restore
+      
+      - name: Publish application
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-app
+          path: ./publish
+  deploy:
+    runs-on: [self-hosted, windows]
+    needs: build
+  
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet-app
+          path: ./publish
+  
+      - name: Deploy to IIS (Elevated)
+        run: |
+          # Define paths and app pool
+          $dest = "C:\inetpub\wwwroot\agrovestro-api"
+          $sitePath = "C:\inetpub\wwwroot\agrovestro-api"
+          $appPoolName = "agrovesto"  # Set the desired application pool name
+  
+          # Create directory if not exists
+          if (!(Test-Path $dest)) {
+              New-Item -ItemType Directory -Path $dest
+          }
+  
+          # Run deployment as Administrator using Start-Process
+          $scriptBlock = {
+              param (
+                  $dest, $sitePath, $appPoolName
+              )
+              
+              # Ensure IIS App Pool exists
+              if (!(Get-WebAppPoolState -Name $appPoolName)) {
+                  New-WebAppPool -Name $appPoolName
+              }
+  
+              # Publish the app to the site directory
+              Copy-Item -Recurse -Force "$env:GITHUB_WORKSPACE\publish\*" $dest
+  
+              # Set app pool for the site
+              Set-ItemProperty "IIS:\Sites\agrovestro-api" -Name applicationPool -Value $appPoolName
+  
+              # Start the site (if it's not running)
+              Start-Website -Name "agrovestro-api"
+          }
+  
+          # Elevate to run script block as Administrator
+          Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command & { $scriptBlock } -dest '$dest' -sitePath '$sitePath' -appPoolName '$appPoolName' " -Verb RunAs
