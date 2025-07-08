@@ -43,5 +43,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<BundleSubscriptionInterestModel>> GetFarmerSubscriptionInterestDetails(BundleSubscriptionInterestModel data);
         Task<List<BundleSubscriptionInterestModel>> isIdentifierPresent(BundleSubscriptionInterestModel data);
         Task<BundleSubscriptionInterestModel> SettlePendingFarmerBundleSubscriptionEquityToBusiness(BundleSubscriptionInterestModel model);
+        Task<BundleSubscriptionInterestModel> GetSingleSubscription(string farmerUserId, long bundleId);
+        Task SaveBundleSubscriptionRepayment(RepaymentModel model);
     }
 }

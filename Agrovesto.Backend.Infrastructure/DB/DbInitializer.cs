@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.AspNetCore.Identity;
@@ -14,6 +15,48 @@ namespace Agrovesto.Backend.Infrastructure.DB
 {
     public static class DbInitializer
     {
+        public static async Task SeedWeight(IServiceProvider serviceProvider)
+        {
+            // var logger = serviceProvider.GetRequiredService<ILogger<DbInitializer>>();
+            try
+            {
+                var creditManager = serviceProvider.GetRequiredService<IFarmerCreditScoreRepository>();
+
+                string systemAdminRole = "SystemAdmin";
+                string systemAdminEmail = "reloarhub@gmail.com";
+                string systemAdminPassword = "Reloarhub144828@"; // Use a strong password
+
+                await creditManager.SaveCreditScoreWeightAsync(new CreditScoreWeightsModel
+                    {
+                      BusinessCode= "REL20252",
+                      SubcriptionWeight=15,
+                      OrganizationCode=null,
+                      RepaymentWeight=20,
+                      TimelinessWeight=65
+                    });
+                await creditManager.SaveCreditScoreWeightAsync(new CreditScoreWeightsModel
+                {
+                    BusinessCode = "ARN20253",
+                    SubcriptionWeight = 15,
+                    OrganizationCode = null,
+                    RepaymentWeight = 20,
+                    TimelinessWeight = 65
+                });
+                await creditManager.SaveCreditScoreWeightAsync(new CreditScoreWeightsModel
+                {
+                    BusinessCode = "ARN20253",
+                    SubcriptionWeight = 15,
+                    OrganizationCode = "FMC62",
+                    RepaymentWeight = 20,
+                    TimelinessWeight = 65
+                });
+            }
+            catch (Exception ex)
+            {
+                // logger.LogError($"Error during database seeding: {ex.Message}");
+            }
+        }
+
         public static async Task SeedRolesAndSuperAdminAsync(IServiceProvider serviceProvider)
         {
             // var logger = serviceProvider.GetRequiredService<ILogger<DbInitializer>>();

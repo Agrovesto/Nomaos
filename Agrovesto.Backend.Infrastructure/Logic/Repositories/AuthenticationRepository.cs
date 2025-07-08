@@ -371,10 +371,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.IsActive = true;
                 if (fetchuser == null)
                 {
-                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber).FirstOrDefaultAsync();
+                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber && x.OrganizationCode == model.OrganizationCode).FirstOrDefaultAsync();
                     if (getuserPhone != null)
                     {
-                        return (model, false, "A user with the same phone number exists on the system");
+                        return (model, false, "A user with the same phone number exists on the system for for this organization");
                     }
                     if (!string.IsNullOrEmpty(model.BusinessCode))
                     {

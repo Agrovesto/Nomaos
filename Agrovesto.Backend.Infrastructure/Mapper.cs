@@ -360,7 +360,7 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalCost = entity.TotalCost,
                 InputQuantity = entity.InputQuantity,
                 InputType = entity.InputType,
-
+                SupportingImageUrl=entity.SupportingImageUrl,
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -393,7 +393,7 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalCost = model.TotalCost,
                 InputQuantity = model.InputQuantity,
                 InputType = model.InputType,
-
+                SupportingImageUrl=model.SupportingImageUrl,
                 OrganizationCode = model.OrganizationCode
             };
         }
@@ -508,7 +508,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = entity.Reference,
                 Location = entity.Location,
                 CooperativeId = entity.CooperativeId,
-
+                
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -1687,5 +1687,155 @@ namespace Agrovesto.Backend.Infrastructure
         }
         #endregion Mgt
 
+
+        #region repayment
+        public static RepaymentBreakdownModel Map(this RepaymentBreakdown entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new RepaymentBreakdownModel
+            {
+                AmountOrEquivalent = entity.AmountOrEquivalent,
+                Id=entity.Id,
+                PaidOn=entity.PaidOn,
+               // RepaymentMode=  entity.RepaymentMode.ToEnum<RepaymentMode>(),
+
+
+            };
+        }
+
+        public static RepaymentBreakdown Map(this RepaymentBreakdownModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new RepaymentBreakdown
+            {
+                RepaymentMode = Enum.GetName(typeof(RepaymentMode), model.RepaymentMode),
+                AmountOrEquivalent=model.AmountOrEquivalent,
+                PaidOn = model.PaidOn,
+                RepaymentId=model.RepaymentId
+            };
+        }
+        public static RepaymentModel Map(this Repayment entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new RepaymentModel
+            {
+                RepaymentBreakdown = entity.RepaymentBreakdown.Select(x => x.Map()).ToList(),
+
+              PaymentDueDate = entity.PaymentDueDate,
+              AmountPaid=entity.AmountPaid,
+              AmountToRepay=entity.AmountToRepay,
+              BelongToBusinessCode=entity.BelongToBusinessCode,
+              OrganizationCode=entity.OrganizationCode,
+              CompletedOn=entity.CompletedOn,
+              FarmerUserId=entity.FarmerUserId,
+              Id=entity.Id,
+              InterestedBundleId=entity.InterestedBundleId,
+              IsComplete=entity.IsComplete
+            };
+        }
+
+        public static Repayment Map(this RepaymentModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Repayment
+            {
+                RepaymentBreakdown = model.RepaymentBreakdown.Select(x => x.Map()).ToList(),
+                PaymentDueDate = model.PaymentDueDate,
+                AmountPaid = model.AmountPaid,
+                AmountToRepay = model.AmountToRepay,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                OrganizationCode = model.OrganizationCode,
+                CompletedOn = model.CompletedOn,
+                FarmerUserId = model.FarmerUserId,
+                InterestedBundleId = model.InterestedBundleId,
+                IsComplete = model.IsComplete
+            };
+        }
+
+        #endregion repayment
+
+        #region creditscore
+
+        public static CreditScoreWeightsModel Map(this CreditScoreWeights entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new CreditScoreWeightsModel
+            {
+              
+                Id = entity.Id,
+                BusinessCode= entity.BusinessCode,
+                OrganizationCode=entity.OrganizationCode,
+                RepaymentWeight = entity.RepaymentWeight,
+                SubcriptionWeight = entity.SubcriptionWeight,
+                TimelinessWeight = entity.TimelinessWeight,
+            };
+        }
+
+        public static CreditScoreWeights Map(this CreditScoreWeightsModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new CreditScoreWeights
+            {
+                BusinessCode = model.BusinessCode,
+                OrganizationCode = model.OrganizationCode,
+                RepaymentWeight = model.RepaymentWeight,
+                SubcriptionWeight = model.SubcriptionWeight,
+                TimelinessWeight = model.TimelinessWeight,
+            };
+        }
+
+        public static FarmerCreditScoreModel Map(this FarmerCreditScore entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmerCreditScoreModel
+            {
+
+                Id = entity.Id,
+                BusinessCode = entity.BusinessCode,
+                OrganizationCode = entity.OrganizationCode,
+                RiskLevel = entity.RiskLevel,
+                FarmerId = entity.FarmerId,
+                LastUpdated = entity.LastUpdated,
+                Score=entity.Score
+            };
+        }
+
+        public static FarmerCreditScore Map(this FarmerCreditScoreModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmerCreditScore
+            {
+                BusinessCode = model.BusinessCode,
+                OrganizationCode = model.OrganizationCode,
+                RiskLevel = model.RiskLevel,
+                FarmerId = model.FarmerId,
+                LastUpdated = model.LastUpdated,
+            };
+        }
+        #endregion creditscore
     }
 }

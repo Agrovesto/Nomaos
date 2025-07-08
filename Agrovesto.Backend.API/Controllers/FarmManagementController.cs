@@ -200,6 +200,11 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
 
                 var updateDetail = await _farmPlotDetailsManager.CreateActivityType(model, args);
 
@@ -240,6 +245,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetActivityTypes(query);
                 return Ok(new PagedListResponse<List<FarmActivityTypeModel>>()
@@ -337,6 +348,12 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
@@ -378,6 +395,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByBusiness(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()

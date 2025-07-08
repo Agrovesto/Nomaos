@@ -25,7 +25,15 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string Name { get; set; }
         public string? BusinessCode { get; set; }
-        public string? OrganizationCode { get; set; }
+        public ICollection<UserOrganization> UserOrganizations { get; set; }
+    }
+
+    public class UserOrganization
+    {
+        public string UserId { get; set; }
+        public User User { get; set; }
+
+        public string OrganizationCode { get; set; }
     }
 
 }

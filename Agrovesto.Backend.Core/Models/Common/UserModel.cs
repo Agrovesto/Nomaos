@@ -8,7 +8,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
-    public class ChnagePasswordModel
+    public class SupportingDOcument
+    {
+        public IFormFile File { get; set; }
+    }
+        public class ChnagePasswordModel
     {
         public string? UserName { get; set; }
         public string OldPassword { get; set; }

@@ -9,11 +9,13 @@ using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
+using DocumentFormat.OpenXml.InkML;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -45,7 +47,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ISMSService _whisperSMSService;
         private readonly IInputFinancingManagementRepository _inputRepository;
         private readonly ITraderRepository _traderRepository;
-
+        private readonly IExcelConverterService _excelConverterService;
 
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
@@ -53,7 +55,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             IFarmPlotDetailRepository farmPlotDetailRepository,
             IAgentRepository agentRepository, ISMSService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
-            ITraderRepository traderRepository,
+            ITraderRepository traderRepository, IExcelConverterService excelConverterService,
 
                 IFaceManager faceManager, ILogger<BusinessManager> log, ICooperativeRepository cooperativeRepository)
         {
@@ -71,7 +73,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _whisperSMSService = whisperSMSService;
             _inputRepository = inputRepository;
             _traderRepository = traderRepository;
-
+            _excelConverterService = excelConverterService;
 
         }
 
@@ -620,8 +622,117 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return user.Map();
         }
 
-
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
+        {
+            if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
+
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
+
+            args.UserId ??= business.UserId;
+            model.DateOfBirth = ConvertedDate(model.DateOfBirth);
+            model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
+                    UserModel finalUser = existingUser;
+                    bool isNewUser = false;
+
+                    if (existingUser != null)
+                    {
+                        // Check if user already linked to organization
+                        bool alreadyInOrg = await _context.UserOrganizations
+                            .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode);
+
+                        if (alreadyInOrg)
+                        {
+                            throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"A user with phone number {model.PhoneNumber} already exists in this organization.");
+                        }
+
+                        // Add user to new organization
+                        _context.UserOrganizations.Add(new UserOrganization
+                        {
+                            UserId = existingUser.Id,
+                            OrganizationCode = args.organizationCode
+                        });
+
+                        _log.LogInformation($"User with phone {model.PhoneNumber} added to new organization {args.organizationCode}.");
+                        await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                    }
+                    else
+                    {
+                        if (string.IsNullOrEmpty(model.Name))
+                        {
+                            model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                        }
+
+                        var registrationResult = await RegisterUserAsync(model, args);
+                        if (!registrationResult.status)
+                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
+
+                        finalUser = registrationResult.model;
+                        isNewUser = true;
+
+                        // Add user to organization
+                        _context.UserOrganizations.Add(new UserOrganization
+                        {
+                            UserId = finalUser.Id,
+                            OrganizationCode = args.organizationCode
+                        });
+                    }
+
+                    // Check for existing subaccount
+                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(finalUser.Id);
+                    SubAccountModel subAccount;
+                    model.Email = !string.IsNullOrWhiteSpace(model.Email)
+                        ? model.Email
+                        : GenerateEmail(model.FirstName, business.BusinessEmail);
+
+                    if (existingSubAccount != null)
+                    {
+                        subAccount = existingSubAccount;
+                    }
+                    else
+                    {
+                        subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
+                    }
+
+                    // Track role assignments (multi-role support)
+                    await _authenticationRepository.TrackUserRoleAssignment(finalUser, model.UserType);
+
+                    // Create business worker
+                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (finalUser, !isNewUser, ""), args.UserType);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Populate subaccount response
+                    subAccount.UserId = finalUser.Id;
+                    subAccount.Address = model.Location;
+                    subAccount.City = model.Lga;
+                    subAccount.FirstName = model.FirstName;
+                    subAccount.LastName = model.LastName;
+                    subAccount.MiddleName = model.MiddleName;
+                    subAccount.Alias = !string.IsNullOrEmpty(model.Alias) ? model.Alias : "Mr";
+
+                    return subAccount;
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "Error occurred during CreateBusinessUser");
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        /**public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
             if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
@@ -632,24 +743,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             args.UserId ??= business.UserId;
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
 
-            // BVN Verification
-            //if (!string.IsNullOrEmpty(model.Bvn))
-            //{
-            //    var bvnVerification = await _identityVerificationManager.VerifyBvn(new BVNDataModel
-            //    {
-            //        image = null,
-            //        number = model.Bvn
-            //    });
-
-            //    if (!bvnVerification.status)
-            //        throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Invalid BVN details");
-
-            //    model.DateOfBirth = ConvertedDate(bvnVerification.data.dateOfBirth);
-            //    model.Bvn = bvnVerification.data.bvn;
-            //    model.Gender = bvnVerification.data.gender;
-            //    model.NIN = string.IsNullOrEmpty(model.NIN) ? bvnVerification.data.nin : model.NIN;
-            //}
-
+            
             model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
             model.OrganizationCode = args.organizationCode;
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -665,7 +759,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     if (existingUser != null)
                     {
-                        if (existingUser.UserType.Equals(model.UserType, StringComparison.OrdinalIgnoreCase))
+                        if (existingUser.OrganizationCode == model.OrganizationCode && existingUser.UserType.Equals(model.UserType, StringComparison.OrdinalIgnoreCase))
                         {
                             throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"A user with phone number {model.PhoneNumber} and user type '{model.UserType}' already exists.");
                         }
@@ -736,6 +830,67 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     throw new Exception(ex.Message);
                 }
             });
+        }
+
+
+
+
+
+
+
+
+
+
+        **/
+
+        private async Task NotifyUserOfOrganizationAddition(string phoneNumber, string orgCode)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
+                {
+                    _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
+                    return;
+                }
+
+                string message = $"You've been added as on the Agrovesto platform to a new organization. Login to access your dashboard.";
+
+                var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                {
+                    to = $"234{phoneNumber[^10..]}",
+                    sms = message
+                });
+
+                if (termiiResult.response != null && termiiResult.status)
+                {
+                    _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
+                }
+                else
+                {
+                    _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
+
+                    var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                    {
+                        campaign_name = "Agrovesto Notification",
+                        contacts = new List<string> { phoneNumber },
+                        message = message
+                    });
+
+                    if (whisperResult.response is not null && whisperResult.status)
+                    {
+                        _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
+                    }
+                    else
+                    {
+                        _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to send role assignment SMS to {PhoneNumber}", phoneNumber);
+            }
         }
 
         private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
@@ -1723,6 +1878,45 @@ ListQueryParams query, string imageKey)
 
 
                 return farmers;
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
+        public async Task<FileDownloadModel> GetAllFarmerDetails(
+
+    ListQueryParams query)
+        {
+            try
+            {
+                var model = new FileDownloadModel();
+                var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+
+                var farmers = await _farmerRepository.GetAllFarmerDetails(query.businessCode,query.organizationCode,query.CooperativeId,query.UserId, query.Location,query.sortBy);
+                if (farmers.Data.Count ==0) return null;
+
+                foreach (var farmer in farmers.Data)
+                {
+
+                    if (farmer.FarmerImage != null && !string.IsNullOrEmpty(farmer.FarmerImage.ImageKey))
+                    {
+                        farmer.FarmerImage.ImageKey = await _faceManager.GetImageUrlAsync(farmer.FarmerImage.ImageKey);
+                    }
+                }
+                var excelBytes = await _excelConverterService.GenerateFarmerExcel(farmers.Data);
+                model.FileBytes = excelBytes;
+                model.MimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                model.FileName = $"farmer_{timestamp}.xlsx";
+                return model;
             }
             catch (BaseException ex)
             {

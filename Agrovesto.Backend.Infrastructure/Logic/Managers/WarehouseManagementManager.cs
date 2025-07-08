@@ -210,7 +210,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     model.BelongToBusinessCode = args.businessCode;
                     model.CreatedOn = DateTimeOffset.Now;
-
+                    model.OrganizationCode = args.organizationCode;
                     var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
                     if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
 
@@ -609,6 +609,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = args.businessCode;
                     model.WarehouseId = args.WarehouseId;
                     model.ManagedByUserId = warehouse.UserId;
+                    model.OrganizationCode = args.organizationCode;
                     var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, args.WarehouseId);
 
                     if (input != null && (input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand))) { throw new Exception($"The warehouse already have same stock of input"); }
@@ -981,6 +982,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.BundleEquityPlusCommission = model.CommissionPrice + model.BundleEquityPrice;
                         model.BundleEquityPrice += model.CommissionPrice;
                     }
+                    model.OrganizationCode = args.organizationCode;
                     createBundle = await _repository.CreateBundle(model);
 
 

@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
@@ -546,5 +547,56 @@ string? disbursedBy = null)
 
         }
 
+
+        public async Task<BundleSubscriptionInterestModel> GetSingleSubscription(string farmerUserId, long bundleId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == farmerUserId 
+            && x.InterestedBundleId == bundleId && x.SubscriptionStatus == InputFinancingStatus.Disbursed.ToString()).FirstOrDefaultAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Map();
+        }
+
+        #region repayment
+
+
+        public async Task SaveBundleSubscriptionRepayment(RepaymentModel model)
+        {
+
+            var existing = await _context.Repayments.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync(); ;
+            if (existing != null)
+            {
+                if (existing.AmountToRepay == (existing.AmountPaid + model.AmountPaid))
+                {
+                    existing.IsComplete = true;
+                    existing.CompletedOn = DateTimeOffset.UtcNow;
+
+                }
+                    existing.AmountPaid+= model.AmountPaid;
+                existing.RepaymentBreakdown = model.RepaymentBreakdown.Select(i => new RepaymentBreakdown
+                {
+
+                    AmountOrEquivalent = i.AmountOrEquivalent,
+                    PaidOn =  DateTimeOffset.Now,
+
+                    RepaymentId = existing.Id,
+                    RepaymentMode = Enum.GetName(typeof(RepaymentMode), i.RepaymentMode)
+
+                }).ToList();
+       
+            }
+            else
+            {
+                var entity = model.Map();
+                entity.IsComplete = false;
+                entity.CompletedOn = null; 
+                await _context.Repayments.AddAsync(entity);
+            }
+            await _context.SaveChangesAsync();
+         
+        }
+
+        #endregion repayment
     }
 }

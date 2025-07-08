@@ -45,6 +45,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ITraderRepository, TraderRepository>();
             services.AddScoped<IPaymentProviderRepository, PaymentProviderRepository>();
             services.AddScoped<IDashboardRepository, DashboardRepository>();
+            services.AddScoped<IFarmerCreditScoreRepository, FarmerCreditScoreRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -59,6 +60,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
             services.AddScoped<IDashboardManager, DashboardManager>();
             services.AddScoped<IPayoutManager, PayoutManager>();
+            services.AddScoped<IFarmerCreditScoremanager, FarmerCreditScoremanager>();
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
@@ -67,6 +69,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
+            services.AddScoped<IGoogleDriveService, GoogleDriveService>();
         }
     }
 }

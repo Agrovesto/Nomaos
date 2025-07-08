@@ -174,7 +174,8 @@ app.UseSwaggerUI(c =>
 
 //    try
 //    {
-//        await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        //await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        await DbInitializer.SeedWeight(services);
 //    }
 //    catch (Exception ex)
 //    {

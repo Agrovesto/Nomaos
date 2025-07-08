@@ -99,7 +99,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
              OfficerInChargeId = x.OfficerInChargeId,
              OfficerName    = x.FarmerName,
              Recommendation=x.Recommendation,
-        
+        SupportingImageUrl=x.SupportingImageUrl,
+        FarmerLabourCost=x.FarmerLabourCost,
+        FarmerTransportCost=x.FarmerTransportCost,
+        InputCost=x.InputCost,
+        InputQuantity=x.InputQuantity,
+        InputType=x.InputType,
+        OrganizationCode=x.OrganizationCode,
+        OtherCost=x.OtherCost,
+        TotalCost=x.TotalCost,
              ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
@@ -129,7 +137,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     OfficerInChargeId = x.OfficerInChargeId,
                     OfficerName = x.FarmerName,
                     Recommendation = x.Recommendation,
-
+                    SupportingImageUrl = x.SupportingImageUrl,
+                    FarmerLabourCost = x.FarmerLabourCost,
+                    FarmerTransportCost = x.FarmerTransportCost,
+                    InputCost = x.InputCost,
+                    InputQuantity = x.InputQuantity,
+                    InputType = x.InputType,
+                    OrganizationCode = x.OrganizationCode,
+                    OtherCost = x.OtherCost,
+                    TotalCost = x.TotalCost,
                     ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
@@ -158,7 +174,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                      OfficerInChargeId = x.OfficerInChargeId,
                      OfficerName = x.FarmerName,
                      Recommendation = x.Recommendation,
-
+                     SupportingImageUrl = x.SupportingImageUrl,
+                     FarmerLabourCost = x.FarmerLabourCost,
+                     FarmerTransportCost = x.FarmerTransportCost,
+                     InputCost = x.InputCost,
+                     InputQuantity = x.InputQuantity,
+                     InputType = x.InputType,
+                     OrganizationCode = x.OrganizationCode,
+                     OtherCost = x.OtherCost,
+                     TotalCost = x.TotalCost,
                      ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
@@ -187,7 +211,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     OfficerInChargeId = x.OfficerInChargeId,
                     OfficerName = x.FarmerName,
                     Recommendation = x.Recommendation,
-
+                    SupportingImageUrl = x.SupportingImageUrl,
+                    FarmerLabourCost = x.FarmerLabourCost,
+                    FarmerTransportCost = x.FarmerTransportCost,
+                    InputCost = x.InputCost,
+                    InputQuantity = x.InputQuantity,
+                    InputType = x.InputType,
+                    OrganizationCode = x.OrganizationCode,
+                    OtherCost = x.OtherCost,
+                    TotalCost = x.TotalCost,
                     ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
@@ -216,7 +248,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                      OfficerInChargeId = x.OfficerInChargeId,
                      OfficerName = x.FarmerName,
                      Recommendation = x.Recommendation,
-
+                     SupportingImageUrl = x.SupportingImageUrl,
+                     FarmerLabourCost = x.FarmerLabourCost,
+                     FarmerTransportCost = x.FarmerTransportCost,
+                     InputCost = x.InputCost,
+                     InputQuantity = x.InputQuantity,
+                     InputType = x.InputType,
+                     OrganizationCode = x.OrganizationCode,
+                     OtherCost = x.OtherCost,
+                     TotalCost = x.TotalCost,
                      ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
@@ -246,7 +286,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                      OfficerInChargeId = x.OfficerInChargeId,
                      OfficerName = x.FarmerName,
                      Recommendation = x.Recommendation,
-
+                     SupportingImageUrl = x.SupportingImageUrl,
+                     FarmerLabourCost = x.FarmerLabourCost,
+                     FarmerTransportCost = x.FarmerTransportCost,
+                     InputCost = x.InputCost,
+                     InputQuantity = x.InputQuantity,
+                     InputType = x.InputType,
+                     OrganizationCode = x.OrganizationCode,
+                     OtherCost = x.OtherCost,
+                     TotalCost = x.TotalCost,
                      ActivityType = _context.FarmActivityTypes
                  .Where(t => t.Id == x.FarmActivityId)
                  .Select(t => t.Name)
