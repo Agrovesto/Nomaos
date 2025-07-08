@@ -1650,7 +1650,7 @@ namespace Agrovesto.Backend.Infrastructure
                 UserType = model.UserType,
                 BusinessCode = model.BusinessCode,
 
-                OrganizationCode = model.OrganizationCode
+                //OrganizationCode = model.OrganizationCode
                 //UserType=model.UserType.ToString()
                 // UserType = Enum.GetName(typeof(UserType), model.UserType)
             };
@@ -1682,7 +1682,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Id = entity.Id,
                 FirstName = entity.Name,
                 BusinessCode = entity.BusinessCode,
-                OrganizationCode=entity.OrganizationCode
+                //OrganizationCode=entity.OrganizationCode
             };
         }
         #endregion Mgt

@@ -166,7 +166,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-                new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
+                //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
                 //new Claim("BelongToBusiness", user.BusinessCode),
 
 
@@ -193,7 +193,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Roles = userRole.ToList(),
                     Token = token,
                     TokenType = TokenType.AccessToken,
-                    organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
+                  //  organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
                 };
                 return (true, "Successful", response);
             }
@@ -371,7 +371,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 entity.IsActive = true;
                 if (fetchuser == null)
                 {
-                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber && x.OrganizationCode == model.OrganizationCode).FirstOrDefaultAsync();
+                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber 
+                   // && x.OrganizationCode == model.OrganizationCode
+                    )
+                        .FirstOrDefaultAsync();
                     if (getuserPhone != null)
                     {
                         return (model, false, "A user with the same phone number exists on the system for for this organization");
