@@ -8,12 +8,15 @@ using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Reflection;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -132,6 +135,7 @@ builder.Logging.AddConsole();
 
 // Register your service
 builder.Services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
 builder.Services.AddCors(options =>
@@ -166,6 +170,32 @@ app.UseSwaggerUI(c =>
     c.DocumentTitle = "Agrovesto Enterprise Platform";
     //  c.RoutePrefix = "/docs";
 
+});
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+
+        //var version = Assembly.GetExecutingAssembly()
+        //                      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        //              ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+        //              ?? "unknown";
+
+        var result = JsonSerializer.Serialize(new
+        {
+            timestamp = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
+            version = "1.0.0",
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description
+            })
+        });
+
+        await context.Response.WriteAsync(result);
+    }
 });
 //using (var scope = app.Services.CreateScope())
 //{
