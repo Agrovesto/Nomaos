@@ -59,7 +59,7 @@ sudo ufw default allow outgoing
 sudo ufw allow 22/tcp
 
 # Allow HTTP (port 80) - for nginx
-sudo ufw allow 82/tcp
+sudo ufw allow 80/tcp
 
 # Allow HTTPS (port 443) - for nginx
 sudo ufw allow 443/tcp
@@ -149,7 +149,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee $NGINX_SITE > /dev/null <<EOF
 server {
-    listen 82;
+    listen 80;
     server_name $LOAD_BALANCER_DNS _;
     
     # Security headers
@@ -172,7 +172,7 @@ server {
     
     # Main application
     location / {
-        proxy_pass         http://127.0.0.1:5000/swagger/;
+        proxy_pass         http://127.0.0.1:5000/;
         proxy_http_version 1.1;
         proxy_set_header   Upgrade \$http_upgrade;
         proxy_set_header   Connection keep-alive;
