@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public string? Location { get; set; }
+        public string? organizationCode { get; set; }
         public string BusinessCode { get; set; }
         public string? supervisorId { get; set; }
         public string? UserId { get; set; } //logging officerId
@@ -35,12 +36,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? businessCode { get; set; }
         public string? organizationCode { get; set; }
         public string? env { get; set; }
+        public string? sortBy { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public long CooperativeId { get; set; }
     }
     public class BusinessRegistrationArgs
     {
+        public long SubscribedBundleId { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public string? Location { get; set; }

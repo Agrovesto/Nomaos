@@ -14,17 +14,64 @@ namespace Agrovesto.Backend.API.Controllers
     public class InputFinancingManagementController : BaseController
     {
         private readonly IInputFinancingManagement _inputFinancingManagement;
+        private readonly IFarmerCreditScoremanager _farmerCreditScoremanager;
         public InputFinancingManagementController(IHttpContextAccessor httpContextAccessor,
-            IInputFinancingManagement inputFinancingManagement) : base(httpContextAccessor)
+            IInputFinancingManagement inputFinancingManagement,
+            IFarmerCreditScoremanager farmerCreditScoremanager) : base(httpContextAccessor)
         {
             _inputFinancingManagement = inputFinancingManagement;
+            _farmerCreditScoremanager = farmerCreditScoremanager;
         }
+        [HttpGet("credit-score")]
+        public async Task<IActionResult> GetBusinessesAsync([FromQuery] BusinessRegistrationArgs query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _farmerCreditScoremanager.GetFarmerScoreAsync(query);
+                return Ok(new PagedListResponse<List<FarmerCreditScoreModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("subscription-interests-bylocation")]
         public async Task<IActionResult> GetInterestRequestByLocation([FromQuery] BusinessRegistrationArgs query)
         {
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
 
                 var result = await _inputFinancingManagement.GetInterestRequestByLocation(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
@@ -144,6 +191,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetInterestRequestByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
@@ -271,6 +324,12 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
                 var bundle = await _inputFinancingManagement.CreateInputFinancingInterest(model, args);
@@ -385,6 +444,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetAllInputDisbursement(query);
                 return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
@@ -442,6 +507,11 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
 
                 var input = await _inputFinancingManagement.DisburseInput(model, args);
                 return Ok(new Response<BundleDisbursementModel>()
@@ -535,6 +605,11 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
 
                 var result = await _inputFinancingManagement.GetDisbursementByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
@@ -653,6 +728,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetPaidSubscriptionInterestByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
@@ -685,6 +766,69 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
 
+        }
+
+        //SaveBundleSubscriptionRepayment
+
+        [HttpPost("save-repayment")]
+        public async Task<IActionResult> SaveBundleSubscriptionRepayment([FromBody] RepaymentBreakdownModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+               
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
+                var input = await _inputFinancingManagement.SaveBundleSubscriptionRepayment( args, model);
+                return Ok(new Response<(bool status, string message)>()
+                {
+                    Code = (input.status) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = input.status,
+                    Message = "Successful",
+                    Data = input
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
     }

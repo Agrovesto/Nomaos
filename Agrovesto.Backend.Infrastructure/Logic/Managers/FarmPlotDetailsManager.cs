@@ -202,6 +202,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 try
                 {
+                    model.OrganizationCode = args.organizationCode;
                     model.BelongToBusinessCode = business.BusinessCode;                   
 
                     update = await _farmPlotDetailRepository.CreateVsitationLogType(model);
@@ -289,7 +290,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.OfficerInChargeId = args.UserId;
                     model.OfficerName = getUserCred.model.FirstName;
                     model.CreatedBy = getUserCred.model.FirstName;
-
+                    model.OrganizationCode = args.organizationCode;
+                    model.SupportingImageUrl = model.SupportingImageUrl;
                     update = await _farmPlotDetailRepository.VisitationLog(model);
 
 

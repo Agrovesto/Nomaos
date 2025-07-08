@@ -14,6 +14,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public FarmerImagesModel? FarmerImage { get; set; }
         public List<FarmPlotDetailsModel> PlotDetails { get; set; }
         public List<FarmVisitationActivityModel> Visitations { get; set; }
+        public List<RepaymentModel> Repayments { get; set; }
     }
 
 
@@ -38,5 +39,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
     }
 }

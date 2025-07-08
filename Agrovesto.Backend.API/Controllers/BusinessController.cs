@@ -1797,7 +1797,47 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        [HttpGet("farmers-by-business")]
+        public async Task<IActionResult> FarmersByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetAllFarmerDetails(query);
+                //return Ok(new Response<FileDownloadModel>()
+                //{
+                //    Succeeded = true,
+                //    Data = result
+                //});
+                Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
+                return File(result.FileBytes, result.MimeType);
 
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
     }
 }

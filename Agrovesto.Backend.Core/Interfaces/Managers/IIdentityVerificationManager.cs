@@ -10,5 +10,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IIdentityVerificationManager
     {
         Task<BVNVerificationResponse<BVN_data, Verification>> VerifyBvn(BVNDataModel model);
+        Task<NINDataVerificationResponse<NINData, Verification>> VerifyNIN(NINDataModel model);
     }
 }

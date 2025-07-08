@@ -132,6 +132,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmerTransactionManager.GetTransactionByFarmer(query.FarmerId, query);
                 return Ok(new PagedListResponse<List<FarmerSalesTrackerModel>>()
@@ -290,6 +296,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmerTransactionManager.GetTransactionsByBusinessCode(query);
                 return Ok(new PagedListResponse<List<FarmerSalesTrackerModel>>()

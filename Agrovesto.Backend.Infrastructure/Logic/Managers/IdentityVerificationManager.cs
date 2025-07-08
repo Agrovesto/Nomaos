@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.Exceptions;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -44,6 +45,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
             return bvnInformation;
         }
+        private string HandleIdentityPassException(string responseCode)
+        {
+            var ninInformation = JsonConvert.DeserializeObject<GlobalResponse<NINData, Verification>>(responseCode);
+
+            string message = "";
+
+            switch (ninInformation.response_code)
+            {
+                case "00":
+                    message = "Successful";
+                    break;
+                case "01":
+                    message = "Record not found";
+                    break;
+                case "02":
+                    message = "Service not available";
+                    break;
+                case "03":
+                    message = "Insufficient wallet balance";
+                    break;
+                default:
+                    break;
+            }
+            return message;
+        }
+
+
+        public async Task<NINDataVerificationResponse<NINData, Verification>> VerifyNIN(NINDataModel model)
+        {
+            var ninInformation = new NINDataVerificationResponse<NINData, Verification>();
+            try
+            {
+
+                var sendRequest = await PostToEndpoint(new { number_nin = model.number }, $"{_idPassOption.Preembleyurl}/verification/vnin");
+                var response = await sendRequest.Content.ReadAsStringAsync();
+                var errorCheck = HandleIdentityPassException(response);
+
+                if (sendRequest.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return new NINDataVerificationResponse<NINData, Verification>
+                    {
+                        nin_data = null,
+                        response_code = ResponseCodes.NotFound,
+                        detail = $"{model.number} not found",
+                        status = false,
+                        verification = null
+                    };
+                }
+
+                ninInformation = JsonConvert.DeserializeObject<NINDataVerificationResponse<NINData, Verification>>(response);
+
+                if (!ninInformation.status)
+                {
+                    return new NINDataVerificationResponse<NINData, Verification>
+                    {
+                        nin_data = ninInformation.nin_data,
+                        response_code = ninInformation.response_code,
+                        detail = ninInformation.detail,
+                        status = ninInformation.status,
+                        verification = ninInformation.verification
+                    };
+                }
+
+
+                return ninInformation;
+            }
+            catch (HttpRequestException e)
+            {
+              //  _log.LogError(e, $"NIN Verification httprequest exception: {e.Message} , {e.StatusCode}");
+
+                throw new NotSuccessfulException($"{e.Message}, {e.StatusCode}");
+            }
+            catch (Exception e)
+            {
+
+               // _log.LogError(e, $"NIN Verification exception: {e.Message}");
+
+                throw new NotSuccessfulException($"Invalid data received, {e.Message}");
+            }
+
+
+        }
+
+
 
         private async Task<HttpResponseMessage> PostToEndpoint(object payload, string url)
         {
