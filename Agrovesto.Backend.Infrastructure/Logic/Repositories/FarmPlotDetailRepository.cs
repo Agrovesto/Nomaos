@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Microsoft.EntityFrameworkCore;
@@ -37,11 +38,105 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return farmer.Select(x=>x.Map()).OrderByDescending(x=>x.CreatedOn).ToList();
         }
 
-        //public async Task<List<FarmerModel>> GetAllFarmPlotDetailsByCooperative(string userId, ListQueryParams query)
-        //{
-        //    //get the farm details based on cooperatives..
-        //    //group farm details for farmers based on all cooperatives
-        //}
+        public async Task<List<FarmPlotDetailsModel>> GetFlaggedFarmsAsync(
+
+           string? businessCode = null,
+           string? organizationCode = null)
+        {
+            var query = _context.FarmPlotDetails
+                .Where(x=>x.IsFarmFlaggedBySystem == true)
+                .AsQueryable();
+
+
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+
+                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+            }
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == organizationCode);
+            }
+            if (query.Count() == 0) { return null; }
+
+            var totalCount = await query.CountAsync();
+
+
+            var pagedResult = await query
+                .OrderByDescending(x => x.CreatedOn)
+               // .Skip((pageNumber - 1) * pageSize)
+               //.Take(pageSize)
+               .ToListAsync();
+            return pagedResult.Select(x => x.Map()).ToList();
+        }
+
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetails(
+         
+            string? businessCode=null, 
+            string? organizationCode=null)
+        {
+            var query =  _context.FarmPlotDetails
+                .AsQueryable();
+
+
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+             
+                query = query.Where(x =>x.BelongToBusinessCode == businessCode);
+            }
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == organizationCode);
+            }
+            if (query.Count() == 0) { return null; }
+
+            var totalCount = await query.CountAsync();
+
+
+            var pagedResult = await query
+                .OrderByDescending(x => x.CreatedOn)
+               // .Skip((pageNumber - 1) * pageSize)
+                //.Take(pageSize)
+               .ToListAsync();
+            return pagedResult.Select(x => x.Map()).ToList();
+               
+         
+        }
+
+
+
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByCooperative(
+            long cooperativeId,
+            string? businessCode = null,
+            string? organizationCode = null)
+        {
+            var query = from farm in _context.FarmPlotDetails
+                        join farmer in _context.Farmers
+                            on farm.FarmerId equals farmer.Id
+                        where farmer.BelongToCooperativeId == cooperativeId
+                        select new { farm, farmer };
+
+            if (!string.IsNullOrWhiteSpace(businessCode))
+            {
+                query = query.Where(x => x.farm.BelongToBusinessCode == businessCode);
+            }
+
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.farm.OrganizationCode == organizationCode);
+            }
+
+            var result = await query
+                .OrderByDescending(x => x.farm.CreatedOn)
+                .ToListAsync();
+
+            return result.Select(x =>
+            {
+                var mapped = x.farm.Map();
+                mapped.CooperativeId = x.farmer.BelongToCooperativeId;
+                return mapped;
+            }).ToList();
+        }
 
         #region visitationlog
         public async Task<(bool status, FarmActivityTypeModel data)> CreateVsitationLogType(FarmActivityTypeModel data)

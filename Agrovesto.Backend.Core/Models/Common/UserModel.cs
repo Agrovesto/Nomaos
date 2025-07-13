@@ -158,7 +158,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
-        public string organizationCode { get; set; }
+        public List<string> OrganizationCodes { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }

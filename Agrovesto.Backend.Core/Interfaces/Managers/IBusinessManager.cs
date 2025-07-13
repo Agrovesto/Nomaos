@@ -45,5 +45,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode);
         Task<FarmerDetailDto> GetFarmerDetails( ListQueryParams query);
         Task<FileDownloadModel> GetAllFarmerDetails(ListQueryParams query);
+        Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
     }
 }

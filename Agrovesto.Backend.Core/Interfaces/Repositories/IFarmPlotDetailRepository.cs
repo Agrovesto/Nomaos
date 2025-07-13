@@ -11,6 +11,9 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     {
         Task<(bool status, FarmActivityTypeModel data)> CreateVsitationLogType(FarmActivityTypeModel data);
         Task<List<FarmPlotDetailsModel>> GetFarmDetailByFarmer(long farmerId);
+        Task<List<FarmPlotDetailsModel>> GetFarmDetails(string? businessCode = null, string? organizationCode = null);
+        Task<List<FarmPlotDetailsModel>> GetFarmDetailsByCooperative(long cooperativeId, string? businessCode = null, string? organizationCode = null);
+        Task<List<FarmPlotDetailsModel>> GetFlaggedFarmsAsync(string? businessCode = null, string? organizationCode = null);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogByFarmer(string businessCode, string farmerId);
         Task<FarmVisitationActivityModel> GetVisitationLogById(string businessCode, long Id);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByActivityType(string businessCode, long activityTypeId);

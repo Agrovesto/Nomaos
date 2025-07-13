@@ -129,7 +129,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
 
                 var jst = handler.ReadJwtToken(token);
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("OrganizationCode", StringComparison.OrdinalIgnoreCase));
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("OrganizationCodes", StringComparison.OrdinalIgnoreCase));
 
                 return claims?.Value;
             }

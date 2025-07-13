@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using DocumentFormat.OpenXml.Drawing.Charts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -261,8 +262,17 @@ namespace Agrovesto.Backend.Infrastructure
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
                 BelongToBusinessCode = entity.BelongToBusinessCode,
                 CreatedOn = entity.CreatedOn,
+                FarmWard=entity.FarmWard,
+                OrganizationCode = entity.OrganizationCode,
 
-                OrganizationCode = entity.OrganizationCode
+                CoordinateOverlapWithFarmerIds = entity.CoordinateOverlapWithFarmerIds,
+                FlaggedReason = entity.FlaggedReason,
+                IsFarmFlaggedBySystem = entity.IsFarmFlaggedBySystem,
+                UnflagFarm = entity.UnflagFarm,
+                UnflaggedOn = entity.UnflaggedOn,
+                AuditTrails = entity.AuditTrails.Select(x => x.Map()).ToList(),
+                FarmUnflaggedByName = entity.FarmUnflaggedByName,
+                FarmUnflaggedByUserId=entity.FarmUnflaggedByUserId,
             };
         }
 
@@ -278,6 +288,7 @@ namespace Agrovesto.Backend.Infrastructure
                 FarmerId = model.FarmerId,
                 FarmerName = model.FarmerName,
                 FarmLga = model.FarmLga,
+                FarmWard= model.FarmWard,
                 FarmLocation = model.FarmLocation,
                 Latitude1 = model.Latitude1,
                 Latitude2 = model.Latitude2,
@@ -295,9 +306,59 @@ namespace Agrovesto.Backend.Infrastructure
                 CoordinateTakenByUserId = model.CoordinateTakenByUserId,
                 CreatedOn = model.CreatedOn,
 
-                OrganizationCode = model.OrganizationCode
+                OrganizationCode = model.OrganizationCode,
+
+                CoordinateOverlapWithFarmerIds = model.CoordinateOverlapWithFarmerIds,
+                FlaggedReason = model.FlaggedReason,
+                IsFarmFlaggedBySystem = model.IsFarmFlaggedBySystem,
+                UnflagFarm = model.UnflagFarm,
+                UnflaggedOn = model.UnflaggedOn,
+                AuditTrails = model.AuditTrails.Select(x => x.Map()).ToList(),
+                FarmUnflaggedByName = model.FarmUnflaggedByName,
+                FarmUnflaggedByUserId = model.FarmUnflaggedByUserId,
             };
         }
+
+        public static FarmFlagAuditTrailModel Map(this FarmFlagAuditTrail entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmFlagAuditTrailModel
+            {
+              Action = entity.Action,
+              FarmPlotDetailsId = entity.FarmPlotDetailsId,
+              PerformedByName = entity.PerformedByName,
+              PerformedByUserId = entity.PerformedByUserId,
+              PerformedOn = entity.PerformedOn,
+              Remarks = entity.Remarks,
+              Id = entity.Id,
+            };
+        }
+
+        public static FarmFlagAuditTrail Map(this FarmFlagAuditTrailModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmFlagAuditTrail
+            {
+               FarmPlotDetailsId=model.FarmPlotDetailsId,
+               Action = model.Action,
+               PerformedByName=model.PerformedByName,
+               PerformedByUserId=model.PerformedByUserId,
+               PerformedOn=model.PerformedOn,
+               Remarks=model.Remarks,
+            };
+        }
+
+
+
+
+
+
         public static FarmActivityTypeModel Map(this FarmActivityType entity)
         {
             if (entity == null)

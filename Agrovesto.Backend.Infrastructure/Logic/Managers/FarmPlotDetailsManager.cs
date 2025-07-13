@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -77,6 +78,167 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return areaInSquareMeters / 10000; // 1 hectare = 10,000 m²
         }
+        private void AddAuditTrail(FarmPlotDetailsModel farm, string action, string userId, string userName, string remarks)
+        {
+            farm.AuditTrails.Add(new FarmFlagAuditTrailModel
+            {
+                Action = action,
+                PerformedByUserId = userId,
+                PerformedByName = userName,
+                Remarks = remarks
+            });
+        }
+        public static double GetAreaInSquareMeters(FarmPlotDetailsModel farm)
+        {
+            var polygon = GeoUtils.CreatePolygonFromFarm(farm);
+            return polygon.Area * 111_139 * 111_139; // rough conversion assuming 1 deg = ~111.139 km
+        }
+
+        /** public async Task<bool> UnflagFarmAsync(long farmId, string agentId, string agentName)
+         {
+             var farm = await _repository.GetByIdAsync(farmId);
+             if (farm == null || !farm.IsFarmFlaggedBySystem)
+                 return false;
+
+             farm.UnflagFarm = true;
+             farm.FarmUnflaggedByUserId = agentId;
+             farm.FarmUnflaggedByName = agentName;
+             farm.UnflaggedOn = DateTimeOffset.UtcNow;
+
+             farm.AuditTrails.Add(new FarmFlagAuditTrail
+             {
+                 Action = "Unflagged",
+                 PerformedByUserId = agentId,
+                 PerformedByName = agentName,
+                 Remarks = "Manually unflagged by agent."
+             });
+
+             await _repository.UpdateAsync(farm);
+             return true;
+         } **/
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByCooperative(ListQueryParams args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+              ?? throw new Exception("Business does not exist");
+
+            try
+            {
+                var plots = await _farmPlotDetailRepository.GetFarmDetailsByCooperative(args.CooperativeId, args.businessCode, args.organizationCode);
+                if (plots == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                return plots;
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+
+        public async Task<List<FarmPlotDetailsModel>> GetFlaggedFarmsAsync(BusinessRegistrationArgs args)
+            => await _farmPlotDetailRepository.GetFlaggedFarmsAsync(args.businessCode, args.organizationCode);
+
+
+        public async Task<(bool isValid, string message)> ValidateAndSaveFarm(FarmPlotDetailsModel newFarm, BusinessRegistrationArgs args)
+        {
+            string farmMappingmessage = "";
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+
+            (bool status, FarmPlotDetailsModel data) update = new(false, new FarmPlotDetailsModel());
+            var strategy = _context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var allFarms = await _farmPlotDetailRepository.GetFarmDetails("","");
+                    List<string> overlapIds = new();
+                    bool isFlagged = false;
+                    string flagReason = "";
+
+                    var farmer = await _farmerRepository.GetFarmerById(newFarm.FarmerId);
+                    if (farmer == null) throw new Exception("Farmer does not exist");
+                    var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
+                    if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
+
+                    //newFarm.AuditTrails.Add(new FarmFlagAuditTrailModel
+                    //{
+                    //    Action = "Unflagged",
+                    //    PerformedByName = "System",
+                    //    PerformedByUserId = "System",
+                    //    Remarks = flagReason
+                    //});
+                    foreach (var existing in allFarms.Where(f => f.FarmerId != newFarm.FarmerId))
+                    {
+                        if (GeoUtils.IsSamePolygon(existing, newFarm))
+                        {
+                            isFlagged = true;
+                            flagReason = $"Exact match with FarmerId: {existing.FarmerId}";
+                            overlapIds.Add(existing.FarmerId.ToString());
+                            break;
+                        }
+
+                        if (GeoUtils.IsOverlapping(existing, newFarm))
+                        {
+                            isFlagged = true;
+                            flagReason = $"Overlaps with Farmer: {existing.FarmerName} Id: {existing.FarmerId}";
+                            overlapIds.Add(existing.FarmerId.ToString());
+                        }
+                    }
+                    if (isFlagged)
+                    {
+                        newFarm.IsFarmFlaggedBySystem = true;
+                        newFarm.FlaggedReason = flagReason;
+                        newFarm.CoordinateOverlapWithFarmerIds = string.Join(",", overlapIds.Distinct());
+                        newFarm.AuditTrails.Add(new FarmFlagAuditTrailModel
+                        {
+                            Action = "Flagged",
+                            PerformedByName = "System",
+                            PerformedByUserId = "System",
+                            Remarks = flagReason
+                        });
+                    }
+                    var getAreaInDegrees = CalculateLandArea(newFarm.Latitude1, newFarm.Longitude1, newFarm.Latitude2, newFarm.Longitude2,
+                                                                     newFarm.Latitude3, newFarm.Longitude3, newFarm.Latitude4, newFarm.Longitude4);
+
+                    //var getAreaInSqMetre = CalculateLandArea(newFarm.Latitude1, newFarm.Longitude1, newFarm.Latitude2, newFarm.Longitude2,
+                                            //                 newFarm.Latitude3, newFarm.Longitude3, newFarm.Latitude4, newFarm.Longitude4);
+
+                    var areaInSqMtr = GetAreaInSquareMeters(newFarm);
+
+                   
+                    var getAreaInHectare = ConvertSquareMetersToHectares(areaInSqMtr);// ConvertSquareMetersToHectares(getAreaInSqMetre);
+                    newFarm.AreaInDegress = getAreaInDegrees;
+                    newFarm.AreaInSqMetre = areaInSqMtr;//getAreaInSqMetre;
+                    newFarm.AreaInHectare = getAreaInHectare;
+                    newFarm.BelongToBusinessCode = business.BusinessCode;
+                    newFarm.FarmerName = farmer.Name;
+                    newFarm.CoordinateTakenByUserId = args.UserId;
+                    newFarm.CoordinateTakenBy = getUserCred.model.FirstName;
+                    newFarm.OrganizationCode = args.organizationCode;
+                    update = await _farmPlotDetailRepository.UpdateFarmerFarmPlot(newFarm);
+
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    farmMappingmessage = newFarm.IsFarmFlaggedBySystem ? "Farm saved but flagged for overlap." : "Farm saved successfully.";
+
+
+                }
+                catch (Exception ex)
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw new Exception($"{ex.Message}", ex);
+                }
+            });
+
+            return (true, farmMappingmessage);
+        }
+
         public async Task<FarmPlotDetailsModel> UpdateFarmCoordinateDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -203,7 +365,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     model.OrganizationCode = args.organizationCode;
-                    model.BelongToBusinessCode = business.BusinessCode;                   
+                    model.BelongToBusinessCode = business.BusinessCode;
 
                     update = await _farmPlotDetailRepository.CreateVsitationLogType(model);
                     await _context.SaveChangesAsync();
@@ -233,9 +395,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 var types = await _farmPlotDetailRepository.GetVisitationLogtypesByBusiness(business.BusinessCode);
                 if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                return types;   
+                return types;
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new NotFoundException($"No Record Found");
             }
@@ -276,17 +438,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId);
                     if (farmer == null) throw new Exception("Farmer does not exist");
-                       var activityType = await _farmPlotDetailRepository.GetVisitationLogtypebyId(business.BusinessCode,model.FarmActivityId);
+                    var activityType = await _farmPlotDetailRepository.GetVisitationLogtypebyId(business.BusinessCode, model.FarmActivityId);
                     if (activityType == null) throw new Exception("Invalid Activity selected");
 
                     var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
                     if (!getUserCred.status) throw new Exception("User taking log not recognized");
-                              
-                  
+
+
                     model.BelongToBusinessCode = business.BusinessCode;
-                    model.FarmerName=farmer.Name;
+                    model.FarmerName = farmer.Name;
                     model.FarmActivityId = activityType.Id;
-                    model.CooperativeId = farmer.BelongToCooperativeId;                    
+                    model.CooperativeId = farmer.BelongToCooperativeId;
                     model.OfficerInChargeId = args.UserId;
                     model.OfficerName = getUserCred.model.FirstName;
                     model.CreatedBy = getUserCred.model.FirstName;

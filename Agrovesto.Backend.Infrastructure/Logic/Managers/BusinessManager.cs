@@ -641,7 +641,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
-                    UserModel finalUser = existingUser;
+                   // UserModel finalUser = existingUser;
                     bool isNewUser = false;
 
                     if (existingUser != null)
@@ -656,11 +656,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         }
 
                         // Add user to new organization
-                        _context.UserOrganizations.Add(new UserOrganization
+                        if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
                         {
-                            UserId = existingUser.Id,
-                            OrganizationCode = args.organizationCode
-                        });
+                            _context.UserOrganizations.Add(new UserOrganization
+                            {
+                                UserId = existingUser.Id,
+                                OrganizationCode = args.organizationCode
+                            });
+                        }
 
                         _log.LogInformation($"User with phone {model.PhoneNumber} added to new organization {args.organizationCode}.");
                         await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
@@ -676,19 +679,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         if (!registrationResult.status)
                             throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
 
-                        finalUser = registrationResult.model;
+                        existingUser = registrationResult.model;
                         isNewUser = true;
 
                         // Add user to organization
-                        _context.UserOrganizations.Add(new UserOrganization
+                        if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
                         {
-                            UserId = finalUser.Id,
-                            OrganizationCode = args.organizationCode
-                        });
+                            _context.UserOrganizations.Add(new UserOrganization
+                            {
+                                UserId = existingUser.Id,
+                                OrganizationCode = args.organizationCode
+                            });
+                        }
                     }
 
                     // Check for existing subaccount
-                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(finalUser.Id);
+                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(existingUser.Id);
                     SubAccountModel subAccount;
                     model.Email = !string.IsNullOrWhiteSpace(model.Email)
                         ? model.Email
@@ -700,20 +706,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     else
                     {
-                        subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
+                        subAccount = await CreateSubAccountAsync(model, args, business, existingUser.Id);
                     }
 
                     // Track role assignments (multi-role support)
-                    await _authenticationRepository.TrackUserRoleAssignment(finalUser, model.UserType);
+                    await _authenticationRepository.TrackUserRoleAssignment(existingUser, model.UserType);
 
                     // Create business worker
-                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (finalUser, !isNewUser, ""), args.UserType);
+                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (existingUser, !isNewUser, ""), args.UserType);
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
                     // Populate subaccount response
-                    subAccount.UserId = finalUser.Id;
+                    subAccount.UserId = existingUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
                     subAccount.FirstName = model.FirstName;
@@ -1018,6 +1024,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedOn = DateTimeOffset.UtcNow,
                 Pin = model.Pin,
                 Name= model.Name,
+                NIN=model.NIN,
+                Bvn=model.Bvn,
+                
                 OrganizationCode=args.organizationCode,
                 BusinessCode = args.businessCode,
             };
@@ -1410,6 +1419,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         //        throw new NotFoundException($"No Record Found");
         //    }
         //}
+        public async Task<CooperativeModel> GetCooperativeDetailByUserId(string userId)
+        {
+
+            return await _cooperativeRepository.GetCooperativeDetailByUserId(userId);
+        }
 
 
         public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId,
@@ -1587,6 +1601,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Count = 0,
                     Message = "No Record Found"
                 };
+                foreach (var farmer in farmers)
+                {
+                    if (!string.IsNullOrEmpty(farmer.FarmerImage))
+                    {
+                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+                    }
+                }
+
                 return new PagedListResponse<List<FarmerModel>>
                 {
                     Succeeded = true,
