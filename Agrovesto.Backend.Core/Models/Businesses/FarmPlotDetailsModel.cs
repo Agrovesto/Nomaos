@@ -10,6 +10,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class FarmPlotDetailsModel
     {
         public long Id { get; set; }
+        public long CooperativeId { get; set; }
         public long FarmerId { get; set; }
         public string? FarmerName { get; set; }
         public double Latitude1 { get; set; }
@@ -23,6 +24,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string FarmLocation { get; set; }
         public string FarmState { get; set; }
         public string FarmLga { get; set; }
+        public string FarmWard { get; set; }
         public string? CoordinateTakenBy {  get; set; }
         public string? CoordinateTakenByUserId { get; set; }
         public double AreaInDegress { get; set; }
@@ -31,5 +33,28 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? BelongToBusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
+        // Flagging logic
+        public bool IsFarmFlaggedBySystem { get; set; }
+        public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
+        public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
+
+        // Unflagging audit
+        public bool UnflagFarm { get; set; }
+        public string? FarmUnflaggedByUserId { get; set; }
+        public string? FarmUnflaggedByName { get; set; }
+        public DateTimeOffset? UnflaggedOn { get; set; }
+        public List<FarmFlagAuditTrailModel> AuditTrails { get; set; } = new List<FarmFlagAuditTrailModel>();
+
     }
+    public class FarmFlagAuditTrailModel
+    {
+        public long Id { get; set; }
+        public long FarmPlotDetailsId { get; set; }
+        public string Action { get; set; } // e.g. "Flagged", "Unflagged"
+        public string PerformedByUserId { get; set; }
+        public string PerformedByName { get; set; }
+        public DateTimeOffset PerformedOn { get; set; } = DateTimeOffset.UtcNow;
+        public string Remarks { get; set; } // e.g. reason for flag/unflag
+    }
+
 }

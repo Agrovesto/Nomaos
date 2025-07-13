@@ -16,11 +16,11 @@ namespace Agrovesto.Backend.API.Controllers
     public class FarmManagementController : BaseController
     {
         private readonly IFarmPlotDetailsManager _farmPlotDetailsManager;
-
+        private readonly IBusinessManager _businessManager;
         public FarmManagementController(IHttpContextAccessor httpContextAccessor,
-            IFarmPlotDetailsManager farmPlotDetailsManager) : base(httpContextAccessor)
+            IFarmPlotDetailsManager farmPlotDetailsManager, IBusinessManager businessManager) : base(httpContextAccessor)
         {
-            
+            _businessManager = businessManager;
             _farmPlotDetailsManager = farmPlotDetailsManager;
         }
         [HttpPost("farm-plot-details")]    
@@ -100,18 +100,82 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+               // args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                
-                var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
-                
+                //var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
+                var updateDetail = await _farmPlotDetailsManager.ValidateAndSaveFarm(model, args);
 
-                return Ok(new Response<FarmPlotDetailsModel>()
+
+                return Ok(new Response<(bool isValid, string message)>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = updateDetail.isValid,
+                    Message = updateDetail.message,
+                    Data = updateDetail
+                });
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("cooperative-plot-details")]
+        public async Task<IActionResult> GetPlotDetails([FromQuery] ListQueryParams query)
+        {
+
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+                if (query.CooperativeId == 0)
+                {
+                    var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                    query.CooperativeId = coop.Id;
+                }
+
+
+                var plots = await _farmPlotDetailsManager.GetFarmDetailsByCooperative(query);
+
+
+                return Ok(new Response<List<FarmPlotDetailsModel>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = "Successful",
-                    Data = updateDetail
+                    Data = plots
                 });
 
 

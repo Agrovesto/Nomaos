@@ -5,6 +5,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OfficeOpenXml;
 using System;
 using System.Collections.Generic;
@@ -537,21 +538,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
            public async Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query)
         {
 
-            var farmers = await (from a in _context.Farmers
-                                 join c in _context.Cooperatives
-                                 on a.BelongToCooperativeId equals c.Id
-                                 where a.BelongToCooperativeId == Id
-                                 select a).ToListAsync();
+            //var farmers = await (from a in _context.Farmers
+            //                     join c in _context.Cooperatives
+            //                     on a.BelongToCooperativeId equals c.Id
+            //                     where a.BelongToCooperativeId == Id
+            //                     select a).ToListAsync();
 
 
 
-            if (farmers.Count > 0)
+            //if (farmers.Count > 0)
+            //{
+            //    return farmers.Select(f => f.Map()).OrderByDescending(f => f.OnBoardedOn).ToList();
+            //}
+
+
+            //return null;
+            var farmersQuery = _context.Farmers.AsQueryable();
+            if (!string.IsNullOrEmpty(query.businessCode))
             {
-                return farmers.Select(f => f.Map()).OrderByDescending(f => f.OnBoardedOn).ToList();
+                farmersQuery = farmersQuery.Where(x => x.BelongToBusinessCode == query.businessCode);
+            }
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                farmersQuery = farmersQuery.Where(x => x.OrganizationCode.Contains(query.organizationCode));
             }
 
+            // Filter by agent via cooperative assignment
+            farmersQuery = from farmer in farmersQuery
+                           join c in _context.Cooperatives
+                                 on farmer.BelongToCooperativeId equals c.Id
+                           where farmer.BelongToCooperativeId == Id
+                           select farmer;
 
-            return null;
+            var result = await (
+                from farmer in farmersQuery
+
+                join cooperative in _context.Cooperatives
+                    on farmer.BelongToCooperativeId equals cooperative.Id
+
+                join image in _context.FarmerImages
+                    on farmer.UserId equals image.FarmerUserId
+                    into imageGroup
+                from img in imageGroup.DefaultIfEmpty()
+
+                join subAccount in _context.SubAccounts
+                    on farmer.UserId equals subAccount.UserId
+                    into subAccountGroup
+                from sub in subAccountGroup.DefaultIfEmpty()
+
+                orderby farmer.OnBoardedOn descending
+
+                select new
+                {
+                    Farmer = farmer,
+                    CooperativeName = cooperative.Name,
+                    FarmerImageKey = img != null ? img.IMageKey : null,
+                    SubAccount = sub
+                }
+            ).ToListAsync();
+
+            if (result == null || !result.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            var mappedFarmers = result.Select(item =>
+            {
+                var mapped = item.Farmer.Map();
+                mapped.CooperativeName = item.CooperativeName;
+                mapped.FarmerImage = item.FarmerImageKey;
+
+                // Add sub-account fields
+                if (item.SubAccount != null)
+                {
+                    //mapped.SSN = item.SubAccount.SSN;
+                    mapped.NIN = item.SubAccount.NIN;
+                    mapped.BVN = item.SubAccount.Bvn;
+                    // mapped.AccountNumber = item.SubAccount.AccountNumber;
+                }
+
+                return mapped;
+            }).ToList();
+
+            return mappedFarmers;
+
         }
         public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
         {

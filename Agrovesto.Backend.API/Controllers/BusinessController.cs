@@ -659,22 +659,21 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     args.organizationCode = OrganizationCode;
                 }
+                var currentRole = CurrentUserRole;
+               
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-                var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
+                
+                if (args.CooperativeId == 0)
                 {
-                  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
+                   var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+                   args.CooperativeId = coop.Id;
                 }
-                //if (args.RoleName.Equals("Farmer"))
+                var registerUser = await _businessManager.CreateBusinessUser(model, args);
+                //if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
                 //{
-                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
-                //    {
-                //        FarmerUserId=registerUser.UserId,
-                //        File=model.FarmerCapturedImage
-                //    }, args);
-
-
+                //  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 //}
+               
 
                 return Ok(new Response<SubAccountModel>()
                 {
@@ -1603,9 +1602,23 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmers-bycooperative")]
         public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
         {
-            try
+            try { 
+             var hasOrgCode = OrganizationCode;
+            if (!string.IsNullOrEmpty(hasOrgCode))
             {
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.organizationCode = OrganizationCode;
+            }
+            var currentRole = CurrentUserRole;
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+            if (query.CooperativeId == 0)
+            {
+                var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                query.CooperativeId = coop.Id;
+            }
+
+     
                 var result = await _businessManager.GetFarmersByCooperativeId(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
                 {
