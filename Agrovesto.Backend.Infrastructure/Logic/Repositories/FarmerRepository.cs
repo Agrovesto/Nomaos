@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+
+        #region farmervaluechain
+     
+        #endregion farmervaluechain
         #region report
         public async Task<List<FarmerModel>> FilterFarmerForDownload(
    string? businessCode,

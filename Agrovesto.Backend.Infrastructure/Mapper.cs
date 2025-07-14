@@ -1742,6 +1742,7 @@ namespace Agrovesto.Backend.Infrastructure
                 IsActive = entity.IsActive,
                 Id = entity.Id,
                 FirstName = entity.Name,
+                Name = entity.Name,
                 BusinessCode = entity.BusinessCode,
                 //OrganizationCode=entity.OrganizationCode
             };
@@ -1898,5 +1899,97 @@ namespace Agrovesto.Backend.Infrastructure
             };
         }
         #endregion creditscore
+
+        #region farmercategory
+        public static FarmerCategoryModel Map(this FarmerCategorys entity)
+        {
+
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmerCategoryModel
+            {
+                // LGAs = entity.LGAs.Select(x => x.Map()).ToList(),
+                FarmerCategory = entity.FarmerCategory,
+                Id = entity.Id,
+            };
+        }
+        public static FarmerCategorys Map(this FarmerCategoryModel model)
+        {
+
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmerCategorys
+            {
+                ValueChainType = model.ValueChainType.Select(x => x.Map()).ToList(),
+                FarmerCategory = model.FarmerCategory,
+
+            };
+        }
+
+
+        public static ValueChainTypeModel Map(this ValueChainType entity)
+        {
+
+            if (entity == null)
+            {
+                return null;
+            }
+            return new ValueChainTypeModel
+            {
+                // Wards = entity.Wards.Select(x => x.Map()).ToList(),
+               FarmerCategoryId = entity.FarmerCategorysId,
+               Id = entity.Id,
+                Name = entity.Name,
+            };
+        }
+        public static ValueChainType Map(this ValueChainTypeModel model)
+        {
+
+            if (model == null)
+            {
+                return null;
+            }
+            return new ValueChainType
+            {
+                FarmerValueChainItem = model.FarmerValueChainItem.Select(x => x.Map()).ToList(),
+                FarmerCategorysId = model.FarmerCategoryId,
+                Name = model.Name,
+            };
+        }
+
+        public static FarmerValueChainItemModel Map(this FarmerValueChainItem entity)
+        {
+
+            if (entity == null)
+            {
+                return null;
+            }
+            return new FarmerValueChainItemModel
+            {
+               Id = entity.Id,
+               ValueChainTypeId = entity.ValueChainTypeId,
+                Name = entity.Name,
+            };
+        }
+        public static FarmerValueChainItem Map(this FarmerValueChainItemModel model)
+        {
+
+            if (model == null)
+            {
+                return null;
+            }
+            return new FarmerValueChainItem
+            {
+             
+                ValueChainTypeId = model.ValueChainTypeId,
+                Name = model.Name,
+            };
+        }
+
+        #endregion farmercategory
     }
 }

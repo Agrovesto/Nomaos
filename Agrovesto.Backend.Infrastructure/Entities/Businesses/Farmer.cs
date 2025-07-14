@@ -5,9 +5,19 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Agrovesto.Backend.Core.Models.Common;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
+
+    //public class FarmerValueChain
+    //{
+    //    public long Id { get; set; }
+    //    public long FarmerId { get; set; }
+    //    public FarmerCategoryModel Category { get; set; }
+    //    public ValueChainTypeModel ValueChainType { get; set; }
+    //    public string ItemName { get; set; }
+    //}
     public class Farmer
     {
         public string BelongToBusinessCode { get; set; }  //which business
@@ -29,5 +39,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
         public long BelongToCooperativeId { get; set; }
         public string? OrganizationCode { get; set; }
+
     }
 }

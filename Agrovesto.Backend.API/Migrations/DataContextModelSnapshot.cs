@@ -1627,6 +1627,45 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("WarehouseUsers");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerCategorys", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("FarmerCategory")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmerCategorys");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("ValueChainTypeId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ValueChainTypeId");
+
+                    b.ToTable("FarmerValueChainItems");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", b =>
                 {
                     b.Property<long>("LgaId")
@@ -2012,6 +2051,28 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("UserOrganizations");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ValueChainType", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("FarmerCategorysId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmerCategorysId");
+
+                    b.ToTable("ValueChainTypes");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>
                 {
                     b.Property<long>("ProviderId")
@@ -2279,6 +2340,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.ValueChainType", null)
+                        .WithMany("FarmerValueChainItem")
+                        .HasForeignKey("ValueChainTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.States", "States")
@@ -2326,6 +2396,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ValueChainType", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerCategorys", null)
+                        .WithMany("ValueChainType")
+                        .HasForeignKey("FarmerCategorysId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProviderParameter", b =>
@@ -2435,6 +2514,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("RepaymentBreakdown");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerCategorys", b =>
+                {
+                    b.Navigation("ValueChainType");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", b =>
                 {
                     b.Navigation("Wards");
@@ -2460,6 +2544,11 @@ namespace Agrovesto.Backend.API.Migrations
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.User", b =>
                 {
                     b.Navigation("UserOrganizations");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ValueChainType", b =>
+                {
+                    b.Navigation("FarmerValueChainItem");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>

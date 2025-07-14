@@ -18,7 +18,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
 
         }
+        #region cooperative
 
+        #endregion cooperative
         #region dashboard
         public async Task<FarmerSalesSummary> GetFarmerDashboardSummaryAsync(string farmerUserId, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null)
         {

@@ -25,7 +25,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> UpdateBundleEquityPrice([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED,"Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -180,7 +180,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-        
+
         [HttpGet("bundles")]
         public async Task<IActionResult> GetBundlesByBusiness([FromQuery] ListQueryParams query)
         {
@@ -270,7 +270,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateWarehouse([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+           // if (isAdmin == null || (!isAdmin.Equals("Business")) || (!isAdmin.Equals("Organization"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
             {
@@ -388,7 +388,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpGet("warehouse")]
-        public async Task<IActionResult> GetWarehousesByBusinessCode([FromQuery] ListQueryParams query)
+        public async Task<IActionResult> GetWarehousesByBusinessCode([FromQuery] BusinessRegistrationArgs query)
         {
             try
             {

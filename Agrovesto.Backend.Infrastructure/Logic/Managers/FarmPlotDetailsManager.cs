@@ -94,28 +94,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return polygon.Area * 111_139 * 111_139; // rough conversion assuming 1 deg = ~111.139 km
         }
 
-        /** public async Task<bool> UnflagFarmAsync(long farmId, string agentId, string agentName)
-         {
-             var farm = await _repository.GetByIdAsync(farmId);
-             if (farm == null || !farm.IsFarmFlaggedBySystem)
-                 return false;
+         public async Task<bool> UnflagFarmAsync(ListQueryParams args,long farmId)
+        {
+            try
+            {
 
-             farm.UnflagFarm = true;
-             farm.FarmUnflaggedByUserId = agentId;
-             farm.FarmUnflaggedByName = agentName;
-             farm.UnflaggedOn = DateTimeOffset.UtcNow;
 
-             farm.AuditTrails.Add(new FarmFlagAuditTrail
-             {
-                 Action = "Unflagged",
-                 PerformedByUserId = agentId,
-                 PerformedByName = agentName,
-                 Remarks = "Manually unflagged by agent."
-             });
+                var farm = await _farmPlotDetailRepository.GetFarmDetailByIdAsync(farmId);
+                if (farm == null || !farm.IsFarmFlaggedBySystem)
+                    return false;
+                var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
+                if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
 
-             await _repository.UpdateAsync(farm);
-             return true;
-         } **/
+                farm.UnflagFarm = true;
+                farm.FarmUnflaggedByUserId = args.UserId;
+                farm.FarmUnflaggedByName = getUserCred.model.Name;
+                farm.UnflaggedOn = DateTimeOffset.UtcNow;
+
+
+                farm.AuditTrails.Add(new FarmFlagAuditTrailModel
+                {
+                    FarmPlotDetailsId=farmId,
+                    PerformedOn=DateTimeOffset.UtcNow,
+                    Action = "Unflagged",
+                    PerformedByUserId = args.UserId,
+                    PerformedByName = getUserCred.model.Name,
+                    Remarks = "Manually unflagged by agent."
+                });
+
+                await _farmPlotDetailRepository.UpdateFarmAsync(farm);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        } 
         public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByCooperative(ListQueryParams args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
@@ -127,6 +141,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (plots == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return plots;
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByBusiness(ListQueryParams args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+              ?? throw new Exception("Business does not exist");
+
+            try
+            {
+                var plots = await _farmPlotDetailRepository.GetFarmDetailsByBusiness(args.businessCode, args.organizationCode);
+                if (plots == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                return plots;
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<List<FarmFlagAuditTrailModel>> GetAuditTrail(BusinessRegistrationArgs args, long plotId)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+              ?? throw new Exception("Business does not exist");
+
+            args.UserId ??= business.UserId;
+            try
+            {
+                var audit = await _farmPlotDetailRepository.GetAuditTrail(plotId, business.BusinessCode, args.organizationCode);
+                if (audit == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                return audit;
             }
             catch (Exception ex)
             {
@@ -392,7 +442,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             args.UserId ??= business.UserId;
             try
             {
-                var types = await _farmPlotDetailRepository.GetVisitationLogtypesByBusiness(business.BusinessCode);
+                var types = await _farmPlotDetailRepository.GetVisitationLogtypesByBusiness(business.BusinessCode, args.organizationCode);
                 if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return types;
@@ -481,7 +531,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             args.UserId ??= business.UserId;
             try
             {
-                var types = await _farmPlotDetailRepository.GetVisitationLogsByBusiness(business.BusinessCode);
+                var types = await _farmPlotDetailRepository.GetVisitationLogsByBusiness(business.BusinessCode, args.organizationCode);
                 if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return types;

@@ -134,7 +134,6 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 // Register your service
-builder.Services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
 builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
@@ -217,7 +216,11 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 //    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
 //    await importer.ImportLocationsFromJsonAsync();
 //}
-
+//using (var scope = app.Services.CreateScope())
+//{
+//    var importer = scope.ServiceProvider.GetRequiredService<IFarmerCategoryService>();
+//    await importer.ImportFarmerValuesFromJsonAsync();
+//}
 
 app.UseCors();
 app.UseRouting();

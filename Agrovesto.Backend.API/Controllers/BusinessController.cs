@@ -663,7 +663,7 @@ namespace Agrovesto.Backend.API.Controllers
                
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 
-                if (args.CooperativeId == 0)
+                if (args.CooperativeId == 0 && currentRole == "Cooperative")
                 {
                    var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                    args.CooperativeId = coop.Id;
