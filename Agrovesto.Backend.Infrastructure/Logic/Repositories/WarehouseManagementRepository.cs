@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
+using static Microsoft.IO.RecyclableMemoryStreamManager;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
@@ -45,12 +46,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, warehouse.Map());
         }
 
-        public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness)
+        public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness, BusinessRegistrationArgs query)
         {
-            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness).ToListAsync();
-            if (warehouse == null) { throw new Exception("No record found"); }
+            var warehouse =  _context.Warehouses
+                .Where(x => x.BelongToBusinessCode == belongToBusiness)
+                .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                warehouse = warehouse.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+            var result = await warehouse
+              .OrderByDescending(s => s.CreatedOn)
+              .Skip(query.PageNumber)
+              .Take(query.PageSize)
+               .Select(s => s.Map()).ToListAsync();
 
-            return warehouse.Select(x => x.Map()).ToList();
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
         }
         public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
         {

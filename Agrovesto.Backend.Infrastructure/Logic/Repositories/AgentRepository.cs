@@ -103,22 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 agents = agents.Where(x=> x.OrganizationCode == query.organizationCode);
             }
 
-            //var agents = await _context.Agents
-            //    .AsNoTracking()
-            //    .Where(s
-            //    =>
-            //    (!string.IsNullOrEmpty(query.organizationCode) && (s.OrganizationCode.Contains(query.organizationCode)))
-            //    &&
-            //    //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-            //    //|| s.Lga.Contains(query.Location))) 
-            //    //  &&
-            //    s.BelongToBusinessCode == businessCode)
-            //    .OrderByDescending(s => s.OnBoardedOn)
-            //    .Skip(query.PageNumber)
-            //    .Take(query.PageSize)
-            //     .Select(s => s.Map()).ToListAsync();
-
-            var result = await agents
+                     var result = await agents
                 .OrderByDescending(s => s.OnBoardedOn)
                 .Skip(query.PageNumber)
                 .Take(query.PageSize)

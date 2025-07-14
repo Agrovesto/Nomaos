@@ -962,6 +962,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await CreateTraderProfile(model, business, registeredUser.model.Id);
                     break;
                 case SubAccountType.Agent:
+                    model.OrganizationCode= args.organizationCode;
                     //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
 

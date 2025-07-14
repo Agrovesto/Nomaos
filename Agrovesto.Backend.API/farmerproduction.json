@@ -1,0 +1,151 @@
+[
+  {
+    "FarmerCategory": "Production",
+    "ValueChainType": [
+      {
+        "name": "Crop",
+        "FarmerValueChainItem": [
+          {
+            "name": "Rice"
+
+          },
+          {
+            "name": "Cowpea"
+
+          },
+          {
+            "name": "Wheat"
+
+          },
+          {
+            "name": "Cassava"
+
+          },
+          {
+            "name": "Maize"
+
+          },
+          {
+            "name": "Sesame"
+
+          },
+          {
+            "name": "Soyabean"
+
+          },
+          {
+            "name": "Potatoes"
+
+          },
+          {
+            "name": "Garlic"
+
+          },
+          {
+            "name": "Sorghum"
+
+          },
+          {
+            "name": "Tomatoes"
+
+          },
+          {
+            "name": "Cocoa"
+
+          },
+          {
+            "name": "Oil Palm"
+
+          },
+          {
+            "name": "Ginger"
+
+          },
+          {
+            "name": "Yam"
+
+          },
+          {
+            "name": "Onion"
+
+          },
+          {
+            "name": "Pepper"
+
+          },
+          {
+            "name": "Millet"
+
+          }
+        ]
+
+      },
+      {
+        "name": "Animal",
+        "FarmerValueChainItem": [
+          {
+            "name": "Goat"
+
+          },
+          {
+            "name": "Poultru"
+
+          },
+          {
+            "name": "Sheep"
+
+          },
+          {
+            "name": "Cow"
+
+          },
+          {
+            "name": "Pig"
+
+          }
+
+        ]
+
+      },
+      {
+        "name": "Aquaculture",
+        "FarmerValueChainItem": [
+          {
+            "name": "Artisan Fishery"
+
+          }
+
+        ]
+
+      }
+    ]
+  },
+  {
+    "FarmerCategory": "Processing",
+    "ValueChainType": [
+      {
+        "name": "",
+        "FarmerValueChainItem": [
+          {
+            "name": ""
+
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "FarmerCategory": "Both",
+    "ValueChainType": [
+      {
+        "name": "",
+        "FarmerValueChainItem": [
+          {
+            "name": ""
+
+          }
+        ]
+      }
+    ]
+  }
+]

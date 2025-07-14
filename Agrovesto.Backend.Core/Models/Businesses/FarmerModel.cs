@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Common;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public List<FarmVisitationActivityModel> Visitations { get; set; }
         public List<RepaymentModel> Repayments { get; set; }
     }
+
 
 
 
@@ -41,5 +43,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? OrganizationCode { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
+
     }
 }

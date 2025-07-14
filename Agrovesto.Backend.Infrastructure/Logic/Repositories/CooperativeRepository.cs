@@ -71,35 +71,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
         {
-            var cooperatives = await _context.Cooperatives
-                .AsNoTracking()
-                .Where(s => 
-                (!string.IsNullOrEmpty(query.organizationCode) && (s.OrganizationCode.Contains(query.organizationCode)))
-           &&
-                s.BelongToBusinessCode == businessCode)
-                .OrderByDescending(s => s.OnBoardedOn)
-                //.Skip(query.PageNumber)
-                //.Take(query.PageSize)
-                .Select(s => new CooperativeModel
-                {
-                    Id = s.Id,
-                    Name = s.Name,
-                    Location = s.Location,
-                    State = s.State,
-                    Lga = s.Lga,
-                    OnBoardedOn = s.OnBoardedOn,
-                    BelongToBusinessCode =s.BelongToBusinessCode,
-                    ContactPerson=s.ContactPerson,
-                    Email=s.Email,
-                    PhoneNumber=s.PhoneNumber,
-                    UserId=s.UserId,
-                    HasbeenAssignedAgent=s.HasbeenAssignedAgent,
-                    IsAssignedToAgentId=s.IsAssignedToAgentId,
-                    TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id)
-                })
-                .ToListAsync();
+            var cooperatives = _context.Cooperatives
+                .Where(x => x.BelongToBusinessCode == businessCode)
+                .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                cooperatives = cooperatives.Where(x => x.OrganizationCode == query.organizationCode);
+            }
 
-            return cooperatives;
+            var result = await cooperatives
+       .OrderByDescending(s => s.OnBoardedOn)
+       .Skip(query.PageNumber)
+       .Take(query.PageSize)
+        .Select(s => s.Map()).ToListAsync();
+
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
         }
 
         public async Task<List<CooperativeModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query)

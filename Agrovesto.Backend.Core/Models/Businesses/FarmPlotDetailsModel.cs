@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool UnflagFarm { get; set; }
         public string? FarmUnflaggedByUserId { get; set; }
         public string? FarmUnflaggedByName { get; set; }
+        public string? CooperativeName { get; set; }
         public DateTimeOffset? UnflaggedOn { get; set; }
         public List<FarmFlagAuditTrailModel> AuditTrails { get; set; } = new List<FarmFlagAuditTrailModel>();
 

@@ -72,7 +72,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<CreditScoreWeights> CreditScoreWeights { get; set; }
         public DbSet<Repayment> Repayments { get; set; }
         public DbSet<RepaymentBreakdown> RepaymentBreakdown { get; set; }
-
+        public DbSet<FarmerCategorys> FarmerCategorys { get; set; }
+        public DbSet<ValueChainType> ValueChainTypes { get; set; }
+        public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
     {

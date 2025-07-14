@@ -211,8 +211,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = args.businessCode;
                     model.CreatedOn = DateTimeOffset.Now;
                     model.OrganizationCode = args.organizationCode;
-                    var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
-                    if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
+                    var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode, args);
+                    if (warehouse!=null && warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
 
                     createWarehouse = await _repository.CreateWarehouse(model);
 
@@ -303,7 +303,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
         public async Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId,
-              ListQueryParams query)
+              BusinessRegistrationArgs query)
         {
             try
             {
@@ -318,7 +318,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
-                var warehouse = await _repository.GetWarehousesByBusiness(business.BusinessCode);
+                var warehouse = await _repository.GetWarehousesByBusiness(business.BusinessCode, query);
                 if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                 {
                     Succeeded = true,
