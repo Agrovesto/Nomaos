@@ -43,4 +43,14 @@ jobs:
         with:
           name: dotnet-app
           path: ./publish
+
+  deploy:
+    runs-on: [self-hosted, windows]
+    needs: build
   
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dotnet-app
+          path: ./publish
