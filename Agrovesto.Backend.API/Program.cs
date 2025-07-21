@@ -17,14 +17,13 @@ using Microsoft.OpenApi.Models;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-=========
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.API.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text.Json;
 using Amazon;
->>>>>>>>> Temporary merge branch 2
+
 
 var builder = WebApplication.CreateBuilder(args);
 
