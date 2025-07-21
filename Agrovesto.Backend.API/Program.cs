@@ -1,11 +1,3 @@
-<<<<<<< HEAD
-using Agrovesto.Backend.Infrastructure.DB;
-using Agrovesto.Backend.API.HealthChecks;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using System.Text.Json;
-using Amazon;
-=======
 using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
@@ -25,7 +17,14 @@ using Microsoft.OpenApi.Models;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
->>>>>>> 1107eb584315176cdc28ba266f33e582d0f00c9e
+=========
+using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.API.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
+using Amazon;
+>>>>>>>>> Temporary merge branch 2
 
 var builder = WebApplication.CreateBuilder(args);
 
