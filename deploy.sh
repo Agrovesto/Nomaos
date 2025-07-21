@@ -64,8 +64,8 @@ sudo ufw allow 80/tcp
 # Allow HTTPS (port 443) - for nginx
 sudo ufw allow 443/tcp
 
-# DON'T expose port 5000 externally - it should only be accessible internally
-# sudo ufw allow 5000/tcp  # REMOVED - we want nginx to handle external traffic
+# Allow custom port (port 5000) - for the application
+sudo ufw allow 5000/tcp
 
 # Enable UFW
 echo "Enabling UFW..."
