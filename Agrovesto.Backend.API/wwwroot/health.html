@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agrovesto API Health Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+        }
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+        .status-card.degraded {
+            border-left-color: #ffc107;
+        }
+        .status-card.unhealthy {
+            border-left-color: #dc3545;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-degraded {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status-unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .service-card {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+        }
+        .service-name {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .service-status {
+            margin-bottom: 5px;
+        }
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .quick-links {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .quick-link {
+            background: #e9ecef;
+            color: #495057;
+            padding: 8px 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .quick-link:hover {
+            background: #dee2e6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌱 Agrovesto API</h1>
+            <p>Health Status Dashboard</p>
+        </div>
+        
+        <div class="content">
+            <div class="quick-links">
+                <a href="/health" class="quick-link" target="_blank">🏥 Basic Health</a>
+                <a href="/health/detailed" class="quick-link" target="_blank">📊 Detailed Health</a>
+                <a href="/health/database" class="quick-link" target="_blank">🗄️ Database Status</a>
+                <a href="/health/external" class="quick-link" target="_blank">🌐 External Services</a>
+                <a href="/health/endpoints" class="quick-link" target="_blank">🔗 API Endpoints</a>
+                <a href="/health/components" class="quick-link" target="_blank">⚙️ App Components</a>
+                <a href="/health/critical" class="quick-link" target="_blank">🚨 Critical Systems</a>
+                <a href="/health/status" class="quick-link" target="_blank">⚡ Quick Status</a>
+                <a href="/swagger" class="quick-link" target="_blank">📚 API Docs</a>
+            </div>
+            
+            <button class="refresh-btn" onclick="loadHealthData()">🔄 Refresh Status</button>
+            
+            <div id="loading" class="loading">
+                Loading health status...
+            </div>
+            
+            <div id="error" class="error" style="display: none;"></div>
+            
+            <div id="health-data" style="display: none;">
+                <div id="overall-status" class="status-card">
+                    <h2>Overall Status: <span id="status-badge" class="status-badge"></span></h2>
+                    <p id="status-info"></p>
+                    <div class="timestamp" id="timestamp"></div>
+                </div>
+                
+                <h3>Service Health</h3>
+                <div id="services" class="services-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadHealthData() {
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const healthDataEl = document.getElementById('health-data');
+            
+            loadingEl.style.display = 'block';
+            errorEl.style.display = 'none';
+            healthDataEl.style.display = 'none';
+            
+            try {
+                const response = await fetch('/health/detailed');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                displayHealthData(data);
+                loadingEl.style.display = 'none';
+                healthDataEl.style.display = 'block';
+                
+            } catch (error) {
+                console.error('Error loading health data:', error);
+                errorEl.innerHTML = `
+                    <strong>Failed to load health data</strong><br>
+                    Error: ${error.message}<br>
+                    <small>Please check if the API is running and accessible.</small>
+                `;
+                errorEl.style.display = 'block';
+                loadingEl.style.display = 'none';
+            }
+        }
+        
+        function displayHealthData(data) {
+            // Overall status
+            const statusBadge = document.getElementById('status-badge');
+            const statusInfo = document.getElementById('status-info');
+            const timestamp = document.getElementById('timestamp');
+            const overallCard = document.getElementById('overall-status');
+            
+            statusBadge.textContent = data.status;
+            statusBadge.className = `status-badge status-${data.status.toLowerCase()}`;
+            
+            statusInfo.innerHTML = `
+                <strong>Application:</strong> ${data.application?.name || 'Agrovesto Backend API'}<br>
+                <strong>Version:</strong> ${data.application?.version || 'Unknown'}<br>
+                <strong>Environment:</strong> ${data.application?.environment || 'Unknown'}<br>
+                <strong>Uptime:</strong> ${data.application?.uptime || 'Unknown'}
+            `;
+            
+            timestamp.textContent = `Last checked: ${data.timestamp}`;
+            
+            // Update card style based on status
+            overallCard.className = `status-card ${data.status.toLowerCase()}`;
+            
+            // Services
+            const servicesEl = document.getElementById('services');
+            servicesEl.innerHTML = '';
+            
+            if (data.services && data.services.length > 0) {
+                data.services.forEach(service => {
+                    const serviceCard = document.createElement('div');
+                    serviceCard.className = 'service-card';
+                    serviceCard.innerHTML = `
+                        <div class="service-name">${service.name}</div>
+                        <div class="service-status">
+                            Status: <span class="status-badge status-${service.status.toLowerCase()}">${service.status}</span>
+                        </div>
+                        <div>Response Time: ${service.responseTime}</div>
+                        ${service.description ? `<div>Description: ${service.description}</div>` : ''}
+                        ${service.error ? `<div style="color: #dc3545; margin-top: 5px;">Error: ${service.error}</div>` : ''}
+                    `;
+                    servicesEl.appendChild(serviceCard);
+                });
+            } else {
+                servicesEl.innerHTML = '<p>No service details available.</p>';
+            }
+        }
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadHealthData, 30000);
+        
+        // Load data on page load
+        loadHealthData();
+    </script>
+</body>
+</html>

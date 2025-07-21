@@ -43,6 +43,7 @@ jobs:
         with:
           name: dotnet-app
           path: ./publish
+
   deploy:
     runs-on: [self-hosted, windows]
     needs: build
