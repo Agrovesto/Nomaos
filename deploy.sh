@@ -91,7 +91,7 @@ echo "Preparing deployment directory..."
 sudo mkdir -p $APP_PATH
 sudo chown -R $USER_NAME:$USER_NAME $APP_PATH
 
-## 7. Copy published files
+## 7. Copy published file
 echo "Copying published files..."
 sudo cp -r $BUILD_PATH/* $APP_PATH/
 
