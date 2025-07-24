@@ -27,7 +27,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (existingCooperative != null)
             {
-                // Cooperative already exists, return the existing one
                 return (true, existingCooperative.Map());
             }
 
@@ -93,11 +92,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return null;
         }
 
-        public async Task<List<CooperativeModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query)
+        public async Task<List<CooperativeModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
         {
-            var cooperatives = await _context.Cooperatives
+            var cooperativesQuery = _context.Cooperatives
                 .AsNoTracking()
-                .Where(s => s.IsAssignedToAgentId == AgentId)
+                .Where(s => s.IsAssignedToAgentId == agentId);
+
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            }
+
+            var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
                 //.Skip(query.PageNumber)
                 //.Take(query.PageSize)
@@ -110,64 +116,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Lga = s.Lga,
                     IsAssignedToAgentId = s.IsAssignedToAgentId,
                     OnBoardedOn = s.OnBoardedOn,
-                    BelongToBusinessCode=s.BelongToBusinessCode,
-                    ContactPerson=s.ContactPerson,
-                    Email=s.Email,
-                    HasbeenAssignedAgent=s.HasbeenAssignedAgent,
-                    PhoneNumber=s.PhoneNumber,
-                    UserId=s.UserId,
-                    TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id) // Count farmers per cooperative
+                    BelongToBusinessCode = s.BelongToBusinessCode,
+                    ContactPerson = s.ContactPerson,
+                    Email = s.Email,
+                    HasbeenAssignedAgent = s.HasbeenAssignedAgent,
+                    PhoneNumber = s.PhoneNumber,
+                    UserId = s.UserId,
+                    TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id)
                 })
                 .ToListAsync();
 
             return cooperatives.Any() ? cooperatives : null;
         }
-        //public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
-        //{
 
-        //    var agents = await _context.Cooperatives
-        //        .AsNoTracking()
-        //        .Where(s
-        //        =>
-        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-        //        // || s.Lga.Contains(query.Location))) &&
-        //        s.BelongToBusinessCode == businessCode)
-        //        .OrderByDescending(s => s.OnBoardedOn)
-        //        .Skip(query.PageNumber)
-        //        .Take(query.PageSize)
-        //         .Select(s => s.Map()).ToListAsync();
-
-
-        //    if (agents.Count > 0)
-        //    {
-        //        return agents;
-        //    }
-        //    return null;
-        //}
-
-
-        //public async Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query)
-        //{
-
-        //    var cooperatives = await _context.Cooperatives
-        //        .AsNoTracking()
-        //        .Where(s
-        //        =>
-        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-        //        // || s.Lga.Contains(query.Location))) &&
-        //        s.IsAssignedToAgentId == AgentId)
-        //        .OrderByDescending(s => s.OnBoardedOn)
-        //        .Skip(query.PageNumber)
-        //        .Take(query.PageSize)
-        //         .Select(s => s.Map()).ToListAsync();
-
-
-        //    if (cooperatives.Count > 0)
-        //    {
-        //        return cooperatives;
-        //    }
-        //    return null;
-        //}
 
         public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
         {
@@ -226,11 +187,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<AgentModel>> AgentsBySupervisor(string supervisorId, ListQueryParams query)
         {
-            var agents = await _context.Agents
+            var agentsQuery = _context.Agents
                 .AsNoTracking()
-                .Where(s => s.SupervisorUserId == supervisorId)
+                .Where(s => s.SupervisorUserId == supervisorId);
+
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                agentsQuery = agentsQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            }
+
+            var agents = await agentsQuery
                 .OrderByDescending(s => s.OnBoardedOn)
-                //.Skip(query.PageNumber)
+                //.Skip((query.PageNumber - 1) * query.PageSize)
                 //.Take(query.PageSize)
                 .Select(s => new AgentModel
                 {
@@ -243,15 +211,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     BelongToBusinessCode = s.BelongToBusinessCode,
                     Email = s.Email,
                     PhoneNumber = s.PhoneNumber,
-                    OrganizationCode=s.OrganizationCode,
-                    Ward=s.Ward,
-                    SupervisorUserId=s.SupervisorUserId,
-                    UserId = s.UserId,// Count farmers per cooperative
+                    OrganizationCode = s.OrganizationCode,
+                    Ward = s.Ward,
+                    SupervisorUserId = s.SupervisorUserId,
+                    UserId = s.UserId
                 })
                 .ToListAsync();
 
             return agents.Any() ? agents : null;
         }
+
 
     }
 }

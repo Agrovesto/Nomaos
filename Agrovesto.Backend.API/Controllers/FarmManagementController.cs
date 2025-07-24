@@ -711,10 +711,15 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpGet("business-visitation-logs-by-agent")]
-        public async Task<IActionResult> GetVisitationLogsByOfficerInCharge([FromQuery] BusinessRegistrationArgs query)
+        public async Task<IActionResult> GetVisitationLogsByOfficerInCharge([FromQuery] ListQueryParams query)
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByOfficerInCharge(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()

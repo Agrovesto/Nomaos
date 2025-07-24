@@ -15,6 +15,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService
 {
+    /*
     public class FarmerCategoryService : IFarmerCategoryService
     {
         private readonly DataContext _context;
@@ -111,4 +112,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsS
         }
 
     }
+
+    **/
 }

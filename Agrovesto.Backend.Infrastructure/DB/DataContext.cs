@@ -72,8 +72,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<CreditScoreWeights> CreditScoreWeights { get; set; }
         public DbSet<Repayment> Repayments { get; set; }
         public DbSet<RepaymentBreakdown> RepaymentBreakdown { get; set; }
-        public DbSet<FarmerCategorys> FarmerCategorys { get; set; }
-        public DbSet<ValueChainType> ValueChainTypes { get; set; }
+
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
@@ -81,8 +80,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DataContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-         optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
-         //  optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
+        // optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
+           optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
               
                 options =>
             options.MigrationsAssembly("Agrovesto.Backend.API"));

@@ -22,7 +22,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByActivityType(string businessCode, long activityTypeId);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByBusiness(string businessCode, string organizationCode);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByCooperative(string businessCode, long cooperativeId);
-        Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(string businessCode, string officerInCharge);
+        Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(string businessCode, string officerInCharge, ListQueryParams args);
         Task<FarmActivityTypeModel> GetVisitationLogtypebyId(string businessCode, long Id);
         Task<List<FarmActivityTypeModel>> GetVisitationLogtypesByBusiness(string businessCode, string organizationCode);
         Task UpdateFarmAsync(FarmPlotDetailsModel farm);

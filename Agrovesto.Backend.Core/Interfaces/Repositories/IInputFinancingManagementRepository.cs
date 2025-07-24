@@ -28,7 +28,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model);
         Task<List<BundleDisbursementModel>> GetDisbursedSubscriptions(string businessCode);
         Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
-         int pageSize = 10);
+         int pageSize = 10, string organizationCode = null);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusinessAgent(string businessCode, string userId);
         Task<List<BundleSubscriptionInterestModel>> GetPaidSubscriptionInterestByBusiness(string businessCode);
         Task<BundleSubscriptionInterestModel> UpdateEquitySubcriiptonStatus(BundleSubscriptionInterestModel model);

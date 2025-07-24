@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,27 +9,30 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
     public class FarmerValueChainItem
     {
-
         public long Id { get; set; }
-        public string Name { get; set; }
-        public long ValueChainTypeId { get; set; }
+        public long FarmerId { get; set; }
+        public string ValueChainType { get; set; } // Crop, Animal, Aquaculture
+        public string ItemName { get; set; }
 
+        public Farmer Farmer { get; set; }
     }
 
-    public class ValueChainType
+
+
+    public enum ValueChainType
     {
-        public long Id { get; set; }
-        public string Name { get; set; }
-        public List<FarmerValueChainItem> FarmerValueChainItem { get; set; }
-        public long FarmerCategorysId { get; set; }
+        Crop,
+        Livestock,
+        Aquaculture
     }
 
-    public class FarmerCategorys
+
+    public enum FarmerCategory
     {
-
-        public long Id { get; set; }
-        public string FarmerCategory { get; set; }  // JSON field is "state"
-        public List<ValueChainType> ValueChainType { get; set; }
+        Production,
+        Processing,
+        Both
     }
+
 
 }

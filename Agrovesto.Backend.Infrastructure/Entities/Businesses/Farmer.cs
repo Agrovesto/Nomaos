@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -39,6 +40,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
         public long BelongToCooperativeId { get; set; }
         public string? OrganizationCode { get; set; }
-
+        public string FarmerCategory { get; set; }
+        public long YearsInAgric { get; set; }
+        public string? HighestLevelOfEducation { get; set; }
     }
+   
 }

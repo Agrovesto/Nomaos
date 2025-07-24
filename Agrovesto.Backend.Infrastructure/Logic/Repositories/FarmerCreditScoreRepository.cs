@@ -108,36 +108,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             };
         }
 
-        //        public async Task<PagedListResponse<List<FarmerCreditScoreModel>>> GetCreditScorebybusiness(string businessCode, int pageNumber = 1,
-        //  int pageSize = 10, 
-        //            string organizationCode = null)
-        //        {
-        //            var query = _context.FarmerCreditScores
-
-        //.AsQueryable();
-
-        //            if (!string.IsNullOrEmpty(organizationCode))
-        //            {
-        //                query = query.Where(x => x.OrganizationCode == organizationCode);
-        //            }
-        //            if (query.Count() == 0) { return null; }
-        //            var totalCount = await query.CountAsync();
-
-
-        //            var pagedResult = await query
-        //                .OrderByDescending(x => x.LastUpdated)
-        //                .Skip((pageNumber - 1) * pageSize)
-        //                .Take(pageSize)
-        //               .ToListAsync();
-        //            return new PagedListResponse<List<FarmerCreditScoreModel>>
-        //            {
-        //                Data = pagedResult.Select(x => x.Map()).ToList(),
-        //                Count = totalCount,
-        //                PageNumber = pageNumber,
-        //                PageSize = pageSize
-        //            };
-
-        //        }
         public async Task<List<long>> GetAllFarmerIdsAsync()
         {
             return await _context.Farmers.Select(f => f.Id).ToListAsync();

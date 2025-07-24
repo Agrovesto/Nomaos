@@ -63,7 +63,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     message = "Service not available";
                     break;
                 case "03":
-                    message = "Insufficient wallet balance";
+                    message = "Could not verify NIN at this time";
+                    //message = "Insufficient wallet balance";
                     break;
                 default:
                     break;
@@ -102,7 +103,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         nin_data = ninInformation.nin_data,
                         response_code = ninInformation.response_code,
-                        detail = ninInformation.detail,
+                        detail = errorCheck
+                        ,//ninInformation.detail,
                         status = ninInformation.status,
                         verification = ninInformation.verification
                     };

@@ -71,7 +71,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
-            services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
+            //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
 
         }
     }

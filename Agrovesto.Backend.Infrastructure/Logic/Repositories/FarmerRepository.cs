@@ -327,17 +327,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (farmerExist != null)
             {
-                // Farmer already exists, return the existing one
+                // Farmer already exists, update the value chain instead
+                await UpdateFarmerValueChainItems(farmerExist.Id, data.ValueChainSelections);
                 return (true, farmerExist.Map());
             }
-            var entity = data.Map();
 
-            await _context.AddAsync(entity);
-            await _context.SaveChangesAsync();
+            // Map and save the farmer first
+            var entity = data.Map(); // This should map FarmerModel to Farmer entity
+            await _context.Farmers.AddAsync(entity);
+            await _context.SaveChangesAsync(); // Saves and assigns Id to entity
+
+            // Now that entity.Id is valid, handle value chain items
+            await UpdateFarmerValueChainItems(entity.Id, data.ValueChainSelections);
 
             return (true, entity.Map());
         }
 
+        private async Task UpdateFarmerValueChainItems(long farmerId, List<ValueChainSelectionDto> valueChainSelections)
+        {
+            // Step 1: Get existing items
+            var existingItems = await _context.FarmerValueChainItems
+                .Where(x => x.FarmerId == farmerId)
+                .ToListAsync();
+
+            // Step 2: Flatten incoming items
+            var incomingItems = valueChainSelections
+                .SelectMany(v => v.Items.Select(item => new { v.ValueChainType, ItemName = item }))
+                .ToList();
+
+            // Step 3: Add new items
+            foreach (var incoming in incomingItems)
+            {
+                bool exists = existingItems.Any(e =>
+                    e.ValueChainType == incoming.ValueChainType &&
+                    e.ItemName == incoming.ItemName);
+
+                if (!exists)
+                {
+                    _context.FarmerValueChainItems.Add(new FarmerValueChainItem
+                    {
+                        FarmerId = farmerId,
+                        ValueChainType = incoming.ValueChainType,
+                        ItemName = incoming.ItemName
+                    });
+                }
+            }
+
+            // Step 4: Remove items not in the new list
+            var toRemove = existingItems
+                .Where(e => !incomingItems.Any(i =>
+                    i.ValueChainType == e.ValueChainType &&
+                    i.ItemName == e.ItemName))
+                .ToList();
+
+            _context.FarmerValueChainItems.RemoveRange(toRemove);
+            await _context.SaveChangesAsync();
+        }
 
 
         public async Task<FarmerModel> GetFarmerByUserId(string userId)
@@ -816,9 +861,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .Where(v => v.FarmerUserId == userId)
                 .OrderByDescending(v => v.CreatedOn)
                 .ToListAsync();
+            // Step 1: Get value chain selections
+            var valueChainSelections = await (
+                from selection in _context.FarmerValueChainItems
+                where selection.FarmerId == farmerProfile.Farmer.Id
+               
+
+                select new FarmerValueChainSelectionDto
+                {
+                   
+                    TypeName = selection.ValueChainType,
+                    ItemId = selection.Id,
+                    ItemName = selection.ItemName
+                }
+            ).ToListAsync();
 
             // Map main profile
             var mappedFarmer = farmerProfile.Farmer.Map();
+            mappedFarmer.ValueChainItems = valueChainSelections;
+
             // mappedFarmer.SSN = farmerProfile.SubAccount?.SSN;
             mappedFarmer.NIN = farmerProfile.SubAccount?.NIN;
             mappedFarmer.BVN = farmerProfile.SubAccount?.Bvn;
@@ -935,30 +996,81 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     on farmer.UserId equals subAccount.UserId into subAccountGroup
                 from sub in subAccountGroup.DefaultIfEmpty()
 
-                select new FarmerDetailDto
+                select new
                 {
-                    Farmer = farmer.Map().ApplySubAccount(sub),
-                    Cooperative = cooperative.Map(),
-                    FarmerImage = farmerImage.Map(),
-                    Agent = assignedAgent.Map(),
-                    PlotDetails = _context.FarmPlotDetails
-                        .Where(p => p.FarmerId == farmer.Id)
-                        .Select(x => x.Map())
-                        .ToList(),
-
-                    Visitations = _context.FarmVisitationActivities
-                        .Where(v => v.FarmerUserId == farmer.UserId)
-                        .Select(x => x.Map())
-                        .ToList()
+                    Farmer = farmer,
+                    Cooperative = cooperative,
+                    FarmerImage = farmerImage,
+                    Agent = assignedAgent,
+                    SubAccount = sub
                 }
-            ).ToListAsync();
+    ).ToListAsync();
+
+            var farmerIds = farmers.Select(f => f.Farmer.Id).ToList();
+            var valueChainItems = await _context.FarmerValueChainItems
+                .Where(v => farmerIds.Contains(v.FarmerId))
+                .ToListAsync();
+
+            // Group value chain items by farmer
+            var groupedValueChains = valueChainItems
+                .GroupBy(v => v.FarmerId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // Final projection
+            var result = farmers.Select(f => new FarmerDetailDto
+            {
+                Farmer = f.Farmer.Map().ApplySubAccount(f.SubAccount),
+                Cooperative = f.Cooperative?.Map(),
+                FarmerImage = f.FarmerImage?.Map(),
+                Agent = f.Agent?.Map(),
+                PlotDetails = _context.FarmPlotDetails
+                    .Where(p => p.FarmerId == f.Farmer.Id)
+                    .Select(x => x.Map())
+                    .ToList(),
+
+                Visitations = _context.FarmVisitationActivities
+                    .Where(v => v.FarmerUserId == f.Farmer.UserId)
+                    .Select(x => x.Map())
+                    .ToList(),
+
+                ValueChainItems = groupedValueChains.TryGetValue(f.Farmer.Id, out var items)
+                    ? items.Select(x => new FarmerValueChainSelectionDto
+                    {
+                        TypeName = x.ValueChainType,
+                        ItemName = x.ItemName
+                    }).ToList()
+                    : new List<FarmerValueChainSelectionDto>()
+            }).ToList();
 
             return new PagedListResponse<List<FarmerDetailDto>>
             {
-                Data = farmers,
-                Count = totalCount,
-                
+                Data = result,
+                Count = totalCount
             };
+            //select new FarmerDetailDto
+            //    {
+            //        Farmer = farmer.Map().ApplySubAccount(sub),
+            //        Cooperative = cooperative.Map(),
+            //        FarmerImage = farmerImage.Map(),
+            //        Agent = assignedAgent.Map(),
+            //        PlotDetails = _context.FarmPlotDetails
+            //            .Where(p => p.FarmerId == farmer.Id)
+            //            .Select(x => x.Map())
+            //            .ToList(),
+
+            //        Visitations = _context.FarmVisitationActivities
+            //            .Where(v => v.FarmerUserId == farmer.UserId)
+            //            .Select(x => x.Map())
+            //            .ToList()
+            //    }
+            //).ToListAsync();
+
+            //return new PagedListResponse<List<FarmerDetailDto>>
+            //{
+            //    Data = farmers,
+            //    Count = totalCount,
+
+            //};
         }
 
 
