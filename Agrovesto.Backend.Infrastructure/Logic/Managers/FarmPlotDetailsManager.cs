@@ -561,7 +561,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(BusinessRegistrationArgs args)
+        public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(ListQueryParams args)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
               ?? throw new Exception("Business does not exist");
@@ -569,7 +569,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             args.UserId ??= business.UserId;
             try
             {
-                var types = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(business.BusinessCode, args.UserId);
+                var types = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(business.BusinessCode, args.UserId, args);
                 if (types == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return types;

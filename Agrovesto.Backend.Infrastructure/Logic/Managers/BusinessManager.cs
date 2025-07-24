@@ -448,7 +448,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         bWorker.BusinessId = business.BusinessId;
                         bWorker.UserId = registerBusinessWorker.model.Id;
-
+                        bWorker.OrganizationCode = bWorker.OrganizationCode;
                         newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
 
 
@@ -1160,7 +1160,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 DateOfBirth = model.DateOfBirth,
                 BelongToCooperativeId = cooperativeId,
                 Ward = model.Ward,
-                OrganizationCode =args.organizationCode
+                OrganizationCode =args.organizationCode,
+                FarmerCategory=model.FarmerCategory,
+                ValueChainSelections=model.ValueChainSelections,
+                YearsInAgric=model.YearsInAgric,
+                HighestLevelOfEducation=model.HighestLevelOfEducation
             };
 
             var farer = await _farmerRepository.CreateFarmer(farmer);
@@ -1246,7 +1250,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode)
+        public async Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode,string organizationCode)
         {
             try
             {
@@ -1255,7 +1259,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var staff = await _businessRepository.GetStaffByBusinessCode(business.BusinessId);
+                var staff = await _businessRepository.GetStaffByBusinessCode(business.BusinessId, organizationCode);
                 if (staff == null) return new PagedListResponse<List<BusinessWorkerModel>>
                 {
                     Succeeded = true,
@@ -1474,7 +1478,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var staff = await _businessRepository.GetStaffByBusinessCode(business.BusinessId);
+                var staff = await _businessRepository.GetStaffByBusinessCode(business.BusinessId, query.organizationCode);
                 if (staff == null) return new PagedListResponse<List<BusinessWorkerModel>>
                 {
                     Succeeded = true,
@@ -1676,7 +1680,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 var agent = await _agentRepository.GetAgentDetailByUserId(query.UserId);
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var plots = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(query.businessCode, query.UserId);
+                var plots = await _farmPlotDetailRepository.GetVisitationLogsByOfficerInCharge(query.businessCode, query.UserId, query);
 
                 var bizEntities = await _farmerRepository.GetBusinessEntitiesMetricsAsyncByAgent(query.UserId, query);
                 bizEntities.FarmVisit = plots != null ? plots.FirstOrDefault() : null;

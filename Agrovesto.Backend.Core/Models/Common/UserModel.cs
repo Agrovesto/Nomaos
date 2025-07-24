@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -107,6 +108,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? BusinessCode { get; set; }
         public string? Alias { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? FarmerCategory { get; set; }
+        public long YearsInAgric { get; set; }
+        public string? HighestLevelOfEducation { get; set; }
+
+        public List<ValueChainSelectionDto>? ValueChainSelections { get; set; }
     }
     public enum UserType
     {

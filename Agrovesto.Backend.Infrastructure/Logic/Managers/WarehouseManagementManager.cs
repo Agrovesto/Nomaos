@@ -274,7 +274,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
                 var agent = await _agentRepository.GetAgentDetailByUserId(userId);
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for Agent");
-                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, userId);
+                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, userId, query);
                 if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                 {
                     Succeeded = true,
@@ -1013,7 +1013,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var bundles = await _repository.GetBundleByWarehouseManager(business.BusinessCode, userId);
+                var bundles = await _repository.GetBundleByWarehouseManager(business.BusinessCode, userId, query);
                 if (bundles == null) return new PagedListResponse<List<BundleModel>>
                 {
                     Succeeded = true,

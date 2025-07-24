@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByActivityType(BusinessRegistrationArgs args, long activitytypeId);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByBusiness(BusinessRegistrationArgs args);
         Task<List<FarmVisitationActivityModel>> GetVisitationLogsByCooperative(BusinessRegistrationArgs args);
-        Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(BusinessRegistrationArgs args);
+        Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(ListQueryParams args);
         Task<FarmVisitationActivityModel> LogFarmVisit(FarmVisitationActivityModel model, BusinessRegistrationArgs args);
         Task<bool> UnflagFarmAsync(ListQueryParams args, long farmId);
         Task<FarmPlotDetailsModel> UpdateFarmCoordinateDetails(FarmPlotDetailsModel model, BusinessRegistrationArgs args);

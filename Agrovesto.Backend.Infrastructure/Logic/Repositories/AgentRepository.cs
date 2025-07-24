@@ -116,12 +116,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
 
-            //var Agent = await _context.Agents.Where(x => x.BelongToBusinessCode == businessCode).ToListAsync();
-            //if (agents.Count > 0)
-            //{
-            //    return Agent.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
-            //}
-            //return null;
         }
 
 

@@ -357,40 +357,48 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return activities.Any() ? activities : null;
         }
-        public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(string businessCode, string officerInCharge)
+        public async Task<List<FarmVisitationActivityModel>> GetVisitationLogsByOfficerInCharge(string businessCode, string officerInCharge, ListQueryParams args)
         {
-            var type = await _context.FarmVisitationActivities
-                .Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeId == officerInCharge)
-                 .Select(x => new FarmVisitationActivityModel
-                 {
+            var query = _context.FarmVisitationActivities
+                .Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeId == officerInCharge);
 
-                     Id = x.Id,
-                     Description = x.Description,
-                     BelongToBusinessCode = businessCode,
-                     CooperativeId = x.CooperativeId,
-                     CreatedBy = x.CreatedBy,
-                     CreatedOn = x.CreatedOn,
-                     FarmActivityId = x.FarmActivityId,
-                     FarmerName = x.FarmerName,
-                     FarmerUserId = x.FarmerUserId,
-                     OfficerInChargeId = x.OfficerInChargeId,
-                     OfficerName = x.FarmerName,
-                     Recommendation = x.Recommendation,
-                     SupportingImageUrl = x.SupportingImageUrl,
-                     FarmerLabourCost = x.FarmerLabourCost,
-                     FarmerTransportCost = x.FarmerTransportCost,
-                     InputCost = x.InputCost,
-                     InputQuantity = x.InputQuantity,
-                     InputType = x.InputType,
-                     OrganizationCode = x.OrganizationCode,
-                     OtherCost = x.OtherCost,
-                     TotalCost = x.TotalCost,
-                     ActivityType = _context.FarmActivityTypes
-                 .Where(t => t.Id == x.FarmActivityId)
-                 .Select(t => t.Name)
-                 .FirstOrDefault(),
-                 }).OrderByDescending(x => x.CreatedOn)
-         .ToListAsync();
+            // Apply optional organization code filter
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == args.organizationCode);
+            }
+
+            var type = await query
+                .OrderByDescending(x => x.CreatedOn)
+                .Select(x => new FarmVisitationActivityModel
+                {
+                    Id = x.Id,
+                    Description = x.Description,
+                    BelongToBusinessCode = x.BelongToBusinessCode,
+                    CooperativeId = x.CooperativeId,
+                    CreatedBy = x.CreatedBy,
+                    CreatedOn = x.CreatedOn,
+                    FarmActivityId = x.FarmActivityId,
+                    FarmerName = x.FarmerName,
+                    FarmerUserId = x.FarmerUserId,
+                    OfficerInChargeId = x.OfficerInChargeId,
+                    OfficerName = x.FarmerName, // Is this supposed to be FarmerName? Consider checking.
+                    Recommendation = x.Recommendation,
+                    SupportingImageUrl = x.SupportingImageUrl,
+                    FarmerLabourCost = x.FarmerLabourCost,
+                    FarmerTransportCost = x.FarmerTransportCost,
+                    InputCost = x.InputCost,
+                    InputQuantity = x.InputQuantity,
+                    InputType = x.InputType,
+                    OrganizationCode = x.OrganizationCode,
+                    OtherCost = x.OtherCost,
+                    TotalCost = x.TotalCost,
+                    ActivityType = _context.FarmActivityTypes
+                        .Where(t => t.Id == x.FarmActivityId)
+                        .Select(t => t.Name)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
 
             return type.Any() ? type : null;
         }

@@ -262,7 +262,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                     "Farm Location",
                     "Farm LGA",
                     "Farm State",
-                    "Most Recent Visitation"
+                    "Most Recent Visitation",
+                    "Value Chain"
             };
 
                 for (int i = 0; i < headers.Length; i++)
@@ -311,7 +312,13 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                         $"Supporting Document {recentVisit.SupportingImageUrl}"
                         : "";
 
-                    row++;
+                var groupedItems = farmer.ValueChainItems
+            .GroupBy(x => x.TypeName)
+            .Select(g => $"{g.Key}: {string.Join(", ", g.Select(i => i.ItemName))}");
+
+                worksheet.Cell(row, 22).Value = string.Join(" | ", groupedItems); // Added here
+
+                row++;
                 }
 
             worksheet.Columns().AdjustToContents();

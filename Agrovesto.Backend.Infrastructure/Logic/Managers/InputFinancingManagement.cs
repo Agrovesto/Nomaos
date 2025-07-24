@@ -221,7 +221,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var requestsByBusiness = await _repository.GetInterestRequestByAgent(args.businessCode, args.UserId, args.PageNumber, args.PageSize);
+            var requestsByBusiness = await _repository.GetInterestRequestByAgent(args.businessCode, args.UserId, args.PageNumber, args.PageSize, args.organizationCode);
             if (requestsByBusiness == null) return null;
 
 

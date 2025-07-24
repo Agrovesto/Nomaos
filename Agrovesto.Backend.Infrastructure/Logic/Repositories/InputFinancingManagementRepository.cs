@@ -208,20 +208,33 @@ DateTime? endDate)
 
             return interest.Select(x => x.Map()).ToList();
         }
-        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
-    int pageSize = 10)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(
+      string businessCode,
+      string userId,
+      int pageNumber = 1,
+      int pageSize = 10,
+      string organizationCode = null)
         {
-            var interest = _context.BundleSubscriptionInterests
-                .Where(x => x.BelongToBusinessCode == businessCode
-            && x.OfficerInChargeUserId == userId).AsQueryable();
+            var interestQuery = _context.BundleSubscriptionInterests
+                .Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId);
 
-            if (interest.Count() == 0) { return null; }
-            var totalCount = await interest.CountAsync();
+            // Optional organization filter
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                interestQuery = interestQuery.Where(x => x.OrganizationCode == organizationCode);
+            }
 
-            var pagedResult = await interest
-              .OrderByDescending(x => x.CreatedOn)
-                //.Skip((pageNumber) * pageSize)
-                //.Take(pageSize)
+            var totalCount = await interestQuery.CountAsync();
+
+            if (totalCount == 0)
+            {
+                return null;
+            }
+
+            var pagedResult = await interestQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             return new PagedListResponse<List<BundleSubscriptionInterestModel>>
@@ -232,6 +245,7 @@ DateTime? endDate)
                 PageSize = pageSize
             };
         }
+
         public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference)
         {
             var receipt = new BundleInterestReceiptModel();
