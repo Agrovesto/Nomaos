@@ -18,6 +18,13 @@ using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.API.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Text.Json;
+using Amazon;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -97,6 +104,43 @@ builder.Services.Configure<FormOptions>(o =>
 
 
 builder.Services.AddControllers();
+
+// Add health checks
+builder.Services.AddHttpClient();
+builder.Services.AddHealthChecks()
+    // Database health checks
+    .AddDbContextCheck<DataContext>("Database", tags: new[] { "database", "critical" })
+    .AddSqlServer(
+        connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
+        name: "SQL Server Database",
+        healthQuery: "SELECT 1",
+        timeout: TimeSpan.FromSeconds(5),
+        tags: new[] { "database", "critical" })
+    
+    // External service health checks
+    .AddCheck<IdentityPassHealthCheck>("IdentityPass API", tags: new[] { "external" })
+    .AddCheck<TermiiSmsHealthCheck>("Termii SMS API", tags: new[] { "external" })
+    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API", tags: new[] { "external" })
+    .AddCheck<SendGridHealthCheck>("SendGrid API", tags: new[] { "external" })
+    .AddS3(options =>
+    {
+        options.BucketName = builder.Configuration["AWS:BucketName"];
+        options.AccessKey = builder.Configuration["AWS:AccessKey"];
+        options.SecretKey = builder.Configuration["AWS:SecretKey"];
+        options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
+    }, name: "AWS S3", tags: new[] { "external", "storage" })
+    
+    // API endpoint health checks
+    .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
+    .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
+
+// Register health check classes
+builder.Services.AddScoped<IdentityPassHealthCheck>();
+builder.Services.AddScoped<TermiiSmsHealthCheck>();
+builder.Services.AddScoped<CountryStateCityApiHealthCheck>();
+builder.Services.AddScoped<SendGridHealthCheck>();
+builder.Services.AddScoped<ApiEndpointHealthCheck>();
+builder.Services.AddScoped<ApplicationComponentHealthCheck>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -171,32 +215,6 @@ app.UseSwaggerUI(c =>
     //  c.RoutePrefix = "/docs";
 
 });
-app.MapHealthChecks("/health", new HealthCheckOptions
-{
-    ResponseWriter = async (context, report) =>
-    {
-        context.Response.ContentType = "application/json";
-
-        //var version = Assembly.GetExecutingAssembly()
-        //                      .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-        //              ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
-        //              ?? "unknown";
-
-        var result = JsonSerializer.Serialize(new
-        {
-            timestamp = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"),
-            version = "1.0.0",
-            status = report.Status.ToString(),
-            checks = report.Entries.Select(e => new {
-                name = e.Key,
-                status = e.Value.Status.ToString(),
-                description = e.Value.Description
-            })
-        });
-
-        await context.Response.WriteAsync(result);
-    }
-});
 //using (var scope = app.Services.CreateScope())
 //{
 //    var services = scope.ServiceProvider;
@@ -235,8 +253,14 @@ app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
 
+// Enable static files for health dashboard
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+// The health check endpoints are now handled by the HealthController
+// No additional mapping needed as we're using controller routes
 
 app.MapControllers();
 
