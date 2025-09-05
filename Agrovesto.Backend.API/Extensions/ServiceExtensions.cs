@@ -73,6 +73,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
 
+
+            services.AddScoped<IMandERepositories, MandERepositories>();
+            services.AddScoped<IActivityEntryRepository, ActivityEntryRepository>();
+            services.AddScoped<IMandEActivityManager, MandEActivityManager>();
+
         }
     }
 }
