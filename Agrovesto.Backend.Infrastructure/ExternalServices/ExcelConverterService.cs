@@ -260,6 +260,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                     "Farm Coordinate 4", 
                     "Farm Size in Sq", "Farm Size in Hectare",
                     "Farm Location",
+                   // "Farm Ward",
                     "Farm LGA",
                     "Farm State",
                     "Most Recent Visitation",
@@ -301,7 +302,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                 worksheet.Cell(row, 16).Value = recentPlot != null ? recentPlot.AreaInSqMetre :"NA";
                 worksheet.Cell(row, 17).Value = recentPlot != null ? recentPlot.AreaInHectare :"NA";
                 worksheet.Cell(row, 18).Value = recentPlot != null ? recentPlot.FarmLocation :"NA";
-                worksheet.Cell(row, 29).Value = recentPlot != null ? recentPlot.FarmLga :"NA";
+                //worksheet.Cell(row, 19).Value = recentPlot != null ? recentPlot.farmward :"NA";
+                worksheet.Cell(row, 19).Value = recentPlot != null ? recentPlot.FarmLga :"NA";
                 worksheet.Cell(row, 20).Value = recentPlot != null ? recentPlot.FarmState :"NA";
                
                     // Most recent visitation
