@@ -15,5 +15,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
         byte[] ConvertFarmerTransactionsToPdf(IEnumerable<FarmerSalesTrackerModel> farmers);
         byte[] ConvertSubscriptionToExcel(IEnumerable<BundleSubscriptionInterestModel> farmers);
         byte[] ConvertSubscriptionToPDF(IEnumerable<BundleSubscriptionInterestModel> farmers);
+        Task<byte[]> GenerateFarmerExcel(List<FarmerDetailDto> farmers);
     }
 }

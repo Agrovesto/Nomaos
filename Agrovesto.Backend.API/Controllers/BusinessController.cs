@@ -659,22 +659,21 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     args.organizationCode = OrganizationCode;
                 }
+                var currentRole = CurrentUserRole;
+               
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-                var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
+                
+                if (args.CooperativeId == 0  && currentRole == "Cooperative")
                 {
-                  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
+                   var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+                   args.CooperativeId = coop.Id;
                 }
-                //if (args.RoleName.Equals("Farmer"))
+                var registerUser = await _businessManager.CreateBusinessUser(model, args);
+                //if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
                 //{
-                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
-                //    {
-                //        FarmerUserId=registerUser.UserId,
-                //        File=model.FarmerCapturedImage
-                //    }, args);
-
-
+                //  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
                 //}
+               
 
                 return Ok(new Response<SubAccountModel>()
                 {
@@ -958,7 +957,7 @@ namespace Agrovesto.Backend.API.Controllers
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _businessManager.GetStaffByBusinessCode(query.businessCode);
+                var result = await _businessManager.GetStaffByBusinessCode(query.businessCode, query.organizationCode);
                 return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
                 {
                     Data = result.Data,
@@ -1355,6 +1354,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
@@ -1603,9 +1607,23 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmers-bycooperative")]
         public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
         {
-            try
+            try { 
+             var hasOrgCode = OrganizationCode;
+            if (!string.IsNullOrEmpty(hasOrgCode))
             {
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                query.organizationCode = OrganizationCode;
+            }
+            var currentRole = CurrentUserRole;
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+            if (query.CooperativeId == 0)
+            {
+                var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                query.CooperativeId = coop.Id;
+            }
+
+     
                 var result = await _businessManager.GetFarmersByCooperativeId(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
                 {
@@ -1797,7 +1815,47 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        [HttpGet("farmers-by-business")]
+        public async Task<IActionResult> FarmersByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetAllFarmerDetails(query);
+                //return Ok(new Response<FileDownloadModel>()
+                //{
+                //    Succeeded = true,
+                //    Data = result
+                //});
+                Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
+                return File(result.FileBytes, result.MimeType);
 
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
     }
 }

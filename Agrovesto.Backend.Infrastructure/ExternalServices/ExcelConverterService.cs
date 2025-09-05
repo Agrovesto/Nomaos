@@ -5,6 +5,7 @@ using Document = iTextSharp.text.Document;
 using iTextSharp.text;
 using iTextSharp.text.pdf;
 using ClosedXML.Excel;
+using OfficeOpenXml;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices
 {
@@ -246,10 +247,93 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
             return stream.ToArray();
         }
 
+        public async Task<byte[]> GenerateFarmerExcel(List<FarmerDetailDto> farmers)
+        {
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("Farmer");
+              // Header
+                var headers = new[]
+                {
+                "Farmer Name", "Phone", "Gender", "State", "LGA", "Ward", "Location",
+                "Cooperative", "Agent",  "NIN", "BVN", 
+                "Farm Cordinate 1", "Farm Cordinate 2", "Farm Coordinate 3",
+                    "Farm Coordinate 4", 
+                    "Farm Size in Sq", "Farm Size in Hectare",
+                    "Farm Location",
+                   // "Farm Ward",
+                    "Farm LGA",
+                    "Farm State",
+                    "Most Recent Visitation",
+                    "Value Chain"
+            };
 
-        #region inputs
+                for (int i = 0; i < headers.Length; i++)
+                {
+                worksheet.Cell(1, i + 1).Value = headers[i];
+                worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                worksheet.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.LightGray;
+            }
 
-        public byte[] ConvertSubscriptionToExcel(IEnumerable<BundleSubscriptionInterestModel> farmers)
+            // Rows
+            int row = 2;
+                foreach (var farmer in farmers)
+                {
+                    var f = farmer.Farmer;
+
+                    worksheet.Cell(row, 1).Value = f.Name;
+                    worksheet.Cell(row, 2).Value = f.PhoneNumber;
+                    worksheet.Cell(row, 3).Value = f.Gender;
+                    worksheet.Cell(row, 4).Value = f.State;
+                    worksheet.Cell(row, 5).Value = f.Lga;
+                    worksheet.Cell(row, 6).Value = f.Ward;
+                    worksheet.Cell(row, 7).Value = f.Location;
+                    worksheet.Cell(row, 8).Value = farmer.Cooperative?.Name;
+                    worksheet.Cell(row, 9).Value = farmer.Agent?.Name;
+
+                  //  worksheet.Cells[row, 10].Value = f.SSN;
+                    worksheet.Cell(row, 10).Value = f.NIN;
+                    worksheet.Cell(row, 11).Value = f.BVN;
+                var recentPlot = farmer.PlotDetails.FirstOrDefault();
+
+                worksheet.Cell(row, 12).Value = recentPlot != null ? $"{recentPlot.Longitude1},{recentPlot.Latitude1}" :"NA" ;
+                worksheet.Cell(row, 13).Value = recentPlot != null ? $"{recentPlot.Longitude2},{recentPlot.Latitude2}" :"NA";
+                worksheet.Cell(row, 14).Value = recentPlot != null ? $"{recentPlot.Longitude3},{recentPlot.Latitude3}":"NA";
+                worksheet.Cell(row, 15).Value = recentPlot != null ? $"{recentPlot.Longitude4},{recentPlot.Latitude4}" :"NA";
+                worksheet.Cell(row, 16).Value = recentPlot != null ? recentPlot.AreaInSqMetre :"NA";
+                worksheet.Cell(row, 17).Value = recentPlot != null ? recentPlot.AreaInHectare :"NA";
+                worksheet.Cell(row, 18).Value = recentPlot != null ? recentPlot.FarmLocation :"NA";
+                //worksheet.Cell(row, 19).Value = recentPlot != null ? recentPlot.farmward :"NA";
+                worksheet.Cell(row, 19).Value = recentPlot != null ? recentPlot.FarmLga :"NA";
+                worksheet.Cell(row, 20).Value = recentPlot != null ? recentPlot.FarmState :"NA";
+               
+                    // Most recent visitation
+                    var recentVisit = farmer.Visitations.FirstOrDefault();
+                    worksheet.Cell(row, 21).Value = recentVisit != null
+                        ? $"{recentVisit.Description} on {recentVisit.CreatedOn:yyyy-MM-dd}, " +
+                        $"Recommendation {recentVisit.Recommendation}" +
+                        $"Supporting Document {recentVisit.SupportingImageUrl}"
+                        : "";
+
+                var groupedItems = farmer.ValueChainItems
+            .GroupBy(x => x.TypeName)
+            .Select(g => $"{g.Key}: {string.Join(", ", g.Select(i => i.ItemName))}");
+
+                worksheet.Cell(row, 22).Value = string.Join(" | ", groupedItems); // Added here
+
+                row++;
+                }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
+
+        }
+    
+    #region inputs
+
+    public byte[] ConvertSubscriptionToExcel(IEnumerable<BundleSubscriptionInterestModel> farmers)
 
         {
             var list = farmers.ToList();

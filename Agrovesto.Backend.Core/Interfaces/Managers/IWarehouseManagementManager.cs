@@ -26,7 +26,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<Response<List<WarehouseInputTransitModel>>> GetWarehouseInputTransit(string userId, ListQueryParams query);
         Task<Response<WarehouseUserModel>> GetWarehouseManagerByBusiness(string userId, long warehouseId);
         Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByAgent(string userId, ListQueryParams query);
-        Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId, BusinessRegistrationArgs query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagerByBusiness(string userId, ListQueryParams query);
         Task<PagedListResponse<List<WarehouseUserModel>>> GetWarehousesManagersByBusiness(string userId, long warehouseId, ListQueryParams query);
         Task<Response<List<WarehouseSummaryMetrics>>> GetWarehouseSummaryByBusiness(string userId, ListQueryParams query);

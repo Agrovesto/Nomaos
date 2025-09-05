@@ -64,42 +64,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return org.Select(x=>x.Map()).ToList();
         }
 
-        public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
+        public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
         {
-         
+            var query = from b in _context.BusinessWorkers
+                        join u in _context.Users on b.UserId equals u.Id
+                        join ur in _context.UserRoles on u.Id equals ur.UserId into userRoles
+                        from ur in userRoles.DefaultIfEmpty()
+                        join rl in _context.Roles on ur.RoleId equals rl.Id into roles
+                        from role in roles.DefaultIfEmpty()
+                        where b.BusinessId == businessId
+                        select new
+                        {
+                            b,
+                            u,
+                            ur,
+                            role
+                        };
 
-            var list = await (from b in _context.BusinessWorkers
-                              join u in _context.Users on b.UserId equals u.Id
-                              join ur in _context.UserRoles on u.Id equals ur.UserId into userRoles
-                              from ur in userRoles.DefaultIfEmpty()
-                              join rl in _context.Roles on ur.RoleId equals rl.Id into roles
-                              from role in roles.DefaultIfEmpty()
-                              where b.BusinessId == businessId
-                              orderby b.CreatedOn
-                              select new BusinessWorkerModel
-                              {
-                                  BusinessId = businessId,
-                                  BusinessWorkerId = b.BusinessWorkerId,
-                                  Email = u.Email,
-                                  FullName = u.Name,
-                                  PhoneNumber = u.PhoneNumber,
-                                  UserId = u.Id,
-                                  RoleId = ur.RoleId,
-                                  RoleName = role.Name ?? "No Role Assigned",
-                                  CreatedOn = b.CreatedOn
-                              })
-                  .ToListAsync();
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.b.OrganizationCode == organizationCode);
+            }
 
-            var query = list
+            var result = await query
+                .OrderBy(x => x.b.CreatedOn)
+                .Select(x => new BusinessWorkerModel
+                {
+                    BusinessId = x.b.BusinessId,
+                    BusinessWorkerId = x.b.BusinessWorkerId,
+                    Email = x.u.Email,
+                    FullName = x.u.Name,
+                    PhoneNumber = x.u.PhoneNumber,
+                    UserId = x.u.Id,
+                    RoleId = x.ur.RoleId,
+                    RoleName = x.role.Name ?? "No Role Assigned",
+                    CreatedOn = x.b.CreatedOn
+                })
+                .ToListAsync();
+
+            var distinctUsers = result
                 .GroupBy(x => x.UserId)
-                .Select(g => g.First()) // Pick the first for each unique user
+                .Select(g => g.First())
                 .Take(50)
                 .ToList();
 
-            return query.Any() ? query : null;
-
-
+            return distinctUsers.Any() ? distinctUsers : null;
         }
+
         public async Task<int> BusinessCount()
         {
             return await _context.Set<Business>().CountAsync();
@@ -111,7 +122,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (businessExist != null)
             {
-                // Business already exists, return the existing one
                 return  businessExist.Map();
             }
             Business business = businessModel.Map();

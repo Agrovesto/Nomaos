@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,8 +24,36 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<UserOrganization>()
+                .HasKey(uo => new
+                {
+                    uo.UserId, uo.OrganizationCode
+                });
+            modelBuilder.Entity<UserOrganization>()
+                .HasOne(uo => uo.User)
+                .WithMany(u => u.UserOrganizations)
+                .HasForeignKey(uo => uo.UserId);
+
+
+            modelBuilder.Entity<MandEActivityType>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandEActivityType>().HasIndex(x => x.Name).IsUnique();
+
+            modelBuilder.Entity<MandESubActivity>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandESubActivity>().HasIndex(x => new { x.MandEActivityTypeId, x.Name }).IsUnique();
+
+            modelBuilder.Entity<MandEFieldDefinition>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandEFieldDefinition>().HasIndex(x => new { x.MandESubActivityId, x.Key }).IsUnique();
+
+            modelBuilder.Entity<MandEFarmActivity>().HasKey(x => x.Id);
         }
+
+        public DbSet<MandEActivityType> MandEActivityTypes { get; set; }
+        public DbSet<MandESubActivity> MandESubActivities { get; set; }
+        public DbSet<MandEFieldDefinition> MandEFieldDefinitions { get; set; }
+        public DbSet<MandEFarmActivity> MandEFarmActivities { get; set; }
+
         public DbSet<Business> Businesses { get; set; }
+        public DbSet<UserOrganization> UserOrganizations { get; set; }
         public DbSet<Organization> BusinessOrganizations { get; set; }
         public DbSet<BusinessWorker> BusinessWorkers { get; set; }  
         public DbSet<SubAccount> SubAccounts { get; set; }
@@ -39,6 +68,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Cooperative> Cooperatives { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
         public DbSet<FarmPlotDetails> FarmPlotDetails { get; set; }
+        public DbSet<FarmFlagAuditTrail> FarmFlagAuditTrail { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
         public DbSet<WarehouseInputInventory> WarehouseInputInventories { get; set; }
         public DbSet<WarehouseUser> WarehouseUsers { get; set; }
@@ -57,14 +87,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<States> States { get; set; }
         public DbSet<LGA> LGAs { get; set; }
         public DbSet<Ward> Wards { get; set; }
+        public DbSet<FarmerCreditScore> FarmerCreditScores { get; set; }
+        public DbSet<CreditScoreWeights> CreditScoreWeights { get; set; }
+        public DbSet<Repayment> Repayments { get; set; }
+        public DbSet<RepaymentBreakdown> RepaymentBreakdown { get; set; }
 
+        public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
     {
         public DataContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-         //optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
+        //optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
            optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
               
                 options =>
