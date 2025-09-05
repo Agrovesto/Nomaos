@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
@@ -207,20 +208,33 @@ DateTime? endDate)
 
             return interest.Select(x => x.Map()).ToList();
         }
-        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(string businessCode, string userId, int pageNumber = 1,
-    int pageSize = 10)
+        public async Task<PagedListResponse<List<BundleSubscriptionInterestModel>>> GetInterestRequestByAgent(
+      string businessCode,
+      string userId,
+      int pageNumber = 1,
+      int pageSize = 10,
+      string organizationCode = null)
         {
-            var interest = _context.BundleSubscriptionInterests
-                .Where(x => x.BelongToBusinessCode == businessCode
-            && x.OfficerInChargeUserId == userId).AsQueryable();
+            var interestQuery = _context.BundleSubscriptionInterests
+                .Where(x => x.BelongToBusinessCode == businessCode && x.OfficerInChargeUserId == userId);
 
-            if (interest.Count() == 0) { return null; }
-            var totalCount = await interest.CountAsync();
+            // Optional organization filter
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                interestQuery = interestQuery.Where(x => x.OrganizationCode == organizationCode);
+            }
 
-            var pagedResult = await interest
-              .OrderByDescending(x => x.CreatedOn)
-                //.Skip((pageNumber) * pageSize)
-                //.Take(pageSize)
+            var totalCount = await interestQuery.CountAsync();
+
+            if (totalCount == 0)
+            {
+                return null;
+            }
+
+            var pagedResult = await interestQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .ToListAsync();
 
             return new PagedListResponse<List<BundleSubscriptionInterestModel>>
@@ -231,6 +245,7 @@ DateTime? endDate)
                 PageSize = pageSize
             };
         }
+
         public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference)
         {
             var receipt = new BundleInterestReceiptModel();
@@ -546,5 +561,56 @@ string? disbursedBy = null)
 
         }
 
+
+        public async Task<BundleSubscriptionInterestModel> GetSingleSubscription(string farmerUserId, long bundleId)
+        {
+            var interest = await _context.BundleSubscriptionInterests.Where(x => x.FarmerUserId == farmerUserId 
+            && x.InterestedBundleId == bundleId && x.SubscriptionStatus == InputFinancingStatus.Disbursed.ToString()).FirstOrDefaultAsync();
+
+            if (interest == null) { return null; }
+
+            return interest.Map();
+        }
+
+        #region repayment
+
+
+        public async Task SaveBundleSubscriptionRepayment(RepaymentModel model)
+        {
+
+            var existing = await _context.Repayments.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefaultAsync(); ;
+            if (existing != null)
+            {
+                if (existing.AmountToRepay == (existing.AmountPaid + model.AmountPaid))
+                {
+                    existing.IsComplete = true;
+                    existing.CompletedOn = DateTimeOffset.UtcNow;
+
+                }
+                    existing.AmountPaid+= model.AmountPaid;
+                existing.RepaymentBreakdown = model.RepaymentBreakdown.Select(i => new RepaymentBreakdown
+                {
+
+                    AmountOrEquivalent = i.AmountOrEquivalent,
+                    PaidOn =  DateTimeOffset.Now,
+
+                    RepaymentId = existing.Id,
+                    RepaymentMode = Enum.GetName(typeof(RepaymentMode), i.RepaymentMode)
+
+                }).ToList();
+       
+            }
+            else
+            {
+                var entity = model.Map();
+                entity.IsComplete = false;
+                entity.CompletedOn = null; 
+                await _context.Repayments.AddAsync(entity);
+            }
+            await _context.SaveChangesAsync();
+         
+        }
+
+        #endregion repayment
     }
 }

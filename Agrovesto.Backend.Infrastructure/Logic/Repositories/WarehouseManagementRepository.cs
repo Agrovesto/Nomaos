@@ -11,6 +11,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Amazon.S3.Util.S3EventNotification;
+using static Microsoft.IO.RecyclableMemoryStreamManager;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
@@ -45,20 +46,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, warehouse.Map());
         }
 
-        public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness)
+        public async Task<List<WarehouseModel>> GetWarehousesByBusiness(string belongToBusiness, BusinessRegistrationArgs query)
         {
-            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness).ToListAsync();
-            if (warehouse == null) { throw new Exception("No record found"); }
+            var warehouse =  _context.Warehouses
+                .Where(x => x.BelongToBusinessCode == belongToBusiness)
+                .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                warehouse = warehouse.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+            var result = await warehouse
+              .OrderByDescending(s => s.CreatedOn)
+              .Skip(query.PageNumber)
+              .Take(query.PageSize)
+               .Select(s => s.Map()).ToListAsync();
 
-            return warehouse.Select(x => x.Map()).ToList();
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
         }
-        public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId)
+        public async Task<List<WarehouseModel>> GetWarehousesByAgent(string belongToBusiness, string agentId, ListQueryParams query)
         {
-            var warehouse = await _context.Warehouses.Where(x => x.BelongToBusinessCode == belongToBusiness && x.ManagedByUserId == agentId).ToListAsync();
-            if (warehouse == null) { throw new Exception("No record found"); }
+            var warehouseQuery = _context.Warehouses
+                .AsNoTracking()
+                .Where(x => x.BelongToBusinessCode == belongToBusiness && x.ManagedByUserId == agentId);
 
-            return warehouse.Select(x => x.Map()).ToList();
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                warehouseQuery = warehouseQuery.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+
+            var warehouses = await warehouseQuery.ToListAsync();
+
+            if (!warehouses.Any())
+            {
+                throw new Exception("No record found");
+            }
+
+            return warehouses.Select(x => x.Map()).ToList();
         }
+
 
         public async Task<WarehouseModel> GetWarehouseByBusiness(string belongToBusiness, long warehouseId)
         {
@@ -356,12 +386,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<List<BundleModel>> GetBundleByWarehouseManager(string belongToBusiness, string warehouseMangerId)
+        public async Task<List<BundleModel>> GetBundleByWarehouseManager(string belongToBusiness, string warehouseManagerId, ListQueryParams query)
         {
             var bundles = await _context.Bundles
                 .Include(b => b.BundlePackage)
                 .Include(b => b.OtherBundlePaymentCosts)
-
                 .Where(x => x.BelongToBusinessCode == belongToBusiness)
                 .ToListAsync();
 
@@ -370,31 +399,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return null;
             }
 
-            // Fetch warehouse names for all distinct WarehouseIds in bundles
             var warehouseIds = bundles.Select(b => b.WarehouseId).Distinct().ToList();
-            var warehouses = await _context.Warehouses
-                .Where(w => warehouseIds.Contains(w.Id) && w.ManagedByUserId == warehouseMangerId)
+
+            var warehouseQuery = _context.Warehouses
+                .Where(w => warehouseIds.Contains(w.Id) && w.ManagedByUserId == warehouseManagerId);
+
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                warehouseQuery = warehouseQuery.Where(w => w.OrganizationCode == query.organizationCode);
+            }
+
+            var warehouses = await warehouseQuery
                 .ToDictionaryAsync(w => w.Id, w => w.Name);
 
-            return bundles.Select(bundle =>
-            {
-                var mappedBundle = bundle.Map();
-                if (warehouses.TryGetValue(bundle.WarehouseId, out var warehouseName))
+            return bundles
+                .Where(b => warehouses.ContainsKey(b.WarehouseId)) // Only include bundles whose warehouse is managed by the user (and match org filter)
+                .Select(bundle =>
                 {
-                    mappedBundle.WarehouseName = warehouseName;
-                }
-                return mappedBundle;
-            }).ToList();
+                    var mapped = bundle.Map();
+                    mapped.WarehouseName = warehouses[bundle.WarehouseId];
+                    return mapped;
+                })
+                .ToList();
         }
 
-        //public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
-        //{
-        //    var bundles = await _context.Bundles.Include(b => b.BundlePackage).Where(x => x.BelongToBusinessCode == belongToBusiness
-        //    ).ToListAsync();
-        //    if (bundles == null) { throw new Exception("No record found"); }
-
-        //    return bundles.Select(x => x.Map()).ToList();
-        //}
         public async Task<BundleModel> GetBundleByIdAsync(string belongToBusiness, long bundleId)
         {
             var bundle = await _context.Bundles
