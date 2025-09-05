@@ -1,7 +1,9 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -17,10 +19,14 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly ICafeOneWalletService _cafeOneWalletService;
         private readonly INigeriaStateImporterService _nigeriaStateImporterService;
         private readonly IFlutterwaveService _flutterwaveService;
+        private readonly IGoogleDriveService _googleDriveService;
+        private readonly IIdentityVerificationManager _verificationManager;
 
         private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly ISMSService _smsService;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
+            IGoogleDriveService googleDriveService,
+            IIdentityVerificationManager verificationManager,
             INigeriaStateImporterService nigeriaStateImporterService,
              IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, ISMSService smsService)
         {
@@ -29,6 +35,46 @@ namespace Agrovesto.Backend.API.Controllers
             _nigeriaStateImporterService = nigeriaStateImporterService;
             _flutterwaveService = flutterwaveService;
             _smsService = smsService;
+            _googleDriveService = googleDriveService;
+            _verificationManager = verificationManager;
+        }
+        [HttpPost("supporting-image")]
+        public async Task<IActionResult> UploadImage([FromForm] SupportingDOcument model)
+        {
+            var imageUrl = await _googleDriveService.UploadFileAsync(model.File);
+            return Ok(new { imageUrl });
+        }
+
+        [HttpGet("nin/{nin}")]
+        [ProducesResponseType(typeof(NINDataVerificationResponse<NINData, Verification>), 200)]
+        [ProducesResponseType(typeof(NINDataVerificationResponse<NINData, Verification>), 400)]
+        [ProducesResponseType(typeof(NINDataVerificationResponse<NINData, Verification>), 500)]
+        public async Task<IActionResult> VerifyNIN(string nin)
+        {
+            if (!ModelState.IsValid)
+            {
+                var message = string.Join(" | ", ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage));
+
+                return BadRequest(new Response<NINData>()
+                {
+                    Succeeded = false,
+                    Message = message
+                });
+            }
+            var sendRequest = await _verificationManager.VerifyNIN(new NINDataModel
+            {
+                number= nin,
+            });
+            return Ok(new Response<NINData>()
+            {
+                Code = sendRequest.response_code,
+                Data = sendRequest.nin_data,
+                Succeeded = sendRequest.status,
+               // Message = sendRequest.verification,
+                Message = sendRequest.detail
+            });
         }
 
 

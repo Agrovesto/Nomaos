@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
@@ -45,6 +46,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ITraderRepository, TraderRepository>();
             services.AddScoped<IPaymentProviderRepository, PaymentProviderRepository>();
             services.AddScoped<IDashboardRepository, DashboardRepository>();
+            services.AddScoped<IFarmerCreditScoreRepository, FarmerCreditScoreRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -59,7 +61,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
             services.AddScoped<IDashboardManager, DashboardManager>();
             services.AddScoped<IPayoutManager, PayoutManager>();
-
+            services.AddScoped<IFarmerCreditScoremanager, FarmerCreditScoremanager>();
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<ISMSService, SMSService>();
@@ -67,6 +69,15 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
+            services.AddScoped<IGoogleDriveService, GoogleDriveService>();
+            services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+            //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
+
+
+            services.AddScoped<IMandERepositories, MandERepositories>();
+            services.AddScoped<IActivityEntryRepository, ActivityEntryRepository>();
+            services.AddScoped<IMandEActivityManager, MandEActivityManager>();
+
         }
     }
 }

@@ -16,11 +16,11 @@ namespace Agrovesto.Backend.API.Controllers
     public class FarmManagementController : BaseController
     {
         private readonly IFarmPlotDetailsManager _farmPlotDetailsManager;
-
+        private readonly IBusinessManager _businessManager;
         public FarmManagementController(IHttpContextAccessor httpContextAccessor,
-            IFarmPlotDetailsManager farmPlotDetailsManager) : base(httpContextAccessor)
+            IFarmPlotDetailsManager farmPlotDetailsManager, IBusinessManager businessManager) : base(httpContextAccessor)
         {
-            
+            _businessManager = businessManager;
             _farmPlotDetailsManager = farmPlotDetailsManager;
         }
         [HttpPost("farm-plot-details")]    
@@ -100,18 +100,203 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+               // args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                
-                var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
-                
+                //var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
+                var updateDetail = await _farmPlotDetailsManager.ValidateAndSaveFarm(model, args);
 
-                return Ok(new Response<FarmPlotDetailsModel>()
+
+                return Ok(new Response<(bool isValid, string message)>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = updateDetail.isValid,
+                    Message = updateDetail.message,
+                    Data = updateDetail
+                });
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+
+        [HttpPut("unflag-farm/{farmId}")]
+        public async Task<IActionResult> UnflagFarm([FromQuery] ListQueryParams args, long farmId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                // args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                //var updateDetail = await _farmPlotDetailsManager.UpdateFarmPlotDetails(model, args);
+                var updateDetail = await _farmPlotDetailsManager.UnflagFarmAsync(args, farmId);
+
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = updateDetail,
+                    Message = "Successful",
+                    Data = updateDetail
+                });
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("cooperative-plot-details")]
+        public async Task<IActionResult> GetPlotDetails([FromQuery] ListQueryParams query)
+        {
+
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+                if (query.CooperativeId == 0)
+                {
+                    var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                    query.CooperativeId = coop.Id;
+                }
+
+
+                var plots = await _farmPlotDetailsManager.GetFarmDetailsByCooperative(query);
+
+
+                return Ok(new Response<List<FarmPlotDetailsModel>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = "Successful",
-                    Data = updateDetail
+                    Data = plots
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpGet("business-plot-details")]
+        public async Task<IActionResult> GetBusinessPlotDetails([FromQuery] ListQueryParams query)
+        {
+
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+                if (query.CooperativeId == 0 && currentRole == "Cooperative")
+                {
+                    var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                    query.CooperativeId = coop.Id;
+                }
+
+
+                var plots = await _farmPlotDetailsManager.GetFarmDetailsByBusiness(query);
+
+
+                return Ok(new Response<List<FarmPlotDetailsModel>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = plots
                 });
 
 
@@ -136,6 +321,53 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
+        [HttpGet("plot-audit/{plotId}")]
+        public async Task<IActionResult> GetAuditTrail([FromQuery] BusinessRegistrationArgs query, long plotId)
+        {
+
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+                var audits = await _farmPlotDetailsManager.GetAuditTrail(query, plotId);
+
+
+                return Ok(new Response<List<FarmFlagAuditTrailModel>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = audits
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
 
         [HttpGet("plot-details")]
         public async Task<IActionResult> GetPlotDetails([FromQuery] long farmerId)
@@ -200,6 +432,11 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
 
                 var updateDetail = await _farmPlotDetailsManager.CreateActivityType(model, args);
 
@@ -240,6 +477,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetActivityTypes(query);
                 return Ok(new PagedListResponse<List<FarmActivityTypeModel>>()
@@ -337,6 +580,12 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
@@ -378,6 +627,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByBusiness(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()
@@ -456,10 +711,15 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpGet("business-visitation-logs-by-agent")]
-        public async Task<IActionResult> GetVisitationLogsByOfficerInCharge([FromQuery] BusinessRegistrationArgs query)
+        public async Task<IActionResult> GetVisitationLogsByOfficerInCharge([FromQuery] ListQueryParams query)
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByOfficerInCharge(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()

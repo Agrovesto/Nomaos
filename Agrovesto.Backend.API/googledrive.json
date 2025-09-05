@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "agrovestomaps",
+  "private_key_id": "0e17fd36a17036e71479dcefc74eee62958ea4e5",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCaB2hWnmJZPkmc\n2h5f6rUB1sxcC+Qv3RAogd/ZiGx6a+Xaa6uqZ+suR0922vzDpot7dsYYyI+Rc6U4\ni+qwh6rPw/5vAiEX+Apxys2osZUpg2pgaqT5bYIweiNe5VzNV3zONsR0dPDUviNX\nwv0wP/irSYd07PvnSgK08XP0R4edLMUI0YJ3xEknZbgU0iW0ZP3vMYI0ZhdrREQz\nJRyFOaSBqTSPCDe9Z4bbWdnEn0i8oZpZ+ElLll9+wPY3YsRG7/DpaHCLb2Bhamd3\np2NZ18lZZfzgJnTwN5feNoRYmm75BGSRl/QOuV07lPVjdWYgJwTe52UpHzCNdaUC\nTd7I87UTAgMBAAECggEAQ8/hEsl2OR4gIIsy9j2J5T5hCGE/3AayV3MeT1ItmBQq\nxOfEUyifNOe2R3iP8b9AB2I6Qq0B8CJ+6g9HiuKfxArg2JSSZ1APoRuNQai1J+qw\nibRJ33pj593N9rh6C/lpfAxGn5LgeHkhbEDvYS+41ghwN30iRiiiWnE3AKQBQ6PD\npPx7XjQPsIlCW0Mp1nTdiyIoB4nATMGwJxysZxf9ZJQUkHtwRbD+KKgJ/Sk1m1q/\nr848l0D+oJn4P4N1kwhipgbdrKr6QIEejFKrPXVWtl46SGyAQqpGREXX/YsZS8TP\nLjaupPsOForvoQ7knt0CeMdlLnyJfWZ71/jpUBaQWQKBgQDZedaA6o8vmL4+i//T\n/Y9oYpL8NLqRwEwS+cyw0ENv+p77ydpVgXsVsieolsdwH4deai41GhAthFuVHW/u\nQrIzdHWKEK1Jy0oOu56oexyMMHadJ3TGF0iwrbV53WwgETvfTURm1sw/Fx/Cg37i\nH9CkmbCMPXZlHLtHPc2HOEtARwKBgQC1UFtZnVM22WEdxRIMxxv2GbspoRKdJiW6\nIR/1xl3ApZV+OoBGySDIWIeIEz3PyhMHfG3TzQmJa7hNuCqrlWfOxbzgwIIpgeA5\nYkJ1bqgt23pmsslwCXztQOG/4JNix/cg6wQyW4jUoMDYO5peOV+eSFasb0A0hMV2\ntE1d3VX21QKBgC92bsEd7/gETujZpxC+EvFGKiwO2fT7Ud8GU4z3NvCWcuIi0Jq+\nsn0ur4cUuRwYVXPemo0OTh+Q9mfZz9bhCYE/VnO2Zgtn6ZbDjcHZdIaIASsVNGAT\nLtMYZjXdhD6PZFC8zUPgdx0Bz/Wkuylgpil2PViuBUvV9G186IEtYQb7AoGAKnyK\n+2PXRQoJLM2qHh5mGfQLnISm9PYkbwomEBSMkYD7l9mjh3LH4MqF78f6ev9yGBX7\nMl9gdbgtNuEJ9q0K5zQEv3G8znclkKzKv/PPKve8JeaNN1ix0nKas7ivML2E1kzb\n7eTvGkwVBFZrJNsy4cc3sC5dkDDwiJFVc8JSy4UCgYABQuc36buQLYgrfCeUB8so\nvW2LoFcYGWcD3xC5ZRT32R00jvLBksrh/d/h8oxPPOkvIxWQZWZ/nLIUOgnQGQKj\n9EVINJER44T8Xj3xg71uLubCqg03TNaqUTJTlMKNJTgIfokPtmLDY69e9UwhgfLB\ncqxfm9IQsw+ufwAsmCrYYQ==\n-----END PRIVATE KEY-----\n",
+  "client_email": "agrovesto@agrovestomaps.iam.gserviceaccount.com",
+  "client_id": "118135818937166218499",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/agrovesto%40agrovestomaps.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

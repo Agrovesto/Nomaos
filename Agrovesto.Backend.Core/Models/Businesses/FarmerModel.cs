@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Common;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,7 +15,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public FarmerImagesModel? FarmerImage { get; set; }
         public List<FarmPlotDetailsModel> PlotDetails { get; set; }
         public List<FarmVisitationActivityModel> Visitations { get; set; }
+        public List<RepaymentModel> Repayments { get; set; }
+        public List<FarmerValueChainSelectionDto>? ValueChainItems { get; set; }
+
     }
+
 
 
 
@@ -38,5 +43,27 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
+        public string FarmerCategory { get; set; }
+        public long YearsInAgric { get; set; }
+        public string? HighestLevelOfEducation { get; set; }
+        public List<ValueChainSelectionDto> ValueChainSelections { get; set; }
+        public List<FarmerValueChainSelectionDto>? ValueChainItems { get; set; }
+    }
+    public class FarmerValueChainSelectionDto
+    {
+        public long CategoryId { get; set; }
+        public string CategoryName { get; set; }
+        public long TypeId { get; set; }
+        public string TypeName { get; set; }
+        public long ItemId { get; set; }
+        public string ItemName { get; set; }
+    }
+
+    public class ValueChainSelectionDto
+    {
+        public string ValueChainType { get; set; }
+        public List<string> Items { get; set; }
     }
 }
