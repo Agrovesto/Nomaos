@@ -210,9 +210,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     model.BelongToBusinessCode = args.businessCode;
                     model.CreatedOn = DateTimeOffset.Now;
-
-                    var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode);
-                    if (warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
+                    model.OrganizationCode = args.organizationCode;
+                    var warehouse = await _repository.GetWarehousesByBusiness(model.BelongToBusinessCode, args);
+                    if (warehouse!=null && warehouse.Any(x => x.Name == model.Name && x.Lga == model.Lga && x.State == model.State)) throw new Exception($"A Warehouse with same name exist in {model.Location} {model.Lga} {model.State}");
 
                     createWarehouse = await _repository.CreateWarehouse(model);
 
@@ -274,7 +274,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
                 var agent = await _agentRepository.GetAgentDetailByUserId(userId);
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found for Agent");
-                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, userId);
+                var warehouse = await _repository.GetWarehousesByAgent(business.BusinessCode, userId, query);
                 if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                 {
                     Succeeded = true,
@@ -303,7 +303,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
         public async Task<PagedListResponse<List<WarehouseModel>>> GetWarehousesByBusiness(string userId,
-              ListQueryParams query)
+              BusinessRegistrationArgs query)
         {
             try
             {
@@ -318,7 +318,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
-                var warehouse = await _repository.GetWarehousesByBusiness(business.BusinessCode);
+                var warehouse = await _repository.GetWarehousesByBusiness(business.BusinessCode, query);
                 if (warehouse == null) return new PagedListResponse<List<WarehouseModel>>
                 {
                     Succeeded = true,
@@ -609,6 +609,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = args.businessCode;
                     model.WarehouseId = args.WarehouseId;
                     model.ManagedByUserId = warehouse.UserId;
+                    model.OrganizationCode = args.organizationCode;
                     var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, args.WarehouseId);
 
                     if (input != null && (input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand))) { throw new Exception($"The warehouse already have same stock of input"); }
@@ -981,6 +982,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         model.BundleEquityPlusCommission = model.CommissionPrice + model.BundleEquityPrice;
                         model.BundleEquityPrice += model.CommissionPrice;
                     }
+                    model.OrganizationCode = args.organizationCode;
                     createBundle = await _repository.CreateBundle(model);
 
 
@@ -1011,7 +1013,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var bundles = await _repository.GetBundleByWarehouseManager(business.BusinessCode, userId);
+                var bundles = await _repository.GetBundleByWarehouseManager(business.BusinessCode, userId, query);
                 if (bundles == null) return new PagedListResponse<List<BundleModel>>
                 {
                     Succeeded = true,

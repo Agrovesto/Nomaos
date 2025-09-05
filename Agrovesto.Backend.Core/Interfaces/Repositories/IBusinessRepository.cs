@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<BusinessModel>> GetBusinessesAsync();
         Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode);
         Task<OrganizationModel> GetOrganizationAsync(string organizationCode);
-        Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId);
+        Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode);
         Task<int> OrganizationCount();
     }
 }

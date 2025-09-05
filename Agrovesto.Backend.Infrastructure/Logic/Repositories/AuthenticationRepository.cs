@@ -146,6 +146,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 user.LastLoginDate = DateTimeOffset.Now;
                 await _context.SaveChangesAsync();
+                var userOrganizations = await _context.UserOrganizations
+    .Where(uo => uo.UserId == user.Id)
+    .Select(uo => uo.OrganizationCode)
+    .ToListAsync();
 
                 var userClaims = new List<Claim>
             {
@@ -166,7 +170,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-                new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
+                new Claim("OrganizationCodes", string.Join(",", userOrganizations)),
+
+                //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
                 //new Claim("BelongToBusiness", user.BusinessCode),
 
 
@@ -193,7 +199,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Roles = userRole.ToList(),
                     Token = token,
                     TokenType = TokenType.AccessToken,
-                    organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
+                    OrganizationCodes = userOrganizations
+                    //  organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
                 };
                 return (true, "Successful", response);
             }
@@ -352,88 +359,140 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
-            IdentityResult createUser = new IdentityResult(); model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : model.PhoneNumber;
-            var fetchuser = await _userManager.FindByNameAsync(model.Email);
+            IdentityResult createUser;
+            model.Email = !string.IsNullOrWhiteSpace(model.Email) ? model.Email : model.PhoneNumber;
+
+            // Check if user already exists by email
+            var existingUser = await _userManager.FindByNameAsync(model.Email);
+
             byte[] salt = EncryptionUtil.GetSalt();
             model.Salt = Convert.ToBase64String(salt);
-            User entity = model.Map();
 
-            //var strategy = _context.Database.CreateExecutionStrategy();
-            //await strategy.ExecuteAsync(async () =>
-            //{
-
-            //    using (var dbTransaction = _context.Database.BeginTransaction()) 
-            //    {
-            try
+            if (existingUser != null)
             {
+                // Check if the user is already in this organization
+                bool alreadyInOrg = _context.UserOrganizations.Local.Any(x =>
+                               x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode)
+                           || await _context.UserOrganizations
+                               .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode);
 
-                entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
-                entity.IsActive = true;
-                if (fetchuser == null)
+                if (alreadyInOrg)
                 {
-                    var getuserPhone = await _context.Users.Where(x => x.PhoneNumber == model.PhoneNumber).FirstOrDefaultAsync();
-                    if (getuserPhone != null)
-                    {
-                        return (model, false, "A user with the same phone number exists on the system");
-                    }
-                    if (!string.IsNullOrEmpty(model.BusinessCode))
-                    {
-                        var datePart = DateTime.UtcNow.ToString("yyyyMMdd"); // or any desired date format
-                        var randomDigits = new Random().Next(100, 999); // 3 random digits
-                        entity.Id = $"{model.BusinessCode}{datePart}{randomDigits}";
-                    }
-                    else if (!string.IsNullOrEmpty(model.OrganizationCode))
-                    {
-                       var datePart = DateTime.UtcNow.ToString("yyyyMMdd"); // or any desired date format
-                        var randomDigits = new Random().Next(100, 999); // 3 random digits
-                        entity.Id = $"{model.OrganizationCode}{datePart}{randomDigits}";
-                    }
-                    else
-                    {
-                        entity.Id = Guid.NewGuid().ToString();
-                    }
-
-                    entity.UserType = model.UserType;//Enum.GetName(typeof(UserType), model.UserType);
-
-                    if (string.IsNullOrEmpty(model.Password))
-                    {
-                        createUser = await _userManager.CreateAsync(entity);
-                    }
-                    else
-                    {
-                        createUser = await _userManager.CreateAsync(entity, model.Password); //create passwordless
-                    }
-
-                    if (!createUser.Succeeded) throw new Exception($"Could not create account for {model.FirstName} {entity.UserType}");
-                    entity = await _userManager.FindByNameAsync(entity.Email);
-
-                    var uniqueRole = await _roleManager.FindByNameAsync(roleName);
-                    if (uniqueRole == null) throw new Exception($"Could not find specified role");
-
-                    var addUserToRole = await _userManager.AddToRoleAsync(entity, uniqueRole.Name);
-
-                    if (!addUserToRole.Succeeded) throw new Exception($"Could not add user to specified role; {addUserToRole.Errors.Select(x => x.Description)}");
-
-
-                    //var token = await _userManager.GenerateEmailConfirmationTokenAsync(entity);
-
-                    //var mailUtil = new MailUtilities(_configuration);
-                    //mailUtil.SendWelcomeEmail(model);
-
-                    return (entity.Map(), true, "Success");
-
+                    return (model, false, "User already exists in this organization.");
                 }
-                else
+
+
+                // Add user to new organization
+                _context.UserOrganizations.Add(new UserOrganization
                 {
-                    return (model, false, "Business User already Exist, Kindly contact administrator");
-                }
+                    UserId = existingUser.Id,
+                    OrganizationCode = model.OrganizationCode
+                });
+
+                await _context.SaveChangesAsync();
+                return (existingUser.Map(), true, "User added to new organization.");
             }
-            catch (Exception ex)
+
+   
+
+            // Generate custom user ID
+            var entity = model.Map(); // Ensure this doesn't map a list of organizations
+            entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
+            entity.IsActive = true;
+            entity.UserType = model.UserType;
+            entity.NIN = model.NIN;
+            entity.BVN = model.Bvn;
+            // Generate custom user ID
+            var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
+            var randomDigits = new Random().Next(100, 999);
+           
+            entity.Id = !string.IsNullOrEmpty(model.BusinessCode)
+        ? $"{model.BusinessCode}{datePart}{randomDigits}"
+        : !string.IsNullOrEmpty(model.OrganizationCode)
+            ? $"{model.OrganizationCode}{datePart}{randomDigits}"
+            : Guid.NewGuid().ToString();
+
+
+            // Check for phone number conflict within the same organization
+            var existingPhoneInOrg = await _context.Users
+                .Include(u => u.UserOrganizations)
+                .Where(u => u.PhoneNumber == model.PhoneNumber &&
+                            u.UserOrganizations.Any(o => o.OrganizationCode == model.OrganizationCode))
+                .FirstOrDefaultAsync();
+
+            if (existingPhoneInOrg != null)
             {
-                //await dbTransaction.RollbackAsync();
-                return (model, false, ex.Message);
-
+                return (model, false, "A user with the same phone number exists in this organization.");
             }
+
+            // Register the user in Identity
+            if (string.IsNullOrEmpty(model.Password))
+                createUser = await _userManager.CreateAsync(entity);
+            else
+                createUser = await _userManager.CreateAsync(entity, model.Password);
+
+            if (!createUser.Succeeded)
+            {
+                var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
+                return (model, false, $"Could not create account: {errors}");
+            }
+
+            // Add to Identity role
+            var role = await _roleManager.FindByNameAsync(roleName);
+            if (role == null)
+                return (model, false, "Specified role does not exist.");
+
+            var roleResult = await _userManager.AddToRoleAsync(entity, role.Name);
+            if (!roleResult.Succeeded)
+            {
+                var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+                return (model, false, $"Could not assign role: {errors}");
+            }
+
+            // Add user to organization
+            if (!_context.UserOrganizations.Local.Any(x => x.UserId == entity.Id && x.OrganizationCode == model.OrganizationCode))
+            {
+                _context.UserOrganizations.Add(new UserOrganization
+                {
+                    UserId = entity.Id,
+                    OrganizationCode = model.OrganizationCode
+                });
+            }
+
+
+            await _context.SaveChangesAsync();
+
+            return (entity.Map(), true, "User successfully registered and added to organization.");
+        }
+
+        public async Task<List<string>> GetOrganizationsForUser(string userId)
+        {
+            return await _context.UserOrganizations
+                .Where(x => x.UserId == userId)
+                .Select(x => x.OrganizationCode)
+                .ToListAsync();
+        }
+        public async Task<List<User>> GetUsersInOrganization(string organizationCode)
+        {
+            return await _context.Users
+                .Where(u => u.UserOrganizations.Any(o => o.OrganizationCode == organizationCode))
+                .ToListAsync();
+        }
+
+        public async Task RemoveUserFromOrganization(string userId, string organizationCode)
+        {
+            var userOrg = await _context.UserOrganizations
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.OrganizationCode == organizationCode);
+
+            if (userOrg == null)
+            {
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User is not part of the specified organization.");
+            }
+
+            _context.UserOrganizations.Remove(userOrg);
+            await _context.SaveChangesAsync();
+
+            _log.LogInformation($"User {userId} removed from organization {organizationCode}.");
         }
 
         public async Task TrackUserRoleAssignment(UserModel user, string userType)

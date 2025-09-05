@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,5 +29,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<FarmerModel>> FilterFarmerForDownload(string? businessCode,
    string? organizationCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
         Task<FarmerDetailDto> GetFarmerDetails(string userId);
+        Task<PagedListResponse<List<FarmerDetailDto>>> GetAllFarmerDetails(string businessCode,string? organizationCode =null,long? cooperativeId = null, string? agentUserId = null, string? state = null,  string? sortBy = "Name", bool sortAsc = true);
     }
 }

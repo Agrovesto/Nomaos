@@ -29,5 +29,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(BusinessRegistrationArgs args);
         Task<BundleSubscriptionInterestResponseModel> RetrievePaymentSlip(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args);
         Task<(bool status, BundleSubscriptionInterestModel data)> SettlePendingFarmerBundleSubscriptionEquityToBusiness(BusinessRegistrationArgs args);
+        Task<(bool status, string message)> SaveBundleSubscriptionRepayment(BusinessRegistrationArgs args, RepaymentBreakdownModel model);
     }
 }

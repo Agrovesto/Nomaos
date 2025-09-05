@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -178,7 +179,6 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
 // Register your service
-builder.Services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
 builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
@@ -222,7 +222,8 @@ app.UseSwaggerUI(c =>
 
 //    try
 //    {
-//        await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        //await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        await DbInitializer.SeedWeight(services);
 //    }
 //    catch (Exception ex)
 //    {
@@ -234,6 +235,18 @@ app.UseSwaggerUI(c =>
 //    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
 //    await importer.ImportLocationsFromJsonAsync();
 //}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var importer = scope.ServiceProvider.GetRequiredService<IFarmerCategoryService>();
+//    await importer.ImportFarmerValuesFromJsonAsync();
+//}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+//    db.Database.Migrate();
+//    await SeedData.EnsureSeededAsync(db);
+//}
+
 
 
 app.UseCors();

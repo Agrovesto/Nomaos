@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -21,7 +23,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double Longitude4 { get; set; }
         public string FarmLocation { get; set; }
         public string FarmState { get; set; }
+       
         public string FarmLga { get; set; }
+        public string FarmWard { get; set; }
+       
 
         public string CoordinateTakenBy { get; set; }
         public string CoordinateTakenByUserId { get; set; }
@@ -32,5 +37,32 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? OrganizationCode { get; set; }
 
+        // Flagging logic
+        public bool IsFarmFlaggedBySystem { get; set; }
+        public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
+        public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
+
+        // Unflagging audit
+        public bool UnflagFarm { get; set; }
+        public string? FarmUnflaggedByUserId { get; set; }
+        public string? FarmUnflaggedByName { get; set; }
+        public DateTimeOffset? UnflaggedOn { get; set; }
+        public ICollection<FarmFlagAuditTrail> AuditTrails { get; set; } = new List<FarmFlagAuditTrail>();
+
     }
+    public class FarmFlagAuditTrail
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public long FarmPlotDetailsId { get; set; }
+        public string Action { get; set; } // e.g. "Flagged", "Unflagged"
+        public string PerformedByUserId { get; set; }
+        public string PerformedByName { get; set; }
+        public DateTimeOffset PerformedOn { get; set; } = DateTimeOffset.UtcNow;
+        public string Remarks { get; set; } // e.g. reason for flag/unflag
+
+        public virtual FarmPlotDetails FarmPlotDetails { get; set; }
+    }
+
 }
