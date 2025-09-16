@@ -18,7 +18,7 @@ using Amazon.Rekognition.Model;
 using DocumentFormat.OpenXml.InkML;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Serilog;
+
 using System;
 using System.Collections.Generic;
 using System.Data.Common;

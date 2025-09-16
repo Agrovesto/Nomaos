@@ -17,7 +17,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
