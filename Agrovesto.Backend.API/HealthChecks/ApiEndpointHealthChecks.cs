@@ -198,7 +198,7 @@ namespace Agrovesto.Backend.API.HealthChecks
             // Check if key services are registered and can be resolved
             var servicesToCheck = new[]
             {
-                typeof(Core.Interfaces.Managers.IAuthenticationRepository),
+                typeof(Core.Interfaces.Repositories.IAuthenticationRepository),
                 typeof(Core.Interfaces.Managers.IBusinessManager),
                 typeof(Core.Interfaces.Managers.IWalletManager),
                 typeof(Infrastructure.DB.DataContext)
