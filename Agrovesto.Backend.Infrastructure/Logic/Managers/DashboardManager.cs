@@ -8,7 +8,6 @@ using Agrovesto.Backend.Core.Models.Common.Dashboard;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Logging;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Globalization;

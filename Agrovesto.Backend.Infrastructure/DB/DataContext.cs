@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using DocumentFormat.OpenXml.Bibliography;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -99,9 +100,12 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DataContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-        optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
-          // optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
-              
+       // optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
+          //optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
+          optionsBuilder.UseSqlServer("Data Source = agrovestodbinstance.cxgc0aq4mmfo.eu - west - 1.rds.amazonaws.com; Initial Catalog = agrovestodbinstance; User Id = agrovesto; Password = sphRm,5WSQcwXlGZvxbkib,R7K8D52",
+
+
+
                 options =>
             options.MigrationsAssembly("Agrovesto.Backend.API"));
 

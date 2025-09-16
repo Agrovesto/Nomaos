@@ -19,7 +19,7 @@ using CafeOneAuthResponse = Agrovesto.Backend.Core.Models.Common.CafeOneAuthResp
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Amazon.Runtime.Internal.Endpoints.StandardLibrary;
-using Elasticsearch.Net;
+
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
 
