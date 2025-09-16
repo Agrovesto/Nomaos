@@ -6,9 +6,10 @@ using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 using Agrovesto.Backend.Infrastructure.Utilities;
+
+using Agrovesto.Backend.Core.Models.Businesses;
 using SendGrid.Helpers.Mail;
 using SendGrid;
-using Agrovesto.Backend.Core.Models.Businesses;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 {

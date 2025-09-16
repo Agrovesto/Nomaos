@@ -1,12 +1,13 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Services;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using Serilog;
 using Serilog.Context;
 using Serilog.Core;
 using Serilog.Sinks.Elasticsearch;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
 {
