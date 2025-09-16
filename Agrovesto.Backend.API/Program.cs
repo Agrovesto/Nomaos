@@ -127,7 +127,7 @@ builder.Services.AddHealthChecks()
         options.BucketName = builder.Configuration["AWS:BucketName"];
         options.AccessKey = builder.Configuration["AWS:AccessKey"];
         options.SecretKey = builder.Configuration["AWS:SecretKey"];
-        options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
+       // options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
     }, name: "AWS S3", tags: new[] { "external", "storage" })
     
     // API endpoint health checks
