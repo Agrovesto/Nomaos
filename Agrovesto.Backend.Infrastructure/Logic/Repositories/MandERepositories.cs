@@ -29,10 +29,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var activityTypes =  _db.MandEActivityTypes.Where(x => x.BelongToBusinessCode == businessCode)
                 .AsQueryable();
 
-            if (!string.IsNullOrEmpty(query.organizationCode))
-            {
-                activityTypes = activityTypes.Where(x => x.OrganizationCode == query.organizationCode);
-            }
+            //if (!string.IsNullOrEmpty(query.organizationCode))
+            //{
+            //    activityTypes = activityTypes.Where(x => x.OrganizationCode == query.organizationCode);
+            //}
 
             var result = await activityTypes
                .Skip(query.PageNumber)
@@ -58,8 +58,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     {
         Task AddAsync(MandEFarmActivity entry);
         Task<List<MandEFarmActivity>> GetByFarmerAsync(string farmerUserId);
-        Task<List<MandEFarmActivity>> GetMandELogsAsync();
-        Task<List<MandEFarmActivity>> GetMandELogsAsync(long subActivityId);
+        Task<List<MandEFarmActivity>> GetMandELogsAsync(ListQueryParams args);
+        Task<List<MandEFarmActivity>> GetMandELogsAsync(long subActivityId, ListQueryParams args);
     }
 
     public class ActivityEntryRepository : IActivityEntryRepository
@@ -81,17 +81,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
 
-        public Task<List<MandEFarmActivity>> GetMandELogsAsync() =>
-            _db.MandEFarmActivities.AsNoTracking()
-               // .Where(x => x.FarmerUserId == farmerUserId)
+        public Task<List<MandEFarmActivity>> GetMandELogsAsync(ListQueryParams args)
+        {
+            var query = _db.MandEFarmActivities.AsNoTracking();
+
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == args.organizationCode);
+            }
+
+            return query
                 .OrderByDescending(x => x.ActivityDate)
                 .ToListAsync();
+        }
 
-        public Task<List<MandEFarmActivity>> GetMandELogsAsync(long subActivityId) =>
-           _db.MandEFarmActivities.AsNoTracking()
-                .Where(x => x.MandESubActivityId == subActivityId)
-               .OrderByDescending(x => x.ActivityDate)
-               .ToListAsync();
+        public Task<List<MandEFarmActivity>> GetMandELogsAsync(long subActivityId, ListQueryParams args)
+        {
+            var query = _db.MandEFarmActivities
+                .AsNoTracking()
+                .Where(x => x.MandESubActivityId == subActivityId);
+
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == args.organizationCode);
+            }
+
+            return query
+                .OrderByDescending(x => x.ActivityDate)
+                .ToListAsync();
+        }
 
     }
 
