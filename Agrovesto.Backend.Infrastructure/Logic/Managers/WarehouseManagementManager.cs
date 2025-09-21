@@ -57,8 +57,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                     }
-
-                    var warehouse = await _repository.GetWarehouseInputTransit(business.BusinessCode);
+                    query.businessCode = business.BusinessCode;
+                    var warehouse = await _repository.GetWarehouseInputTransit(query);
                     if (warehouse == null) return new Response<List<WarehouseInputTransitModel>>
                     {
                         Succeeded = true,
@@ -98,9 +98,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
+                query.businessCode = business.BusinessCode;
 
-
-                var warehouse = await _repository.GetWarehouseSummaryByBusiness(business.BusinessCode);
+                var warehouse = await _repository.GetWarehouseSummaryByBusiness(query);
                 if (warehouse == null) return new Response<List<WarehouseSummaryMetrics>>
                 {
                     Succeeded = true,
@@ -923,7 +923,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
 
-        public async Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args)
+        public async Task<BundleModel> CreateBundleAsync(BundleModel model, ListQueryParams args)
         {
             if (model.BundlePackage == null || model.BundlePackage.Count == 0)
                 throw new ArgumentException("Bundle must contain at least one item.");
@@ -969,8 +969,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     { throw new Exception("Total Bundle Cost calculation mismatched"); }
                     model.CreatedBy = args.UserId;
                     model.BelongToBusinessCode = business.BusinessCode;
-
-                    var bundles = await _repository.GetBundleByBusiness(business.BusinessCode);
+                    args.businessCode = business.BusinessCode;
+                    var bundles = await _repository.GetBundleByBusiness(args);
                     if (bundles != null && bundles.Any(x => x.Name == model.Name)) throw new Exception($"There is an existing bundle package with same name");
 
                     if (model.IsPercentageEquity)
@@ -1053,8 +1053,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
-                var bundles = await _repository.GetBundleByBusiness(business.BusinessCode);
+                query.businessCode = business.BusinessCode;
+                var bundles = await _repository.GetBundleByBusiness(query);
                 if (bundles == null) return new PagedListResponse<List<BundleModel>>
                 {
                     Succeeded = true,

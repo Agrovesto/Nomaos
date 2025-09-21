@@ -1829,12 +1829,12 @@ ListQueryParams query, string imageKey)
 
                         var registrationMode = new UserModel
                         {
-                            Email = org.ContactEmail,
+                            Email = org.OrganizationEmail,
                             FirstName = org.OrganizationName,
                             Password = org.Password,
                             PhoneNumber = org.Contact,
                             UserType = Enum.GetName(typeof(UserType), UserType.Organization),//UserType.Business,
-                            CreatedBy = args.UserId,
+                            CreatedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : "Self-Registration",
                             CreatedOn = DateTimeOffset.Now,
                             BusinessCode = args.businessCode,
                             OrganizationCode= org.OrganizationCode,

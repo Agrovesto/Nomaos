@@ -79,7 +79,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpPost("bundle")]
-        public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");

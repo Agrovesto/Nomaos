@@ -147,7 +147,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _svc.GetMandELogsAsync();
+                var result = await _svc.GetMandELogsAsync(query);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
                 {
                     Data = result,
@@ -192,7 +192,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _svc.GetMandELogsAsync(subActivityId);
+                var result = await _svc.GetMandELogsAsync(subActivityId,query);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
                 {
                     Data = result,
