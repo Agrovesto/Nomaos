@@ -189,8 +189,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
-
-                var bizEntities = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
+                query.businessCode = business.BusinessCode;
+                var bizEntities = await _repository.FarmerBundleSubscriptions(query);
                 if (bizEntities == null) return new Response<List<SubscriptionData>>
                 {
                     Succeeded = false,
@@ -263,8 +263,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
-
-                var subscription = await _repository.FarmerBundleSubscriptions(business.BusinessCode);
+                query.businessCode = business.BusinessCode;
+                var subscription = await _repository.FarmerBundleSubscriptions(query);
                 if (subscription == null) return new Response<List<SubscriptionData>>
                 {
                     Succeeded = true,
@@ -304,8 +304,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
                 }
-
-                var subscription = await _repository.FarmerBundleSubscriptionInterests(business.BusinessCode);
+                query.businessCode = business.BusinessCode;
+                var subscription = await _repository.FarmerBundleSubscriptionInterests(query);
                 if (subscription == null) return new Response<List<BundleSubscriptionSummary>>
                 {
                     Succeeded = true,
@@ -337,7 +337,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var requestsByBusiness = await _repository.GetSubscriptionInterestByBusiness(args.businessCode, args.PageNumber, args.PageSize, args.startDate, args.endDate, args.Location);
+            var requestsByBusiness = await _repository.GetSubscriptionInterestByBusiness(args.businessCode, args.PageNumber, args.PageSize, args.startDate, args.endDate, args.Location, args.organizationCode);
             if (requestsByBusiness == null) return null;
 
 
@@ -1126,7 +1126,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                ?? throw new Exception("Business does not exist");
 
             args.UserId ??= business.UserId;
-            var requestsByBusiness = await _repository.GetDisbursementByBusiness(args.businessCode, args.PageNumber, args.PageSize, args.startDate, args.endDate, args.Location, args.WarehouseManger);
+            var requestsByBusiness = await _repository.GetDisbursementByBusiness(args.businessCode, args.PageNumber, args.PageSize, args.startDate, args.endDate, args.Location, args.WarehouseManger, args.organizationCode);
             if (requestsByBusiness == null) return null;
 
             return requestsByBusiness;

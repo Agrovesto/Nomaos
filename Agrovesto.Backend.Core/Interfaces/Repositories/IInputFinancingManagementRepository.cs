@@ -15,14 +15,14 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
       int pageSize = 10,
          DateTimeOffset? startDate = null,
          DateTimeOffset? endDate = null,
-         string? location = null);
+         string? location = null, string? organizationCode = null);
         Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByCooperative(string businessCode, long CooperativeId);
         Task<List<BundleSubscriptionInterestModel>> GetUnpaidSubscriptionInterestByFarmer(BundleSubscriptionInterestModel data);
         Task<List<BundleSubscriptionInterestModel>> GetSubscriptionInterestByLocation(string businessCode, string Location);
         Task<BundleSubscriptionInterestModel> UpdateSubscriptionPayment(BundleSubscriptionInterestModel model);
-        Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode);
+        Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(ListQueryParams args);
         //   Task<SubscriptionMetrics> FarmerBundleSubscriptions(string businessCode);
-        Task<List<SubscriptionData>> FarmerBundleSubscriptions(string businessCode);
+        Task<List<SubscriptionData>> FarmerBundleSubscriptions(ListQueryParams args);
         Task<BundleSubscriptionInterestModel> GetPaidSubscriptionByFarmer(string businessCode, string farmerUserId, string reference);
         Task<BundleDisbursementModel> GetDisbursedSubscription(string businessCode, string farmerUserId, string reference);
         Task<BundleDisbursementModel> UpdateDisbursement(BundleDisbursementModel model);
@@ -37,7 +37,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model);
         Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference);
         Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(string businessCode, string warehouseManger, int pageNumber = 1, int pageSize = 10, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null, string? disbursedBy = null);
-        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(string businessCode, int pageNumber = 1, int pageSize = 10, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null, string? disbursedBy = null);
+        Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(string businessCode, int pageNumber = 1, int pageSize = 10, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null, string? disbursedBy = null, string? organizationCode =null);
         Task<List<BundleDisbursementModel>> FilterDisbursementForDownload(string? businessCode, string? disbursedBy, string? state, DateTime? startDate, DateTime? endDate);
         Task<List<BundleSubscriptionInterestModel>> FilterSubscriptionForDownload(string? businessCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
         Task<List<BundleSubscriptionInterestModel>> GetFarmerSubscriptionInterestDetails(BundleSubscriptionInterestModel data);
