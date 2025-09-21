@@ -4,6 +4,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using DocumentFormat.OpenXml.Bibliography;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -154,41 +155,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         #endregion warehousemgt
 
         #region BundleManagement
-        public async Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(string businessCode)
+        public async Task<List<WarehouseInputTransitModel>> GetWarehouseInputTransit(ListQueryParams args)
         {
-            var query = await
-                              //(
-                              //from 
-                              //w in _context.WarehouseInputInventories
-                              //join d in
-                              //_context.InputDeliveryTrackers. 
-                              //on w.WarehouseId equals d.WarehouseId
-                              // Where w.BelongToBusinessCode == businessCode
-                              _context.InputDeliveryTrackers.Where(w => w.BusinessCode == businessCode)
-                               .Select(w => new WarehouseInputTransitModel
-                               {
-                                   WarehouseId = w.WarehouseId,
-                                   WarehouseInputInventoryId = w.Id,
-                                   Status = w.Status,
-                                   InputName = w.InputName,
-                                   QuantityLoaded = w.QuantityLoaded,
-                                   QuantityDelivered = w.QuantityDelivered,
-                                   QuantityReceived = w.QuantityReceived,
-                                   DeliveredTo = w.DeliveredTo,
-                                   DeliveredBy = w.DeliveredBy,
-                                   Reference = w.Reference,
-                                   TransitStatus = w.Status,
-                                   DeliveryContact = w.DeliveryContact,
-                                   PickupLocation = w.PickupLocation,
-                                   DeliveryLocation = w.DeliveryLocation,
-                                   // LogisticType = d.LogisticType,
-                                   LogisticNumber = w.LogisticNumber,
-                                   DateReceived = w.DeliveryDate,
-                                   DateShipped = w.Shipmentdate,
-                                   From = w.PickupLocation,
-                                   To = w.DeliveredTo,
-                                   TrackingId = w.Reference
-                               }).ToListAsync();
+            var queryable = _context.InputDeliveryTrackers
+                .Where(w => w.BusinessCode == args.businessCode);
+
+            // Conditionally apply organizationCode filter
+            if (!string.IsNullOrEmpty(args.organizationCode))
+            {
+                queryable = queryable.Where(w => w.OrganizationCode == args.organizationCode);
+            }
+
+            var query = await queryable
+                .Select(w => new WarehouseInputTransitModel
+                {
+                    WarehouseId = w.WarehouseId,
+                    WarehouseInputInventoryId = w.Id,
+                    Status = w.Status,
+                    InputName = w.InputName,
+                    QuantityLoaded = w.QuantityLoaded,
+                    QuantityDelivered = w.QuantityDelivered,
+                    QuantityReceived = w.QuantityReceived,
+                    DeliveredTo = w.DeliveredTo,
+                    DeliveredBy = w.DeliveredBy,
+                    Reference = w.Reference,
+                    TransitStatus = w.Status,
+                    DeliveryContact = w.DeliveryContact,
+                    PickupLocation = w.PickupLocation,
+                    DeliveryLocation = w.DeliveryLocation,
+                    LogisticNumber = w.LogisticNumber,
+                    DateReceived = w.DeliveryDate,
+                    DateShipped = w.Shipmentdate,
+                    From = w.PickupLocation,
+                    To = w.DeliveredTo,
+                    TrackingId = w.Reference
+                })
+                .ToListAsync();
 
             return query;
         }
@@ -258,27 +260,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //        if (query.Count == 0) { return null; }
         //        return query;
         //    }
-        public async Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(string businessCode)
+        public async Task<List<WarehouseSummaryMetrics>> GetWarehouseSummaryByBusiness(ListQueryParams args)
         {
-            var query = await _context.Warehouses
-     .Where(w => w.BelongToBusinessCode == businessCode)
-     .Select(w => new WarehouseSummaryMetrics
-     {
-         WarehouseName = w.Name,
-         Location = w.Location,
-         StockSummary = _context.WarehouseInputInventories
-             .Where(wi => wi.WarehouseId == w.Id)
-             .GroupBy(wi => wi.InputName)
-             .Select(g => new WarehouseSummary
-             {
-                 Name = g.Key,
-                 Value = g.Sum(wi => wi.UnitBalance),
-                 InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
-             })
-             .ToList()
-     })
-     .ToListAsync();
-            if (query.Count == 0) { return null; }
+            var queryable = _context.Warehouses
+                .Where(w => w.BelongToBusinessCode == args.businessCode);
+
+            // Conditionally apply organizationCode filter
+            if (!string.IsNullOrEmpty(args.organizationCode))
+            {
+                queryable = queryable.Where(w => w.OrganizationCode == args.organizationCode);
+            }
+
+            var query = await queryable
+                .Select(w => new WarehouseSummaryMetrics
+                {
+                    WarehouseName = w.Name,
+                    Location = w.Location,
+                    StockSummary = _context.WarehouseInputInventories
+                        .Where(wi => wi.WarehouseId == w.Id)
+                        .GroupBy(wi => wi.InputName)
+                        .Select(g => new WarehouseSummary
+                        {
+                            Name = g.Key,
+                            Value = g.Sum(wi => wi.UnitBalance),
+                            InitialStockUp = g.Sum(wi => wi.UnitStockedUp)
+                        })
+                        .ToList()
+                })
+                .ToListAsync();
+
+            if (query.Count == 0)
+            {
+                return null;
+            }
+
             return query;
         }
         public async Task<BundleModel> CreateBundle(BundleModel model)
@@ -355,13 +370,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-        public async Task<List<BundleModel>> GetBundleByBusiness(string belongToBusiness)
+        public async Task<List<BundleModel>> GetBundleByBusiness(ListQueryParams query)
         {
-            var bundles = await _context.Bundles
+            
+
+            var bundlequery = _context.Bundles
+                .AsNoTracking()
                 .Include(b => b.BundlePackage)
                 .Include(b => b.OtherBundlePaymentCosts)
-                .Where(x => x.BelongToBusinessCode == belongToBusiness)
-                .ToListAsync();
+                .Where(x => x.BelongToBusinessCode == query.businessCode);
+
+            //    .ToListAsync();
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                bundlequery = bundlequery.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+            var bundles = await bundlequery.ToListAsync();
 
             if (bundles == null || !bundles.Any())
             {
@@ -388,11 +412,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<BundleModel>> GetBundleByWarehouseManager(string belongToBusiness, string warehouseManagerId, ListQueryParams query)
         {
-            var bundles = await _context.Bundles
+            var bundlequery = _context.Bundles
+                .AsNoTracking()
                 .Include(b => b.BundlePackage)
                 .Include(b => b.OtherBundlePaymentCosts)
-                .Where(x => x.BelongToBusinessCode == belongToBusiness)
-                .ToListAsync();
+                .Where(x => x.BelongToBusinessCode == query.businessCode);
+
+            //    .ToListAsync();
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                bundlequery = bundlequery.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+            var bundles = await bundlequery.ToListAsync();
 
             if (bundles == null || !bundles.Any())
             {

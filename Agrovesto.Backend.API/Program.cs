@@ -210,7 +210,7 @@ if (app.Environment.IsDevelopment())
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Agrovesto Enterprise Platform ");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
     c.DocumentTitle = "Agrovesto Enterprise Platform";
     //  c.RoutePrefix = "/docs";
 

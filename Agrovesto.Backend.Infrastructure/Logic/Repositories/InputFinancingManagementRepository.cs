@@ -23,20 +23,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
-        public async Task<List<SubscriptionData>> FarmerBundleSubscriptions(string businessCode)
+        public async Task<List<SubscriptionData>> FarmerBundleSubscriptions(ListQueryParams args)
         {
-            var query = await _context.BundleSubscriptionInterests
-                .Where(w => w.BelongToBusinessCode == businessCode)
+            var queryable = _context.BundleSubscriptionInterests
+                .Where(w => w.BelongToBusinessCode == args.businessCode);
+
+            // Conditionally apply organizationCode filter
+            if (!string.IsNullOrEmpty(args.organizationCode))
+            {
+                queryable = queryable.Where(w => w.OrganizationCode == args.organizationCode);
+            }
+
+            var query = await queryable
                 .GroupBy(b => 1) // Group everything together to get overall counts
                 .Select(g => new
                 {
-                    ActiveSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid) || b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.AllowedDebit)),
+                    ActiveSubscribers = g.Count(b =>
+                        b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Paid) ||
+                        b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.AllowedDebit)),
                     PendingSubscribers = g.Count(b =>
                         b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Pending) ||
                         b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Initial)),
-                    OverdueSubscribers = g.Count(b => b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
+                    OverdueSubscribers = g.Count(b =>
+                        b.PaymentStatus == Enum.GetName(typeof(EquityPaymentStatus), EquityPaymentStatus.Partial_Payment))
                 })
-                .FirstOrDefaultAsync(); // We expect a single object as output
+                .FirstOrDefaultAsync();
 
             if (query == null)
             {
@@ -50,6 +61,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         new SubscriptionData { Name = "Overdue Subscribers", Value = query.OverdueSubscribers }
     };
         }
+
 
         #region report
         public async Task<List<BundleSubscriptionInterestModel>> FilterSubscriptionForDownload(
@@ -136,18 +148,31 @@ DateTime? endDate)
 
         #endregion report
 
-        public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(string businessCode)
+        public async Task<List<BundleSubscriptionSummary>> FarmerBundleSubscriptionInterests(ListQueryParams args)
         {
-            var query = await _context.BundleSubscriptionInterests
-                .Where(w => w.BelongToBusinessCode == businessCode)
-                .GroupBy(b => b.InterestedBundleName) // Assuming BundleName represents the bundle type
+            var queryable = _context.BundleSubscriptionInterests
+                .Where(w => w.BelongToBusinessCode == args.businessCode);
+
+            // Conditionally apply organizationCode filter
+            if (!string.IsNullOrEmpty(args.organizationCode))
+            {
+                queryable = queryable.Where(w => w.OrganizationCode == args.organizationCode);
+            }
+
+            var query = await queryable
+                .GroupBy(b => b.InterestedBundleName) // Group by bundle type
                 .Select(g => new BundleSubscriptionSummary
                 {
                     Name = g.Key,
                     Value = g.Count() // Count number of farmers subscribed to each bundle
                 })
                 .ToListAsync();
-            if (query.Count == 0) { return null; }
+
+            if (query.Count == 0)
+            {
+                return null;
+            }
+
             return query;
         }
         public async Task<(bool status, BundleSubscriptionInterestModel data)> CreateInputFinancingInterestThroughBundle(BundleSubscriptionInterestModel data)
@@ -298,12 +323,16 @@ DateTime? endDate)
       int pageSize = 10,
          DateTimeOffset? startDate = null,
          DateTimeOffset? endDate = null,
-         string? location = null)
+         string? location = null,
+         string? organizationCode =null)
         {
             var query = _context.BundleSubscriptionInterests.Where(x => x.BelongToBusinessCode == businessCode
             ).AsQueryable();
 
-
+            if (!string.IsNullOrEmpty(organizationCode))
+            {
+                query=query.Where(x=>x.OrganizationCode==organizationCode);
+            }
 
             if (startDate.HasValue)
             {
@@ -468,17 +497,19 @@ DateTime? endDate)
             return interest.Map();
         }
 
-        public async Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(string businessCode, int pageNumber = 1,
-int pageSize = 10,
-  DateTimeOffset? startDate = null,
-  DateTimeOffset? endDate = null,
-  string? location = null,
-  string? disbursedBy =null)
+        public async Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByBusiness(
+    string businessCode,
+    int pageNumber = 1,
+    int pageSize = 10,
+    DateTimeOffset? startDate = null,
+    DateTimeOffset? endDate = null,
+    string? location = null,
+    string? disbursedBy = null,
+    string? organizationCode = null)
         {
-            var query = _context.BundleSubscriptionDisbursements.Where(x => x.BelongToBusinessCode == businessCode
-            ).AsQueryable();
-
-
+            var query = _context.BundleSubscriptionDisbursements
+                .Where(x => x.BelongToBusinessCode == businessCode)
+                .AsQueryable();
 
             if (startDate.HasValue)
             {
@@ -494,26 +525,35 @@ int pageSize = 10,
             {
                 query = query.Where(x => x.Location == location);
             }
+
             if (!string.IsNullOrWhiteSpace(disbursedBy))
             {
                 query = query.Where(x => x.DisbursedBy == disbursedBy);
             }
-            if (query.Count() == 0) { return null; }
+
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == organizationCode);
+            }
+
             var totalCount = await query.CountAsync();
-            var data = await query.OrderByDescending(x => x.DisbursedOn)
+            if (totalCount == 0) { return null; }
+
+            var data = await query
+                .OrderByDescending(x => x.DisbursedOn)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => x.Map()).ToListAsync();
+                .Select(x => x.Map())
+                .ToListAsync();
+
             return new PagedListResponse<List<BundleDisbursementModel>>
             {
-                Data = data,//pagedResult.Select(x => x.Map()).ToList(),
+                Data = data,
                 Count = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
             };
-
         }
-
 
         public async Task<PagedListResponse<List<BundleDisbursementModel>>> GetDisbursementByAgent(string businessCode, string warehouseManger,int pageNumber = 1,
 int pageSize = 10,

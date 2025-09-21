@@ -614,14 +614,14 @@ namespace Agrovesto.Backend.API.Controllers
                 var result = await _inputFinancingManagement.GetDisbursementByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
                 {
-                    Data = result.Data,
+                    Data = result !=null ? result.Data : null,
                     Message = result.Count !=0 ? "Successful" : "No Record",
                     Succeeded = result.Count != 0 ? true : false,
                     Count = result.Count,
                    PageNumber = result.PageNumber,
                     PageSize = 10,
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                }); ;
+                }); 
             }
             catch (BaseException ex)
             {
