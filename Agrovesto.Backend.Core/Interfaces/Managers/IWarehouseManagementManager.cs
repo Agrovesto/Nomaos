@@ -13,7 +13,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<bool> AddMoreInputToStock(InputUpdateModel model, BusinessRegistrationArgs args);
         Task<InputDeliveryTrackerModel> ConfirmInputShipment(InputDeliveryTrackerModel model, BusinessRegistrationArgs args);
         Task<InputDeliveryTrackerModel> ConfirmReceiptOfInput(InputDeliveryTrackerModel model, BusinessRegistrationArgs args);
-        Task<BundleModel> CreateBundleAsync(BundleModel model, BusinessRegistrationArgs args);
+        Task<BundleModel> CreateBundleAsync(BundleModel model, ListQueryParams args);
         Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel model, BusinessRegistrationArgs args);
         Task<(bool status, WarehouseUserModel data)> CreateWarehouseManager(WarehouseUserModel model, BusinessRegistrationArgs args);
         Task<bool> DepleteFromInput(InputUpdateModel model, BusinessRegistrationArgs args);

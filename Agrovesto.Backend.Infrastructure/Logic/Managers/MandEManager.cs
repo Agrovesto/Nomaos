@@ -28,8 +28,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         Task<IEnumerable<SubMandEActivityModel>> GetSubActivitiesAsync(long activityTypeId);
         Task<IEnumerable<TrackableMandEFieldModel>> GetFieldsAsync(long subActivityId);
         Task<long> SubmitEntryAsync(SubmitFarmerActivityEntryModel dto, BusinessRegistrationArgs args);
-        Task<List<MandEActivityLogModel>> GetMandELogsAsync();
-        Task<List<MandEActivityLogModel>> GetMandELogsAsync(long subActivityId);
+        Task<List<MandEActivityLogModel>> GetMandELogsAsync(ListQueryParams args);
+        Task<List<MandEActivityLogModel>> GetMandELogsAsync(long subActivityId, ListQueryParams args);
     }
 
     public class MandEActivityManager : IMandEActivityManager
@@ -156,9 +156,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
 
-        public async Task<List<MandEActivityLogModel>> GetMandELogsAsync()
+        public async Task<List<MandEActivityLogModel>> GetMandELogsAsync(ListQueryParams args)
         {
-            var logs = await _entries.GetMandELogsAsync();
+            var logs = await _entries.GetMandELogsAsync(args);
             return logs.Select(l => new MandEActivityLogModel
             {
                 Id = l.Id,
@@ -176,9 +176,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }).ToList();
         }
 
-        public async Task<List<MandEActivityLogModel>> GetMandELogsAsync(long subActivityId)
+        public async Task<List<MandEActivityLogModel>> GetMandELogsAsync(long subActivityId, ListQueryParams args)
         {
-            var logs = await _entries.GetMandELogsAsync(subActivityId);
+            var logs = await _entries.GetMandELogsAsync(subActivityId,args);
             return logs.Select(l => new MandEActivityLogModel
             {
                 Id = l.Id,

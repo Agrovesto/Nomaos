@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-
+        [AllowAnonymous]
         [HttpPost("register-organization")]
         public async Task<IActionResult> CreateOrganization([FromBody] OrganizationModel model, [FromQuery] BusinessRegistrationArgs args)
         {
@@ -396,6 +396,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.FarmerBundleSubscriptions(query);
                 return Ok(new Response<List<SubscriptionData>>()
@@ -431,6 +437,12 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetBundleSubscriptionAnalysisByBusiness(query);
                 return Ok(new Response<List<BundleSubscriptionSummary>>()
