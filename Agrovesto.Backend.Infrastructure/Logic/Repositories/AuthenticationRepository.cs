@@ -166,7 +166,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName),
                 new Claim(JwtRegisteredClaimNames.Iss, _configuration["JWT:Issuer"]),
                 new Claim(JwtRegisteredClaimNames.Aud, _configuration["JWT:Audience"]),
-                new Claim(JwtRegisteredClaimNames.Exp, DateTime.Now.AddDays(1).ToString()),
              //   new Claim("WalletId", userWallet.WalletId.ToString()),
                 new Claim("Role", string.Join(',' ,userRole)),
                 new Claim("UserType", user.UserType),
