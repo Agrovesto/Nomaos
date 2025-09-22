@@ -150,6 +150,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     .Select(uo => uo.OrganizationCode)
     .ToListAsync();
 
+                var organizationCodes = (userOrganizations != null && userOrganizations.Any())
+                    ? string.Join(",", userOrganizations)
+                    : null;
+
+
                 var userClaims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, $"{user.UserName}"),
@@ -169,7 +174,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-                new Claim("OrganizationCodes", string.Join(",", userOrganizations)),
+                new Claim("OrganizationCodes", string.Join(",", organizationCodes)),
 
                 //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
                 //new Claim("BelongToBusiness", user.BusinessCode),
