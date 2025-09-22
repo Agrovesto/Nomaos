@@ -174,7 +174,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 new Claim("Email", user.Email),
                 new Claim("LastLogin", user.LastLoginDate.ToString()),
                 new Claim("MemberSince", user.CreatedOn.ToString()),
-                new Claim("OrganizationCodes", string.Join(",", organizationCodes)),
+            new Claim("OrganizationCodes", organizationCodes ?? string.Empty),
+
 
                 //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
                 //new Claim("BelongToBusiness", user.BusinessCode),
