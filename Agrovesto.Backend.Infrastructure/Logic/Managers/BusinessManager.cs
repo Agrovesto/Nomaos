@@ -1879,8 +1879,8 @@ ListQueryParams query, string imageKey)
                     {
 
                         await dbTransaction.RollbackAsync();
-
-                        throw new Exception(ex.Message);
+                        _log.LogInformation("Error thrown at organization registration with ", ex.Message);
+                        throw;
                     }
                 }
             });
