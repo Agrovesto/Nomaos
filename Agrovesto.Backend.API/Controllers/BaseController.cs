@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
@@ -61,11 +62,11 @@ namespace Agrovesto.Backend.API.Controllers
             get
             {
                 if (string.IsNullOrEmpty(Token)) return null;
-                var handler = new JwtSecurityTokenHandler();
-                var jst = handler.ReadJwtToken(Token);
+                var handler = new JsonWebTokenHandler();
+                var jst = handler.ReadJsonWebToken(Token);
 
                 var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase));
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
 
@@ -76,7 +77,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var token = Token;
                 if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
 
-                var handler = new JwtSecurityTokenHandler();
+                var handler = new JsonWebTokenHandler();
 
                 // Ensure the token is a well-formed JWT before reading it
                 if (!handler.CanReadToken(token))
@@ -84,10 +85,10 @@ namespace Agrovesto.Backend.API.Controllers
                     throw new SecurityTokenException("Invalid JWT format");
                 }
 
-                var jst = handler.ReadJwtToken(token);
+                var jst = handler.ReadJsonWebToken(token);
                 var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase));
 
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
 
@@ -99,7 +100,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var token = Token;
                 if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
 
-                var handler = new JwtSecurityTokenHandler();
+                var handler = new JsonWebTokenHandler();
 
                 // Ensure the token is a well-formed JWT before reading it
                 if (!handler.CanReadToken(token))
@@ -107,10 +108,10 @@ namespace Agrovesto.Backend.API.Controllers
                     throw new SecurityTokenException("Invalid JWT format");
                 }
 
-                var jst = handler.ReadJwtToken(token);
+                var jst = handler.ReadJsonWebToken(token);
                 var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
 
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
         public string OrganizationCode
@@ -120,7 +121,7 @@ namespace Agrovesto.Backend.API.Controllers
                 var token = Token;
                 if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
 
-                var handler = new JwtSecurityTokenHandler();
+                var handler = new JsonWebTokenHandler();
 
                 // Ensure the token is a well-formed JWT before reading it
                 if (!handler.CanReadToken(token))
@@ -128,10 +129,10 @@ namespace Agrovesto.Backend.API.Controllers
                     throw new SecurityTokenException("Invalid JWT format");
                 }
 
-                var jst = handler.ReadJwtToken(token);
+                var jst = handler.ReadJsonWebToken(token);
                 var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("OrganizationCodes", StringComparison.OrdinalIgnoreCase));
 
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
 
