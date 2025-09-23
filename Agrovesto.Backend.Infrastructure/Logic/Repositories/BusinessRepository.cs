@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             Organization org = orgModel.Map();
 
             _context.Set<Organization>().Add(org);
-            await _context.SaveChangesAsync();
+           // await _context.SaveChangesAsync();
             return org.Map();
         }
 
