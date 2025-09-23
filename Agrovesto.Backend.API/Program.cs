@@ -95,7 +95,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         )
     };
 });
-
+//builder.Services.Configure<JwtBearerOptions>(options =>
+//{
+//    options.UseSecurityTokenValidators = true;
+//});
 builder.Services.Configure<FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
