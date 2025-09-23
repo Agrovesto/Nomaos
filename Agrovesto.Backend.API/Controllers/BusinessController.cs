@@ -74,7 +74,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("register-organization")]
         public async Task<IActionResult> CreateOrganization([FromBody] OrganizationModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            //var isAdmin = CurrentUserRole;
+           
             //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
@@ -96,6 +96,8 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
+                var isAdmin = CurrentUserRole;
+
                 var createMerchant = await _businessManager.CreateOrganization(model, args);
 
                 return Ok(new Response<string>()
