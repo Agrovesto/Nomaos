@@ -186,8 +186,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 var signinKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"]));
 
                 var securityToken = new JwtSecurityToken(
-                            issuer: _configuration["JWT:ValidIssuer"],
-                            audience: _configuration["JWT:ValidAudience"],
+                            issuer: _configuration["JWT:Issuer"],
+                            audience: _configuration["JWT:Audience"],
                             expires: DateTime.Now.AddDays(1),
                             claims: userClaims,
 
