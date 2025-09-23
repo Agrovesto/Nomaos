@@ -1794,99 +1794,202 @@ ListQueryParams query, string imageKey)
         }
 
         //organization
-        public async Task<OrganizationModel> CreateOrganization(OrganizationModel org, BusinessRegistrationArgs args) //userId is same as onboarded by{
-        {   
-            OrganizationModel newOrg = new OrganizationModel();
+        public async Task<OrganizationModel> CreateOrganization(
+    OrganizationModel org,
+    BusinessRegistrationArgs args)
+        {
+            // validate business
             var parentBusiness = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
             if (parentBusiness == null)
             {
-                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Parent business not found or has been deactivated, kindly contact platform administrator");
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND,
+                    "Parent business not found or has been deactivated, kindly contact platform administrator");
             }
-            var bModel = await _businessRepository.GetOrganizationAsync(org.OrganizationCode);
-            if (bModel != null)
+
+            // check if org already exists
+            var existingOrg = await _businessRepository.GetOrganizationAsync(org.OrganizationName);
+            if (existingOrg != null)
             {
-                throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST, $"{org.OrganizationName} already exist, Kindly contact administrator");
+                throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST,
+                    $"{org.OrganizationName} already exist, Kindly contact administrator");
             }
+
+            OrganizationModel newOrg;
+
+            // EF Core execution strategy for transient errors
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
+            newOrg = await strategy.ExecuteAsync(async () =>
             {
-                using (var dbTransaction = _context.Database.BeginTransaction())
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    try
+                    // generate org code
+                    var name = org.OrganizationName.Replace(" ", string.Empty).ToUpper();
+                    var businessCount = await _businessRepository.OrganizationCount();
+                    if (name.Length > 3)
                     {
-                        var name = org.OrganizationName.Replace(" ", string.Empty).ToUpper();
-                        var businessCount = await _businessRepository.OrganizationCount();
-                        if (name.Length > 3)
-                        {
-                            name = $"{name.Substring(0, 3)}";
-                        }
-                        org.BusinessCode = args.businessCode;
-                        org.OrganizationCode= $"{name}{DateTimeOffset.Now.Month}{businessCount + 1}";
-
-                        //register organization
-                        newOrg = await _businessRepository.CreateOrganization(org);
-
-                        var registrationMode = new UserModel
-                        {
-                            Email = org.OrganizationEmail,
-                            FirstName = org.OrganizationName,
-                            Password = org.Password,
-                            PhoneNumber = org.Contact,
-                            UserType = Enum.GetName(typeof(UserType), UserType.Organization),//UserType.Business,
-                            CreatedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : "Self-Registration",
-                            CreatedOn = DateTimeOffset.Now,
-                            BusinessCode = args.businessCode,
-                            OrganizationCode= org.OrganizationCode,
-                            Name= org.OrganizationName
-
-                        };
-                        var registerBusinessUser = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*role name should be business admin role*/);
-                        if (!registerBusinessUser.status)
-                        {
-                            throw new Exception(registerBusinessUser.message);
-                        }
-
-                        
-
-
-                        await _context.SaveChangesAsync();
-                        await dbTransaction.CommitAsync();
-
-
-                        //send email to business about sucessful onboarding
-                       
-                        var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
-
-                        var propagationUrl = AppSettingsHelper.Setting("propagation:url");
-                        var mailRequest = new WelcomeMailBody
-                        {
-                            To = org.ContactEmail,
-                            ToName = $"{org.OrganizationName}",
-                            Subject = $"Welcome OnBoard {org.OrganizationName}",
-                            AccountOfficer = accountOfficer.model.FirstName,
-                            DefaultPassword = args.DefaultPassword,
-                            Email = accountOfficer.model.Email,
-                            PhoneNumber = accountOfficer.model.PhoneNumber,
-                            //PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
-                            logincred = $"login?bsCd={org.BusinessCode}&org={org.OrganizationCode}&pwd={args.DefaultPassword}"
-                        };
-                        var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-                        var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact);
-                        return newOrg;
+                        name = name.Substring(0, 3);
                     }
-                    catch (Exception ex)
+
+                    org.BusinessCode = args.businessCode;
+                    org.OrganizationCode = $"{name}{DateTimeOffset.Now.Month}{businessCount + 1}";
+
+                    // stage org in context (do not SaveChanges inside repo)
+                    newOrg = await _businessRepository.CreateOrganization(org);
+
+                    // prepare user model
+                    var registrationMode = new UserModel
                     {
+                        Email = org.OrganizationEmail,
+                        FirstName = org.OrganizationName,
+                        Password = org.Password,
+                        PhoneNumber = org.Contact,
+                        UserType = Enum.GetName(typeof(UserType), UserType.Organization),
+                        CreatedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : "Self-Registration",
+                        CreatedOn = DateTimeOffset.Now,
+                        BusinessCode = args.businessCode,
+                        OrganizationCode = org.OrganizationCode,
+                        Name = org.OrganizationName
+                    };
 
-                        await dbTransaction.RollbackAsync();
-                        _log.LogInformation("Error thrown at organization registration with ", ex.Message);
-                        throw;
+                    // stage user in context
+                    var registerBusinessUser =
+                        await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName);
+                    if (!registerBusinessUser.status)
+                    {
+                        throw new Exception(registerBusinessUser.message);
                     }
+
+                    // commit DB work
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return newOrg;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
                 }
             });
 
+            // 🔑 non-DB work after commit
+            var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
+
+            var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+            var mailRequest = new WelcomeMailBody
+            {
+                To = org.ContactEmail,
+                ToName = org.OrganizationName,
+                Subject = $"Welcome OnBoard {org.OrganizationName}",
+                AccountOfficer = accountOfficer.model.FirstName,
+                DefaultPassword = args.DefaultPassword,
+                Email = accountOfficer.model.Email,
+                PhoneNumber = accountOfficer.model.PhoneNumber,
+                logincred = $"login?bsCd={org.BusinessCode}&org={org.OrganizationCode}&pwd={args.DefaultPassword}"
+            };
+
+            // send notifications
+            var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
+            var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact);
+
             return newOrg;
         }
+
+        //public async Task<OrganizationModel> CreateOrganization(OrganizationModel org, BusinessRegistrationArgs args) //userId is same as onboarded by{
+        //{   
+        //    OrganizationModel newOrg = new OrganizationModel();
+        //    var parentBusiness = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+        //    if (parentBusiness == null)
+        //    {
+        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Parent business not found or has been deactivated, kindly contact platform administrator");
+        //    }
+        //    var bModel = await _businessRepository.GetOrganizationAsync(org.OrganizationCode);
+        //    if (bModel != null)
+        //    {
+        //        throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST, $"{org.OrganizationName} already exist, Kindly contact administrator");
+        //    }
+        //    var strategy = _context.Database.CreateExecutionStrategy();
+
+        //    await strategy.ExecuteAsync(async () =>
+        //    {
+        //        using (var dbTransaction = _context.Database.BeginTransaction())
+        //        {
+        //            try
+        //            {
+        //                var name = org.OrganizationName.Replace(" ", string.Empty).ToUpper();
+        //                var businessCount = await _businessRepository.OrganizationCount();
+        //                if (name.Length > 3)
+        //                {
+        //                    name = $"{name.Substring(0, 3)}";
+        //                }
+        //                org.BusinessCode = args.businessCode;
+        //                org.OrganizationCode= $"{name}{DateTimeOffset.Now.Month}{businessCount + 1}";
+
+        //                //register organization
+        //                newOrg = await _businessRepository.CreateOrganization(org);
+
+        //                var registrationMode = new UserModel
+        //                {
+        //                    Email = org.OrganizationEmail,
+        //                    FirstName = org.OrganizationName,
+        //                    Password = org.Password,
+        //                    PhoneNumber = org.Contact,
+        //                    UserType = Enum.GetName(typeof(UserType), UserType.Organization),//UserType.Business,
+        //                    CreatedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : "Self-Registration",
+        //                    CreatedOn = DateTimeOffset.Now,
+        //                    BusinessCode = args.businessCode,
+        //                    OrganizationCode= org.OrganizationCode,
+        //                    Name= org.OrganizationName
+
+        //                };
+        //                var registerBusinessUser = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*role name should be business admin role*/);
+        //                if (!registerBusinessUser.status)
+        //                {
+        //                    throw new Exception(registerBusinessUser.message);
+        //                }
+
+
+
+
+        //                await _context.SaveChangesAsync();
+        //                await dbTransaction.CommitAsync();
+
+
+        //                //send email to business about sucessful onboarding
+
+        //                var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
+
+        //                var propagationUrl = AppSettingsHelper.Setting("propagation:url");
+        //                var mailRequest = new WelcomeMailBody
+        //                {
+        //                    To = org.ContactEmail,
+        //                    ToName = $"{org.OrganizationName}",
+        //                    Subject = $"Welcome OnBoard {org.OrganizationName}",
+        //                    AccountOfficer = accountOfficer.model.FirstName,
+        //                    DefaultPassword = args.DefaultPassword,
+        //                    Email = accountOfficer.model.Email,
+        //                    PhoneNumber = accountOfficer.model.PhoneNumber,
+        //                    //PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
+        //                    logincred = $"login?bsCd={org.BusinessCode}&org={org.OrganizationCode}&pwd={args.DefaultPassword}"
+        //                };
+        //                var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
+        //                var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact);
+        //                return newOrg;
+        //            }
+        //            catch (Exception ex)
+        //            {
+
+        //                await dbTransaction.RollbackAsync();
+        //                _log.LogInformation("Error thrown at organization registration with ", ex.Message);
+        //                throw;
+        //            }
+        //        }
+        //    });
+
+        //    return newOrg;
+        //}
 
         public async Task<FarmerDetailDto> GetFarmerDetails(
 
