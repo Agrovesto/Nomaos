@@ -210,8 +210,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             catch (Exception ex)
             {
+                _log.LogInformation("Login failed with error", ex.Message);
                 // await _userManager.AccessFailedAsync(user);
-                return (false, ex.Message, null);
+                return (false, "Oops, an error occured, not your fault!", null);
             }
 
 
