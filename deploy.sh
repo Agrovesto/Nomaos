@@ -76,7 +76,7 @@ sudo ufw status verbose
 
 ## 3. Restore dependencies
 echo "Restoring NuGet packages..."
-dotnet restore
+dotnet restore --no-cache
 
 ## 4. Build the application
 echo "Building application..."
@@ -84,7 +84,7 @@ dotnet build -c Release --no-restore
 
 ## 5. Publish the application
 echo "Publishing application..."
-dotnet publish -c Release -r linux-x64 --self-contained false -o $BUILD_PATH
+dotnet publish -c Release -r linux-x64 --self-contained true -o $BUILD_PATH
 
 ## 6. Prepare deployment directory
 echo "Preparing deployment directory..."
