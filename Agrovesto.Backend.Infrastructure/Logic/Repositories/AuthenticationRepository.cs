@@ -212,7 +212,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             {
                 _log.LogInformation("Login failed with error", ex.Message);
                 // await _userManager.AccessFailedAsync(user);
-                return (false, "Oops, an error occured, not your fault!", null);
+                throw;
+                //return (false, "Oops, an error occured, not your fault!", null);
             }
 
 
