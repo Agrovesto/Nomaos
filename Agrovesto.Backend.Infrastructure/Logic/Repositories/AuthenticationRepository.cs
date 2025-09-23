@@ -394,7 +394,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     OrganizationCode = model.OrganizationCode
                 });
 
-                await _context.SaveChangesAsync();
+                //await _context.SaveChangesAsync();
                 return (existingUser.Map(), true, "User added to new organization.");
             }
 
@@ -465,7 +465,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
 
-            await _context.SaveChangesAsync();
+            //await _context.SaveChangesAsync();
 
             return (entity.Map(), true, "User successfully registered and added to organization.");
         }

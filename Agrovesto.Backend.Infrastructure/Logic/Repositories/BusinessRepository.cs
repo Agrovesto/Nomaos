@@ -45,7 +45,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<OrganizationModel> GetOrganizationAsync(string organizationCode)
         {
             var org = await _context.Set<Organization>()
-                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode);
+                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode || x.OrganizationName == organizationCode);
             if (org == null)
             {
                 return null;
