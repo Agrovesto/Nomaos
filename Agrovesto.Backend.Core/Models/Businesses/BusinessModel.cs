@@ -43,6 +43,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class BusinessRegistrationArgs
     {
+        public string? WalletProviderCode { get; set; }
         public long SubscribedBundleId { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
