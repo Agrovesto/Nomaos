@@ -42,7 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var response = new CafeOneParams();
             var provider = await _providerRepo.GetActiveProvider();
             var providerId = provider.Where(x => x.Code == "CafeOne").FirstOrDefault().ProviderId;
-            var parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
+            WalletProviderParameterModel[] parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
             var _params = parameters.ToDictionary(x => x.Key);
 
             response.Url = _params["url"].Value;
