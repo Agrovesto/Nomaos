@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
@@ -72,6 +73,9 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
+           
+
+
 
 
             services.AddScoped<IMandERepositories, MandERepositories>();
