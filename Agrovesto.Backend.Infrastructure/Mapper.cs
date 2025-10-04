@@ -19,6 +19,63 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        public static OrganizationConfigurationModel MapToModel(this OrganizationConfiguration entity)
+        {
+            if (entity == null) return null;
+
+            return new OrganizationConfigurationModel
+            {
+                OrganizationCode = entity.OrganizationCode,
+                OrganizationName = entity.OrganizationName,
+                WalletProviderConfiguration = entity.WalletProviderConfiguration == null
+                    ? null
+                    : new WalletProviderConfigurationModel
+                    {
+                        DefaultWalletProvider = entity.WalletProviderConfiguration.DefaultWalletProvider,
+                        Currency = entity.WalletProviderConfiguration.Currency,
+                        EnableMultiWallet = entity.WalletProviderConfiguration.EnableMultiWallet,
+                    },
+                //InputFinancingConfiguration = entity.InputFinancingConfiguration == null
+                //    ? null
+                //    : new InputFinancingConfigurationModel
+                //    {
+                //        EnableInputFinancing = entity.InputFinancingConfiguration.EnableInputFinancing,
+                //        CreditLimit = entity.InputFinancingConfiguration.CreditLimit,
+                //        InterestRate = entity.InputFinancingConfiguration.InterestRate
+                //    }
+            };
+        }
+
+        // ✅ Helper: Map model → entity
+        public static OrganizationConfiguration MapToEntity(this OrganizationConfigurationModel model)
+        {
+            if (model == null) return null;
+
+            return new OrganizationConfiguration
+            {
+                OrganizationCode = model.OrganizationCode,
+                OrganizationName = model.OrganizationName,
+                WalletProviderConfiguration = model.WalletProviderConfiguration == null
+                    ? null
+                    : new WalletProviderConfiguration
+                    {
+                        DefaultWalletProvider = model.WalletProviderConfiguration.DefaultWalletProvider,
+                        Currency=model.WalletProviderConfiguration.Currency,
+                        EnableMultiWallet = model.WalletProviderConfiguration.EnableMultiWallet,
+                        
+                        //WalletProviderSettings = model.WalletProviderConfiguration.WalletProviderSettings
+                    },
+                //InputFinancingConfiguration = model.InputFinancingConfiguration == null
+                //    ? null
+                //    : new InputFinancingConfiguration
+                //    {
+                //        EnableInputFinancing = model.InputFinancingConfiguration.EnableInputFinancing,
+                //        CreditLimit = model.InputFinancingConfiguration.CreditLimit,
+                //        InterestRate = model.InputFinancingConfiguration.InterestRate
+                //    }
+            };
+        }
+
         public static StateModel Map(this States entity)
         {
 
@@ -1905,11 +1962,58 @@ namespace Agrovesto.Backend.Infrastructure
                 LastUpdated = model.LastUpdated,
             };
         }
+
+
+        public static Wallet Map(this WalletModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Wallet()
+            {
+                PhoneNumber = model.PhoneNumber,
+                UserId = model.UserId,
+                WalletCode = model.WalletCode,
+                AccountName = model.AccountName,
+                AccountNumber = model.AccountNumber,
+                BankName = model.BankName,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                Id = model.Id,
+                WalletProviderCode = model.WalletProviderCode,
+                OrganizationCode = model.OrganizationCode
+
+            };
+        }
+
+        public static WalletModel Map(this Wallet entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WalletModel()
+            {
+                PhoneNumber = entity.PhoneNumber,
+                UserId = entity.UserId,
+                WalletCode = entity.WalletCode,
+                AccountName = entity.AccountName,
+                AccountNumber = entity.AccountNumber,
+                BankName=entity.BankName,
+                CreatedBy=entity.CreatedBy,
+                CreatedOn=entity.CreatedOn,
+                Id = entity.Id,
+                WalletProviderCode=entity.WalletProviderCode,
+                OrganizationCode = entity.OrganizationCode
+            };
+        }
+
         #endregion creditscore
 
         #region farmercategory
-      
-        
+
+
         #endregion farmercategory
     }
 }

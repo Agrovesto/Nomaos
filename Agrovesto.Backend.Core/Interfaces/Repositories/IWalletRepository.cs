@@ -12,9 +12,11 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     {
         Task<SterlingBankWalletModel> CreateSterlingWallet(SterlingBankWalletModel model);
         Task<SubAccountModel> CreateSubAccount(SubAccountModel model);
+        Task<WalletModel> CreateUserWallet(WalletModel model);
         Task<SterlingBankWalletModel> GetSterlingWallet(string agrovestoUserId);
         Task<SterlingBankWalletModel[]> GetSterlingWallets();
         Task<SubAccountModel> GetSubAccount(string userId);
+        Task<WalletModel> GetUserWalletByProviderAsync(string userId, string walletProviderCode);
         Task<SubAccountModel> UpdateSubAccount(SubAccountModel model);
     }
 }

@@ -40,10 +40,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public long CooperativeId { get; set; }
+        public string? Env { get; set; }
+        public string? SelectedProviderCode { get; set; }
     }
     public class BusinessRegistrationArgs
     {
-        public string? WalletProviderCode { get; set; }
+        public string? SelectedProviderCode { get; set; }
         public long SubscribedBundleId { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }

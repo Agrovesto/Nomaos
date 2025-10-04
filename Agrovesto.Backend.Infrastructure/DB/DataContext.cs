@@ -46,6 +46,67 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.Entity<MandEFieldDefinition>().HasIndex(x => new { x.MandESubActivityId, x.Key }).IsUnique();
 
             modelBuilder.Entity<MandEFarmActivity>().HasKey(x => x.Id);
+
+            modelBuilder.Entity<Invoice>()
+            .HasIndex(i => i.ReferenceCode)
+            .IsUnique();
+
+            modelBuilder.Entity<Distribution>()
+                .HasIndex(d => d.ReferenceNumber)
+                .IsUnique();
+
+
+            modelBuilder.Entity<SubscriptionProgram>()
+            .HasOne(s => s.Invoice)
+            .WithOne(i => i.Subscription)
+            .HasForeignKey<Invoice>(i => i.SubscriptionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<OrganizationBundlePlans>()
+                .HasMany(b => b.OrganizationBundleItems)
+                .WithOne(i => i.OrganizationBundlePlans)
+                .HasForeignKey(i => i.OrganizationBundlePlansId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<SubscriptionProgram>()
+                .HasMany(s => s.Distributions)
+                .WithOne(d => d.Subscription)
+                .HasForeignKey(d => d.SubscriptionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Distribution>()
+                .HasMany(d => d.OrganizationRepayments)
+                .WithOne(r => r.Distribution)
+                .HasForeignKey(r => r.DistributionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Enum conversions (store as string)
+            modelBuilder.Entity<SubscriptionProgram>()
+                .Property(s => s.Status)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.Status)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<Distribution>()
+                .Property(d => d.Mode)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<OrganizationRepayment>()
+                .Property(r => r.Mode)
+                .HasConversion<string>();
+
+            // Additional configuration as needed (max lengths, required fields)
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.ReferenceCode)
+                .HasMaxLength(64)
+                .IsRequired();
+
+            modelBuilder.Entity<Invoice>()
+                .Property(i => i.InvoiceNumber)
+                .HasMaxLength(64)
+                .IsRequired();
         }
 
         public DbSet<MandEActivityType> MandEActivityTypes { get; set; }
@@ -94,6 +155,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<RepaymentBreakdown> RepaymentBreakdown { get; set; }
 
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
+        public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
+       public DbSet<Wallet> Wallets { get; set; }
+
+
+        public DbSet<OrganizationBundlePlans> OrganizationBundlePlans { get; set; }
+        public DbSet<OrganizationBundleItem> OrganizationBundleItem { get; set; }
+        public DbSet<SubscriptionProgram> OrganizationSubscriptions { get; set; }
+        public DbSet<Invoice> Invoices { get; set; }
+        public DbSet<Distribution> Distributions { get; set; }
+        public DbSet<OrganizationRepayment> OrganizationRepayment { get; set; }
+        public DbSet<Receipt> Receipts { get; set; }
+        public DbSet<CooperativeCreditScore> CooperativeCreditScores { get; set; }
+
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
     {

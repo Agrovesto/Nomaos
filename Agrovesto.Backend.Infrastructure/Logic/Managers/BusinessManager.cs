@@ -987,6 +987,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     args.UserId = registeredUser.model.Id;
                     //then create user as a farmer as well
                     model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                  //  model.FarmerCategory = 
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
 
                     break;
@@ -1045,7 +1046,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 BusinessId = business.BusinessId,
                 UserId = userId,
                 FirstName = model.FirstName,
-                LastName = model.FirstName,
+                LastName = model.LastName,
                 MiddleName=model.MiddleName,
                 SubAccountType = args.SubAccountType.ToEnum<SubAccountType>(),
                 PhoneNumber = model.PhoneNumber,

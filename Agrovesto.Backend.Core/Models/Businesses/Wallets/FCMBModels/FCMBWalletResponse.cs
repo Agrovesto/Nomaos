@@ -85,16 +85,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels
     {
         [JsonPropertyName("access_token")]
 
-        public string AccessToken { get; set; }
+        public string access_token { get; set; }
 
         [JsonPropertyName("expires_in")]
-        public string ExpiresIn { get; set; }
+        public string expires_in { get; set; }
         [JsonPropertyName("refresh_expires_in")]
-        public string ResfreshExpiresIn { get; set; }
+        public string resfresh_expires_in { get; set; }
         [JsonPropertyName("token_type")]
-        public string TokenType { get; set; }
+        public string token_type { get; set; }
         [JsonPropertyName("not-before-policy")]
-        public string NotBeforePolicy { get; set; }
+        public string not_before_policy { get; set; }
         [JsonPropertyName("scope")]
         public string Scope { get; set; }
 

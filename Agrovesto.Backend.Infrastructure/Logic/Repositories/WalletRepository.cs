@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return entity.Map();
         }
-
+       
         public async Task<SterlingBankWalletModel> CreateSterlingWallet(SterlingBankWalletModel model)
         {
             
@@ -124,6 +124,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             SterlingBankWallet entity = await _context.Set<SterlingBankWallet>()
 
                 .FirstOrDefaultAsync(x => x.AgrovestoUserId == agrovestoUserId);
+            if (entity == null)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+
+
+        public async Task<WalletModel> CreateUserWallet(WalletModel model)
+        {
+            Wallet entity = model.Map();
+            _context.Set<Wallet>().Add(entity);
+
+            int count = await _context.SaveChangesAsync();
+            if (count < 1)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+        public async Task<WalletModel> GetUserWalletByProviderAsync(string userId, string walletProviderCode)
+        {
+            var entity = await _context.Set<Wallet>()
+
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.WalletProviderCode== walletProviderCode);
             if (entity == null)
             {
                 return null;
