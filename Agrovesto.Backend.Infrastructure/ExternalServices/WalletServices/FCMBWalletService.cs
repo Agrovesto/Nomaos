@@ -18,12 +18,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
-    public class FCMBWalletService<T,R> : IWalletService<T, FCMBWalletResponse<R>> where T : class
+    public class FCMBWalletService : IWalletService
     {
 
         private readonly IHttpService _httpService;
-        private readonly ILogger<FCMBWalletService<T,R>> _log;
-        public FCMBWalletService(ILogger<FCMBWalletService<T,R>> log, IHttpService httpService)
+        private readonly ILogger<FCMBWalletService> _log;
+        public FCMBWalletService(ILogger<FCMBWalletService> log, IHttpService httpService)
         {
 
             _httpService = httpService;
@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.GrantType = _params["GrantType"].Value;
             response.ClientId = _params["ClientId"].Value;
             response.ClientSecret = _params["ClientSecret"].Value;
-            response.Scope = _params["Scope"].Value;
+            response.Scope = _params["scope"].Value;
             response.BaseUrl = _params["BaseUrl"].Value;
             
             return response;
@@ -59,34 +59,37 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
         private async Task<TokenResponse> GetProviderToken(FCMBParams tokendata)
         {
-            
-            var model = new
-            {
-                grant_type = tokendata.GrantType,
-                client_id = tokendata.ClientId,
-                client_secret = tokendata.ClientSecret,
-                scope = tokendata.Scope
-            };
+
+            var model = new Dictionary<string, string>
+{
+    { "grant_type", tokendata.GrantType },
+    { "client_id", tokendata.ClientId },
+    { "client_secret", tokendata.ClientSecret },
+    { "scope", tokendata.Scope }
+};
+
             try
             {
-                var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
+                using var content = new FormUrlEncodedContent(model);
                 var request = await _httpService.Post($"{tokendata.BaseUrl}/token", content);
-                var readResponse = await request.Content.ReadAsStringAsync();
+
                 request.EnsureSuccessStatusCode();
 
+                var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<TokenResponse>(readResponse);
-                return response;
 
+                return response;
             }
             catch (Exception ex)
             {
-                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                string errorMsg = ex.InnerException?.Message ?? ex.Message;
+                // optionally log errorMsg here
                 return null;
             }
 
         }
 
-        public async Task<FCMBWalletResponse<R>> CreateWallet(T model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<FCMBWalletResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
             
@@ -97,13 +100,30 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 //var lastName = model?.GetType().GetProperty("LastName")?.GetValue(model)?.ToString();
                 //var phone = model?.GetType().GetProperty("PhoneNumber")?.GetValue(model)?.ToString();
 
+                // Default assignments
+                var firstName = model.FirstName;
+                var lastName = model.LastName;
+
+                // Handle case where FirstName contains multiple words
+                if (!string.IsNullOrWhiteSpace(model.FirstName) && model.FirstName.Contains(" "))
+                {
+                    var nameParts = model.FirstName.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+                    if (nameParts.Length > 1)
+                    {
+                        firstName = nameParts.First();   // first word
+                        lastName = string.IsNullOrWhiteSpace(model.LastName)
+                            ? nameParts.Last()           // use last word if LastName not already provided
+                            : model.LastName;
+                    }
+                }
 
                 var data = new
                 {
-                    email = (string)model.GetType().GetProperty("Email")?.GetValue(model),
-                    firstName = (string)model.GetType().GetProperty("FirstName")?.GetValue(model),
-                    lastName = (string)model.GetType().GetProperty("LastName")?.GetValue(model),
-                    phone = (string)model.GetType().GetProperty("PhoneNumber")?.GetValue(model)
+                    email = model.Email,
+                    firstName,
+                    lastName,
+                    phone = model.PhoneNumber
                 };
 
                 var accessToken = await GetProviderToken(@params);
@@ -111,19 +131,19 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var headers = new Dictionary<string, string>
                 {
-                    { "Authorization",  $"Bearer {accessToken.AccessToken}"}
+                    { "Authorization",  $"Bearer {accessToken.access_token}"}
                 };
                 _log.LogInformation("Calling enpoint with payload");
                 var content = new StringContent(JsonConvert.SerializeObject(data), Encoding.UTF8, "application/json");
 
-                var request = await _httpService.Post($"{@params.BaseUrl}/virtual-account/static", content,  accessToken.AccessToken);
+                var request = await _httpService.Post($"{@params.BaseUrl}/virtual-account/static", content,  accessToken.access_token);
 
                 _log.LogInformation($"API response from Create wallet {request}");
                 var readResponse = await request.Content.ReadAsStringAsync();
 
                 _log.LogInformation($"reading response from Create wallet {readResponse}");
 
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<R>>(readResponse);
+                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<CreateWalletResponse>>(readResponse);
 
                     
                     return response;
@@ -139,7 +159,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         }
 
-        public  async Task<FCMBWalletResponse<R>> GetBanks(T model, WalletProviderParameterModel[] parameters, string env)
+        public  async Task<FCMBBankData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
 
@@ -151,16 +171,16 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var headers = new Dictionary<string, string>
                 {
-                    { "Authorization",  $"Bearer {accessToken.AccessToken}"}
+                    { "Authorization",  $"Bearer {accessToken.access_token}"}
                 };
                 
                 
                 var request = await _httpService.Get($"{@params.BaseUrl}/banks", headers);
                 // request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<R>>(readResponse);
+                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<FCMBBankData>>(readResponse);
 
-                return response;
+                return response.data;
 
 
 
@@ -175,7 +195,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
 
         }
-        public async Task<FCMBWalletResponse<R>> GetWalletDetails(T model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<CreateWalletResponse> GetWalletDetails(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
 
@@ -187,16 +207,16 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var headers = new Dictionary<string, string>
                 {
-                    { "Authorization",  $"Bearer {accessToken.AccessToken}"}
+                    { "Authorization",  $"Bearer {accessToken.access_token}"}
                 };
 
                 var accountNumber = (string)model.GetType().GetProperty("AccountNumber")?.GetValue(model);
                 var request = await _httpService.Get($"{@params.BaseUrl}/virtual-account/static/{accountNumber}", headers);
                 // request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<R>>(readResponse);
+                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<CreateWalletResponse>>(readResponse);
 
-                return response;
+                return response.data;
 
 
 
@@ -212,23 +232,23 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
 
 
-        public async Task<FCMBWalletResponse<R>> NameEnquiry(T model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<CreateWalletResponse> NameEnquiry(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             throw new NotImplementedException();
         }
 
      
-        public  async Task<FCMBWalletResponse<R>> InitiateFundTransfer(T model, WalletProviderParameterModel[] parameters, string env)
+        public  async Task<CreateWalletResponse> InitiateFundTransfer(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             throw new NotImplementedException();
         }
 
-        public async Task<FCMBWalletResponse<R>> FetchTransferStatus(T model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<CreateWalletResponse> FetchTransferStatus(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             throw new NotImplementedException();
         }
 
-        public async Task<FCMBWalletResponse<R>> GetAllWallets(T model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<CreateWalletResponse> GetAllWallets(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             throw new NotImplementedException();
         }
