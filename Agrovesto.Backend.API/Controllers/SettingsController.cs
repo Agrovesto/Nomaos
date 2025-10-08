@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.API.Controllers
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                await _settingsManager.CreateOrgConfig(model, query);
+                await _settingsManager.CreateOrUpdateOrgConfig(model, query);
                 return Ok(new Response<bool>()
                 {
                     Data = true,

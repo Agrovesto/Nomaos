@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,15 +21,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         /// Organization name
         /// </summary>
         public string? OrganizationName { get; set; }
-        public WalletProviderConfigurationModel WalletProviderConfiguration { get; set; }
+        public ICollection<WalletProviderConfigurationModel>? WalletProviderConfiguration { get; set; }
         /// <summary>
         /// Input financing module configuration
         /// Specifies how farmers can subscribe, pay for inputs, and repayment structure
         /// </summary>
-     //  public InputFinancingConfiguration InputFinancingConfig { get; set; } = new();
+       public ICollection<InputFinancingConfigurationModel>? InputFinancingConfig { get; set; } 
     }
     public class WalletProviderConfigurationModel
     {
+        public long Id { get; set; }
         /// <summary>
         /// Default wallet provider for the organization (e.g., BankAWallet, BankBWallet)
         /// </summary>
@@ -41,7 +44,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         /// <summary>
         /// Enable multiple wallet accounts per user if true
         /// </summary>
-        public bool EnableMultiWallet { get; set; } = false;
+        public bool IsDefault { get; set; } = false;
 
         /// <summary>
         /// Custom provider-specific parameters for wallets
@@ -53,43 +56,66 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     /// <summary>
     /// Configuration for input financing module
     /// </summary>
-    public class InputFinancingConfiguration
+    public class InputFinancingConfigurationModel
     {
         /// <summary>
         /// Whether input financing is enabled for the organization
         /// </summary>
+        public long Id { get; set; }
+        public SubscriptionConfigModel SubscriptionConfig { get; set; }
+        public DisbursementConfigModel DisbursementConfig { get; set; }
+        public RepaymentConfigModel RepaymentConfig { get; set; }
+        public bool BundleEnabled { get; set; } = true;
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
         public bool IsEnabled { get; set; } = true;
 
-        /// <summary>
-        /// Default repayment method (Percentage of harvest, Cash, or Combination)
-        /// </summary>
-        public string DefaultRepaymentMethod { get; set; } = "PercentageOfHarvest";
-
-        /// <summary>
-        /// Subscription options: list of bundles, quantities, and pricing
-        /// </summary>
-        public List<InputBundleOption> BundleOptions { get; set; } = new();
-
-        /// <summary>
-        /// Maximum financing limit per farmer
-        /// </summary>
-        public decimal MaxFinancingAmount { get; set; } = 0;
-
-        /// <summary>
-        /// Whether farmers need to be part of a cooperative
-        /// </summary>
-        public bool RequiresCooperativeMembership { get; set; } = true;
     }
+   
 
     /// <summary>
     /// Represents a bundle of agricultural inputs for financing
     /// </summary>
-    public class InputBundleOption
+    public class SubscriptionConfigModel
     {
-        public string BundleName { get; set; }
-        public string InputType { get; set; } // e.g., Seed, Fertilizer, Agrochemicals
-        public int Units { get; set; }
-        public decimal Price { get; set; }
+        public int Id { get; set; }
+        public bool RequiresEquity { get; set; } = true;
+        public string EquityType { get; set; } // "Cash", "Sweat", "Land", "Mixed", "None"
+        public decimal? EquityPercentage { get; set; }
+        public bool CooperativeContributes { get; set; }
+        public bool OrganizationContributes { get; set; }
+        public bool FinancialPartnerContributes { get; set; }
+        public string? ContributionSplitJson { get; set; }
+        public bool IsEquityInPercentage { get; set; }
+        public bool IsEquityStaticFee { get; set; }
+        public bool AllowFarmerSelfSubscription { get; set; }
+        public bool AllowCooperativeSubscription { get; set; }
+        public decimal? EquityStaticFee { get; set; }
+
+        public Dictionary<string, decimal>? ContributionSplits { get; set; }
     }
+    public class DisbursementConfigModel
+    {
+      
+        public int Id { get; set; }
+
+        public string DisbursementMode { get; set; } = "Input";// "Input", "Cash", "Both
+        public string DisbursementTarget { get; set; } = "Farmer"; // "Farmer", "Cooperative"
+        public bool RequiresApprovalForDisbursement { get; set; } = true;
+        public bool UsesInvoiceReference { get; set; } = true;
+    }
+    public class RepaymentConfigModel
+    {
+        
+        public int Id { get; set; }
+        public string RepaymentMode { get; set; } = "Cash"; // "Cash", "Produce", "Both", "None"
+        public decimal? ExpectedRepaymentPercentage { get; set; } //e.g 100% 50%
+        public long? RepaymentDurationInMonths { get; set; }
+        public bool AllowInstallments { get; set; } = true;
+        public bool IsRepaymentInPercentage { get; set; }
+        public bool IsRepaymentStaticFee { get; set; }
+        public decimal? RepaymentStaticFee { get; set; }
+
+    }
+
 
 }
