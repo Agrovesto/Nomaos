@@ -112,13 +112,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         /// </summary>
         private string ResolveWalletProvider(OrganizationConfigurationModel orgConfig, string selectedProviderCode)
         {
-            if (!string.IsNullOrEmpty(orgConfig.WalletProviderConfiguration?.DefaultWalletProvider))
-                return orgConfig.WalletProviderConfiguration.DefaultWalletProvider;
-
+            // 1️⃣ Prefer explicit provider selected by user
             if (!string.IsNullOrEmpty(selectedProviderCode))
                 return selectedProviderCode;
 
-            return Providers.FCMBWallet; // fallback
+            // 2️⃣ Try to get default provider from organization's configurations
+            var defaultProvider = orgConfig.WalletProviderConfiguration?
+                .FirstOrDefault(p => p.DefaultWalletProvider != null);
+
+            if (!string.IsNullOrEmpty(defaultProvider.DefaultWalletProvider))
+                return defaultProvider.DefaultWalletProvider;
+
+        
+
+            // 4️⃣ Fallback to a global constant
+            return Providers.FCMBWallet;
         }
 
         /// <summary>
@@ -259,8 +267,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (orgConfig == null)
                     throw new Exception($"Organization {args.organizationCode} not found");
 
-                if (!string.IsNullOrEmpty(orgConfig.WalletProviderConfiguration?.DefaultWalletProvider))
-                    return orgConfig.WalletProviderConfiguration.DefaultWalletProvider;
+
+                var defaultProvider = orgConfig.WalletProviderConfiguration?
+               .FirstOrDefault(p => p.DefaultWalletProvider != null);
+
+                if (!string.IsNullOrEmpty(defaultProvider.DefaultWalletProvider))
+                    return defaultProvider.DefaultWalletProvider;
+
 
                 if (!string.IsNullOrEmpty(args.SelectedProviderCode))
                     return args.SelectedProviderCode;

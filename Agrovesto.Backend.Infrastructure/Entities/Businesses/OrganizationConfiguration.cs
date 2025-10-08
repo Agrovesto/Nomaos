@@ -22,12 +22,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         /// Organization name
         /// </summary>
         public string OrganizationName { get; set; }
-        public WalletProviderConfiguration WalletProviderConfiguration { get; set; }
-        public InputFinancingConfiguration InputFinancingConfiguration { get; set; }
-        // public InputFinancingConfiguration InputFinancingConfig { get; set; } = new();
+        public ICollection<WalletProviderConfiguration>? WalletProviderConfigurations { get; set; }
+        public ICollection<InputFinancingConfiguration>? InputFinancingConfigurations { get; set; }
 
-        public long OrganizationId { get; set; }
-        public Organization Organization { get; set; }
+
+
     }
     public class WalletProviderConfiguration
     {
@@ -38,7 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         /// <summary>
         /// Default wallet provider for the organization (e.g., BankAWallet, BankBWallet)
         /// </summary>
-        public string DefaultWalletProvider { get; set; }
+        public string? DefaultWalletProvider { get; set; }
 
         /// <summary>
         /// Currency used by organization for wallet and financial transactions
@@ -48,12 +47,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         /// <summary>
         /// Enable multiple wallet accounts per user if true
         /// </summary>
-        public bool EnableMultiWallet { get; set; } = false;
+        public bool IsDefault { get; set; } = false;
 
-        /// <summary>
-        /// Custom provider-specific parameters for wallets
-        /// </summary>
-       // public Dictionary<string, string> WalletProviderSettings { get; set; } //= new();
 
         public long OrganizationConfigurationId { get; set; }
         public OrganizationConfiguration OrganizationConfiguration { get; set; }
@@ -63,12 +58,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
-        public SubscriptionConfig SubscriptionConfig { get; set; }
-        public DisbursementConfig DisbursementConfig { get; set; }
-        public RepaymentConfig RepaymentConfig { get; set; }
+        public SubscriptionConfig SubscriptionConfigs { get; set; } 
+        public DisbursementConfig DisbursementConfigs { get; set; } 
+        public RepaymentConfig RepaymentConfigs { get; set; } 
+
         public bool BundleEnabled { get; set; } = true;
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
-    
+        public bool IsEnabled { get; set; } = true;
         public long OrganizationConfigurationId { get; set; }
         public OrganizationConfiguration OrganizationConfiguration { get; set; }
     }
@@ -81,10 +77,16 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool RequiresEquity { get; set; } = true;
         public string EquityType { get; set; } // "Cash", "Sweat", "Land", "Mixed", "None"
         public decimal? EquityPercentage { get; set; }
+        public bool IsEquityInPercentage { get; set; }
+        public bool IsEquityStaticFee { get; set; }
+        public decimal? EquityStaticFee { get; set; }
         public bool CooperativeContributes { get; set; }
         public bool OrganizationContributes { get; set; }
         public bool FinancialPartnerContributes { get; set; }
-        public string ContributionSplitJson { get; set; }
+        public string? ContributionSplitJson { get; set; }
+        public bool AllowFarmerSelfSubscription { get; set; }
+        public bool AllowCooperativeSubscription { get; set; }
+
     }
     public class DisbursementConfig
     {
@@ -106,8 +108,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public int Id { get; set; }
         public string RepaymentMode { get; set; } = "Cash"; // "Cash", "Produce", "Both", "None"
         public decimal? ExpectedRepaymentPercentage { get; set; } //e.g 100% 50%
-        public int? RepaymentDurationInMonths { get; set; }
+        public long? RepaymentDurationInMonths { get; set; }
         public bool AllowInstallments { get; set; } = true;
+        public bool IsRepaymentInPercentage { get; set; }
+        public bool IsRepaymentStaticFee { get; set; }
+        public decimal? RepaymentStaticFee { get; set; }
+
     }
 
 
