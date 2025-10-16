@@ -62,6 +62,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         /// Whether input financing is enabled for the organization
         /// </summary>
         public long Id { get; set; }
+
+        public string ConfigurationName { get; set; }
+        public string? ConfigurationCode { get; set; }
         public SubscriptionConfigModel SubscriptionConfig { get; set; }
         public DisbursementConfigModel DisbursementConfig { get; set; }
         public RepaymentConfigModel RepaymentConfig { get; set; }

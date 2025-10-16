@@ -9,7 +9,7 @@ using DocumentFormat.OpenXml.Bibliography;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-    public class OrganizationRepayment
+    public class SubscriptionRepayment
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -21,8 +21,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [Required]
         public string BusinessCode { get; set; }
         [Required] 
-        public long DistributionId { get; set; }
-        public Distribution Distribution { get; set; }
+        public long DistributionsId { get; set; }
+        public Distributions Distributions { get; set; }
 
         // who is paying
         [Required] 
@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         // reference to generated receipt
         public Receipt Receipt { get; set; }
     }
-    public class SubscriptionProgram
+    public class Subscriptions
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -74,7 +74,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string SubscriptionApprovedByUserId { get; set; }
 
         public Invoice Invoice { get; set; }
-        public ICollection<Distribution> Distributions { get; set; }
+        public ICollection<Distributions> Distributions { get; set; }
     }
     public class Invoice
     {
@@ -83,8 +83,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public long Id { get; set; }
         public string OrganizationCode { get; set; }
-        public long SubscriptionId { get; set; }
-        public SubscriptionProgram Subscription { get; set; }
+        public long SubscriptionsId { get; set; }
+        public Subscriptions Subscriptions { get; set; }
         [Required]
         public string InvoiceNumber { get; set; }
         [Required]
@@ -115,7 +115,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
     }
 
-    public class Distribution
+    public class Distributions
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -129,7 +129,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         [Required]
         public long SubscriptionId { get; set; }
-        public SubscriptionProgram Subscription { get; set; }
+        public Subscriptions Subscriptions { get; set; }
 
         public DistributionMode Mode { get; set; } = DistributionMode.Input; // Input or Cash
         public string DistributionReceiverType { get; set; } // "Farmer" or "Cooperative"
@@ -149,7 +149,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset? DistributedOn { get; set; }
         public string? DistributedByUserId { get; set; } // agent/admin who did the handover
 
-        public ICollection<OrganizationRepayment> OrganizationRepayments { get; set; } = new List<OrganizationRepayment>();
+        public ICollection<SubscriptionRepayment> SubscriptionRepayments { get; set; } = new List<SubscriptionRepayment>();
     }
     public class Receipt
     {
@@ -158,8 +158,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public long Id { get; set; }
 
-        public long OrganizationRepaymentId { get; set; }
-        public OrganizationRepayment OrganizationRepayment { get; set; }
+        public long SubscriptionRepaymentsId { get; set; }
+        public SubscriptionRepayment SubscriptionRepayments { get; set; }
         [Required]
         public string ReceiptNumber { get; set; }
         public decimal AmountAcknowledged { get; set; }

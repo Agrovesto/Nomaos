@@ -58,6 +58,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
+        public string Name { get; set; }
+        public string ConfigurationCode { get; set; }
         public SubscriptionConfig SubscriptionConfigs { get; set; } 
         public DisbursementConfig DisbursementConfigs { get; set; } 
         public RepaymentConfig RepaymentConfigs { get; set; } 

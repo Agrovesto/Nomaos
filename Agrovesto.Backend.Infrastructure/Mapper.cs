@@ -47,6 +47,9 @@ namespace Agrovesto.Backend.Infrastructure
                 Id = entity.Id,
                 IsEnabled = entity.IsEnabled,
                 BundleEnabled = entity.BundleEnabled,
+
+                ConfigurationName = entity.Name,
+                ConfigurationCode = entity.ConfigurationCode,
                 SubscriptionConfig = entity.SubscriptionConfigs?.ToModel(),
                    
                 DisbursementConfig = entity.DisbursementConfigs?.ToModel(),
@@ -62,6 +65,8 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 Id = model.Id,
                 IsEnabled = model.IsEnabled,
+                Name=model.ConfigurationName,
+                ConfigurationCode=model.ConfigurationCode,
                 BundleEnabled = model.BundleEnabled,
                 SubscriptionConfigs = model.SubscriptionConfig?.ToEntity(),
                 DisbursementConfigs = model.DisbursementConfig?.ToEntity(),
