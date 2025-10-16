@@ -87,12 +87,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                        await _orgConfig.CreateAsync(config);
                 }
-                else if(orgConfig != null && config.WalletProviderConfiguration != null)
+                else if(orgConfig != null &&  config.WalletProviderConfiguration.Count > 0)
                 {
 
                     
                     await _orgConfig.UpdateWalletConfiguration(config);
-                }else if(orgConfig !=null && config.InputFinancingConfig !=null)
+                }
+                else if(orgConfig !=null && config.InputFinancingConfig.Count > 0)
                 {
                    
                     await _orgConfig.UpdateInputConfiguration(config);
@@ -111,5 +112,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             return await _orgConfig.GetByCodeAsync(args.organizationCode);
         }
+
+
     }
 }

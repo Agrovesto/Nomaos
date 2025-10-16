@@ -49,6 +49,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IDashboardRepository, DashboardRepository>();
             services.AddScoped<IFarmerCreditScoreRepository, FarmerCreditScoreRepository>();
             services.AddScoped<IOrganizationConfigurationRepository, OrganizationConfigurationRepository>();
+            services.AddScoped<IInputFinancingSchemeRepository, InputFinancingSchemeRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -66,6 +67,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmerCreditScoremanager, FarmerCreditScoremanager>();
             services.AddScoped<IWalletSetUpManager, WalletSetUpManager>();
             services.AddScoped<ISettingsManager, SettingsManager>();
+            services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
 
 
 

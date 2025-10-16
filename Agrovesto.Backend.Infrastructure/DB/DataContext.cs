@@ -51,15 +51,15 @@ namespace Agrovesto.Backend.Infrastructure.DB
             .HasIndex(i => i.ReferenceCode)
             .IsUnique();
 
-            modelBuilder.Entity<Distribution>()
+            modelBuilder.Entity<Distributions>()
                 .HasIndex(d => d.ReferenceNumber)
                 .IsUnique();
 
 
-            modelBuilder.Entity<SubscriptionProgram>()
+            modelBuilder.Entity<Subscriptions>()
             .HasOne(s => s.Invoice)
-            .WithOne(i => i.Subscription)
-            .HasForeignKey<Invoice>(i => i.SubscriptionId)
+            .WithOne(i => i.Subscriptions)
+            .HasForeignKey<Invoice>(i => i.SubscriptionsId)
             .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<OrganizationBundlePlans>()
@@ -68,20 +68,20 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasForeignKey(i => i.OrganizationBundlePlansId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<SubscriptionProgram>()
+            modelBuilder.Entity<Subscriptions>()
                 .HasMany(s => s.Distributions)
-                .WithOne(d => d.Subscription)
+                .WithOne(d => d.Subscriptions)
                 .HasForeignKey(d => d.SubscriptionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<Distribution>()
-                .HasMany(d => d.OrganizationRepayments)
-                .WithOne(r => r.Distribution)
-                .HasForeignKey(r => r.DistributionId)
+            modelBuilder.Entity<Distributions>()
+                .HasMany(d => d.SubscriptionRepayments)
+                .WithOne(r => r.Distributions)
+                .HasForeignKey(r => r.DistributionsId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             // Enum conversions (store as string)
-            modelBuilder.Entity<SubscriptionProgram>()
+            modelBuilder.Entity<Subscriptions>()
                 .Property(s => s.Status)
                 .HasConversion<string>();
 
@@ -89,11 +89,11 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .Property(i => i.Status)
                 .HasConversion<string>();
 
-            modelBuilder.Entity<Distribution>()
+            modelBuilder.Entity<Distributions>()
                 .Property(d => d.Mode)
                 .HasConversion<string>();
 
-            modelBuilder.Entity<OrganizationRepayment>()
+            modelBuilder.Entity<SubscriptionRepayment>()
                 .Property(r => r.Mode)
                 .HasConversion<string>();
 
@@ -161,12 +161,13 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<OrganizationBundlePlans> OrganizationBundlePlans { get; set; }
         public DbSet<OrganizationBundleItem> OrganizationBundleItem { get; set; }
-        public DbSet<SubscriptionProgram> OrganizationSubscriptions { get; set; }
+        public DbSet<Subscriptions> Subscriptions { get; set; }
         public DbSet<Invoice> Invoices { get; set; }
-        public DbSet<Distribution> Distributions { get; set; }
-        public DbSet<OrganizationRepayment> OrganizationRepayment { get; set; }
+        public DbSet<Distributions> Distributions { get; set; }
+        public DbSet<SubscriptionRepayment> SubscriptionRepayments { get; set; }
         public DbSet<Receipt> Receipts { get; set; }
         public DbSet<CooperativeCreditScore> CooperativeCreditScores { get; set; }
+        public DbSet<InputFinancingScheme> InputFinancingSchemes { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>

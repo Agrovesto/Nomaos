@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         Task<OrganizationConfigurationModel> UpdateWalletConfiguration(OrganizationConfigurationModel config);
         Task DeleteAsync(string orgId);
         Task<OrganizationConfigurationModel> UpdateInputConfiguration(OrganizationConfigurationModel config);
+        Task<InputFinancingConfigurationModel> GetInputConfigByCodeAsync(string configCode);
     }
 
     public class OrganizationConfigurationRepository : IOrganizationConfigurationRepository
@@ -203,7 +204,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         // update scalar props
                         existingInput.IsEnabled = inputConfigModel.IsEnabled;
                         existingInput.BundleEnabled = inputConfigModel.BundleEnabled;
-
+                        existingInput.Name = inputConfigModel.ConfigurationName;
+                        existingInput.ConfigurationCode = inputConfigModel.ConfigurationCode;
                         // ensure sub-collections initialized
                         existingInput.SubscriptionConfigs ??= new SubscriptionConfig();
                         existingInput.DisbursementConfigs ??= new DisbursementConfig();
@@ -254,6 +256,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             await _context.SaveChangesAsync();
             //return Task.CompletedTask;
         }
-    }
 
+        public async Task<InputFinancingConfigurationModel> GetInputConfigByCodeAsync(string configCode)
+        {
+            var configEntity = await _context.Set<InputFinancingConfiguration>()
+                .Include(x=>x.SubscriptionConfigs)
+                .Include(x=>x.RepaymentConfigs)
+                .Include(x=>x.DisbursementConfigs)  
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ConfigurationCode == configCode);
+
+            if (configEntity == null)
+                return null;
+
+            //SubscriptionConfigModel subscriptionConfig = null;
+
+            //if (!string.IsNullOrWhiteSpace(configEntity.SubscriptionConfigs.ContributionSplitJson))
+            //{
+            //    try
+            //    {
+            //        subscriptionConfig = JsonConvert.DeserializeObject<SubscriptionConfigModel>(configEntity.SubscriptionConfigs.ContributionSplitJson);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        throw new InvalidOperationException("Invalid subscription configuration format.", ex);
+            //    }
+            //}
+
+            return configEntity.ToModel();
+
+           
+        }
+    }
 }
+
+
