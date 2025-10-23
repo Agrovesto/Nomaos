@@ -86,6 +86,76 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                 throw new Exception("Image upload failed");
             }
         }
+
+
+        public async Task<string> UploadFileAsync(IFormFile file, string folderName)
+        {
+            if (file == null || file.Length == 0)
+                throw new ArgumentException("Invalid file upload request");
+
+            try
+            {
+                var folderId = await GetOrCreateFolderAsync(folderName);
+
+                var fileMetadata = new Google.Apis.Drive.v3.Data.File
+                {
+                    Name = file.FileName,
+                    Parents = new List<string> { folderId }
+                };
+
+                using var stream = file.OpenReadStream();
+                var request = _driveService.Files.Create(fileMetadata, stream, file.ContentType);
+                request.Fields = "id";
+                var uploadResult = await request.UploadAsync();
+
+                if (uploadResult.Status != Google.Apis.Upload.UploadStatus.Completed)
+                    throw new Exception("File upload failed");
+
+                var fileId = request.ResponseBody.Id;
+
+             
+                var permission = new Permission
+                {
+                    Role = "reader",
+                    Type = "anyone"
+                };
+                await _driveService.Permissions.Create(permission, fileId).ExecuteAsync();
+
+              
+                return $"https://drive.google.com/uc?id={fileId}";
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Google Drive upload failed: {ex.Message}", ex);
+            }
+        }
+
+        private async Task<string> GetOrCreateFolderAsync(string folderName)
+        {
+            // Try to find the folder first
+            var listRequest = _driveService.Files.List();
+            listRequest.Q = $"mimeType='application/vnd.google-apps.folder' and name='{folderName}' and trashed=false";
+            listRequest.Fields = "files(id, name)";
+            var folders = await listRequest.ExecuteAsync();
+
+            var folder = folders.Files.FirstOrDefault();
+            if (folder != null)
+                return folder.Id;
+
+            // Folder doesn’t exist — create it
+            var fileMetadata = new Google.Apis.Drive.v3.Data.File
+            {
+                Name = folderName,
+                MimeType = "application/vnd.google-apps.folder"
+            };
+
+            var createRequest = _driveService.Files.Create(fileMetadata);
+            createRequest.Fields = "id";
+            var createdFolder = await createRequest.ExecuteAsync();
+            return createdFolder.Id;
+        }
     }
 
 }
+
+

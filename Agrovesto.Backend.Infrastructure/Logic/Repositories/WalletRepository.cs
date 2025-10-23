@@ -1,10 +1,12 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -158,5 +160,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entity.Map();
         }
 
+
+        /// <summary>
+        /// Debits a wallet safely and records a transaction trail.
+        /// </summary>
+        public async Task<ResponseDto> DebitAsync(long walletId, decimal amount, string description)
+        {
+            if (amount <= 0)
+                return ResponseDto.Failure("Invalid debit amount.");
+
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == walletId);
+            if (wallet == null)
+                return ResponseDto.Failure("Wallet not found.");
+
+            // Check balance
+            if (wallet.WalletBalance < amount)
+                return ResponseDto.Failure("Insufficient wallet balance.");
+
+            // Debit wallet
+            wallet.WalletBalance -= amount;
+
+            // Record transaction log for audit trail
+            var transaction = new WalletTransaction
+            {
+             
+                WalletId = wallet.Id,
+                UserId = wallet.UserId,
+                Amount = amount,
+                TransactionType = "Debit",
+                Description = description,
+                Reference = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                CreatedAt = DateTime.UtcNow,
+                BalanceAfter = wallet.WalletBalance
+            };
+
+            _context.WalletTransactions.Add(transaction);
+
+            // Save both updates
+            await _context.SaveChangesAsync();
+
+            return ResponseDto.Success("Wallet debited successfully.", new
+            {
+                wallet.Id,
+                wallet.WalletBalance,
+                transaction.Reference,
+                transaction.Amount,
+                transaction.Description
+            });
+        }
     }
 }

@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
         public string? CreatedBy { get; set; }
         public string? OrganizationCode { get; set; }
+        public decimal WalletBalance { get; set; }
 
     }
     public class SubAccountModel

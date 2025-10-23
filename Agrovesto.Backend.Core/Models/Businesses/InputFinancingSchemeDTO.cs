@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -68,4 +69,17 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string ConfigurationCode { get; set; }
        // public List<SchemeTargetDto> Targets { get; set; }
     }
+
+
+    public class InputSubscriptionRequestDto
+    {
+        public string SubscriberUserId { get; set; } = string.Empty;
+        public int SchemeId { get; set; }
+        public string ConfigurationCode { get; set; } = string.Empty;
+        public string SubscribedBy { get; set; } = "Farmer";
+        public bool AgreeToDebit { get; set; }
+        public IFormFile? PaymentProof { get; set; }
+        public string? TransactionRef { get; set; }
+    }
+
 }

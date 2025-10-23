@@ -110,7 +110,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public int Id { get; set; }
         public string RepaymentMode { get; set; } = "Cash"; // "Cash", "Produce", "Both", "None"
         public decimal? ExpectedRepaymentPercentage { get; set; } //e.g 100% 50%
-        public long? RepaymentDurationInMonths { get; set; }
+        public long RepaymentDurationInMonths { get; set; }
         public bool AllowInstallments { get; set; } = true;
         public bool IsRepaymentInPercentage { get; set; }
         public bool IsRepaymentStaticFee { get; set; }
