@@ -24,5 +24,23 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
         public string? CreatedBy { get; set; }
         public string? OrganizationCode { get; set; }
+
+        public decimal WalletBalance { get; set; }
+    }
+
+    public class WalletTransaction
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+
+        public long WalletId { get; set; }
+        public string UserId { get; set; }
+        public decimal Amount { get; set; }
+        public string TransactionType { get; set; } // "Credit" or "Debit"
+        public string Description { get; set; }
+        public string Reference { get; set; }
+        public decimal BalanceAfter { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 }

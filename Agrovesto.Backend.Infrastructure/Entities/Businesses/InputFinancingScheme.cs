@@ -55,4 +55,28 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public InputFinancingScheme Scheme { get; set; }
     }
+
+
+    public class InputSubscription
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public long InputSchemeId { get; set; }
+        public string ConfigurationCode { get; set; }
+        public string OrganizationCode { get; set; }
+        public string BusinessCode { get; set; }
+        public string SubscribedByUserId { get; set; } //
+        public string SubscriberType { get; set; } // Farmer, Cooperative
+        public long CooperativeId { get; set; } /// if subscriber is cooperative, cooperativeId cannot be 0
+        public decimal EquityAmount { get; set; }
+        public decimal RepaymentAmount { get; set; }
+        public DateTimeOffset RepaymentStartDate { get; set; }
+        public DateTimeOffset RepaymentEndDate { get; set; }
+        public string? PaymentProofUrl { get; set; }
+        public string? TransactionRef { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
+        public string Status { get; set; } // ActiveSubscription, ApprovedSubscription, RejectedSubscription, DisbursedSubscription
+    }
 }

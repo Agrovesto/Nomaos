@@ -157,6 +157,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
         public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
        public DbSet<Wallet> Wallets { get; set; }
+       public DbSet<WalletTransaction> WalletTransactions { get; set; }
 
 
         public DbSet<OrganizationBundlePlans> OrganizationBundlePlans { get; set; }
@@ -168,6 +169,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Receipt> Receipts { get; set; }
         public DbSet<CooperativeCreditScore> CooperativeCreditScores { get; set; }
         public DbSet<InputFinancingScheme> InputFinancingSchemes { get; set; }
+        public DbSet<InputSubscription> InputSubscriptions { get; set; }
 
     }
     public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>

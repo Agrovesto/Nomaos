@@ -92,7 +92,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool IsEquityStaticFee { get; set; }
         public bool AllowFarmerSelfSubscription { get; set; }
         public bool AllowCooperativeSubscription { get; set; }
-        public decimal? EquityStaticFee { get; set; }
+        public decimal EquityStaticFee { get; set; }
 
         public Dictionary<string, decimal>? ContributionSplits { get; set; }
     }
@@ -112,11 +112,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int Id { get; set; }
         public string RepaymentMode { get; set; } = "Cash"; // "Cash", "Produce", "Both", "None"
         public decimal? ExpectedRepaymentPercentage { get; set; } //e.g 100% 50%
-        public long? RepaymentDurationInMonths { get; set; }
+        public long RepaymentDurationInMonths { get; set; }
         public bool AllowInstallments { get; set; } = true;
         public bool IsRepaymentInPercentage { get; set; }
         public bool IsRepaymentStaticFee { get; set; }
-        public decimal? RepaymentStaticFee { get; set; }
+        public decimal RepaymentStaticFee { get; set; }
 
     }
 

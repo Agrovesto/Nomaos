@@ -10,5 +10,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
     public interface IGoogleDriveService
     {
         Task<string> UploadFileAsync(IFormFile file);
+        Task<string> UploadFileAsync(IFormFile file, string folderName);
     }
 }

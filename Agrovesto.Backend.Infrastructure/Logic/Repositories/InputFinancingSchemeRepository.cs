@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.DB;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -12,10 +13,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public interface IInputFinancingSchemeRepository
     {
         Task<InputFinancingScheme> AddAsync(InputFinancingScheme scheme);
+        Task AddInputSubscription(InputSubscription subscription);
         Task DeleteAsync(long id);
         Task<bool> ExistsByNameAsync(string schemeName);
-        Task<IEnumerable<InputFinancingScheme>> GetAllAsync();
+        Task<IEnumerable<InputFinancingScheme>> GetAllAsync(BusinessRegistrationArgs query);
+        Task<IEnumerable<InputSubscription>> GetAllInputSubscriptionAsync(BusinessRegistrationArgs query);
         Task<InputFinancingScheme> GetByIdAsync(long id);
+        Task<InputSubscription?> GetInputSubscriptionByIdAsync(long id);
+        Task<IEnumerable<InputSubscription>> GetInputSubscriptionByUserIdAsync(string userId);
         Task UpdateAsync(InputFinancingScheme scheme);
     }
     public class InputFinancingSchemeRepository : IInputFinancingSchemeRepository
@@ -41,12 +46,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .FirstOrDefaultAsync(s => s.Id == id);
         }
 
-        public async Task<IEnumerable<InputFinancingScheme>> GetAllAsync()
+        public async Task<IEnumerable<InputFinancingScheme>> GetAllAsync(BusinessRegistrationArgs query)
         {
-            return await _context.InputFinancingSchemes
-               // .Include(s => s.Targets)
-                .ToListAsync();
+
+            var inputSchemes = _context.InputFinancingSchemes
+              .Where(x => x.BusinessCode == query.businessCode)
+              .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                inputSchemes = inputSchemes.Where(x=> x.OrganizationCode == query.organizationCode);
+            }
+
+                     var result = await inputSchemes
+                .OrderByDescending(s => s.CreatedOn)
+                .Skip(query.PageNumber)
+                .Take(query.PageSize)
+                 .Select(s => s).ToListAsync();
+
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
+
         }
+        
 
         public async Task UpdateAsync(InputFinancingScheme scheme)
         {
@@ -67,5 +92,59 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             return await _context.InputFinancingSchemes.AnyAsync(s => s.SchemeName == schemeName);
         }
+
+
+        public async Task AddInputSubscription(InputSubscription subscription)
+        {
+            // Basic validation and tracking
+            if (subscription == null)
+                throw new ArgumentNullException(nameof(subscription));
+
+            await _context.InputSubscriptions.AddAsync(subscription);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<InputSubscription?> GetInputSubscriptionByIdAsync(long id)
+        {
+            return await _context.InputSubscriptions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+        }
+
+        public async Task<IEnumerable<InputSubscription>> GetInputSubscriptionByUserIdAsync(string userId)
+        {
+          
+
+            return await _context.InputSubscriptions
+                .AsNoTracking()
+                .Where(x => x.SubscribedByUserId == userId)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<InputSubscription>> GetAllInputSubscriptionAsync(BusinessRegistrationArgs query)
+        {
+            var subscriptions = _context.InputSubscriptions
+          .Where(x => x.BusinessCode == query.businessCode)
+          .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                subscriptions = subscriptions.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+
+            var result = await subscriptions
+              .OrderByDescending(s => s.CreatedOn)
+              .Skip(query.PageNumber)
+              .Take(query.PageSize)
+               .Select(s => s).ToListAsync();
+
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
+
+        }
     }
 }
+

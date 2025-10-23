@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using System;
 using System.Collections.Generic;
@@ -13,6 +14,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<SterlingBankWalletModel> CreateSterlingWallet(SterlingBankWalletModel model);
         Task<SubAccountModel> CreateSubAccount(SubAccountModel model);
         Task<WalletModel> CreateUserWallet(WalletModel model);
+        Task<ResponseDto> DebitAsync(long walletId, decimal amount, string description);
         Task<SterlingBankWalletModel> GetSterlingWallet(string agrovestoUserId);
         Task<SterlingBankWalletModel[]> GetSterlingWallets();
         Task<SubAccountModel> GetSubAccount(string userId);
