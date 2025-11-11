@@ -47,16 +47,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return cooperative.Map();
         }
-
-        public async Task<CooperativeModel> GetCooperativeDetailById(long Id)
+        public async Task<CooperativeModel?> GetCooperativeDetailById(long id)
         {
-            var cooperative = await _context.Cooperatives.Where(x => x.Id == Id).FirstOrDefaultAsync();
+            var cooperative = await _context.Cooperatives
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
             if (cooperative == null)
-            {
                 return null;
-            }
-            return cooperative.Map();
+
+            // Fetch wallet sequentially (safe)
+            var wallet = await _context.Wallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == cooperative.UserId);
+
+            // Fetch farmers sequentially (safe)
+            var farmers = await _context.Farmers
+                .AsNoTracking()
+                .Where(f => f.BelongToCooperativeId == cooperative.Id)
+                .ToListAsync();
+            //var mappingTask = _context.FarmMappings.AsNoTracking().FirstOrDefaultAsync(f => f.UserId == cooperative.UserId);
+            // Map results
+            var response = cooperative.Map();
+            response.Wallet = wallet?.Map();
+            response.Farmers = farmers?.Select(f => f.Map()).ToList() ?? new List<FarmerModel>();
+
+            return response;
         }
+
+
         public async Task<List<CooperativeModel>> GetCooperatives() //restricted to agrovesto
         {
 

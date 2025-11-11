@@ -8,13 +8,13 @@ namespace Agrovesto.Backend.Core.CoreUtils
 {
     public class ResponseDto
     {
-        public bool Success { get; set; }
+        public bool Status { get; set; }
         public string Message { get; set; }
         public object? Data { get; set; }
 
         public ResponseDto(bool success, string message, object? data = null)
         {
-            Success = success;
+            Status = success;
             Message = message;
             Data = data;
         }

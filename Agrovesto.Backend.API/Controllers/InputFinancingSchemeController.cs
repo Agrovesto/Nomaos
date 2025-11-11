@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Amazon.Util.Internal;
 using Microsoft.AspNetCore.Http;
@@ -262,9 +263,63 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
                 var result = await _manager.CreateSubscription(model, args);
-                return Ok(new Response<ResponseDto>()
+                if (result.Status)
                 {
-                    Data = result,
+                    return Ok(new Response<ResponseDto>()
+                    {
+                        Data = result,
+                        Succeeded = result.Status,
+                        Code = result.Status ? ResponseCodes.Success : ResponseCodes.BadRequest
+                        //Code = result.Success
+                    });
+                }
+                else
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = result.Message,
+                        Succeeded = false,
+
+                    });
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpGet("subscriptions")]
+        public async Task<IActionResult> InputSubscriptions([FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var result = await _manager.GetAllSubscriptionsAsync(args);
+                return Ok(new Response<object>()
+                {
+                    Data = result.Data,
                     Succeeded = true,
                     //Code = result.Success
                 });
@@ -290,8 +345,133 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
+        /// <summary>
+        /// Get subscriptions for a specific farmer
+        /// </summary>
+        [HttpGet("farmer/{farmerId}")]
+        public async Task<IActionResult> GetByFarmer([FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var result = await _manager.GetByFarmerAsync(args.UserId);
+                return Ok(new Response<ResponseDto>()
+                {
+                    Data = result,
+                    Succeeded = true,
+                    //Code = result.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
 
+        }
+
+        /// <summary>
+        /// Get all subscriptions pending verification (payment proof uploaded but not verified)
+        /// </summary>
+        [HttpGet("pending-verification")]
+        public async Task<IActionResult> GetPendingVerification([FromQuery] BusinessRegistrationArgs args)
+        {
+             try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var result = await _manager.GetPendingVerificationAsync();
+                return Ok(new Response<ResponseDto>()
+                {
+                    Data = result,
+                    Succeeded = true,
+                    //Code = result.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        /// <summary>
+        /// Verify payment proof and activate subscription
+        /// </summary>
+        [HttpPut("verify/{subscriptionId}")]
+        public async Task<IActionResult> VerifySubscription(long subscriptionId, [FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var result = await _manager.VerifyAndActivateAsync(args, subscriptionId, args.UserId);
+
+                return Ok(new Response<ResponseDto>()
+                {
+                    Data = result,
+                    Succeeded = true,
+                    //Code = result.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+          
+        }
     }
 
 }

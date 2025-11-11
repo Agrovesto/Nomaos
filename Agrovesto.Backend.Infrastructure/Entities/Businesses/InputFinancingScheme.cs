@@ -77,6 +77,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? PaymentProofUrl { get; set; }
         public string? TransactionRef { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
-        public string Status { get; set; } // ActiveSubscription, ApprovedSubscription, RejectedSubscription, DisbursedSubscription
+        public string Status { get; set; } // PendingSubscription ActiveSubscription, ApprovedSubscription, RejectedSubscription, DisbursedSubscription,
+        public string? VerifiedBy { get; set; }
+        public string? ApprovedBy { get; set; }
+        public DateTimeOffset ApprovedOn { get; set; } = DateTimeOffset.UtcNow;
+
+        public DateTimeOffset VerifiedOn { get; set; } = DateTimeOffset.UtcNow;
+
     }
 }

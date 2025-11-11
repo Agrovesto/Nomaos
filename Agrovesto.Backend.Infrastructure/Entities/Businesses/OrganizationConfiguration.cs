@@ -81,7 +81,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal? EquityPercentage { get; set; }
         public bool IsEquityInPercentage { get; set; }
         public bool IsEquityStaticFee { get; set; }
-        public decimal? EquityStaticFee { get; set; }
+        public decimal EquityStaticFee { get; set; }
         public bool CooperativeContributes { get; set; }
         public bool OrganizationContributes { get; set; }
         public bool FinancialPartnerContributes { get; set; }
@@ -114,7 +114,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool AllowInstallments { get; set; } = true;
         public bool IsRepaymentInPercentage { get; set; }
         public bool IsRepaymentStaticFee { get; set; }
-        public decimal? RepaymentStaticFee { get; set; }
+        public decimal RepaymentStaticFee { get; set; }
 
     }
 

@@ -48,7 +48,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
-        public List<ValueChainSelectionDto> ValueChainSelections { get; set; }
+        public bool IsNinVerified { get; set; } = false;
+        public List<ValueChainSelectionDto> SelectedItems { get; set; }
         public List<FarmerValueChainSelectionDto>? ValueChainItems { get; set; }
     }
     public class FarmerValueChainSelectionDto

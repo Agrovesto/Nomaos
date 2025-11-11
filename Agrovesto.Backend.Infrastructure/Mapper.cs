@@ -1397,7 +1397,7 @@ namespace Agrovesto.Backend.Infrastructure
                 MiddleName = model.MiddleName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType),
 
-
+                IsNinVerified= model.IsNinVerified,
                 OrganizationCode = model.OrganizationCode
             };
         }
@@ -1429,7 +1429,8 @@ namespace Agrovesto.Backend.Infrastructure
                 LastName = entity.LastName,
                 MiddleName = entity.MiddleName,
                 SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
-
+                IsNinVerified= entity.IsNinVerified,
+                
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -2150,7 +2151,8 @@ namespace Agrovesto.Backend.Infrastructure
                 CreatedOn = model.CreatedOn,
                 Id = model.Id,
                 WalletProviderCode = model.WalletProviderCode,
-                OrganizationCode = model.OrganizationCode
+                OrganizationCode = model.OrganizationCode,
+                WalletBalance=model.WalletBalance
 
             };
         }
@@ -2173,7 +2175,8 @@ namespace Agrovesto.Backend.Infrastructure
                 CreatedOn=entity.CreatedOn,
                 Id = entity.Id,
                 WalletProviderCode=entity.WalletProviderCode,
-                OrganizationCode = entity.OrganizationCode
+                OrganizationCode = entity.OrganizationCode,
+                WalletBalance=entity.WalletBalance
             };
         }
 

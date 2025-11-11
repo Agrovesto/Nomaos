@@ -21,7 +21,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         Task<InputFinancingScheme> GetByIdAsync(long id);
         Task<InputSubscription?> GetInputSubscriptionByIdAsync(long id);
         Task<IEnumerable<InputSubscription>> GetInputSubscriptionByUserIdAsync(string userId);
+        Task<IEnumerable<InputSubscription>> GetSubscriptionByStatusAsync(string status);
         Task UpdateAsync(InputFinancingScheme scheme);
+        Task UpdateSubscriptionStatusAsync(long id, string status, string verifiedBy);
     }
     public class InputFinancingSchemeRepository : IInputFinancingSchemeRepository
     {
@@ -133,8 +135,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var result = await subscriptions
               .OrderByDescending(s => s.CreatedOn)
-              .Skip(query.PageNumber)
-              .Take(query.PageSize)
+             // .Skip(query.PageNumber)
+              //.Take(query.PageSize)
                .Select(s => s).ToListAsync();
 
 
@@ -144,6 +146,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
 
+        }
+        public async Task<IEnumerable<InputSubscription>> GetSubscriptionByStatusAsync(string status)
+        {
+            return await _context.InputSubscriptions
+                .Where(s => s.Status == status)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+        public async Task UpdateSubscriptionStatusAsync(long id, string status, string verifiedBy)
+        {
+            var subscription = await _context.InputSubscriptions.FindAsync(id);
+            if (subscription == null) return;
+
+            subscription.Status = status;
+            subscription.VerifiedBy = verifiedBy;
+            subscription.VerifiedOn = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
         }
     }
 }
