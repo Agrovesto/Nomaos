@@ -28,6 +28,10 @@ using Amazon;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
+// Prefer awaiting the async implementation to avoid blocking threads
+await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
+
 // Add services to the container.
 //builder.Services.AddDbContext<DataContext>(options =>
 
@@ -250,7 +254,6 @@ app.UseSwaggerUI(c =>
 //    db.Database.Migrate();
 //    await SeedData.EnsureSeededAsync(db);
 //}
-
 
 
 app.UseCors();

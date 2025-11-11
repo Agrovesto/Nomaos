@@ -140,7 +140,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WarehouseUserModel> GetWarehouseManagerByBusiness(string belongToBusiness, long warehouseId)
         {
             var warehouse = await _context.WarehouseUsers.Where(x => x.BelongToBusinessCode == belongToBusiness && x.WarehouseId == warehouseId).FirstOrDefaultAsync();
-            if (warehouse == null) { throw new Exception("No record found"); }
+            if (warehouse == null) { return null; }//throw new Exception("No record found"); }
 
             return warehouse.Map();
         }

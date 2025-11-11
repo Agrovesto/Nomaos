@@ -328,7 +328,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (farmerExist != null)
             {
                 // Farmer already exists, update the value chain instead
-                await UpdateFarmerValueChainItems(farmerExist.Id, data.ValueChainSelections);
+                await UpdateFarmerValueChainItems(farmerExist.Id, data.SelectedItems);
                 return (true, farmerExist.Map());
             }
 
@@ -338,7 +338,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             await _context.SaveChangesAsync(); // Saves and assigns Id to entity
 
             // Now that entity.Id is valid, handle value chain items
-            await UpdateFarmerValueChainItems(entity.Id, data.ValueChainSelections);
+            await UpdateFarmerValueChainItems(entity.Id, data.SelectedItems);
 
             return (true, entity.Map());
         }
@@ -664,6 +664,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     //mapped.SSN = item.SubAccount.SSN;
                     mapped.NIN = item.SubAccount.NIN;
                     mapped.BVN = item.SubAccount.Bvn;
+                    mapped.IsNinVerified = item.SubAccount.IsNinVerified;
                     // mapped.AccountNumber = item.SubAccount.AccountNumber;
                 }
 

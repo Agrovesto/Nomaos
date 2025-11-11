@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -22,9 +23,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     {
         Task<(bool status, string message)> CreateWalletMultipleAsync(ListQueryParams args);
         Task<(bool status, string message)> CreateWalletSingleAsync(ListQueryParams args);
-        
-            
-     }
+        Task<ResponseDto> GetUserWalletAsync(ListQueryParams query);
+    }
 
     public class WalletSetUpManager: IWalletSetUpManager
     {
@@ -154,7 +154,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 LastName = userModel.LastName,
                 PhoneNumber = userModel.PhoneNumber
             };
-
+            providerParams = await RetrieveParams(walletProviderCode, args.env);
             switch (walletProviderCode)
             {
                 case Providers.FCMBWallet:
@@ -254,6 +254,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 return (false, $"Error creating wallet: {ex.Message}");
             }
+        }
+        public async Task<ResponseDto> GetUserWalletAsync(ListQueryParams query)
+        {
+            var walletProviderCode = await ResolveWalletProviderAsync(query);
+            var existingWallet = await _walletRepository.GetUserWalletByProviderAsync(query.UserId, walletProviderCode);
+            if (existingWallet == null)
+            {
+                return ResponseDto.Failure($"User Wallet does not Exist");
+            }
+            return ResponseDto.Success("Wallet Retrieved Successfully.", new
+            {
+                existingWallet.UserId,
+                existingWallet.Id,
+                existingWallet.AccountName,
+                existingWallet.AccountNumber,
+                existingWallet.BankName,
+                existingWallet.WalletBalance,
+                existingWallet.WalletProviderCode
+            });
         }
 
         /// <summary>

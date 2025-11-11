@@ -408,6 +408,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             entity.UserType = model.UserType;
             entity.NIN = model.NIN;
             entity.BVN = model.Bvn;
+
             // Generate custom user ID
             var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
             var randomDigits = new Random().Next(100, 999);

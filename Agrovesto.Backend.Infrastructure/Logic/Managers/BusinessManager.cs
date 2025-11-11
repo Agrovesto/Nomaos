@@ -16,6 +16,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
 using DocumentFormat.OpenXml.InkML;
+using iTextSharp.text.pdf.security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -633,7 +634,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             args.UserId ??= business.UserId;
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
             model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
-
+            var isninVerified = false;
+            if (model.shouldVerifyNin)
+            {
+                //debit account then go ahead and verify
+                var ninVerification = await _identityVerificationManager.VerifyNIN(new NINDataModel
+                {
+                   number=model.NIN
+                });
+                if (!ninVerification.status)
+                {
+                    _log.LogError($"NIN verification failed: {ninVerification.detail}");
+                    isninVerified= false;
+                    model.shouldVerifyNin = isninVerified;
+                    // throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"NIN verification failed: {ninVerification.message}");
+                }
+                else {                    
+                    isninVerified= true;
+                    model.NIN= ninVerification.nin_data.nin;
+                    model.FirstName= ninVerification.nin_data.firstname;
+                    model.LastName=ninVerification.nin_data.surname;
+                    model.MiddleName= ninVerification.nin_data.middlename;
+                    model.shouldVerifyNin = isninVerified;
+                    _log.LogInformation($"NIN verification succeeded for NIN: {model.NIN}");
+                }
+            }
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
@@ -1028,8 +1053,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Name= model.Name,
                 NIN=model.NIN,
                 Bvn=model.Bvn,
-                
-                OrganizationCode=args.organizationCode,
+                shouldVerifyNin=model.shouldVerifyNin,
+
+                OrganizationCode =args.organizationCode,
                 BusinessCode = args.businessCode,
             };
             //send mail
@@ -1059,7 +1085,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 IsMainAccount = false,
                 OrganizationCode=args.organizationCode,
-                Status = BusinessStatus.Registered.ToString()
+                Status = BusinessStatus.Registered.ToString(),
+                IsNinVerified=model.shouldVerifyNin
             };
 
             return await _walletManager.CreateSubAccount(subaccount);
@@ -1163,9 +1190,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Ward = model.Ward,
                 OrganizationCode =args.organizationCode,
                 FarmerCategory=model.FarmerCategory,
-                ValueChainSelections=model.ValueChainSelections,
+                SelectedItems=model.ValueChainDto,
                 YearsInAgric=model.YearsInAgric,
-                HighestLevelOfEducation=model.HighestLevelOfEducation
+                HighestLevelOfEducation=model.HighestLevelOfEducation,
+               // ValueChainItems= model.ValueChainSelections
             };
 
             var farer = await _farmerRepository.CreateFarmer(farmer);
@@ -1273,6 +1301,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Succeeded = true,
                     Data = staff,
                     Count = staff.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        //
+        public async Task<Response<CooperativeModel>> GetCooperativeDetailById(long Id)
+        {
+            try
+            {
+                var cooperativeDetail = await _cooperativeRepository.GetCooperativeDetailById(Id);
+                if (cooperativeDetail == null) return new Response<CooperativeModel>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Message = "No Record Found"
+                };
+                return new Response<CooperativeModel>
+                {
+                    Succeeded = true,
+                    Data = cooperativeDetail,
                     Message = "Retrieved Successfully"
                 };
             }

@@ -47,7 +47,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string City { get; set; }
         public string Alias { get; set; }
         public string Address { get; set; }
-        public SubAccountType SubAccountType { get; set; }  
+        public SubAccountType SubAccountType { get; set; }
+        public bool IsNinVerified { get; set; } = false;
     }
     public enum SubAccountType
     {

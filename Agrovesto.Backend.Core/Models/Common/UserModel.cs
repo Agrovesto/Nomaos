@@ -111,8 +111,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
+        public bool shouldVerifyNin { get; set; } = false;
 
-        public List<ValueChainSelectionDto>? ValueChainSelections { get; set; }
+        public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
     }
     public enum UserType
     {

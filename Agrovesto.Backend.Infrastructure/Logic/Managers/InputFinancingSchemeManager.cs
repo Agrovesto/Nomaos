@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Azure.Core;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Logging;
 using Org.BouncyCastle.Asn1.Ocsp;
@@ -27,6 +28,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         Task UpdateAsync(long id, CreateInputFinancingSchemeDto dto);
         Task DeleteAsync(long id);
         Task<ResponseDto> CreateSubscription(InputSubscriptionRequestDto request, BusinessRegistrationArgs args);
+        Task<ResponseDto> VerifyAndActivateAsync(BusinessRegistrationArgs args, long subscriptionId, string verifiedBy);
+        Task<ResponseDto> GetPendingVerificationAsync();
+        Task<ResponseDto> GetByFarmerAsync(string farmerId);
+        Task<ResponseDto> GetAllSubscriptionsAsync(BusinessRegistrationArgs query);
     }
     public class InputFinancingSchemeManager : IInputFinancingSchemeManager
     {
@@ -190,7 +195,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             await _repository.DeleteAsync(id);
         }
-
+      
         public async Task<ResponseDto> CreateSubscription(InputSubscriptionRequestDto request, BusinessRegistrationArgs args)
         {
             CooperativeModel coopRepo = new CooperativeModel();
@@ -343,7 +348,60 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
 
+        public async Task<ResponseDto> GetAllSubscriptionsAsync(BusinessRegistrationArgs query)
+        {
+            var subscriptions = await _repository.GetAllInputSubscriptionAsync(query);
+            return ResponseDto.Success("Subscriptions retrieved successfully.", subscriptions);
+        }
 
+        // ==============================
+        // 3️⃣ Retrieve By Farmer
+        // ==============================
+        public async Task<ResponseDto> GetByFarmerAsync(string farmerId)
+        {
+            var subscriptions = await _repository.GetInputSubscriptionByUserIdAsync(farmerId);
+            return ResponseDto.Success("Farmer subscriptions retrieved successfully.", subscriptions);
+        }
+
+        // ==============================
+        // 4️⃣ Retrieve Pending Verification
+        // ==============================
+        public async Task<ResponseDto> GetPendingVerificationAsync()
+        {
+            var pending = await _repository.GetSubscriptionByStatusAsync("PendingVerification");
+            return ResponseDto.Success("Pending subscriptions retrieved successfully.", pending);
+        }
+
+        // ==============================
+        // 5️⃣ Verify Payment Proof & Activate
+        // ==============================
+        public async Task<ResponseDto> VerifyAndActivateAsync(BusinessRegistrationArgs args,long subscriptionId, string verifiedBy)
+        {
+            var subscription = await _repository.GetInputSubscriptionByIdAsync(subscriptionId);
+            if (subscription == null)
+                return ResponseDto.Failure("Subscription not found.");
+
+            if (subscription.Status != "PendingVerification")
+                return ResponseDto.Failure("Subscription is not awaiting verification.");
+            var orgConfig = await _configRepository.GetByCodeAsync(args.organizationCode);
+            if (orgConfig == null)
+                return ResponseDto.Failure("Organization not found");
+
+            var defaultOrgWallet = orgConfig.WalletProviderConfiguration.FirstOrDefault(x => x.IsDefault);
+
+            var wallet = await _walletRepo.GetUserWalletByProviderAsync(subscription.SubscribedByUserId, defaultOrgWallet.DefaultWalletProvider);
+
+            if (wallet == null)
+                return ResponseDto.Failure("Farmer wallet not found.");
+
+            if (wallet.WalletBalance < subscription.EquityAmount)
+                return ResponseDto.Failure("Insufficient wallet balance to activate subscription.");
+
+            await _walletRepo.DebitAsync(wallet.Id, subscription.EquityAmount, "Equity payment verified and debited");
+            await _repository.UpdateSubscriptionStatusAsync(subscriptionId, "Active", verifiedBy);
+
+            return ResponseDto.Success("Subscription verified and activated successfully.");
+        }
         private InputFinancingSchemeDto MapToDto(InputFinancingScheme scheme)
         {
             if (scheme == null) return null;

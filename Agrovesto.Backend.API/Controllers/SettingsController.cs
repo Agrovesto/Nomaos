@@ -98,7 +98,53 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-       
+        [HttpGet("retrieve-wallet")]
+        public async Task<IActionResult> RetrieveWallet([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                var hasOrgCode = OrganizationCode;
+                if (!string.IsNullOrEmpty(hasOrgCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _walletSetUpManager.GetUserWalletAsync(query);
+                if (!result.Status)
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = result.Message,
+                        Succeeded = false,
+
+                    });
+                }
+                return Ok(new Response<object>()
+                {
+                    Data = result.Data,
+                    Succeeded = true,
+                    Code = Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
         //update config put
         //delete config delete
         [HttpPost("wallet-setup")]
