@@ -23,9 +23,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
     {
         public string BelongToBusinessCode { get; set; }  //which business
         public string Name { get; set; }
-        public string Location { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public string? Ward { get; set; }
         public string PhoneNumber { get; set; }
         public string? Email { get; set; }       

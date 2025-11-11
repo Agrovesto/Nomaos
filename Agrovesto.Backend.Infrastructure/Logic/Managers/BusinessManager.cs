@@ -622,43 +622,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return user.Map();
         }
-
         public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
         {
             if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
 
+            // Fetch the business
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                 ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
 
             args.UserId ??= business.UserId;
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
             model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
-            var isninVerified = false;
+
+            // NIN verification if required
             if (model.shouldVerifyNin)
             {
-                //debit account then go ahead and verify
-                var ninVerification = await _identityVerificationManager.VerifyNIN(new NINDataModel
-                {
-                   number=model.NIN
-                });
+                var ninVerification = await _identityVerificationManager.VerifyNIN(new NINDataModel { number = model.NIN });
                 if (!ninVerification.status)
                 {
                     _log.LogError($"NIN verification failed: {ninVerification.detail}");
-                    isninVerified= false;
-                    model.shouldVerifyNin = isninVerified;
-                    // throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"NIN verification failed: {ninVerification.message}");
+                    model.shouldVerifyNin = false;
                 }
-                else {                    
-                    isninVerified= true;
-                    model.NIN= ninVerification.nin_data.nin;
-                    model.FirstName= ninVerification.nin_data.firstname;
-                    model.LastName=ninVerification.nin_data.surname;
-                    model.MiddleName= ninVerification.nin_data.middlename;
-                    model.shouldVerifyNin = isninVerified;
+                else
+                {
+                    model.shouldVerifyNin = true;
+                    model.NIN = ninVerification.nin_data.nin;
+                    model.FirstName = ninVerification.nin_data.firstname;
+                    model.LastName = ninVerification.nin_data.surname;
+                    model.MiddleName = ninVerification.nin_data.middlename;
                     _log.LogInformation($"NIN verification succeeded for NIN: {model.NIN}");
                 }
             }
+
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
@@ -666,79 +662,84 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
-                   // UserModel finalUser = existingUser;
                     bool isNewUser = false;
 
                     if (existingUser != null)
                     {
-                        // Check if user already linked to organization
-                        bool alreadyInOrg = await _context.UserOrganizations
-                            .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode);
-
-                        if (alreadyInOrg)
+                        // Only handle organization linkage if organizationCode is provided
+                        if (!string.IsNullOrEmpty(args.organizationCode))
                         {
-                            throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"A user with phone number {model.PhoneNumber} already exists in this organization.");
-                        }
+                            bool alreadyInOrg = await _context.UserOrganizations
+                                .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode);
 
-                        // Add user to new organization
-                        if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
-                        {
-                            _context.UserOrganizations.Add(new UserOrganization
+                            if (alreadyInOrg)
+                                throw new BaseException(Core.Enums.ExceptionType.CONFLICT,
+                                    $"A user with phone number {model.PhoneNumber} already exists in this organization.");
+
+                            if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
                             {
-                                UserId = existingUser.Id,
-                                OrganizationCode = args.organizationCode
-                            });
+                                _context.UserOrganizations.Add(new UserOrganization
+                                {
+                                    UserId = existingUser.Id,
+                                    OrganizationCode = args.organizationCode
+                                });
+                                _log.LogInformation($"User {model.PhoneNumber} added to organization {args.organizationCode}.");
+                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                            }
                         }
-
-                        _log.LogInformation($"User with phone {model.PhoneNumber} added to new organization {args.organizationCode}.");
-                        await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                        else
+                        {
+                            _log.LogInformation($"User {model.PhoneNumber} is a direct business user (no organization).");
+                        }
                     }
                     else
                     {
+                        // Generate full name if empty
                         if (string.IsNullOrEmpty(model.Name))
-                        {
                             model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
-                        }
 
                         var registrationResult = await RegisterUserAsync(model, args);
                         if (!registrationResult.status)
-                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
+                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                                $"User registration failed: {registrationResult.message}");
 
                         existingUser = registrationResult.model;
                         isNewUser = true;
 
-                        // Add user to organization
-                        if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
+                        // Add to organization if applicable
+                        if (!string.IsNullOrEmpty(args.organizationCode) &&
+                            !_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
                         {
                             _context.UserOrganizations.Add(new UserOrganization
                             {
                                 UserId = existingUser.Id,
                                 OrganizationCode = args.organizationCode
                             });
+                            _log.LogInformation($"New user {model.PhoneNumber} added to organization {args.organizationCode}.");
                         }
                     }
 
-                    // Check for existing subaccount
+                    // Ensure subaccount exists
                     var existingSubAccount = await _walletManager.GetSubAccountByUserId(existingUser.Id);
                     SubAccountModel subAccount;
-                    model.Email = !string.IsNullOrWhiteSpace(model.Email)
-                        ? model.Email
-                        : GenerateEmail(model.FirstName, business.BusinessEmail);
+                    model.Email ??= GenerateEmail(model.FirstName, business.BusinessEmail);
 
-                    if (existingSubAccount != null)
-                    {
-                        subAccount = existingSubAccount;
-                    }
-                    else
-                    {
-                        subAccount = await CreateSubAccountAsync(model, args, business, existingUser.Id);
-                    }
+                    subAccount = existingSubAccount ?? await CreateSubAccountAsync(model, args, business, existingUser.Id);
 
-                    // Track role assignments (multi-role support)
+                    // Track role assignments
                     await _authenticationRepository.TrackUserRoleAssignment(existingUser, model.UserType);
 
                     // Create business worker
-                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (existingUser, !isNewUser, ""), args.UserType);
+                    await CreateUserCategory(
+                        model,
+                        args,
+                        new BusinessWorkerModel(),
+                        new BusinessWorkerModel(),
+                        business,
+                        subAccount,
+                        (existingUser, !isNewUser, ""),
+                        args.UserType
+                    );
 
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
@@ -758,121 +759,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     _log.LogError(ex, "Error occurred during CreateBusinessUser");
                     await transaction.RollbackAsync();
-                    throw;
+                    throw new Exception("Unable to register user at this time. Please try again later.");
                 }
             });
         }
-
-        /**public async Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
-        {
-            if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
-                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
-
-            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                            ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
-
-            args.UserId ??= business.UserId;
-            model.DateOfBirth = ConvertedDate(model.DateOfBirth);
-
-            
-            model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
-            model.OrganizationCode = args.organizationCode;
-            var strategy = _context.Database.CreateExecutionStrategy();
-            return await strategy.ExecuteAsync(async () =>
-            {
-                await using var transaction = await _context.Database.BeginTransactionAsync();
-                try
-                {
-                    var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
-                    UserModel finalUser = existingUser;
-                    bool isNewUser = false;
-                    bool reusedUserForDifferentRole = false;
-
-                    if (existingUser != null)
-                    {
-                        if (existingUser.OrganizationCode == model.OrganizationCode && existingUser.UserType.Equals(model.UserType, StringComparison.OrdinalIgnoreCase))
-                        {
-                            throw new BaseException(Core.Enums.ExceptionType.CONFLICT, $"A user with phone number {model.PhoneNumber} and user type '{model.UserType}' already exists.");
-                        }
-
-                        reusedUserForDifferentRole = true;
-
-                        // Log reuse
-                        _log.LogInformation($"User with phone {model.PhoneNumber} exists with a different role ('{existingUser.UserType}'), reusing user for role '{model.UserType}'.");
-
-                        // Optional: send notification
-                        await NotifyUserOfRoleReuse(existingUser.PhoneNumber, model.UserType);
-
-                    }
-                    else
-                    {
-                        if (string.IsNullOrEmpty(model.Name))
-                        {
-
-                            model.Name = model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
-                        }
-                        var registrationResult = await RegisterUserAsync(model, args);
-                        if (!registrationResult.status)
-                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"User registration failed: {registrationResult.message}");
-
-                        finalUser = registrationResult.model;
-                        isNewUser = true;
-                    }
-
-                    // Check for existing subaccount
-                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(finalUser.Id);
-                    SubAccountModel subAccount;
-                    model.Email = !string.IsNullOrWhiteSpace(model.Email)
-            ? model.Email
-            : GenerateEmail(model.FirstName, business.BusinessEmail);
-                    if (existingSubAccount != null)
-                    {
-                        subAccount = existingSubAccount;
-                    }
-                    else
-                    {
-
-                        subAccount = await CreateSubAccountAsync(model, args, business, finalUser.Id);
-                    }
-
-                    // Track role assignments (multi-role support)
-                    await _authenticationRepository.TrackUserRoleAssignment(finalUser, model.UserType);
-
-                    // Create business worker
-                    var newBusinessWorker = await CreateUserCategory(model, args, new BusinessWorkerModel(), new BusinessWorkerModel(), business, subAccount, (finalUser, !isNewUser, ""), args.UserType);
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-
-                    subAccount.UserId = finalUser.Id;
-                    subAccount.Address = model.Location;
-                    subAccount.City = model.Lga;
-                    subAccount.FirstName = model.FirstName;
-                    subAccount.LastName = model.LastName;
-                    subAccount.MiddleName = model.MiddleName;
-                    subAccount.Alias = !string.IsNullOrEmpty(model.Alias) ? model.Alias : "Mr";
-                    return subAccount;
-                }
-                catch (Exception ex)
-                {
-                    _log.LogInformation("error occurred", ex.Message);
-                    await transaction.RollbackAsync();
-                    throw new Exception(ex.Message);
-                }
-            });
-        }
-
-
-
-
-
-
-
-
-
-
-        **/
 
         private async Task NotifyUserOfOrganizationAddition(string phoneNumber, string orgCode)
         {
