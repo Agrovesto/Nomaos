@@ -6,19 +6,244 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
-using DocumentFormat.OpenXml.Drawing.Charts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static Amazon.S3.Util.S3EventNotification;
+using Newtonsoft.Json;
+using static Org.BouncyCastle.Math.EC.ECCurve;
+using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
 using States = Agrovesto.Backend.Infrastructure.Entities.Common.States;
 
 namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        public static Dictionary<string, decimal> SafeDeserializeContributions(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return new();
+
+            try
+            {
+                var temp = JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                return temp.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp =>
+                    {
+                        if (kvp.Value == null) return 0m;
+                        if (decimal.TryParse(kvp.Value.ToString().Replace("%", ""), out var val))
+                            return val;
+                        return 0m;
+                    });
+            }
+            catch
+            {
+                return new();
+            }
+        }
+
+        public static InputFinancingConfigurationModel ToModel(this InputFinancingConfiguration entity)
+        {
+            if (entity == null) return null;
+
+            return new InputFinancingConfigurationModel
+            {
+                Id = entity.Id,
+                IsEnabled = entity.IsEnabled,
+                BundleEnabled = entity.BundleEnabled,
+
+                ConfigurationName = entity.Name,
+                ConfigurationCode = entity.ConfigurationCode,
+                SubscriptionConfig = entity.SubscriptionConfigs?.ToModel(),
+                   
+                DisbursementConfig = entity.DisbursementConfigs?.ToModel(),
+                RepaymentConfig = entity.RepaymentConfigs?.ToModel()
+            };
+        }
+
+        public static InputFinancingConfiguration ToEntity(this InputFinancingConfigurationModel model)
+        {
+            if (model == null) return null;
+
+            return new InputFinancingConfiguration
+            {
+                Id = model.Id,
+                IsEnabled = model.IsEnabled,
+                Name=model.ConfigurationName,
+                ConfigurationCode=model.ConfigurationCode,
+                BundleEnabled = model.BundleEnabled,
+                SubscriptionConfigs = model.SubscriptionConfig?.ToEntity(),
+                DisbursementConfigs = model.DisbursementConfig?.ToEntity(),
+                RepaymentConfigs = model.RepaymentConfig?.ToEntity()
+            };
+        }
+
+        public static SubscriptionConfig ToEntity(this SubscriptionConfigModel model)
+        {
+            if (model == null) return null;
+
+            return new SubscriptionConfig
+            {
+                AllowFarmerSelfSubscription = model.AllowFarmerSelfSubscription,
+                AllowCooperativeSubscription = model.AllowCooperativeSubscription,
+                RequiresEquity = model.RequiresEquity,
+                EquityType = model.EquityType,
+                ContributionSplitJson = model.ContributionSplitJson,
+            EquityStaticFee =model.EquityStaticFee,
+                IsEquityStaticFee=model.IsEquityStaticFee,
+                CooperativeContributes= model.CooperativeContributes,
+                EquityPercentage=model.EquityPercentage,
+                FinancialPartnerContributes = model.FinancialPartnerContributes,
+                IsEquityInPercentage=model.IsEquityInPercentage,
+                OrganizationContributes = model.OrganizationContributes,
+            };
+        }
+
+        public static SubscriptionConfigModel ToModel(this SubscriptionConfig entity)
+        {
+            if (entity == null) return null;
+
+            return new SubscriptionConfigModel
+            {
+                AllowFarmerSelfSubscription = entity.AllowFarmerSelfSubscription,
+                AllowCooperativeSubscription = entity.AllowCooperativeSubscription,
+                RequiresEquity = entity.RequiresEquity,
+                EquityType = entity.EquityType,
+                ContributionSplitJson = entity.ContributionSplitJson,
+                EquityStaticFee = entity.EquityStaticFee,
+                IsEquityStaticFee = entity.IsEquityStaticFee,
+                CooperativeContributes = entity.CooperativeContributes,
+                EquityPercentage = entity.EquityPercentage,
+                FinancialPartnerContributes = entity.FinancialPartnerContributes,
+                IsEquityInPercentage = entity.IsEquityInPercentage,
+                OrganizationContributes = entity.OrganizationContributes,
+                Id= entity.Id,
+                ContributionSplits = SafeDeserializeContributions(entity.ContributionSplitJson),
+            };
+        }
+
+        public static DisbursementConfig ToEntity(this DisbursementConfigModel model)
+        {
+            if (model == null) return null;
+
+            return new DisbursementConfig
+            {
+                DisbursementMode = model.DisbursementMode,
+                DisbursementTarget=model.DisbursementTarget,
+                RequiresApprovalForDisbursement = model.RequiresApprovalForDisbursement,
+                UsesInvoiceReference = model.UsesInvoiceReference
+            };
+        }
+
+        public static DisbursementConfigModel ToModel(this DisbursementConfig entity)
+        {
+            if (entity == null) return null;
+
+            return new DisbursementConfigModel
+            {
+                DisbursementMode = entity.DisbursementMode,
+                DisbursementTarget = entity.DisbursementTarget,
+                RequiresApprovalForDisbursement = entity.RequiresApprovalForDisbursement,
+                UsesInvoiceReference = entity.UsesInvoiceReference,
+                Id = entity.Id
+            };
+        }
+
+        public static RepaymentConfig ToEntity(this RepaymentConfigModel model)
+        {
+            if (model == null) return null;
+
+            return new RepaymentConfig
+            {
+                RepaymentMode = model.RepaymentMode,
+                ExpectedRepaymentPercentage = model.ExpectedRepaymentPercentage,
+                RepaymentDurationInMonths = model.RepaymentDurationInMonths,
+                AllowInstallments = model.AllowInstallments,
+                IsRepaymentInPercentage = model.IsRepaymentInPercentage,
+                IsRepaymentStaticFee = model.IsRepaymentStaticFee,
+                RepaymentStaticFee= model.RepaymentStaticFee
+            };
+        }
+
+        public static RepaymentConfigModel ToModel(this RepaymentConfig entity)
+        {
+            if (entity == null) return null;
+
+            return new RepaymentConfigModel
+            {
+                RepaymentMode = entity.RepaymentMode,
+                ExpectedRepaymentPercentage = entity.ExpectedRepaymentPercentage,
+                RepaymentDurationInMonths = entity.RepaymentDurationInMonths,
+                AllowInstallments = entity.AllowInstallments,
+                IsRepaymentInPercentage = entity.IsRepaymentInPercentage,
+                IsRepaymentStaticFee = entity.IsRepaymentStaticFee,
+                RepaymentStaticFee = entity.RepaymentStaticFee,
+                Id=entity.Id
+            };
+        }
+
+        public static WalletProviderConfigurationModel ToModel(this WalletProviderConfiguration entity)
+        {
+            if (entity == null) return null;
+
+            return new WalletProviderConfigurationModel
+            {
+                Id = entity.Id,
+
+                DefaultWalletProvider = entity.DefaultWalletProvider,
+                Currency = entity.Currency,
+                IsDefault = entity.IsDefault,
+            };
+        }
+
+        public static WalletProviderConfiguration ToEntity(this WalletProviderConfigurationModel model)
+        {
+            if (model == null) return null;
+
+            return new WalletProviderConfiguration
+            {
+                Id = model.Id,
+                DefaultWalletProvider=model.DefaultWalletProvider,
+                Currency=model.Currency,
+                IsDefault=model.IsDefault,
+                
+            };
+        }
+
+
+        public static OrganizationConfigurationModel MapToModel(this OrganizationConfiguration entity)
+        {
+            if (entity == null) return null;
+
+            return new OrganizationConfigurationModel
+            {
+                OrganizationCode = entity.OrganizationCode,
+                OrganizationName = entity.OrganizationName,
+                WalletProviderConfiguration = entity.WalletProviderConfigurations?
+                    .Select(w => w.ToModel())
+                    .ToList() ?? new List<WalletProviderConfigurationModel>(),
+
+                InputFinancingConfig = entity.InputFinancingConfigurations?
+                    .Select(i => i.ToModel())
+                    .ToList() ?? new List<InputFinancingConfigurationModel>()
+            };
+        }
+
+        public static OrganizationConfiguration MapToEntity(this OrganizationConfigurationModel model)
+        {
+            if (model == null) return null;
+
+            return new OrganizationConfiguration
+            {
+                OrganizationCode = model.OrganizationCode,
+                OrganizationName = model.OrganizationName,
+                WalletProviderConfigurations = model.WalletProviderConfiguration?
+                    .Select(w => w.ToEntity())
+                    .ToList() ?? new List<WalletProviderConfiguration>(),
+
+                InputFinancingConfigurations = model.InputFinancingConfig?
+                    .Select(i => i.ToEntity())
+                    .ToList() ?? new List<InputFinancingConfiguration>()
+            };
+        }
+
+
         public static StateModel Map(this States entity)
         {
 
@@ -1013,7 +1238,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OnboardedByUserId = entities.OnboardedByUserId,
                 BelongToCooperativeId = entities.BelongToCooperativeId,
                 Ward = entities.Ward,
-                OrganizationCode = entities.OrganizationCode,
+             //   OrganizationCode = entities.OrganizationCode,
                 FarmerCategory=entities.FarmerCategory,
                 HighestLevelOfEducation = entities.HighestLevelOfEducation,
                 YearsInAgric = entities.YearsInAgric,
@@ -1041,7 +1266,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Gender = model.Gender,
                 BelongToCooperativeId = model.BelongToCooperativeId,
                 Ward=model.Ward,
-                OrganizationCode = model.OrganizationCode,
+                //OrganizationCode = model.OrganizationCode,
                 FarmerCategory = model.FarmerCategory,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
                 YearsInAgric=model.YearsInAgric
@@ -1172,7 +1397,7 @@ namespace Agrovesto.Backend.Infrastructure
                 MiddleName = model.MiddleName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType),
 
-
+                IsNinVerified= model.IsNinVerified,
                 OrganizationCode = model.OrganizationCode
             };
         }
@@ -1204,7 +1429,8 @@ namespace Agrovesto.Backend.Infrastructure
                 LastName = entity.LastName,
                 MiddleName = entity.MiddleName,
                 SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
-
+                IsNinVerified= entity.IsNinVerified,
+                
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -1361,7 +1587,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Location = entity.Location,
                 OrganizationEmail = entity.OrganizationEmail,
                 OrganizationName = entity.OrganizationName,
-                OrganizaionId   = entity.OrganizaionId,
+                OrganizaionId   = entity.OrganizationId,
                 Contact=entity.Contact
             };
         }
@@ -1905,11 +2131,60 @@ namespace Agrovesto.Backend.Infrastructure
                 LastUpdated = model.LastUpdated,
             };
         }
+
+
+        public static Wallet Map(this WalletModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new Wallet()
+            {
+                PhoneNumber = model.PhoneNumber,
+                UserId = model.UserId,
+                WalletCode = model.WalletCode,
+                AccountName = model.AccountName,
+                AccountNumber = model.AccountNumber,
+                BankName = model.BankName,
+                CreatedBy = model.CreatedBy,
+                CreatedOn = model.CreatedOn,
+                Id = model.Id,
+                WalletProviderCode = model.WalletProviderCode,
+                OrganizationCode = model.OrganizationCode,
+                WalletBalance=model.WalletBalance
+
+            };
+        }
+
+        public static WalletModel Map(this Wallet entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new WalletModel()
+            {
+                PhoneNumber = entity.PhoneNumber,
+                UserId = entity.UserId,
+                WalletCode = entity.WalletCode,
+                AccountName = entity.AccountName,
+                AccountNumber = entity.AccountNumber,
+                BankName=entity.BankName,
+                CreatedBy=entity.CreatedBy,
+                CreatedOn=entity.CreatedOn,
+                Id = entity.Id,
+                WalletProviderCode=entity.WalletProviderCode,
+                OrganizationCode = entity.OrganizationCode,
+                WalletBalance=entity.WalletBalance
+            };
+        }
+
         #endregion creditscore
 
         #region farmercategory
-      
-        
+
+
         #endregion farmercategory
     }
 }

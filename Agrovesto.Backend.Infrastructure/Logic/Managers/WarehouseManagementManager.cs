@@ -604,16 +604,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId);
-                    if (warehouse == null) { throw new Exception("Warehouse could not be found"); }
+                    var warehouse = await _repository.GetWarehouseByBusiness(business.BusinessCode, args.WarehouseId);
+                    if (warehouse == null && string.IsNullOrEmpty(args.UserId)) { throw new Exception("Warehouse could not be found"); }
+                    var manager = "";
+                    if(warehouse.ManagedByUserId != null)
+                    {
+                        manager = warehouse.ManagedByUserId;
+                    }
                     model.BelongToBusinessCode = args.businessCode;
                     model.WarehouseId = args.WarehouseId;
-                    model.ManagedByUserId = warehouse.UserId;
+                    model.ManagedByUserId = !string.IsNullOrEmpty(manager) ? manager : args.UserId;
                     model.OrganizationCode = args.organizationCode;
                     var input = await _repository.GetInputByWarehouse(model.BelongToBusinessCode, args.WarehouseId);
 
                     if (input != null && (input.Exists(x => x.InputName == model.InputName && x.Brand == model.Brand))) { throw new Exception($"The warehouse already have same stock of input"); }
-
+                    
                     model.InputComingFrom = model.InputComingFrom;
                     model.DeliveredTo = warehouse.Location;
                     model.Status = InputTransitStatus.Packed;
@@ -648,8 +653,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     //WarehouseInputInventoryModel
-                    var warehouse = await _repository.GetWarehouseManagerByBusiness(business.BusinessCode, args.WarehouseId) ?? throw new Exception("Warehouse could not be found");
-                    var user = await _authenticationRepository.GetUserById(warehouse.UserId);
+                    var warehouse = await _repository.GetWarehouseByBusiness(business.BusinessCode, args.WarehouseId);
+                    if (warehouse == null && string.IsNullOrEmpty(args.UserId)) { throw new Exception("Warehouse could not be found"); }
+                    var manager = "";
+                    if (warehouse.ManagedByUserId != null)
+                    {
+                        manager = warehouse.ManagedByUserId;
+                    }
+                    else { manager = args.UserId; }
+                        var user = await _authenticationRepository.GetUserById(manager);
                     var inputName = await _repository.GetInputBYIdAsync(business.BusinessCode, model.WarehouseInputInventoryId) ?? throw new Exception("Could not retrive input");
                     model.BusinessCode = business.BusinessCode;
                     model.InputName = inputName.InputName;

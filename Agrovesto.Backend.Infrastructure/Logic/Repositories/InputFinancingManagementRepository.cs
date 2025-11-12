@@ -635,7 +635,7 @@ string? disbursedBy = null)
                     PaidOn =  DateTimeOffset.Now,
 
                     RepaymentId = existing.Id,
-                    RepaymentMode = Enum.GetName(typeof(RepaymentMode), i.RepaymentMode)
+                    RepaymentMode = Enum.GetName(typeof(Entities.Businesses.RepaymentMode), i.RepaymentMode)
 
                 }).ToList();
        
