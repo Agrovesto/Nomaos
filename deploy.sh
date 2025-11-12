@@ -9,6 +9,9 @@ ENV_FILE="/etc/default/$APP_NAME"
 BUILD_PATH="./bin/Release/net8.0/linux-x64/publish"
 USER_NAME="www-data"
 LOAD_BALANCER_DNS="agrovesto-alb-83128556.eu-west-1.elb.amazonaws.com"
+# Install .NET 8.0.17 SDK and runtimes
+DOTNET_VERSION="8.0.411"   # SDK version
+RUNTIME_VERSION="8.0.17"   # Microsoft.NETCore.App runtime
 
 set -e
 export HOME=/tmp
@@ -25,7 +28,7 @@ if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks | grep -q "8\."; the
     sudo dpkg -i packages-microsoft-prod.deb
     rm packages-microsoft-prod.deb
     sudo apt-get update
-    sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
+    sudo apt-get install -y dotnet-sdk-$DOTNET_VERSION dotnet-runtime-$RUNTIME_VERSION aspnetcore-runtime-$RUNTIME_VERSION
 fi
 
 ## 2. Configure UFW
