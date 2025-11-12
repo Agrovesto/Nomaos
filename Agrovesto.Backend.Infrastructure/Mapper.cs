@@ -1238,7 +1238,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OnboardedByUserId = entities.OnboardedByUserId,
                 BelongToCooperativeId = entities.BelongToCooperativeId,
                 Ward = entities.Ward,
-                OrganizationCode = entities.OrganizationCode,
+             //   OrganizationCode = entities.OrganizationCode,
                 FarmerCategory=entities.FarmerCategory,
                 HighestLevelOfEducation = entities.HighestLevelOfEducation,
                 YearsInAgric = entities.YearsInAgric,
@@ -1266,7 +1266,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Gender = model.Gender,
                 BelongToCooperativeId = model.BelongToCooperativeId,
                 Ward=model.Ward,
-                OrganizationCode = model.OrganizationCode,
+                //OrganizationCode = model.OrganizationCode,
                 FarmerCategory = model.FarmerCategory,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
                 YearsInAgric=model.YearsInAgric

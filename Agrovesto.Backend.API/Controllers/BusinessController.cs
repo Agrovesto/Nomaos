@@ -224,11 +224,11 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.AgentsBySupervisor(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
@@ -272,8 +272,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -315,8 +314,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -357,8 +355,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -398,8 +395,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -439,12 +435,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetBundleSubscriptionAnalysisByBusiness(query);
                 return Ok(new Response<List<BundleSubscriptionSummary>>()
@@ -481,9 +475,8 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -668,8 +661,7 @@ namespace Agrovesto.Backend.API.Controllers
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
 
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -832,8 +824,8 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     model.FarmerUserId = CurrentUserId;
                 }
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -965,8 +957,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1029,8 +1020,8 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -1198,8 +1189,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1241,8 +1231,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1325,8 +1314,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1366,8 +1354,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1410,8 +1397,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1490,8 +1476,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1621,8 +1606,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -1663,13 +1647,12 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmers-bycooperative")]
         public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
         {
-            try { 
-             var hasOrgCode = OrganizationCode;
-            if (!string.IsNullOrEmpty(hasOrgCode))
-            {
-                query.organizationCode = OrganizationCode;
-            }
-            var currentRole = CurrentUserRole;
+            try {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
 
@@ -1876,12 +1859,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
-                }
-                //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                } //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetAllFarmerDetails(query);
                 //return Ok(new Response<FileDownloadModel>()
                 //{

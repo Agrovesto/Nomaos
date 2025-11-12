@@ -1071,7 +1071,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 State = model.State,
                 Lga = model.Lga,
                 Location = model.Location,
-                Name = model.Name,
+                Name = !string.IsNullOrEmpty(model.Name) ? model.Name : $"{model.FirstName} {model.MiddleName} {model.LastName}",
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
@@ -1286,11 +1286,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
-                if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
-                {
-                    business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-                }
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                
                 if (business == null)
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
