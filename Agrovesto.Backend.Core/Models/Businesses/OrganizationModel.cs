@@ -18,5 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? OrganizationEmail { get; set; }
         public string? Location { get; set; }
         public string? Password { get; set; }
+        public string? Kick { get; set; }
+        public DateTimeOffset OnboardedOn { get; set; } = DateTimeOffset.Now;
     }
 }

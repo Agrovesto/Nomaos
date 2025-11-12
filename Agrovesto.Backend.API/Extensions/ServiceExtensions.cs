@@ -48,6 +48,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IPaymentProviderRepository, PaymentProviderRepository>();
             services.AddScoped<IDashboardRepository, DashboardRepository>();
             services.AddScoped<IFarmerCreditScoreRepository, FarmerCreditScoreRepository>();
+            services.AddScoped<IOrganizationConfigurationRepository, OrganizationConfigurationRepository>();
+            services.AddScoped<IInputFinancingSchemeRepository, InputFinancingSchemeRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -63,6 +65,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IDashboardManager, DashboardManager>();
             services.AddScoped<IPayoutManager, PayoutManager>();
             services.AddScoped<IFarmerCreditScoremanager, FarmerCreditScoremanager>();
+            services.AddScoped<IWalletSetUpManager, WalletSetUpManager>();
+            services.AddScoped<ISettingsManager, SettingsManager>();
+            services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
+
+
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<ISMSService, SMSService>();
@@ -72,6 +79,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
            
 

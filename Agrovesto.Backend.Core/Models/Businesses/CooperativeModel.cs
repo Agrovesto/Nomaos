@@ -25,5 +25,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string IsAssignedToAgentId { get; set; }
         public long TotalFarmers { get; set; }
+        public List<FarmerModel> Farmers { get; set; }
+        public WalletModel Wallet { get; set; }
     }
 }

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Common;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+using Agrovesto.Backend.Core.Models.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,16 +8,16 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Interfaces.Services
 {
-    public interface IWalletService<T,R>
+    public interface IWalletService
     {
         //Task<(R data, bool status, string message)> GetToken(T model, string env);
-        Task<R> GetBanks(T model, WalletProviderParameterModel[] parameters, string env);
-        Task<R> CreateWallet(T model, WalletProviderParameterModel[] parameters, string env);
-        Task<R> NameEnquiry(T model, WalletProviderParameterModel[] parameters, string env);
-        Task<R> GetWalletDetails(T model,WalletProviderParameterModel[] parameters, string env);
-        Task<R> InitiateFundTransfer(T model, WalletProviderParameterModel[] parameters, string env);
-        Task<R> FetchTransferStatus(T model,WalletProviderParameterModel[] parameters, string env);
-        Task<R> GetAllWallets(T model, WalletProviderParameterModel[] parameters, string env);
+        Task<FCMBBankData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<FCMBWalletResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<CreateWalletResponse> NameEnquiry(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<CreateWalletResponse> GetWalletDetails(WalletsRequest model,WalletProviderParameterModel[] parameters, string env);
+        Task<CreateWalletResponse> InitiateFundTransfer(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<CreateWalletResponse> FetchTransferStatus(WalletsRequest model,WalletProviderParameterModel[] parameters, string env);
+        Task<CreateWalletResponse> GetAllWallets(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
     }
 
     public interface IRequestMapper
