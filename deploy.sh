@@ -3,7 +3,7 @@
 # Author: Dolapo Fashina
 
 set -e
-set -x   # Enable command tracing for CI/CD debugging
+set -x   # Enable command tracing for CI/CD debugging 
 
 # --- Configuration ---
 APP_NAME="Agrovesto.Backend.API"
