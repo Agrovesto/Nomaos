@@ -111,8 +111,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
+        public bool shouldVerifyNin { get; set; } = false;
 
-        public List<ValueChainSelectionDto>? ValueChainSelections { get; set; }
+        public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
     }
     public enum UserType
     {
@@ -164,11 +165,16 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
-        public List<string> OrganizationCodes { get; set; }
+        public List<OrganizationDto> Organizations { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
       //  public UserObject User { get; set; }
+    }
+    public class OrganizationDto
+    {
+        public string OrganizationCode { get; set; }
+        public string OrganizationName { get; set; }
     }
 
     public enum TokenType

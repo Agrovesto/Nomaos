@@ -5,6 +5,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OfficeOpenXml;
@@ -25,41 +26,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
         #region farmervaluechain
-     
+
         #endregion farmervaluechain
         #region report
         public async Task<List<FarmerModel>> FilterFarmerForDownload(
-   string? businessCode,
-   string? organizationCode,
-    string? cooperativeName,
-    string? state,
-    DateTime? startDate,
-    DateTime? endDate)
+     string? businessCode,
+     string? organizationCode,
+     string? cooperativeName,
+     string? state,
+     DateTime? startDate,
+     DateTime? endDate)
         {
             var query = _context.Farmers.AsQueryable();
 
+            // Filter by business code
             if (!string.IsNullOrWhiteSpace(businessCode))
             {
-                query = query.Where(x => x.BelongToBusinessCode == businessCode);
+                query = query.Where(f => f.BelongToBusinessCode == businessCode);
             }
+
+            // Filter by organization via FarmerOrganizations
             if (!string.IsNullOrWhiteSpace(organizationCode))
             {
-                query = query.Where(x => x.OrganizationCode == organizationCode);
+                query = from f in query
+                        join fo in _context.FarmerOrganizations
+                            on f.Id equals fo.FarmerId
+                        where fo.OrganizationCode == organizationCode
+                        select f;
             }
 
+            // Filter by state
             if (!string.IsNullOrWhiteSpace(state))
             {
-                query = query.Where(x => x.State == state);
+                query = query.Where(f => f.State == state);
             }
 
+            // Filter by onboarding date range
             if (startDate.HasValue)
             {
-                query = query.Where(x => x.OnBoardedOn >= startDate.Value);
+                query = query.Where(f => f.OnBoardedOn >= startDate.Value);
             }
-
             if (endDate.HasValue)
             {
-                query = query.Where(x => x.OnBoardedOn <= endDate.Value);
+                query = query.Where(f => f.OnBoardedOn <= endDate.Value);
             }
 
             var farmers = await query.ToListAsync();
@@ -69,11 +78,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 throw new Exception("No record found");
             }
 
+            // Map cooperative names
             var cooperativeIds = farmers.Select(f => f.BelongToCooperativeId).Distinct().ToList();
             var cooperatives = await _context.Cooperatives
                 .Where(c => cooperativeIds.Contains(c.Id))
                 .ToDictionaryAsync(c => c.Id, c => c.Name);
 
+            // Filter by cooperative name if provided
             if (!string.IsNullOrWhiteSpace(cooperativeName))
             {
                 farmers = farmers
@@ -82,16 +93,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     .ToList();
             }
 
-            return farmers.Select(farmer =>
+            // Map results
+            return farmers.Select(f =>
             {
-                var mappedFarmer = farmer.Map();
-
-                if (cooperatives.TryGetValue(farmer.BelongToCooperativeId, out var coopName))
+                var mapped = f.Map();
+                if (cooperatives.TryGetValue(f.BelongToCooperativeId, out var coopName))
                 {
-                    mappedFarmer.CooperativeName = coopName;
+                    mapped.CooperativeName = coopName;
                 }
-
-                return mappedFarmer;
+                return mapped;
             }).ToList();
         }
 
@@ -213,23 +223,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var currentYear = DateTime.UtcNow.Year;
             var previousYear = DateTime.UtcNow.AddMonths(-1).Year;
 
-            double percentageChange = await CalculateFarmerPercentagePerformance(businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
-            double cooperativePercentageChange = await CalculateCooperativePercentagePerformance(businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
-            double agentPercentageChange = await CalculateAgentPercentagePerformance(businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
+            // Calculate percentage changes
+            double percentageChange = await CalculateFarmerPercentagePerformance(
+                businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
+            double cooperativePercentageChange = await CalculateCooperativePercentagePerformance(
+                businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
+            double agentPercentageChange = await CalculateAgentPercentagePerformance(
+                businessCode, organizationCode, currentMonth, previousMonth, currentYear, previousYear);
 
+            // Base queries
             var agentsQuery = _context.Agents.Where(a => a.BelongToBusinessCode == businessCode);
             var cooperativesQuery = _context.Cooperatives.Where(c => c.BelongToBusinessCode == businessCode);
             var farmersQuery = _context.Farmers.Where(f => f.BelongToBusinessCode == businessCode);
             var warehousesQuery = _context.Warehouses.Where(w => w.BelongToBusinessCode == businessCode);
 
+            // Filter by organization
             if (!string.IsNullOrEmpty(organizationCode))
             {
                 agentsQuery = agentsQuery.Where(a => a.OrganizationCode.Contains(organizationCode));
                 cooperativesQuery = cooperativesQuery.Where(c => c.OrganizationCode.Contains(organizationCode));
-                farmersQuery = farmersQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
+
+                // Farmers: join with FarmerOrganizations
+                farmersQuery = from f in farmersQuery
+                               join fo in _context.FarmerOrganizations
+                                   on f.Id equals fo.FarmerId
+                               where fo.OrganizationCode == organizationCode
+                               select f;
+
                 warehousesQuery = warehousesQuery.Where(w => w.OrganizationCode.Contains(organizationCode));
             }
 
+            // Build metrics
             var metrics = new BusinessEntitiesMetrics
             {
                 TotalAgents = await agentsQuery.CountAsync(),
@@ -291,22 +315,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return percentageChange;
         }
 
-        private async Task<double> CalculateFarmerPercentagePerformance(string businessCode, string? organizationCode, int currentMonth, int previousMonth, int currentYear, int previousYear)
+        private async Task<double> CalculateFarmerPercentagePerformance(
+      string businessCode,
+      string? organizationCode,
+      int currentMonth,
+      int previousMonth,
+      int currentYear,
+      int previousYear)
         {
-            var farmersQuery = _context.Farmers.Where(f =>
-                f.BelongToBusinessCode == businessCode);
+            // Base query: farmers in the business
+            var farmersQuery = _context.Farmers.Where(f => f.BelongToBusinessCode == businessCode);
 
+            // Filter by organization if provided
             if (!string.IsNullOrEmpty(organizationCode))
             {
-                farmersQuery = farmersQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
+                farmersQuery = from farmer in farmersQuery
+                               join fo in _context.FarmerOrganizations
+                                   on farmer.Id equals fo.FarmerId
+                               where fo.OrganizationCode == organizationCode
+                               select farmer;
             }
 
+            // Count farmers onboarded in the current month
             var totalFarmersThisMonth = await farmersQuery
                 .CountAsync(f => f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
 
+            // Count farmers onboarded in the previous month
             var totalFarmersLastMonth = await farmersQuery
                 .CountAsync(f => f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
 
+            // Calculate percentage change
             double percentageChange = totalFarmersLastMonth == 0
                 ? (totalFarmersThisMonth > 0 ? 100 : 0)
                 : ((double)(totalFarmersThisMonth - totalFarmersLastMonth) / totalFarmersLastMonth) * 100;
@@ -322,27 +360,108 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool status, FarmerModel data)> CreateFarmer(FarmerModel data)
         {
-            var farmerExist = await _context.Farmers
-                .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+            // Check if the farmer exists by UserId
+            var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == data.UserId);
 
-            if (farmerExist != null)
+            if (farmer != null)
             {
-                // Farmer already exists, update the value chain instead
-                await UpdateFarmerValueChainItems(farmerExist.Id, data.ValueChainSelections);
-                return (true, farmerExist.Map());
+                // Update basic details if changed
+                bool isModified = false;
+                if (farmer.Name != data.Name) { farmer.Name = data.Name; isModified = true; }
+                if (farmer.PhoneNumber != data.PhoneNumber) { farmer.PhoneNumber = data.PhoneNumber; isModified = true; }
+                if (farmer.Email != data.Email) { farmer.Email = data.Email; isModified = true; }
+
+                if (isModified)
+                {
+                    _context.Farmers.Update(farmer);
+                    await _context.SaveChangesAsync();
+                }
+            }
+            else
+            {
+                // Create new farmer
+                farmer = data.Map();
+                await _context.Farmers.AddAsync(farmer);
+                await _context.SaveChangesAsync(); // get Farmer.Id
             }
 
-            // Map and save the farmer first
-            var entity = data.Map(); // This should map FarmerModel to Farmer entity
-            await _context.Farmers.AddAsync(entity);
-            await _context.SaveChangesAsync(); // Saves and assigns Id to entity
+            // Link farmer to organization if not already linked
+            if (!string.IsNullOrEmpty(data.OrganizationCode))
+            {
+                bool alreadyLinked = await _context.FarmerOrganizations
+                    .AnyAsync(fo => fo.FarmerId == farmer.Id && fo.OrganizationCode == data.OrganizationCode);
 
-            // Now that entity.Id is valid, handle value chain items
-            await UpdateFarmerValueChainItems(entity.Id, data.ValueChainSelections);
+                if (!alreadyLinked)
+                {
+                    await _context.FarmerOrganizations.AddAsync(new FarmerOrganization
+                    {
+                        FarmerId = farmer.Id,
+                        OrganizationCode = data.OrganizationCode,
+                        OnboardedByUserId = data.OnboardedByUserId
+                    });
+                    await _context.SaveChangesAsync();
+                }
+            }
 
-            return (true, entity.Map());
+            // Update value chain items
+            await UpdateFarmerValueChainItems(farmer.Id, data.SelectedItems);
+
+            return (true, farmer.Map());
         }
 
+        /** public async Task<(bool status, FarmerModel data)> CreateFarmer(FarmerModel data)
+         {
+             // Check if the farmer already exists
+             var farmerExist = await _context.Farmers
+                 .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+             if (farmerExist != null)
+             {
+                 // Farmer exists → update basic details if they have changed
+                 bool isModified = false;
+
+                 if (farmerExist.Name != data.Name)
+                 {
+                     farmerExist.Name = data.Name;
+                     isModified = true;
+                 }
+
+                 if (farmerExist.PhoneNumber != data.PhoneNumber)
+                 {
+                     farmerExist.PhoneNumber = data.PhoneNumber;
+                     isModified = true;
+                 }
+
+                 if (farmerExist.Email != data.Email)
+                 {
+                     farmerExist.Email = data.Email;
+                     isModified = true;
+                 }
+                 // Add other properties as needed...
+
+                 if (isModified)
+                 {
+                     _context.Farmers.Update(farmerExist);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // Update the value chain items regardless
+                 await UpdateFarmerValueChainItems(farmerExist.Id, data.SelectedItems);
+
+                 return (true, farmerExist.Map());
+             }
+
+             // Farmer does not exist → create new
+             var entity = data.Map(); // Map FarmerModel → Farmer entity
+             await _context.Farmers.AddAsync(entity);
+             await _context.SaveChangesAsync(); // Save to get Id
+
+             // Handle value chain items
+             await UpdateFarmerValueChainItems(entity.Id, data.SelectedItems);
+
+             return (true, entity.Map());
+         }
+ **/
         private async Task UpdateFarmerValueChainItems(long farmerId, List<ValueChainSelectionDto> valueChainSelections)
         {
             // Step 1: Get existing items
@@ -515,22 +634,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<FarmerModel>> GetFarmersByAgent(string agentId, ListQueryParams query)
         {
+            // Base query filtered by business code
             var farmersQuery = _context.Farmers.AsQueryable();
 
-            farmersQuery = farmersQuery.Where(x => x.BelongToBusinessCode == query.businessCode);
-
-            if (!string.IsNullOrEmpty(query.organizationCode))
+            if (!string.IsNullOrEmpty(query.businessCode))
             {
-                farmersQuery = farmersQuery.Where(x => x.OrganizationCode.Contains(query.organizationCode));
+                farmersQuery = farmersQuery.Where(f => f.BelongToBusinessCode == query.businessCode);
             }
 
-            // Filter by agent via cooperative assignment
+            // Filter by organization if provided
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                farmersQuery = from farmer in farmersQuery
+                               join fo in _context.FarmerOrganizations
+                                   on farmer.Id equals fo.FarmerId
+                               where fo.OrganizationCode == query.organizationCode
+                               select farmer;
+            }
+
+            // Filter farmers by agent via cooperative assignment
             farmersQuery = from farmer in farmersQuery
                            join cooperative in _context.Cooperatives
                                on farmer.BelongToCooperativeId equals cooperative.Id
                            where cooperative.IsAssignedToAgentId == agentId
                            select farmer;
 
+            // Perform joins for cooperative, images, subaccounts
             var result = await (
                 from farmer in farmersQuery
 
@@ -538,13 +667,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     on farmer.BelongToCooperativeId equals cooperative.Id
 
                 join image in _context.FarmerImages
-                    on farmer.UserId equals image.FarmerUserId
-                    into imageGroup
+                    on farmer.UserId equals image.FarmerUserId into imageGroup
                 from img in imageGroup.DefaultIfEmpty()
 
                 join subAccount in _context.SubAccounts
-                    on farmer.UserId equals subAccount.UserId
-                    into subAccountGroup
+                    on farmer.UserId equals subAccount.UserId into subAccountGroup
                 from sub in subAccountGroup.DefaultIfEmpty()
 
                 orderby farmer.OnBoardedOn descending
@@ -558,24 +685,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
             ).ToListAsync();
 
+            // Return empty list if no records found
             if (result == null || !result.Any())
-            {
-                throw new Exception("No record found");
-            }
+                return new List<FarmerModel>();
 
+            // Map results
             var mappedFarmers = result.Select(item =>
             {
                 var mapped = item.Farmer.Map();
                 mapped.CooperativeName = item.CooperativeName;
                 mapped.FarmerImage = item.FarmerImageKey;
 
-                // Add sub-account fields
                 if (item.SubAccount != null)
                 {
-                    //mapped.SSN = item.SubAccount.SSN;
                     mapped.NIN = item.SubAccount.NIN;
                     mapped.BVN = item.SubAccount.Bvn;
-                    // mapped.AccountNumber = item.SubAccount.AccountNumber;
                 }
 
                 return mapped;
@@ -585,41 +709,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-           public async Task<List<FarmerModel>> GetFarmersByCooperativeId(long Id, ListQueryParams query)
+        public async Task<List<FarmerModel>> GetFarmersByCooperativeId(long cooperativeId, ListQueryParams query)
         {
-
-            //var farmers = await (from a in _context.Farmers
-            //                     join c in _context.Cooperatives
-            //                     on a.BelongToCooperativeId equals c.Id
-            //                     where a.BelongToCooperativeId == Id
-            //                     select a).ToListAsync();
-
-
-
-            //if (farmers.Count > 0)
-            //{
-            //    return farmers.Select(f => f.Map()).OrderByDescending(f => f.OnBoardedOn).ToList();
-            //}
-
-
-            //return null;
+            // Base query filtered by business code if provided
             var farmersQuery = _context.Farmers.AsQueryable();
+
             if (!string.IsNullOrEmpty(query.businessCode))
             {
-                farmersQuery = farmersQuery.Where(x => x.BelongToBusinessCode == query.businessCode);
+                farmersQuery = farmersQuery.Where(f => f.BelongToBusinessCode == query.businessCode);
             }
+
+            // Filter by organization if provided
             if (!string.IsNullOrEmpty(query.organizationCode))
             {
-                farmersQuery = farmersQuery.Where(x => x.OrganizationCode.Contains(query.organizationCode));
+                farmersQuery = from farmer in farmersQuery
+                               join fo in _context.FarmerOrganizations
+                                   on farmer.Id equals fo.FarmerId
+                               where fo.OrganizationCode == query.organizationCode
+                               select farmer;
             }
 
-            // Filter by agent via cooperative assignment
-            farmersQuery = from farmer in farmersQuery
-                           join c in _context.Cooperatives
-                                 on farmer.BelongToCooperativeId equals c.Id
-                           where farmer.BelongToCooperativeId == Id
-                           select farmer;
+            // Filter by cooperative
+            farmersQuery = farmersQuery.Where(f => f.BelongToCooperativeId == cooperativeId);
 
+            // Perform joins for cooperative, images, subaccounts
             var result = await (
                 from farmer in farmersQuery
 
@@ -627,13 +740,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     on farmer.BelongToCooperativeId equals cooperative.Id
 
                 join image in _context.FarmerImages
-                    on farmer.UserId equals image.FarmerUserId
-                    into imageGroup
+                    on farmer.UserId equals image.FarmerUserId into imageGroup
                 from img in imageGroup.DefaultIfEmpty()
 
                 join subAccount in _context.SubAccounts
-                    on farmer.UserId equals subAccount.UserId
-                    into subAccountGroup
+                    on farmer.UserId equals subAccount.UserId into subAccountGroup
                 from sub in subAccountGroup.DefaultIfEmpty()
 
                 orderby farmer.OnBoardedOn descending
@@ -647,91 +758,93 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
             ).ToListAsync();
 
+            // Return empty list if no records
             if (result == null || !result.Any())
-            {
-                throw new Exception("No record found");
-            }
+                return new List<FarmerModel>();
 
+            // Map results
             var mappedFarmers = result.Select(item =>
             {
                 var mapped = item.Farmer.Map();
                 mapped.CooperativeName = item.CooperativeName;
                 mapped.FarmerImage = item.FarmerImageKey;
 
-                // Add sub-account fields
                 if (item.SubAccount != null)
                 {
-                    //mapped.SSN = item.SubAccount.SSN;
                     mapped.NIN = item.SubAccount.NIN;
                     mapped.BVN = item.SubAccount.Bvn;
-                    // mapped.AccountNumber = item.SubAccount.AccountNumber;
+                    mapped.IsNinVerified = item.SubAccount.IsNinVerified;
                 }
 
                 return mapped;
             }).ToList();
 
             return mappedFarmers;
-
         }
         public async Task<List<FarmerModel>> GetFarmersByBusinessCode(string businessCode, ListQueryParams query)
         {
-            var farmersQuery = _context.Farmers.AsQueryable();
-
-            farmersQuery = farmersQuery.Where(x => x.BelongToBusinessCode == businessCode);
+            var farmersQuery = _context.Farmers
+                .Where(f => f.BelongToBusinessCode == businessCode)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(query.organizationCode))
             {
-                farmersQuery = farmersQuery.Where(x => x.OrganizationCode.Contains(query.organizationCode));
+                farmersQuery = from farmer in farmersQuery
+                               join fo in _context.FarmerOrganizations
+                                   on farmer.Id equals fo.FarmerId
+                               where fo.OrganizationCode == query.organizationCode
+                               select farmer;
             }
 
             var result = await (
                 from farmer in farmersQuery
 
                 join cooperative in _context.Cooperatives
-                    on farmer.BelongToCooperativeId equals cooperative.Id
-                    into cooperativeGroup
-                from coop in cooperativeGroup.DefaultIfEmpty()
+                    on farmer.BelongToCooperativeId equals cooperative.Id into cooperativeGroup
+                from coop in cooperativeGroup.DefaultIfEmpty() 
 
                 join image in _context.FarmerImages
-                    on farmer.UserId equals image.FarmerUserId
-                    into imageGroup
-                from img in imageGroup.DefaultIfEmpty()
+                    on farmer.UserId equals image.FarmerUserId into imageGroup
+                from img in imageGroup.DefaultIfEmpty() 
 
                 join subAccount in _context.SubAccounts
-                    on farmer.UserId equals subAccount.UserId
-                    into subAccountGroup
-                from sub in subAccountGroup.DefaultIfEmpty()
+                    on farmer.UserId equals subAccount.UserId into subAccountGroup
+                from sub in subAccountGroup.DefaultIfEmpty() 
 
                 orderby farmer.OnBoardedOn descending
 
                 select new
                 {
                     Farmer = farmer,
-                    CooperativeName = coop != null ? coop.Name : null,
-                    FarmerImageKey = img != null ? img.IMageKey : null,
+                    Cooperative = coop,
+                    FarmerImage = img,
                     SubAccount = sub
                 }
             ).ToListAsync();
 
-            if (result == null || !result.Any())
-            {
-                throw new Exception("No record found");
-            }
-
             var mappedFarmers = result.Select(item =>
             {
-                var mapped = item.Farmer.Map();
-                mapped.CooperativeName = item.CooperativeName;
-                mapped.FarmerImage = item.FarmerImageKey;
+//                var valueChainSelections = await (
+// from selection in _context.FarmerValueChainItems
+// where selection.FarmerId == item.Farmer.Id
+// group selection by selection.ValueChainType into g
+// select new FarmerValueChainsSelectionDto
+// {
+//     TypeName = g.Key,
+//     Items = g.Select(x => new ValueChainItemDto
+//     {
+//         ItemId = x.Id,
+//         Name = x.ItemName
+//     }).ToList()
+// }
+//).ToListAsync();
 
-                // Include sub-account data if available
-                if (item.SubAccount != null)
-                {
-                    //  mapped.Ward = item.SubAccount.;
-                    mapped.NIN = item.SubAccount.NIN;
-                    mapped.BVN = item.SubAccount.Bvn;
-                    // mapped.AccountNumber = item.SubAccount.AccountNumber;
-                }
+                var mapped = item.Farmer.Map();
+                //mapped.ValueChainItems= valueChainSelections;
+                mapped.CooperativeName = item.Cooperative?.Name;
+                mapped.FarmerImage = item.FarmerImage?.IMageKey;
+                mapped.NIN = item.SubAccount?.NIN;
+                mapped.BVN = item.SubAccount?.Bvn;
 
                 return mapped;
             }).ToList();
@@ -815,85 +928,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 from farmer in _context.Farmers
                 where farmer.UserId == userId
 
+                // 🟢 Left join cooperative (farmer might not belong to one)
                 join cooperative in _context.Cooperatives
-                    on farmer.BelongToCooperativeId equals cooperative.Id
+                    on farmer.BelongToCooperativeId equals cooperative.Id into cooperativeGroup
+                from coop in cooperativeGroup.DefaultIfEmpty()
 
+                    // 🟢 Left join agent (cooperative might not have an assigned agent)
                 join agent in _context.Agents
-                    on cooperative.IsAssignedToAgentId equals agent.UserId into agentGroup
-                from agent in agentGroup.DefaultIfEmpty()
+                    on coop.IsAssignedToAgentId equals agent.UserId into agentGroup
+                from agt in agentGroup.DefaultIfEmpty()
 
+                    // 🟢 Left join image
                 join image in _context.FarmerImages
                     on farmer.UserId equals image.FarmerUserId into imageGroup
                 from img in imageGroup.DefaultIfEmpty()
 
+                    // 🟢 Left join subaccount
                 join subAccount in _context.SubAccounts
                     on farmer.UserId equals subAccount.UserId into subAccountGroup
                 from sub in subAccountGroup.DefaultIfEmpty()
 
-
                 select new
                 {
                     Farmer = farmer,
-                    Cooperative = cooperative,
-                    Agent = agent,
+                    Cooperative = coop,
+                    Agent = agt,
                     FarmerImage = img,
                     SubAccount = sub
                 }
             ).FirstOrDefaultAsync();
 
             if (farmerProfile == null)
-            {
                 throw new Exception("Farmer not found");
-            }
 
-            // Get farm plots
+            // 🟢 Farm plots
             var plots = await _context.FarmPlotDetails
                 .Where(p => p.FarmerId == farmerProfile.Farmer.Id)
                 .ToListAsync();
 
-            // Get farmer input repayment
-            var repayments = await _context.Repayments.Include(x=>x.RepaymentBreakdown)
+            // 🟢 Repayments
+            var repayments = await _context.Repayments
+                .Include(x => x.RepaymentBreakdown)
                 .Where(p => p.FarmerUserId == farmerProfile.Farmer.UserId)
                 .ToListAsync();
 
-            // Get visitation activities
+            // 🟢 Visitations
             var visitations = await _context.FarmVisitationActivities
                 .Where(v => v.FarmerUserId == userId)
                 .OrderByDescending(v => v.CreatedOn)
                 .ToListAsync();
-            // Step 1: Get value chain selections
+
+            // 🟢 Value chain selections
             var valueChainSelections = await (
-                from selection in _context.FarmerValueChainItems
-                where selection.FarmerId == farmerProfile.Farmer.Id
-               
+    from selection in _context.FarmerValueChainItems
+    where selection.FarmerId == farmerProfile.Farmer.Id
+    group selection by selection.ValueChainType into g
+    select new FarmerValueChainsSelectionDto
+    {
+        TypeName = g.Key,
+        Items = g.Select(x => new ValueChainItemDto
+        {
+            ItemId = x.Id,
+            Name = x.ItemName
+        }).ToList()
+    }
+).ToListAsync();
 
-                select new FarmerValueChainSelectionDto
-                {
-                   
-                    TypeName = selection.ValueChainType,
-                    ItemId = selection.Id,
-                    ItemName = selection.ItemName
-                }
-            ).ToListAsync();
 
-            // Map main profile
+            // 🟢 Map main farmer details
             var mappedFarmer = farmerProfile.Farmer.Map();
             mappedFarmer.ValueChainItems = valueChainSelections;
 
-            // mappedFarmer.SSN = farmerProfile.SubAccount?.SSN;
+            // Add SubAccount details if available
             mappedFarmer.NIN = farmerProfile.SubAccount?.NIN;
             mappedFarmer.BVN = farmerProfile.SubAccount?.Bvn;
-            // mappedFarmer.AccountNumber = farmerProfile.SubAccount?.AccountNumber;
 
+            // 🟢 Build final DTO safely
             var result = new FarmerDetailDto
             {
-                Repayments=repayments.Select(r=>r?.Map()).ToList(),
                 Farmer = mappedFarmer,
-                Cooperative = farmerProfile.Cooperative.Map(),
-                Agent = farmerProfile.Agent?.Map(),
-                FarmerImage = farmerProfile.FarmerImage?.Map(),
-                PlotDetails = plots.Select(p => p?.Map()).ToList(),
-                Visitations = visitations.Select(v => v?.Map()).ToList()
+                Cooperative = farmerProfile.Cooperative?.Map(),  // ✅ Optional
+                Agent = farmerProfile.Agent?.Map(),              // ✅ Optional
+                FarmerImage = farmerProfile.FarmerImage?.Map(),  // ✅ Optional
+                PlotDetails = plots.Select(p => p.Map()).ToList(),
+                Repayments = repayments.Select(r => r.Map()).ToList(),
+                Visitations = visitations.Select(v => v.Map()).ToList()
             };
 
             return result;
@@ -957,28 +1076,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
          **/
 
         public async Task<PagedListResponse<List<FarmerDetailDto>>> GetAllFarmerDetails(
-            string businessCode,
-            string organizationCode = null,
-    long? cooperativeId = null,
-    string? agentUserId = null,
-    string? state = null,
-    string? sortBy = "Name",   // You can add other fields
-    bool sortAsc = true)
+       string businessCode,
+       string? organizationCode = null,
+       long? cooperativeId = null,
+       string? agentUserId = null,
+       string? state = null,
+       string? sortBy = "Name", // You can add other fields
+       bool sortAsc = true)
         {
             var query = _context.Farmers
-         .Where(f => f.BelongToBusinessCode == businessCode);
+                .Where(f => f.BelongToBusinessCode == businessCode);
 
+            // Filter by organization via FarmerOrganizations
             if (!string.IsNullOrEmpty(organizationCode))
             {
-                query = query.Where(f => f.OrganizationCode.Contains(organizationCode));
+                query = from f in query
+                        join fo in _context.FarmerOrganizations
+                            on f.Id equals fo.FarmerId
+                        where fo.OrganizationCode == organizationCode
+                        select f;
             }
 
+            // Filter by cooperative
+            if (cooperativeId.HasValue)
+            {
+                query = query.Where(f => f.BelongToCooperativeId == cooperativeId.Value);
+            }
+
+            // Filter by state
+            if (!string.IsNullOrEmpty(state))
+            {
+                query = query.Where(f => f.State == state);
+            }
+
+            // Count total before joins
             int totalCount = await query.CountAsync();
 
+            // Include joins for details
             var farmers = await (
                 from farmer in query
                     .OrderByDescending(f => f.OnBoardedOn)
-                   
 
                 join coop in _context.Cooperatives
                     on farmer.BelongToCooperativeId equals coop.Id into coopGroup
@@ -1004,14 +1141,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Agent = assignedAgent,
                     SubAccount = sub
                 }
-    ).ToListAsync();
+            ).ToListAsync();
 
             var farmerIds = farmers.Select(f => f.Farmer.Id).ToList();
+
+            // Preload value chain items
             var valueChainItems = await _context.FarmerValueChainItems
                 .Where(v => farmerIds.Contains(v.FarmerId))
                 .ToListAsync();
 
-            // Group value chain items by farmer
             var groupedValueChains = valueChainItems
                 .GroupBy(v => v.FarmerId)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -1047,30 +1185,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 Data = result,
                 Count = totalCount
             };
-            //select new FarmerDetailDto
-            //    {
-            //        Farmer = farmer.Map().ApplySubAccount(sub),
-            //        Cooperative = cooperative.Map(),
-            //        FarmerImage = farmerImage.Map(),
-            //        Agent = assignedAgent.Map(),
-            //        PlotDetails = _context.FarmPlotDetails
-            //            .Where(p => p.FarmerId == farmer.Id)
-            //            .Select(x => x.Map())
-            //            .ToList(),
-
-            //        Visitations = _context.FarmVisitationActivities
-            //            .Where(v => v.FarmerUserId == farmer.UserId)
-            //            .Select(x => x.Map())
-            //            .ToList()
-            //    }
-            //).ToListAsync();
-
-            //return new PagedListResponse<List<FarmerDetailDto>>
-            //{
-            //    Data = farmers,
-            //    Count = totalCount,
-
-            //};
         }
 
 

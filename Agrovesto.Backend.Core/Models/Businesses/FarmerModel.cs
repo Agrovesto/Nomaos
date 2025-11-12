@@ -48,8 +48,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
-        public List<ValueChainSelectionDto> ValueChainSelections { get; set; }
-        public List<FarmerValueChainSelectionDto>? ValueChainItems { get; set; }
+        public bool IsNinVerified { get; set; } = false;
+        public List<ValueChainSelectionDto> SelectedItems { get; set; }
+        public List<FarmerValueChainsSelectionDto>? ValueChainItems { get; set; }
     }
     public class FarmerValueChainSelectionDto
     {
@@ -66,4 +67,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string ValueChainType { get; set; }
         public List<string> Items { get; set; }
     }
+    public class FarmerValueChainsSelectionDto
+    {
+        public string TypeName { get; set; } = string.Empty;
+
+        // List of items under this value chain type
+        public List<ValueChainItemDto> Items { get; set; } = new List<ValueChainItemDto>();
+    }
+
+    public class ValueChainItemDto
+    {
+        public long ItemId { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
 }

@@ -40,10 +40,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
         public long CooperativeId { get; set; }
+        public string? Env { get; set; }
+        public string? SelectedProviderCode { get; set; }
     }
     public class BusinessRegistrationArgs
     {
-        public string? WalletProviderCode { get; set; }
+        public string? SelectedProviderCode { get; set; }
         public long SubscribedBundleId { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
@@ -61,6 +63,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long CooperativeId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
+        public long Id { get; set; }
+        public string? status { get; set; }
     }
     public class BusinessLoadModel
     {

@@ -27,8 +27,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -97,8 +96,7 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -141,8 +139,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -186,8 +183,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
