@@ -1,10 +1,12 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Asn1.Ocsp;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -47,12 +49,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             account.DOB = model.DOB;
             account.FirstName = model.FirstName;
             account.LastName = model.LastName;
+            account.MiddleName = model.MiddleName;
             account.WalletCode = model.WalletCode;
             account.IsMainAccount = false;
             account.NIN = model.NIN;
-            account.Status = model.Status;
+            account.Status = BusinessStatus.Registered.ToString();//model.Status;
             account.SubAccountName = model.SubAccountName;  
-            
+           
 
             await _context.SaveChangesAsync();
             return account.Map();
@@ -69,11 +72,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return entity.Map();
         }
-
+       
         public async Task<SterlingBankWalletModel> CreateSterlingWallet(SterlingBankWalletModel model)
         {
-            SterlingBankWallet entity = model.Map();
-            _context.Set<SterlingBankWallet>().Add(entity);
+            
+            //SterlingBankWallet entity = model.Map();
+            var entity = await _context.SterlingBankWallets.Where(x => x.AgrovestoUserId == model.AgrovestoUserId).FirstOrDefaultAsync();
+            if(entity == null)
+            {
+                entity = model.Map();
+                _context.Set<SterlingBankWallet>().Add(entity);
+            }
+            else
+            {
+                entity.AccountName = model.AccountName;
+                entity.AccountNumber = model.AccountNumber;
+                entity.BankCode = model.BankCode;
+                entity.BankName = model.BankName;
+                entity.currencyId = model.currencyId;
+                entity.CustomerId = model.CustomerId;
+                entity.customerTypeId = model.customerTypeId;
+                entity.InternalAccountId = model.InternalAccountId;
+                entity.LedgerAccountNumber = model.LedgerAccountNumber;
+                entity.OwnerId = model.OwnerId;
+                entity.UserId = model.UserId;
+                entity.walletClassificationId = model.walletClassificationId;
+                entity.WalletId = model.WalletId;
+                
+            }
+          
 
             int count = await _context.SaveChangesAsync();
             if (count < 1)
@@ -106,5 +133,80 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entity.Map();
         }
 
+
+
+        public async Task<WalletModel> CreateUserWallet(WalletModel model)
+        {
+            Wallet entity = model.Map();
+            _context.Set<Wallet>().Add(entity);
+
+            int count = await _context.SaveChangesAsync();
+            if (count < 1)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+        public async Task<WalletModel> GetUserWalletByProviderAsync(string userId, string walletProviderCode)
+        {
+            var entity = await _context.Set<Wallet>()
+
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.WalletProviderCode== walletProviderCode);
+            if (entity == null)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
+
+
+        /// <summary>
+        /// Debits a wallet safely and records a transaction trail.
+        /// </summary>
+        public async Task<ResponseDto> DebitAsync(long walletId, decimal amount, string description)
+        {
+            if (amount <= 0)
+                return ResponseDto.Failure("Invalid debit amount.");
+
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == walletId);
+            if (wallet == null)
+                return ResponseDto.Failure("Wallet not found.");
+
+            // Check balance
+            if (wallet.WalletBalance < amount)
+                return ResponseDto.Failure("Insufficient wallet balance.");
+
+            // Debit wallet
+            wallet.WalletBalance -= amount;
+
+            // Record transaction log for audit trail
+            var transaction = new WalletTransaction
+            {
+             
+                WalletId = wallet.Id,
+                UserId = wallet.UserId,
+                Amount = amount,
+                TransactionType = "Debit",
+                Description = description,
+                Reference = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
+                CreatedAt = DateTime.UtcNow,
+                BalanceAfter = wallet.WalletBalance
+            };
+
+            _context.WalletTransactions.Add(transaction);
+
+            // Save both updates
+            await _context.SaveChangesAsync();
+
+            return ResponseDto.Success("Wallet debited successfully.", new
+            {
+                wallet.Id,
+                wallet.WalletBalance,
+                transaction.Reference,
+                transaction.Amount,
+                transaction.Description
+            });
+        }
     }
 }

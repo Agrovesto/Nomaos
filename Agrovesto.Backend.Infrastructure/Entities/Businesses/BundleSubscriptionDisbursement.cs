@@ -29,5 +29,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string PaymentStatus { get; set; }
         public bool InputAlreadyCollected { get; set; }
         public string InputCollectedByPictureOf { get; set; } //i.e image of who collected the input
+        public string? OrganizationCode { get; set; }
     }
 }

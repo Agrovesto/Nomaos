@@ -24,6 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal EquityPaymentBalanceDeficit { get; set; }
         public long TotalQuantityPaidFor { get; set; }
         public string PaymentStatus { get; set; }
+        public string SubscriptionStatus { get; set; }
         public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
         public decimal EquityPlusCommission { get; set; }
@@ -36,7 +37,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string OfficerInChargeUserId { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string Location { get; set; }
+        public string FarmerIdentifier { get; set; }
 
         public long CooperativeId { get; set; }
+        public DateTimeOffset? MaturityDate { get; set; }
+        public bool IsDebitted { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

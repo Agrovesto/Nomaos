@@ -1,53 +1,56 @@
-name: Build and Deploy .NET 8 Application
+name: Build and Deploy .NET 8 App to Windows EC2
 
 on:
   push:
     branches:
-      - dev  # Trigger on pushes to the main branch
+      - dev
+      - master
+      - solution
+  pull_request:
+    branches:
+      - dev
+      - master
+      - solution
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-
+  build:
+    runs-on: [self-hosted, windows]
     steps:
-      # Step 1: Checkout the repository
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # Step 2: Set up .NET 8 SDK
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-
-      # Step 3: Restore dependencies and build the application
+      - name: Set dotnet path
+        run: |
+          $dotnetPath = "C:\Program Files\dotnet"
+          echo "Adding dotnet path to the environment variable"
+          echo "$dotnetPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+     
       - name: Restore dependencies
         run: dotnet restore
-
-      - name: Build the application
+      
+      - name: Build application
         run: dotnet build --configuration Release --no-restore
-
-      # Step 4: Publish the application
-      - name: Publish the application
+      
+      - name: Publish application
         run: dotnet publish -c Release -o ./publish
 
-      # Step 5: Deploy to the Ubuntu server
-      - name: Deploy to Ubuntu server
-        uses: appleboy/scp-action@v0.1.3
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
-          username: ${{ secrets.SSH_USERNAME }}  # SSH username
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
-          source: "./publish/*"
-          target: "/var/www/dotnet-app/"
+          name: dotnet-app
+          path: ./publish
 
-      # Step 6: Restart the .NET application service
-      - name: Restart .NET application service
-        uses: appleboy/ssh-action@v0.1.7
+  deploy:
+    runs-on: [self-hosted, windows]
+    needs: build
+  
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
         with:
-          host: ${{ secrets.SSH_HOST }}  # Server IP or hostname
-          username: ${{ secrets.SSH_USERNAME }}  # SSH username
-          key: ${{ secrets.SSH_PRIVATE_KEY }}  # SSH private key
-          script: |
-            sudo systemctl restart dotnet-app
-            sudo systemctl status dotnet-app
+          name: dotnet-app
+          path: ./publish

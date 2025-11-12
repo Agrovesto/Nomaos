@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
@@ -22,6 +23,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             get
             {
+                var headers = _httpContextAccessor.HttpContext?.Request.Headers;
                 var header = _httpContextAccessor.HttpContext?.Request.Headers["Domain"];
                 if (string.IsNullOrEmpty(header)) return string.Empty;
                 return header;
@@ -60,21 +62,22 @@ namespace Agrovesto.Backend.API.Controllers
             get
             {
                 if (string.IsNullOrEmpty(Token)) return null;
-                var handler = new JwtSecurityTokenHandler();
-                var jst = handler.ReadJwtToken(Token);
+                var handler = new JsonWebTokenHandler();
+                var jst = handler.ReadJsonWebToken(Token);
 
                 var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase));
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
-        public string CurrentUserId
+
+        public string CurrentUserEmail
         {
             get
             {
                 var token = Token;
                 if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
 
-                var handler = new JwtSecurityTokenHandler();
+                var handler = new JsonWebTokenHandler();
 
                 // Ensure the token is a well-formed JWT before reading it
                 if (!handler.CanReadToken(token))
@@ -82,25 +85,104 @@ namespace Agrovesto.Backend.API.Controllers
                     throw new SecurityTokenException("Invalid JWT format");
                 }
 
-                var jst = handler.ReadJwtToken(token);
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
+                var jst = handler.ReadJsonWebToken(token);
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase));
 
-                return claims?.Value;
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
 
-        //public string CurrentUserId
+
+        public string CurrentUserId
+        {
+            get
+            {
+                var token = Token;
+                if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
+
+                var handler = new JsonWebTokenHandler();
+
+                // Ensure the token is a well-formed JWT before reading it
+                if (!handler.CanReadToken(token))
+                {
+                    throw new SecurityTokenException("Invalid JWT format");
+                }
+
+                var jst = handler.ReadJsonWebToken(token);
+                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
+
+                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
+            }
+        }
+        //public string OrganizationCode
         //{
         //    get
         //    {
-        //        if (string.IsNullOrEmpty(Token)) return null;
-        //        var handler = new JwtSecurityTokenHandler();
-        //        var jst = handler.ReadJwtToken(Token);
+        //        var token = Token;
+        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
 
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
-        //        return claims?.Value;
+        //        var handler = new JsonWebTokenHandler();
+
+        //        // Ensure the token is a well-formed JWT before reading it
+        //        if (!handler.CanReadToken(token))
+        //        {
+        //            throw new SecurityTokenException("Invalid JWT format");
+        //        }
+
+        //        var jst = handler.ReadJsonWebToken(token);
+        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
+
+
+        //        //[{"OrganizationCode":"KIC115","OrganizationName":"Kickstart Abj"}]
+        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
         //    }
         //}
+
+        public string OrganizationCode
+        {
+            get
+            {
+                var token = Token;
+                if (string.IsNullOrEmpty(token))
+                    return null;
+
+                var handler = new JsonWebTokenHandler();
+
+                if (!handler.CanReadToken(token))
+                    throw new SecurityTokenException("Invalid JWT format");
+
+                var jst = handler.ReadJsonWebToken(token);
+                var claims = jst.Claims.FirstOrDefault(x =>
+                    x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
+
+                if (string.IsNullOrEmpty(claims?.Value))
+                    return null;
+
+                try
+                {
+                    // Deserialize the JSON array
+                    var organizations = System.Text.Json.JsonSerializer.Deserialize<List<OrganizationClaim>>(claims.Value);
+
+                    // Return a comma-separated list if there are multiple organization codes
+                    return organizations != null && organizations.Count > 0
+                        ? string.Join(",", organizations.Select(o => o.OrganizationCode))
+                        : null;
+                }
+                catch
+                {
+                    // Handle invalid JSON or unexpected format
+                    return null;
+                }
+            }
+        }
+
+        // Helper class to match the claim structure
+        public class OrganizationClaim
+        {
+            public string OrganizationCode { get; set; }
+            public string OrganizationName { get; set; }
+        }
+
     }
 
 }

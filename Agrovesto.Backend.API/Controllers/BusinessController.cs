@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,16 +31,295 @@ namespace Agrovesto.Backend.API.Controllers
             _inputFinancingManagement = inputFinancingManagement;
             _warehouseManagementManager = warehouseManagementManager;
         }
+        [HttpGet("registered-organizations")] //accessed by agrovesto
+        public async Task<IActionResult> GetBusinessOrganization([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessOrganizationAsync(query.businessCode);
+                return Ok(new PagedListResponse<List<OrganizationModel>>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code =  Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [AllowAnonymous]
+        [HttpPost("register-organization")]
+        public async Task<IActionResult> CreateOrganization([FromBody] OrganizationModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+           
+            //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = CurrentUserId;
+                var isAdmin = CurrentUserRole;
+
+                var createMerchant = await _businessManager.CreateOrganization(model, args);
+
+                return Ok(new Response<string>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        //assign supervisor to agent
+        [HttpPost("assign-supervisor")]
+        public async Task<IActionResult> AssignSupervisorToAgent([FromQuery] string agentId, [FromQuery] string supervisorId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _businessManager.AssignSupervisorToAgent(agentId, supervisorId);
+                return Ok(new Response<AgentModel>()
+                {
+                    Data = result,
+                    Message = "Retrieved",
+                    Succeeded = true,
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        //retrieve agent by supervisor
+
+        [HttpGet("user-profile")]
+        public async Task<IActionResult> GetUserProfile([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _walletManager.GetSubAccount(query.UserId);
+                return Ok(new Response<SubAccountModel>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        
+        [HttpGet("agents-bysupervisor")]
+        public async Task<IActionResult> AgentsBySupervisor([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.AgentsBySupervisor(query.UserId, query);
+                return Ok(new PagedListResponse<List<AgentModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
         #region dashboard
+
+
+        #region agent
+        [HttpGet("agent/users/summary")]
+        public async Task<IActionResult> GetBusinessEntitiesMetricsAsyncByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessEntitiesMetricsAsyncByAgent(query);
+                return Ok(new Response<BusinessEntitiesMetrics>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        #endregion agent
         //
         [HttpGet("warehouse/input-disbursement/summary")]
         public async Task<IActionResult> GetWarehouseInputTransit([FromQuery] ListQueryParams query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId);
+                var result = await _warehouseManagementManager.GetWarehouseInputTransit(query.UserId, query);
                 return Ok(new Response<List<WarehouseInputTransitModel>> ()
                 {
                     Data = result.Data,
@@ -75,6 +355,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetBusinessEntitiesMetricsAsync(query);
                 return Ok(new Response<BusinessEntitiesMetrics>()
@@ -111,9 +395,14 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.FarmerBundleSubscriptions(query);
-                return Ok(new Response<SubscriptionMetrics>()
+                return Ok(new Response<List<SubscriptionData>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -146,6 +435,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetBundleSubscriptionAnalysisByBusiness(query);
                 return Ok(new Response<List<BundleSubscriptionSummary>>()
@@ -182,8 +475,84 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId);
+                var result = await _warehouseManagementManager.GetWarehouseSummaryByBusiness(query.UserId, query);
+                return Ok(new Response<List<WarehouseSummaryMetrics>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,                    
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("agent/warehouse/stocks/summary")]
+        public async Task<IActionResult> StockSummaryByWarehouseByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.StockSummaryByWarehouseByAgent(query.UserId, query.businessCode);
+                return Ok(new Response<List<WarehouseSummaryMetrics>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,                    
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("warehouse/stocks/summary/{id}")]
+        public async Task<IActionResult> StockSummaryByWarehouseByAgent([FromQuery] ListQueryParams query, long id)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.StockSummaryByWarehouseId(query.UserId, id, query.businessCode);
                 return Ok(new Response<List<WarehouseSummaryMetrics>>()
                 {
                     Data = result.Data,
@@ -214,6 +583,58 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         #endregion dashboard
+        //
+
+        [HttpPost("assign-agent-role")]
+   
+        public async Task<IActionResult> MakeUserAgent([FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+                
+                var registerUser = await _businessManager.MakeUserAgent(args);
+                
+                //if (args.RoleName.Equals("Farmer"))
+                //{
+                //    var saveFarmerFace = await _businessManager.SaveFarmerImage(new ImageModel
+                //    {
+                //        FarmerUserId=registerUser.UserId,
+                //        File=model.FarmerCapturedImage
+                //    }, args);
+
+
+                //}
+
+                return Ok(new Response<UserModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = registerUser
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
 
         [HttpPost("register")]
         [AllowAnonymous]
@@ -237,14 +658,28 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-                //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-                var registerUser = await _businessManager.CreateBusinessUser(model, args);
-                if (registerUser != null)
-                {
-                    await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
-                }
 
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+               
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                
+                if (args.CooperativeId == 0  && currentRole == "Cooperative")
+                {
+                   var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+                   args.CooperativeId = coop.Id;
+                }
+                var registerUser = await _businessManager.CreateBusinessUser(model, args);
+                //if (registerUser != null && registerUser.SubAccountType != SubAccountType.Agent  )
+                //{
+                //  var wallet=  await _businessManager.UpdateUserAccountProfile(registerUser, args, args.UserId);
+                //}
+               
 
                 return Ok(new Response<SubAccountModel>()
                 {
@@ -275,6 +710,79 @@ namespace Agrovesto.Backend.API.Controllers
             }
 
         }
+
+
+
+
+        [HttpPost("update-user-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> UpdateUserProfile([FromBody] SubAccountModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                model.UserId = args.UserId;
+                var update=  await _businessManager.UpdateUserAccountProfile(model, args, args.UserId);
+                if (update.WalletCode != null)
+                {
+                    return Ok(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = model
+                    });
+
+                }
+                else
+                {
+                    return BadRequest(new Response<SubAccountModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "Could not update profile",
+                        Data = model
+                    });
+
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpPost("upload-image")]
         [AllowAnonymous]
         public async Task<IActionResult> CaptureFarmersImage([FromForm] ImageModel model, [FromQuery] BusinessRegistrationArgs args)
@@ -298,7 +806,29 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
+               if(CurrentUserRole != "Farmer" && string.IsNullOrEmpty(model.FarmerUserId))
+                {
+                    return BadRequest(new Response<Dictionary<string, string>>()
+                    {
+                        Message = "Validation failed.",
+                        Succeeded = false,
+                        Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                    });
+                }
+                if(CurrentUserRole == "Farmer")
+                {
+                    model.FarmerUserId = CurrentUserId;
+                }
 
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 var saveFarmerFace = await _businessManager.SaveFarmerImage(model, args);
 
 
@@ -387,13 +917,52 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-        [HttpGet("staffs")] //accessed by agrovesto
-        public async Task<IActionResult> GetWorkersByBusiness([FromQuery] ListQueryParams query)
+        [HttpGet("wallet-details")] //accessed by agrovesto
+        public async Task<IActionResult> RetrieveCustomerWallet([FromQuery] ListQueryParams query)
         {
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _businessManager.GetStaffByBusinessCode(query.businessCode);
+                var result = await _businessManager.RetrieveCustomerWallet(query);
+                return Ok(new Response<CafeOneCustomerWalletResponse>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+       [HttpGet("staffs")] //accessed by agrovesto
+        public async Task<IActionResult> GetWorkersByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetStaffByBusinessCode(query.businessCode, query.organizationCode);
                 return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
                 {
                     Data = result.Data,
@@ -425,6 +994,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+     
         [HttpPost("create-staff")]
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
@@ -450,6 +1020,11 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 var createWorker = await _businessManager.CreateBusinessWorkerAsync(model, args);
 
                 return Ok(new Response<BusinessWorkerModel>()
@@ -614,6 +1189,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetStaffbyBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<BusinessWorkerModel>>()
@@ -652,6 +1231,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetAgentsByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<AgentModel>>()
@@ -685,6 +1268,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+      
         [HttpGet("businesses")]
         public async Task<IActionResult> GetBusinessesAsync([FromQuery] ListQueryParams query)
         {
@@ -723,12 +1307,57 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        //
+
+        [HttpGet("cooperative")]
+        public async Task<IActionResult> GetCooperativeDetailById([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId);
+                return Ok(new Response<CooperativeModel> ()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
         [HttpGet("cooperatives")]
         public async Task<IActionResult> GetCooperativesByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
@@ -762,11 +1391,16 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-         [HttpGet("cooperatives-byagent")]
+         
+        [HttpGet("cooperatives-byagent")]
         public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<CooperativeModel>>()
@@ -800,14 +1434,52 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-        
-        
-        [HttpGet("farmers")]
 
+        [HttpGet("farmer-image/{imageKey}")]
+        public async Task<IActionResult> GetFarmerImage([FromQuery] ListQueryParams query, string imageKey)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmerDetailWithImage(query, imageKey);
+                return Ok(new Response<FarmerModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("farmers")]
         public async Task<IActionResult> GetFarmersByBusinessCode([FromQuery] ListQueryParams query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByBusinessCode(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
@@ -879,7 +1551,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         [HttpPost("assign-agent")]
-        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] long agentId, [FromQuery] long cooperativeId)
+        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
         {
             if (!ModelState.IsValid)
             {
@@ -928,11 +1600,16 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+       
         [HttpGet("farmers-byagent")]
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
@@ -970,9 +1647,22 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmers-bycooperative")]
         public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
         {
-            try
+            try {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+            if (query.CooperativeId == 0)
             {
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                query.CooperativeId = coop.Id;
+            }
+
+     
                 var result = await _businessManager.GetFarmersByCooperativeId(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerModel>>()
                 {
@@ -1005,5 +1695,204 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+        [HttpPost("assign-farmer-to-cooperative")]
+        public async Task<IActionResult> AssignFarmerToCooperative([FromQuery] long farmerId, [FromQuery] long cooperativeId)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _businessManager.AssignFarmerToCooperative(farmerId, cooperativeId);
+                return Ok(new Response<FarmerModel>()
+                {
+                    Data = result,
+                    Message = "Assigned Successful",
+                    Succeeded = true,
+
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("bank-account-details")]
+        public async Task<IActionResult> GetUserBankAccountDetails([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountDetails(query);
+                return Ok(new Response<UserAccountDetailsModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+     [HttpGet("bank-account-balance")]
+        public async Task<IActionResult> GetUserBankAccountBalance([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetUserBankAccountBalance(query);
+                return Ok(new Response<UserWalletBalanceModel>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("farmer-detail")]
+        public async Task<IActionResult> GetFarmerDetails([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+               
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetFarmerDetails(query);
+                return Ok(new Response<FarmerDetailDto>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded =true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success 
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("farmers-by-business")]
+        public async Task<IActionResult> FarmersByBusiness([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                } //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetAllFarmerDetails(query);
+                //return Ok(new Response<FileDownloadModel>()
+                //{
+                //    Succeeded = true,
+                //    Data = result
+                //});
+                Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
+                return File(result.FileBytes, result.MimeType);
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
     }
 }

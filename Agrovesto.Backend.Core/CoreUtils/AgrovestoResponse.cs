@@ -6,6 +6,35 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.CoreUtils
 {
+    public class ResponseDto
+    {
+        public bool Status { get; set; }
+        public string Message { get; set; }
+        public object? Data { get; set; }
+
+        public ResponseDto(bool success, string message, object? data = null)
+        {
+            Status = success;
+            Message = message;
+            Data = data;
+        }
+
+        /// <summary>
+        /// Returns a successful response with an optional data payload.
+        /// </summary>
+        public static ResponseDto Success(string message, object? data = null)
+        {
+            return new ResponseDto(true, message, data);
+        }
+
+        /// <summary>
+        /// Returns a failed response with an optional data payload.
+        /// </summary>
+        public static ResponseDto Failure(string message, object? data = null)
+        {
+            return new ResponseDto(false, message, data);
+        }
+    }
     public class Response<T>
     {
         public string Code { get; set; }
@@ -23,6 +52,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
         public int Count { get; set; }
         public int PageSize { get; set; }
         public int PageNumber { get; set; }
+        public int TotalPages => (int)Math.Ceiling((double)Count / PageSize);
 
     }
     public class AgrovestoResponse<T> where T : class//: Response

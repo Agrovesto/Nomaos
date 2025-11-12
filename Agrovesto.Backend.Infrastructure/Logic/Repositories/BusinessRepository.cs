@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -20,37 +21,148 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
-
-        public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId)
+        public async Task<int> OrganizationCount()
         {
-            var query = await (from b in _context.BusinessWorkers
-                               join u in _context.Users
-                               on b.UserId equals u.Id
-                               where b.BusinessId == businessId
-                               orderby  b.CreatedOn
-                               select new BusinessWorkerModel
-                               {
-                                   BusinessId = businessId,
-                                   BusinessWorkerId= b.BusinessWorkerId,
-                                   Email=u.Email,
-                                   FullName=u.Name,
-                                   PhoneNumber=u.PhoneNumber,
-                                   UserId=u.Id
-                               }).ToListAsync();           
-
-
-            if (query.Count > 0)
-            {
-                return query;
-            }
-            return null;
+            return await _context.Set<Organization>().CountAsync();
         }
+        public async Task<OrganizationModel> CreateOrganization(OrganizationModel orgModel)
+        {
+            var orgExist = await _context.BusinessOrganizations
+              .FirstOrDefaultAsync(x => x.OrganizationCode == orgModel.OrganizationCode && x.OrganizationName == orgModel.OrganizationName);
+
+            if (orgExist != null)
+            {
+                // Organization already exists, return the existing one
+                return orgExist.Map();
+            }
+            Organization org = orgModel.Map();
+
+            _context.Set<Organization>().Add(org);
+           // await _context.SaveChangesAsync();
+            return org.Map();
+        }
+
+        public async Task<OrganizationModel> GetOrganizationAsync(string organizationCode)
+        {
+            var org = await _context.Set<Organization>()
+                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode || x.OrganizationName == organizationCode);
+            if (org == null)
+            {
+                return null;
+            }
+            return org.Map();
+        }
+
+        //public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+        //{
+        //    var org = await _context.Set<Organization>()
+        //        .Where(x => x.BusinessCode == businessCode).ToListAsync();
+        //    if (org == null)
+        //    {
+        //        return null;
+        //    }
+        //    return org.Select(x=>x.Map()).ToList();
+        //}
+        public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+        {
+            var organizations = await (from org in _context.BusinessOrganizations
+                                       join user in _context.Users on org.BusinessCode equals user.BusinessCode into orgUsers
+                                       from user in orgUsers.DefaultIfEmpty()
+                                       where org.BusinessCode == businessCode
+                                       select new
+                                       {
+                                           Organization = org,
+                                           User = user
+                                       })
+                                      .ToListAsync();
+
+            if (organizations == null || !organizations.Any())
+                return null;
+
+            var result = organizations.Select(x => new OrganizationModel
+            {
+                OrganizaionId = x.Organization.OrganizationId,
+                OrganizationName = x.Organization.OrganizationName,
+                BusinessCode = x.Organization.BusinessCode,
+                Kick = x.User.Password,
+                OrganizationCode = x.Organization.OrganizationCode,
+                ContacPerson=x.Organization.ContacPerson,
+                Contact=x.Organization.Contact,
+                ContactEmail=x.Organization.ContactEmail,
+                Location=x.Organization.Location,
+                OrganizationEmail=x.Organization.OrganizationEmail,
+                OnboardedOn=x.User.CreatedOn,
+                // Add any user details you want to expose
+                //UserName = x.User != null ? x.User.FullName : null,
+                //UserEmail = x.User != null ? x.User.Email : null,
+                //UserPhone = x.User != null ? x.User.PhoneNumber : null,
+                //CreatedAt = x.Organization.CreatedAt
+                // Include other organization fields you need
+            }).ToList();
+
+            return result;
+        }
+
+        public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
+        {
+            var query = from b in _context.BusinessWorkers
+                        join u in _context.Users on b.UserId equals u.Id
+                        join ur in _context.UserRoles on u.Id equals ur.UserId into userRoles
+                        from ur in userRoles.DefaultIfEmpty()
+                        join rl in _context.Roles on ur.RoleId equals rl.Id into roles
+                        from role in roles.DefaultIfEmpty()
+                        where b.BusinessId == businessId
+                        select new
+                        {
+                            b,
+                            u,
+                            ur,
+                            role
+                        };
+
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                query = query.Where(x => x.b.OrganizationCode == organizationCode);
+            }
+
+            var result = await query
+                .OrderBy(x => x.b.CreatedOn)
+                .Select(x => new BusinessWorkerModel
+                {
+                    BusinessId = x.b.BusinessId,
+                    BusinessWorkerId = x.b.BusinessWorkerId,
+                    Email = x.u.Email,
+                    FullName = x.u.Name,
+                    PhoneNumber = x.u.PhoneNumber,
+                    UserId = x.u.Id,
+                    RoleId = x.ur.RoleId,
+                    RoleName = x.role.Name ?? "No Role Assigned",
+                    CreatedOn = x.b.CreatedOn
+                })
+                .ToListAsync();
+
+            var distinctUsers = result
+                .GroupBy(x => x.UserId)
+                .Select(g => g.First())
+                .Take(50)
+                .ToList();
+
+            return distinctUsers.Any() ? distinctUsers : null;
+        }
+
         public async Task<int> BusinessCount()
         {
             return await _context.Set<Business>().CountAsync();
         }
         public async Task<BusinessModel> CreateBusiness(BusinessModel businessModel, string userId)
         {
+            var businessExist = await _context.Businesses
+              .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (businessExist != null)
+            {
+                return  businessExist.Map();
+            }
             Business business = businessModel.Map();
             byte[] salt = EncryptionUtil.GetSalt();
             business.BusinessCodeSignageSalt = Convert.ToBase64String(salt);
@@ -72,13 +184,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return businessWorker.Map();
         }
    
-        public async Task<List<BusinessModel>> GetBusinessesAsync(ListQueryParams query)
+        public async Task<List<BusinessModel>> GetBusinessesAsync()
         {
             var business = await _context.Set<Business>().Include(b =>b.BusinessWorkers)
                 .AsNoTracking()
                 .OrderByDescending(b=>b.CreatedOn)
-                 .Skip(query.PageNumber)
-                .Take(query.PageSize)
+                // .Skip(query.PageNumber)
+                //.Take(query.PageSize)
               .Select(s => new BusinessModel
               {
                   TotalStaffCount= s.BusinessWorkers.Count,
@@ -92,6 +204,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                   BusinessId=s.BusinessId,
                   Website=s.Website,
                   UserId=s.UserId,
+                  DisputeEmail=s.DisputeEmail,
+                  SupportEmail=s.SupportEmail,
+                  BusinessCodeSignage=s.BusinessCodeSignage,
+                  BusinessCodeSignageSalt
+                  =s.BusinessCodeSignageSalt,
+                  CreatedOn=s.CreatedOn,
+                  BusinessWorkers=s.BusinessWorkers.Select(x=> new BusinessWorkerModel
+                  {
+                      BusinessId=x.BusinessId,
+                      BusinessWorkerId=x.BusinessWorkerId,
+                      UserId= x.UserId,
+                     
+                  }).ToArray(),
+                  BVN = s.BVN,
+                  Category=s.Category.ToEnum<Category>(),
+                  ContactEmail=s.ContactEmail,
+                  NIN=s.NIN,
+                  
               }).ToListAsync();
             if (business == null)
             {

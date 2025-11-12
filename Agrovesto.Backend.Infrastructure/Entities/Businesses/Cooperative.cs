@@ -14,6 +14,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
+        public string? Ward { get; set; }
         public string ContactPerson { get; set; }
         public string? Email { get; set; }
         public string PhoneNumber { get; set; }
@@ -25,7 +26,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string BelongToBusinessCode { get; set; }  //which business
 
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-        public long IsAssignedToAgentId { get; set; }
+        public string IsAssignedToAgentId { get; set; }
         public bool HasbeenAssignedAgent { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

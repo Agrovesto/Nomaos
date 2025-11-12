@@ -13,6 +13,8 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Core.Models.Payment;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -23,12 +25,134 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IWalletProviderManager _walletProvider;
+        private readonly IInputFinancingManagement _inputFinancingManagement;
+        private readonly IPaymentProviderManager _providerManager;
+        private readonly IReportManager _reportManager;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
-            IAuthenticationRepository authenticationRepository) : base(httpContextAccessor)
+            IReportManager reportManager,
+            IPaymentProviderManager providerManager,
+            IAuthenticationRepository authenticationRepository,
+            IInputFinancingManagement inputFinancingManagement) : base(httpContextAccessor)
         {
+            _reportManager = reportManager;
+            _providerManager = providerManager;
             _authenticationRepository = authenticationRepository;
             _walletProvider = walletProvider;
+            _inputFinancingManagement = inputFinancingManagement;
+        }
+        #region FarmerActivities
+        [HttpGet("overview")]
+        public async Task<IActionResult> GetCoreBusinessMetrics()
+        {
+            try
+            {
+                var isAdmin = CurrentUserRole;
+                 if (isAdmin == null  || !isAdmin.Equals("Business")) throw new Exception("Forbidden");
+
+                var result = await _reportManager.GetCoreBusinessMetrics();
+                return Ok(new Response<AdminBusinessEntitiesMetrics>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        
+        #endregion FarmerActivities
+
+        [HttpPost("input-subscription-settlement")]
+        public async Task<IActionResult> SettleBusiness([FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                var bundle = await _inputFinancingManagement.SettlePendingFarmerBundleSubscriptionEquityToBusiness(args);
+                if (bundle.status)
+                {
+                    return Ok(new Response<(bool status, BundleSubscriptionInterestModel data)>()
+                    {
+                        Code = (bundle.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = bundle
+                    });
+
+                }
+                else
+                {
+                    return Ok(new Response<(bool status, BundleSubscriptionInterestModel data)>()
+                    {
+                        Code = (bundle.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                        Succeeded = false,
+                        Message = "Please try again later",
+                        Data = bundle
+                    });
+                }
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
         [HttpPost("create-admin")]
@@ -308,6 +432,141 @@ namespace Agrovesto.Backend.API.Controllers
 
         #endregion
 
+        #region payment
+        /// <summary>
+        /// Gets all provider
+        /// </summary>
+        /// <param name="pageNumber"></param>
+        /// <param name="pageSize"></param>
+        /// <returns></returns>
+        // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpGet("payment/all")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> GetAllProviders([FromQuery] int pageNumber, [FromQuery] int pageSize)
+        {
+
+            var result = await _providerManager.Get();
+            return Ok(new Response<PaymentProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Creates provider
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpPost("payment")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+        public async Task<IActionResult> CreateProvider([FromBody] PaymentProviderModel model)
+        {
+            return Ok(new Response<PaymentProviderModel>
+            {
+                Succeeded = true,
+                Data = await _providerManager.CreateProvider(model)
+            });
+        }
+        /// <summary>
+        /// Updates provider
+        /// </summary>
+        /// <param name="providerModel"></param>
+        /// <returns></returns>
+       // [Authorize(Policy = "MANAGE_PROVIDER")]
+        [HttpPut("payment/{id}")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+
+        public async Task<IActionResult> UpdateProvider([FromBody] PaymentProviderModel providerModel)
+        {
+            PaymentProviderModel result = await _providerManager.UpdateProvider(providerModel);
+            return Ok(new Response<object>()
+            {
+                Succeeded = true,
+                Message = "Provider has been updated successfully",
+                Data = result
+            });
+        }
+
+        /// <summary>
+        /// Gets parameters 
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        //[Authorize(Roles = "Admin")]
+        [HttpGet("payment/parameters/{id}/{Env}")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+
+        public async Task<IActionResult> GetParameters(long id, string Env)
+        {
+            var result = await _providerManager.GetParametersByProvider(id, Env);
+            return Ok(new Response<ProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Updates parameter
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        //  [Authorize(Roles = "Admin")]
+
+        [HttpPost("payment/parameters")]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 422)]
+        [ProducesResponseType(typeof(Response<PaymentProviderModel>), 500)]
+        public async Task<IActionResult> UpdateParameters([FromBody] PaymentProviderModel model)
+        {
+
+            var result = await _providerManager.UpdateProviderParameter(model);
+
+
+            return Ok(new Response<PaymentProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Disables provider
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+      //  [Authorize(Roles = "Admin")]
+        [HttpPut("payment/{id}/disable")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> DisableProvider(long id)
+        {
+            bool result = await _providerManager.DisableProvider(id);
+            return Ok(new Response<object>()
+            {
+                Succeeded = result,
+                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
+
+        #endregion payment
 
     }
 }

@@ -31,14 +31,17 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         Pending,
         Partial_Payment,
         Paid,
-        Failed
+        Failed,
+        Disbursed,
+        AllowedDebit
 
     }
     public enum InputFinancingStatus
     {
         Requested,
-        Disbursed,
-        PartiallyDisbursed
+        Approved,
+        Rejected,
+        Disbursed
     }
 
     //public class BundlePlanSubcription

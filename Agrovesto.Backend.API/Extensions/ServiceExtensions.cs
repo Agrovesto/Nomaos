@@ -2,10 +2,13 @@
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -40,7 +43,13 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmPlotDetailRepository, FarmPlotDetailRepository>();
             services.AddScoped<IWarehouseManagementRepository, WarehouseManagementRepository>();
             services.AddScoped<IInputFinancingManagementRepository, InputFinancingManagementRepository>();
-           
+           services.AddScoped<IFarmerTransactionRepository, FarmerTransactionRepository>();
+            services.AddScoped<ITraderRepository, TraderRepository>();
+            services.AddScoped<IPaymentProviderRepository, PaymentProviderRepository>();
+            services.AddScoped<IDashboardRepository, DashboardRepository>();
+            services.AddScoped<IFarmerCreditScoreRepository, FarmerCreditScoreRepository>();
+            services.AddScoped<IOrganizationConfigurationRepository, OrganizationConfigurationRepository>();
+            services.AddScoped<IInputFinancingSchemeRepository, InputFinancingSchemeRepository>();
 
             services.AddScoped<IBusinessManager, BusinessManager>();
             services.AddScoped<IRoleManager, RoleManager>();
@@ -50,10 +59,36 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
             services.AddScoped<IFaceManager, FaceManager>();
+            services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
+            services.AddScoped<IReportManager, ReportManager>();
+            services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
+            services.AddScoped<IDashboardManager, DashboardManager>();
+            services.AddScoped<IPayoutManager, PayoutManager>();
+            services.AddScoped<IFarmerCreditScoremanager, FarmerCreditScoremanager>();
+            services.AddScoped<IWalletSetUpManager, WalletSetUpManager>();
+            services.AddScoped<ISettingsManager, SettingsManager>();
+            services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
+
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<ISMSService, SMSService>();
+            services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
+            services.AddScoped<IEncryptionService, EncryptionService>();
+            services.AddScoped<IExcelConverterService, ExcelConverterService>();
+            services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
+            services.AddScoped<IGoogleDriveService, GoogleDriveService>();
+            services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
+            //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
+           
+
+
+
+
+            services.AddScoped<IMandERepositories, MandERepositories>();
+            services.AddScoped<IActivityEntryRepository, ActivityEntryRepository>();
+            services.AddScoped<IMandEActivityManager, MandEActivityManager>();
 
         }
     }

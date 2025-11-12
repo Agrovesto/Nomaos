@@ -1,18 +1,37 @@
 using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.API.HealthChecks;
+using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System;
+using System.Reflection;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json;
+
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
+// Prefer awaiting the async implementation to avoid blocking threads
+await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
 
 // Add services to the container.
 //builder.Services.AddDbContext<DataContext>(options =>
@@ -34,6 +53,13 @@ builder.Services.AddDbContext<DataContext>(options =>
                 errorNumbersToAdd: null);
             sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
         }));
+
+
+builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+
+builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+builder.Services.AddHostedService<FarmerOrganizationSyncService>();
+
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
@@ -75,6 +101,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         )
     };
 });
+//builder.Services.Configure<JwtBearerOptions>(options =>
+//{
+//    options.UseSecurityTokenValidators = true;
+//});
 builder.Services.Configure<FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
@@ -84,6 +114,43 @@ builder.Services.Configure<FormOptions>(o =>
 
 
 builder.Services.AddControllers();
+
+// Add health checks
+builder.Services.AddHttpClient();
+builder.Services.AddHealthChecks()
+    // Database health checks
+    .AddDbContextCheck<DataContext>("Database", tags: new[] { "database", "critical" })
+    .AddSqlServer(
+        connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
+        name: "SQL Server Database",
+        healthQuery: "SELECT 1",
+        timeout: TimeSpan.FromSeconds(5),
+        tags: new[] { "database", "critical" })
+    
+    // External service health checks
+    .AddCheck<IdentityPassHealthCheck>("IdentityPass API", tags: new[] { "external" })
+    .AddCheck<TermiiSmsHealthCheck>("Termii SMS API", tags: new[] { "external" })
+    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API", tags: new[] { "external" })
+    .AddCheck<SendGridHealthCheck>("SendGrid API", tags: new[] { "external" })
+    .AddS3(options =>
+    {
+        options.BucketName = builder.Configuration["AWS:BucketName"];
+        options.AccessKey = builder.Configuration["AWS:AccessKey"];
+        options.SecretKey = builder.Configuration["AWS:SecretKey"];
+       // options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
+    }, name: "AWS S3", tags: new[] { "external", "storage" })
+    
+    // API endpoint health checks
+    .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
+    .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
+
+// Register health check classes
+builder.Services.AddScoped<IdentityPassHealthCheck>();
+builder.Services.AddScoped<TermiiSmsHealthCheck>();
+builder.Services.AddScoped<CountryStateCityApiHealthCheck>();
+builder.Services.AddScoped<SendGridHealthCheck>();
+builder.Services.AddScoped<ApiEndpointHealthCheck>();
+builder.Services.AddScoped<ApplicationComponentHealthCheck>();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -99,6 +166,7 @@ builder.Services.AddSwaggerGen(option =>
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
+
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -113,7 +181,15 @@ builder.Services.AddSwaggerGen(option =>
             new string[]{}
         }
     });
+
+   // option.OperationFilter<AddCustomHeaderParameter>();
 });
+// Add logging
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
+// Register your service
+builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
 builder.Services.AddCors(options =>
@@ -144,7 +220,7 @@ if (app.Environment.IsDevelopment())
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Agrovesto Enterprise Platform ");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
     c.DocumentTitle = "Agrovesto Enterprise Platform";
     //  c.RoutePrefix = "/docs";
 
@@ -156,20 +232,44 @@ app.UseSwaggerUI(c =>
 
 //    try
 //    {
-//        await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        //await DbInitializer.SeedRolesAndSuperAdminAsync(services);
+//        await DbInitializer.SeedWeight(services);
 //    }
 //    catch (Exception ex)
 //    {
 //        logger.LogError($"Database seeding encountered an error but will not stop application: {ex.Message}");
 //    }
 //}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
+//    await importer.ImportLocationsFromJsonAsync();
+//}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var importer = scope.ServiceProvider.GetRequiredService<IFarmerCategoryService>();
+//    await importer.ImportFarmerValuesFromJsonAsync();
+//}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+//    db.Database.Migrate();
+//    await SeedData.EnsureSeededAsync(db);
+//}
+
 
 app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
 
+// Enable static files for health dashboard
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+// The health check endpoints are now handled by the HealthController
+// No additional mapping needed as we're using controller routes
 
 app.MapControllers();
 

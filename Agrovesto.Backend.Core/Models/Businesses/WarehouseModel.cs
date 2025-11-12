@@ -17,9 +17,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
         public string Capacity { get; set; }
-        public long ManagedByUserId { get; set; }
+        public string? ManagedByUserId { get; set; }
         public bool HasbeenAssignedManager { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 
     public class WarehouseInputInventoryModel
@@ -49,12 +50,23 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? DeliveredTo { get; set; }
         public string? ReceivedBy { get; set; }
         public string? TransitStatus { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public enum InputTransitStatus
     {
         Packed,
+        PickedUp,
         InTransit,
+        ArrivedDestination,
+        Delivered,
         Received
+    }
+
+    public enum LogisticType
+    {
+        Truck,
+        Bus,
+       Bike
     }
     public class WarehouseUserModel
     {
@@ -66,6 +78,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Lga { get; set; }
         public string PhoneNumber { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
         public string? UserId { get; set; }
         public long WarehouseId { get; set; }
     }

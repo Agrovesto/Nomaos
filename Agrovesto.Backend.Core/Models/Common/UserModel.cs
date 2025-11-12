@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -8,6 +9,17 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class SupportingDOcument
+    {
+        public IFormFile File { get; set; }
+    }
+        public class ChnagePasswordModel
+    {
+        public string? UserName { get; set; }
+        public string OldPassword { get; set; }
+        public string NewPassword { get; set; }
+        public string ConfirmPassword { get; set; }
+    }
     public class ForgotPasswordModel
     {
         public string Username { get; set; }
@@ -35,6 +47,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         //public string? Gender { get; set; }
         //public string? DateOfBirth { get; set; }
         public string BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class ImageComparisonResponse
     {
@@ -52,14 +65,16 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public string FarmerUserId { get; set; }
         public string BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
     }
     public class ImageModel
     {
         public IFormFile File { get; set; }
-        public string FarmerUserId { get; set; }
+        public string? FarmerUserId { get; set; }
     }
     public class UserModel
     {
+      //  public IFormFile? FarmerCapturedImage { get; set; }
         public string? Id { get; set; }
         public string? Salt { get; set; }
         public string PhoneNumber { get; set; }
@@ -75,10 +90,14 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
+        public string? FirstName { get; set; }
         public string? Name { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
+        public string? Ward { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
 
@@ -87,6 +106,14 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? BankAccount { get; set; }
         public string? BankName { get; set; }
         public string? BusinessCode { get; set; }
+        public string? Alias { get; set; }
+        public string? OrganizationCode { get; set; }
+        public string? FarmerCategory { get; set; }
+        public long YearsInAgric { get; set; }
+        public string? HighestLevelOfEducation { get; set; }
+        public bool shouldVerifyNin { get; set; } = false;
+
+        public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
     }
     public enum UserType
     {
@@ -107,7 +134,12 @@ namespace Agrovesto.Backend.Core.Models.Common
         [Description("Agrovesto")]
         Agrovesto,
         [Description("Buyer")]
-        Buyer
+        Buyer,
+        [Description("Trader")]
+        Trader,
+
+        [Description("Organization")]
+        Organization
     }
     public class LoginModel
     {
@@ -118,16 +150,31 @@ namespace Agrovesto.Backend.Core.Models.Common
         public LoginType LoginMethod { get; set; }
     }
 
-
+    public class UserObject
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public string Phone_number
+        { get; set; }
+    }
     public class TokenModel
     {
         public string Token { get; set; }
         public TokenType TokenType { get; set; }
+
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
+        public List<OrganizationDto> Organizations { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
+      //  public UserObject User { get; set; }
+    }
+    public class OrganizationDto
+    {
+        public string OrganizationCode { get; set; }
+        public string OrganizationName { get; set; }
     }
 
     public enum TokenType

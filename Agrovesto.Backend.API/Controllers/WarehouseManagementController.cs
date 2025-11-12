@@ -25,7 +25,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> UpdateBundleEquityPrice([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED,"Forbidden");
+            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -79,7 +79,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpPost("bundle")]
-        public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
             if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -101,6 +101,11 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
                 args.UserId ??= CurrentUserId;
                 var bundle = await _warehouseManagementManager.CreateBundleAsync(model, args);
                 return Ok(new Response<BundleModel>()
@@ -135,12 +140,60 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
 
+        [HttpGet("bundles/warehouse-manager")]
+        public async Task<IActionResult> GetBundleByWarehouseManager([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _warehouseManagementManager.GetBundleByWarehouseManager(query.UserId, query);
+                return Ok(new PagedListResponse<List<BundleModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("bundles")]
         public async Task<IActionResult> GetBundlesByBusiness([FromQuery] ListQueryParams query)
         {
             try
             {
                 //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId //: CurrentUserId;
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
 
                 var result = await _warehouseManagementManager.GetBundlesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<BundleModel>>()
@@ -219,7 +272,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateWarehouse([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+           // if (isAdmin == null || (!isAdmin.Equals("Business")) || (!isAdmin.Equals("Organization"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
             {
@@ -238,6 +291,10 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 args.UserId ??= CurrentUserId;
                 var createWarehouse = await _warehouseManagementManager.CreateWarehouse(model, args);
                 return Ok(new Response<WarehouseModel>()
@@ -331,10 +388,14 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpGet("warehouse")]
-        public async Task<IActionResult> GetWarehousesByBusinessCode([FromQuery] ListQueryParams query)
+        public async Task<IActionResult> GetWarehousesByBusinessCode([FromQuery] BusinessRegistrationArgs query)
         {
             try
             {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehousesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseModel>>()
@@ -368,7 +429,48 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+        [HttpGet("warehouse/by-agent")]
+        public async Task<IActionResult> GetWarehousesByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _warehouseManagementManager.GetWarehousesByAgent(query.UserId, query);
+                return Ok(new PagedListResponse<List<WarehouseModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
         [HttpGet("warehouse/{id}")]
         public async Task<IActionResult> GetSingleWarehouseDetail(long id)
         {
@@ -551,6 +653,10 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
 
                 var result = await _warehouseManagementManager.GetWarehousesManagerByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseUserModel>>()
@@ -608,6 +714,10 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId ??= CurrentUserId;
                 args.WarehouseId = args.WarehouseId;
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
 
                 var result = await _warehouseManagementManager.StockUpInput(model, args);
                 return Ok(new Response<WarehouseInputInventoryModel>()
@@ -640,7 +750,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
         [HttpPost("ship-input")]
-        public async Task<IActionResult> ShipInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> ShipInput([FromBody] InputDeliveryTrackerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -663,7 +773,7 @@ namespace Agrovesto.Backend.API.Controllers
                 args.WarehouseId = args.WarehouseId;
 
                 var result = await _warehouseManagementManager.ConfirmInputShipment(model, args);
-                return Ok(new Response<WarehouseInputInventoryModel>()
+                return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
                     Message = "Successful",
@@ -695,7 +805,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpPost("receive-warehouse-input")]
-        public async Task<IActionResult> ReceiveInput([FromBody] WarehouseInputInventoryModel model, [FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> ReceiveInput([FromBody] InputDeliveryTrackerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -718,7 +828,7 @@ namespace Agrovesto.Backend.API.Controllers
                 args.WarehouseId = args.WarehouseId;
 
                 var result = await _warehouseManagementManager.ConfirmReceiptOfInput(model, args);
-                return Ok(new Response<WarehouseInputInventoryModel>()
+                return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
                     Message = "Successful",
@@ -856,12 +966,18 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
+
+       
         [HttpGet("inputs-by-warehouse")]
         public async Task<IActionResult> InputsByWarehouse([FromQuery] ListQueryParams query)
         {
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
 
                 var result = await _warehouseManagementManager.GetInputByWarehouse(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseInputInventoryModel>>()

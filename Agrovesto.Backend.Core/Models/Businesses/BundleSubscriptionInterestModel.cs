@@ -6,13 +6,47 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+
+    public class BundleInterestReceiptModel
+    {
+        public string BusinessLogo { get; set; }
+        public string BusinessName { get; set; }
+        public string BusinessPhoneNumber { get; set; }
+        public string FarmerUserId { get; set; }
+        public string? FarmerName { get; set; }
+        public string WarehouseName { get; set; }
+        public string Reference { get; set; }
+        public string FarmerIdentifier { get; set; }
+        public DateTimeOffset? MaturityDate { get; set; }
+        public long Id { get; set; }
+        public string? BundleType { get; set; }
+        public string BelongToBusinessCode { get; set; }
+        public string? Description { get; set; }
+        public BundleSubscriptionInterestModel SubscriptionInterest { get; set; }
+        public List<BundleItemsModel>? BundlePackage { get; set; }
+        public List<OtherBundlePaymentCostModel>? OtherBundlePaymentCosts { get; set; }
+        // Add these new properties:
+        public FarmerModel Farmer { get; set; }
+        public CooperativeModel Cooperative { get; set; }
+        public decimal BundlePrice { get; set; }
+        public long QuantityOfInterest { get; set; }
+        public decimal TotalEquityPaid { get; set; }
+        public decimal ExpectedEquity { get; set; }
+        public decimal EquityPaymentBalanceDeficit { get; set; }
+        public EquityPaymentStatus Status { get; set; }
+        public DateTimeOffset? PaymentDate { get; set; }
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
+        public string? PaymentStatus { get; set; }
+        public string? RepaymentDeadline { get; set; }
+    }
     public class BundleSubscriptionInterestResponseModel
     {
-        public string AccountNUmber { get; set; }
+        public string AccountNumber { get; set; }
         public string BankName { get; set; }
         public string AccountName { get; set; }
         public string Reference { get; set; }
         public decimal Amount { get; set; }
+        public decimal RepaymentBalance { get; set; }
     }
     public class BundleSubscriptionInterestModel
     {
@@ -28,11 +62,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal EquityPaymentBalanceDeficit { get; set; }
         public long TotalQuantityPaidFor { get; set; }
         public EquityPaymentStatus Status { get; set; }
+        public InputFinancingStatus EquitySubscriptionStatus { get; set; }
         public DateTimeOffset? PaymentDate { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public decimal EquityPlusCommission { get; set; }
         public bool IsCommissionPaidOut { get; set; }//has Agrovesto commission been paid
-
+        public string? FarmerIdentifier { get; set; }
         public bool ShouldAddCommission { get; set; }
         public decimal CommissionPrice { get; set; }
         public double CommissionPercentage { get; set; }
@@ -42,7 +77,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Reference { get; set; }
         public string? Location { get; set; }
         public long CooperativeId { get; set; }
-        public string? AccountBalance { get; set; }
+        public long AccountBalance { get; set; }
         public string? PaymentStatus { get; set; }
+        public string? SubscriptionStatus { get; set; }
+
+        public DateTimeOffset? MaturityDate { get; set; }
+        public bool IsDebitted { get; set; }
+        public string? OrganizationCode { get; set; }
     }
 }

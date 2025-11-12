@@ -10,6 +10,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     public interface IAgentRepository
     {
         Task<(bool status, AgentModel data)> CreateAgent(AgentModel data);
+        Task<AgentModel> GetAgentBySuperVisor(string userId);
         Task<AgentModel> GetAgentDetailById(long Id);
         Task<AgentModel> GetAgentDetailByUserId(string userId);
         Task<List<AgentModel>> GetAgents();

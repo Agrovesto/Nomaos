@@ -10,29 +10,61 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
-
+    public class TransactionQueryParams
+    {
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+        public string? transactionType { get; set; }
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
+        public string? Location { get; set; }
+        public string? organizationCode { get; set; }
+        public string BusinessCode { get; set; }
+        public string? supervisorId { get; set; }
+        public string? UserId { get; set; } //logging officerId
+        public long CooperativeId { get; set; }
+        public long FarmerId { get; set; }
+    }
     public class ListQueryParams
     {
+        public long farmerId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
         public string? Location { get; set; }
         public string? UserId { get; set; }
         public long warehouseId { get; set; }
         public string? businessCode { get; set; }
+        public string? organizationCode { get; set; }
+        public string? env { get; set; }
+        public string? sortBy { get; set; }
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
         public long CooperativeId { get; set; }
+        public string? Env { get; set; }
+        public string? SelectedProviderCode { get; set; }
     }
     public class BusinessRegistrationArgs
     {
+        public string? SelectedProviderCode { get; set; }
+        public long SubscribedBundleId { get; set; }
+        public DateTimeOffset? startDate { get; set; }
+        public DateTimeOffset? endDate { get; set; }
+        public string? Location { get; set; }
+        public string? WarehouseManger { get; set; }
         public string? UserType { get; set; }
         public string? RoleName { get; set; }
         public string? UserId { get; set; }
         public string? DefaultPassword { get; set; }
         public string? businessCode { get; set; }
+        public string? organizationCode { get; set; }
         public string? SubAccountType { get; set; }
         public string? Env { get; set; }
         public long WarehouseId { get; set; }
         public long CooperativeId { get; set; }
-        public string? Location { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+        public long Id { get; set; }
+        public string? status { get; set; }
     }
     public class BusinessLoadModel
     {
@@ -43,6 +75,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BusinessLogo { get; set; }
         public string Address { get; set; }
         public string Website { get; set; }
+        public string? PropagateUrl { get; set; }
     }
 
     public class BusinessModel :Model
@@ -90,14 +123,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         [RegularExpression(ValidationRegex.General)]
         [MaxLength(50)]
-        public string BVN { get; set; }
+        public string? BVN { get; set; }
 
         [RegularExpression(ValidationRegex.General)]
         [MaxLength(13)]
-        public string NIN { get; set; }
+        public string? NIN { get; set; }
 
         [RegularExpression(ValidationRegex.General)]
-        [MaxLength(50)]
+        [MaxLength(200)]
         public string Website { get; set; }
         public BusinessStatus BusinessStatus { get; set; }
         public Category Category { get; set; } = Category.Not_Live;
@@ -108,7 +141,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string BusinessLogo { get; set; }
         public string? UserId { get; set; }
         public string? BusinessCodeSignage { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public long TotalStaffCount { get; set; }
+        public string? PropagateUrl { get; set; }
     }
     public enum BusinessStatus
     {

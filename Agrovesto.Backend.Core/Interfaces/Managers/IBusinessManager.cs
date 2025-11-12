@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,7 +14,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     {
         Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId,
        ListQueryParams query);
-        Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId);
+        Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
         Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args);
         Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args);
         Task<BusinessWorkerModel> CreateBusinessWorkerAsync(BusinessWorkerModel bWorker, BusinessRegistrationArgs args);
@@ -24,12 +25,27 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId, ListQueryParams query);
         Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffbyBusiness(string userId, ListQueryParams query);
-        Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode);
-        Task UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId);
+        Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode, string organizationCode);
+        Task<SubAccountModel> UpdateUserAccountProfile(SubAccountModel subaccount, BusinessRegistrationArgs args, string userId);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(string userId, ListQueryParams query);
         Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsync(ListQueryParams query);
         Task<ImageUploadResponse> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args);
+        Task<FarmerModel> AssignFarmerToCooperative(long farmerId, long cooperativeId);
+        Task<Response<BusinessEntitiesMetrics>> GetBusinessEntitiesMetricsAsyncByAgent(ListQueryParams query);
+        Task<UserModel> MakeUserAgent(BusinessRegistrationArgs args);
+        Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId);
+        Task<PagedListResponse<List<AgentModel>>> AgentsBySupervisor(string userId, ListQueryParams query);
+        Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(ListQueryParams query);
+        Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(ListQueryParams query);
+        Task<Response<FarmerModel>> GetFarmerDetailWithImage(ListQueryParams query, string imageKey);
+        Task<Response<CafeOneCustomerWalletResponse>> RetrieveCustomerWallet(ListQueryParams query);
+        Task<OrganizationModel> CreateOrganization(OrganizationModel org, BusinessRegistrationArgs args);
+        Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode);
+        Task<FarmerDetailDto> GetFarmerDetails( ListQueryParams query);
+        Task<FileDownloadModel> GetAllFarmerDetails(ListQueryParams query);
+        Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
+        Task<Response<CooperativeModel>> GetCooperativeDetailById(long Id);
     }
 }

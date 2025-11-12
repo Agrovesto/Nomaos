@@ -22,6 +22,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool status, CooperativeModel data)> CreateCooperative(CooperativeModel data)
         {
+            var existingCooperative = await _context.Cooperatives
+                 .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+            if (existingCooperative != null)
+            {
+                return (true, existingCooperative.Map());
+            }
+
             var entity =data.Map();
 
             await _context.AddAsync(entity);
@@ -39,16 +47,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return cooperative.Map();
         }
-
-        public async Task<CooperativeModel> GetCooperativeDetailById(long Id)
+        public async Task<CooperativeModel?> GetCooperativeDetailById(long id)
         {
-            var cooperative = await _context.Cooperatives.Where(x => x.Id == Id).FirstOrDefaultAsync();
+            var cooperative = await _context.Cooperatives
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
             if (cooperative == null)
-            {
                 return null;
-            }
-            return cooperative.Map();
+
+            // Fetch wallet sequentially (safe)
+            var wallet = await _context.Wallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == cooperative.UserId);
+
+            // Fetch farmers sequentially (safe)
+            var farmers = await _context.Farmers
+                .AsNoTracking()
+                .Where(f => f.BelongToCooperativeId == cooperative.Id)
+                .ToListAsync();
+            //var mappingTask = _context.FarmMappings.AsNoTracking().FirstOrDefaultAsync(f => f.UserId == cooperative.UserId);
+            // Map results
+            var response = cooperative.Map();
+            response.Wallet = wallet?.Map();
+            response.Farmers = farmers?.Select(f => f.Map()).ToList() ?? new List<FarmerModel>();
+
+            return response;
         }
+
+
         public async Task<List<CooperativeModel>> GetCooperatives() //restricted to agrovesto
         {
 
@@ -62,12 +89,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
         {
-            var cooperatives = await _context.Cooperatives
+            var cooperatives = _context.Cooperatives
+                .Where(x => x.BelongToBusinessCode == businessCode)
+                .AsQueryable();
+            if (!string.IsNullOrEmpty(query.organizationCode))
+            {
+                cooperatives = cooperatives.Where(x => x.OrganizationCode == query.organizationCode);
+            }
+
+            var result = await cooperatives
+       .OrderByDescending(s => s.OnBoardedOn)
+       .Skip(query.PageNumber)
+       .Take(query.PageSize)
+        .Select(s => s.Map()).ToListAsync();
+
+
+            if (result.Count > 0)
+            {
+                return result;
+            }
+            return null;
+        }
+
+        public async Task<List<CooperativeModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
+        {
+            var cooperativesQuery = _context.Cooperatives
                 .AsNoTracking()
-                .Where(s => s.BelongToBusinessCode == businessCode)
+                .Where(s => s.IsAssignedToAgentId == agentId);
+
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            }
+
+            var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
-                .Skip(query.PageNumber)
-                .Take(query.PageSize)
+                //.Skip(query.PageNumber)
+                //.Take(query.PageSize)
                 .Select(s => new CooperativeModel
                 {
                     Id = s.Id,
@@ -75,70 +133,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Location = s.Location,
                     State = s.State,
                     Lga = s.Lga,
+                    IsAssignedToAgentId = s.IsAssignedToAgentId,
                     OnBoardedOn = s.OnBoardedOn,
-                    BelongToBusinessCode =s.BelongToBusinessCode,
-                    ContactPerson=s.ContactPerson,
-                    Email=s.Email,
-                    PhoneNumber=s.PhoneNumber,
-                    UserId=s.UserId,
-                    HasbeenAssignedAgent=s.HasbeenAssignedAgent,
-                    IsAssignedToAgentId=s.IsAssignedToAgentId,
+                    BelongToBusinessCode = s.BelongToBusinessCode,
+                    ContactPerson = s.ContactPerson,
+                    Email = s.Email,
+                    HasbeenAssignedAgent = s.HasbeenAssignedAgent,
+                    PhoneNumber = s.PhoneNumber,
+                    UserId = s.UserId,
                     TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id)
                 })
                 .ToListAsync();
 
-            return cooperatives;
+            return cooperatives.Any() ? cooperatives : null;
         }
 
 
-        //public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
-        //{
-
-        //    var agents = await _context.Cooperatives
-        //        .AsNoTracking()
-        //        .Where(s
-        //        =>
-        //        //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-        //        // || s.Lga.Contains(query.Location))) &&
-        //        s.BelongToBusinessCode == businessCode)
-        //        .OrderByDescending(s => s.OnBoardedOn)
-        //        .Skip(query.PageNumber)
-        //        .Take(query.PageSize)
-        //         .Select(s => s.Map()).ToListAsync();
-
-
-        //    if (agents.Count > 0)
-        //    {
-        //        return agents;
-        //    }
-        //    return null;
-        //}
-
-
-        public async Task<List<CooperativeModel>> GetCooperativeByAgent(long AgentId, ListQueryParams query)
+        public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
         {
+            var agent = await _context.Agents.Where(c => c.UserId == agentId).FirstOrDefaultAsync();
+            if (agent == null) return null;
+            agent.SupervisorUserId = supervisorId;
 
-            var cooperatives = await _context.Cooperatives
-                .AsNoTracking()
-                .Where(s
-                =>
-                //(!string.IsNullOrEmpty(query.Location) && (s.Location.Contains(query.Location) || s.State.Contains(query.Location)
-                // || s.Lga.Contains(query.Location))) &&
-                s.IsAssignedToAgentId == AgentId)
-                .OrderByDescending(s => s.OnBoardedOn)
-                .Skip(query.PageNumber)
-                .Take(query.PageSize)
-                 .Select(s => s.Map()).ToListAsync();
+            await _context.SaveChangesAsync();
 
-
-            if (cooperatives.Count > 0)
-            {
-                return cooperatives;
-            }
-            return null;
+            return agent.Map();
         }
 
-        public async Task<CooperativeModel> AssignCooperativeToAgent(long agentId, long cooperativeId)
+        public async Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
         {
             var cooperative = await _context.Cooperatives.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
             if (cooperative == null) return null;
@@ -148,13 +170,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return cooperative.Map();
         }
+        public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
+        {
+            var farmers = await _context.Farmers
+                .Where(f => f.BelongToCooperativeId == cooperativeId)
+                .ToListAsync();
+
+            if (!farmers.Any())
+                return null;
+
+            foreach (var farmer in farmers)
+            {
+                farmer.OnboardedByUserId = agentUserId;
+            }
+
+            await _context.SaveChangesAsync();
+
+            return farmers.Select(x=>x.Map()).ToList();
+
+        }
 
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             var agent =
                 await (from c in _context.Cooperatives
                        join a in _context.Agents
-                       on c.IsAssignedToAgentId equals a.Id
+                       on c.IsAssignedToAgentId equals a.UserId
                        where c.Id == cooperativeId
                        select a).FirstOrDefaultAsync();
 
@@ -162,6 +203,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return null;
             
         }
+
+        public async Task<List<AgentModel>> AgentsBySupervisor(string supervisorId, ListQueryParams query)
+        {
+            var agentsQuery = _context.Agents
+                .AsNoTracking()
+                .Where(s => s.SupervisorUserId == supervisorId);
+
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                agentsQuery = agentsQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            }
+
+            var agents = await agentsQuery
+                .OrderByDescending(s => s.OnBoardedOn)
+                //.Skip((query.PageNumber - 1) * query.PageSize)
+                //.Take(query.PageSize)
+                .Select(s => new AgentModel
+                {
+                    Id = s.Id,
+                    Name = s.Name,
+                    Location = s.Location,
+                    State = s.State,
+                    Lga = s.Lga,
+                    OnBoardedOn = s.OnBoardedOn,
+                    BelongToBusinessCode = s.BelongToBusinessCode,
+                    Email = s.Email,
+                    PhoneNumber = s.PhoneNumber,
+                    OrganizationCode = s.OrganizationCode,
+                    Ward = s.Ward,
+                    SupervisorUserId = s.SupervisorUserId,
+                    UserId = s.UserId
+                })
+                .ToListAsync();
+
+            return agents.Any() ? agents : null;
+        }
+
+
     }
 }
 
