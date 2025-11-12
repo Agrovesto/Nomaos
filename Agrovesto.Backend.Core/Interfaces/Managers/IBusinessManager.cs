@@ -46,5 +46,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<FarmerDetailDto> GetFarmerDetails( ListQueryParams query);
         Task<FileDownloadModel> GetAllFarmerDetails(ListQueryParams query);
         Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
+        Task<Response<CooperativeModel>> GetCooperativeDetailById(long Id);
     }
 }

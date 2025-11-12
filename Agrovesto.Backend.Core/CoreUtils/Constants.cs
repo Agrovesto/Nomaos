@@ -40,6 +40,11 @@ namespace Agrovesto.Backend.Core.CoreUtils
             public const string AgrovestoActor = "AgrovestoActor";
         }
 
+        public static class Providers
+        {
+            public const string FCMBWallet = "FCMB";
+            public const string SterlingWallet = "CafeOne";
+        }
     }
 
 

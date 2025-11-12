@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -9,6 +10,20 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
 
     public static class ReferenceUtil
     {
+        public static string GenerateInvoiceReference(Organization org, string seasonCode, DateTime date, Guid beneficiaryId, int serial)
+        {
+            // ORG-<SEASON>-YY-<beneficiarySuffix>-<serial>
+            var year = date.ToString("yy");
+            var bene = beneficiaryId.ToString().Substring(0, 4).ToUpper();
+            return $"{org.OrganizationCode}-{seasonCode}-{year}-{bene}-{serial:0000}";
+        }
+        public static string GenerateReceiptReference(Organization org, string seasonCode, DateTime date, Guid beneficiaryId, int serial)
+        {
+            // ORG-<SEASON>-YY-<beneficiarySuffix>-<serial>
+            var year = date.ToString("yy");
+            var bene = beneficiaryId.ToString().Substring(0, 4).ToUpper();
+            return $"{org.OrganizationCode}-{seasonCode}-{year}-{bene}-{serial:0000}";
+        }
         public static string GenerateWalletReferenceNumber()
         {
             Random gen = new Random();

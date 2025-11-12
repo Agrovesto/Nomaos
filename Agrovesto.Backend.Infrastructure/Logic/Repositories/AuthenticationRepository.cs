@@ -51,173 +51,301 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model, string businessCode, string header)
         {
-            User user = new User();
-            if (string.IsNullOrEmpty(header)) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
+            if (string.IsNullOrEmpty(header))
+                throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Forbidden");
 
-            var business = await _context.Businesses.Where(x => x.BusinessCode == businessCode).FirstOrDefaultAsync();
-            if(business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString()) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
+            var business = await _context.Businesses
+                .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
+
+            if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
+                throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Forbidden");
+
             try
-
             {
-                IList<string> userRole = new List<string>();
+                User user;
+                IList<string> userRoles;
+
+                // 🔹 Validate credentials based on login method
                 if (model.LoginMethod == LoginType.Password)
                 {
-                    if (header.Contains("IsAgrovesto"))
-                    {
-                        user = await _userManager.FindByNameAsync(model.Username);
-                    }
-                    else if (header.Contains("IsBusiness"))
-                    {
-                        if (string.IsNullOrEmpty(businessCode))
-                        {
-                            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
-                        }
-                        user = await _context.Users.Where(x => x.UserName == model.Username && x.BusinessCode == businessCode).FirstOrDefaultAsync();
-                    }
-                    else
-                    {
-                        throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
-                    }
+                    user = header.Contains("IsAgrovesto")
+                        ? await _userManager.FindByNameAsync(model.Username)
+                        : await _context.Users
+                            .FirstOrDefaultAsync(x => x.UserName == model.Username && x.BusinessCode == businessCode)
+                            ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found");
 
-                    if (user == null)
-                    {
-
-                        //  await _userManager.AccessFailedAsync(user);
-                        return (false, "Invalid username or password", null);
-                    }
-                    var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
-                    if (!checkPassword)
+                    var validPassword = await _userManager.CheckPasswordAsync(user, model.password);
+                    if (!validPassword)
                     {
                         await _userManager.AccessFailedAsync(user);
                         return (false, "Invalid username or password", null);
                     }
-
                 }
                 else
                 {
+                    user = header.Contains("IsAgrovesto")
+                        ? await FindByPhoneNumberAsync(model.phonenumber)
+                        : await _context.Users
+                            .FirstOrDefaultAsync(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode)
+                            ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found");
 
-                    if (header.Contains("IsAgrovesto"))
-                    {
-                        user = await FindByPhoneNumberAsync(model.phonenumber);
-                    }
-                    else if (header.Contains("IsBusiness"))
-                    {
-                        if (string.IsNullOrEmpty(businessCode))
-                        {
-                            throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
-                        }
-                        user = await _context.Users.Where(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode).FirstOrDefaultAsync();
-                    }
-                    else
-                    {
-                        throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
-                    }
-
-                    if (user == null)
-                    {
-                        return (false, "User not found", null);
-
-                    }
                     if (string.IsNullOrEmpty(user.Salt))
-                    {
                         return (false, "Could not login user. Contact administrator", null);
 
-                    }
-                    byte[] salt = Convert.FromBase64String(user.Salt);
-                    string transPin = model.pin.HashSecret(salt);
+                    var salt = Convert.FromBase64String(user.Salt);
+                    var hashedPin = model.pin.HashSecret(salt);
+
                     if (string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
-                    {
                         return (false, "Login with Email and Password, then enable login with Pin in settings", null);
-                    }
-                    var userPin = await ValidateTransactionPin(user, transPin);
-                    if (!userPin)
+
+                    var isValidPin = await ValidateTransactionPin(user, hashedPin);
+                    if (!isValidPin)
                     {
                         await _userManager.AccessFailedAsync(user);
                         return (false, "Invalid pin", null);
                     }
-                    //var result = await _signInManager.CheckPasswordSignInAsync(user, transPin, lockoutOnFailure: true);
-                    //if (!result.Succeeded) { return (false, "Invalid pin"); }
                 }
-                //get walletId
 
-                userRole = await _userManager.GetRolesAsync(user);
-                if (userRole == null) { throw new Exception("Could not sign in user, kindly contact Administrator"); }
+                // 🔹 Retrieve user roles
+                userRoles = await _userManager.GetRolesAsync(user);
+                if (userRoles == null) throw new Exception("Could not sign in user, kindly contact Administrator");
 
+                // 🔹 Update last login
                 user.LastLoginDate = DateTimeOffset.Now;
                 await _context.SaveChangesAsync();
+
+                // 🔹 Retrieve all organization codes the user belongs to
                 var userOrganizations = await _context.UserOrganizations
-    .Where(uo => uo.UserId == user.Id)
-    .Select(uo => uo.OrganizationCode)
-    .ToListAsync();
+                    .Where(uo => uo.UserId == user.Id)
+                    .Select(uo => uo.OrganizationCode)
+                    .Distinct()
+                    .ToListAsync();
 
-                var organizationCodes = (userOrganizations != null && userOrganizations.Any())
-                    ? string.Join(",", userOrganizations)
-                    : null;
+                // 🔹 Fetch organization details (name + code)
+                var organizations = await _context.BusinessOrganizations
+                    .Where(o => userOrganizations.Contains(o.OrganizationCode))
+                    .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.OrganizationName })
+                    .ToListAsync();
 
+                // 🔹 Convert to claim-safe JSON
+                var organizationsJson = JsonConvert.SerializeObject(organizations);
 
+                // 🔹 Build user claims
                 var userClaims = new List<Claim>
-            {
-                new Claim(ClaimTypes.Name, $"{user.UserName}"),
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(JwtRegisteredClaimNames.Jti, user.Id),
-                new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-                new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Typ, "JWT"),
-                new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName),
-                new Claim(JwtRegisteredClaimNames.Iss, _configuration["JWT:Issuer"]),
-                new Claim(JwtRegisteredClaimNames.Aud, _configuration["JWT:Audience"]),
-             //   new Claim("WalletId", userWallet.WalletId.ToString()),
-                new Claim("Role", string.Join(',' ,userRole)),
-                new Claim("UserType", user.UserType),
-                new Claim("User", user.Name),
-                new Claim("Email", user.Email),
-                new Claim("LastLogin", user.LastLoginDate.ToString()),
-                new Claim("MemberSince", user.CreatedOn.ToString()),
-            new Claim("OrganizationCodes", organizationCodes ?? string.Empty),
-
-
-                //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
-                //new Claim("BelongToBusiness", user.BusinessCode),
-
-
-
-            };
+        {
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.NameIdentifier, user.Id),
+            new Claim(JwtRegisteredClaimNames.Jti, user.Id),
+            new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+            new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+            new Claim("Role", string.Join(',', userRoles)),
+            new Claim("UserType", user.UserType ?? ""),
+            new Claim("User", user.Name ?? ""),
+            new Claim("LastLogin", user.LastLoginDate.ToString()),
+            new Claim("MemberSince", user.CreatedOn.ToString()),
+            new Claim("Organizations", organizationsJson) // 👈 JSON claim containing code + name
+        };
 
                 var signinKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"]));
-
                 var securityToken = new JwtSecurityToken(
-                            issuer: _configuration["JWT:Issuer"],
-                            audience: _configuration["JWT:Audience"],
-                            expires: DateTime.Now.AddDays(1),
-                            claims: userClaims,
+                    issuer: _configuration["JWT:Issuer"],
+                    audience: _configuration["JWT:Audience"],
+                    expires: DateTime.Now.AddDays(1),
+                    claims: userClaims,
+                    signingCredentials: new SigningCredentials(signinKey, SecurityAlgorithms.HmacSha256)
+                );
 
-                            signingCredentials: new SigningCredentials(signinKey, SecurityAlgorithms.HmacSha256));
                 var token = new JwtSecurityTokenHandler().WriteToken(securityToken);
-
 
                 var response = new TokenModel
                 {
-
                     Id = user.Id,
                     ExpiresOn = DateTime.Now.AddDays(1),
-                    Roles = userRole.ToList(),
+                    Roles = userRoles.ToList(),
                     Token = token,
                     TokenType = TokenType.AccessToken,
-                    OrganizationCodes = userOrganizations
-                    //  organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
+                    Organizations = organizations // 👈 return code + name in response object
                 };
+
                 return (true, "Successful", response);
             }
             catch (Exception ex)
             {
-                _log.LogInformation("Login failed with error", ex.Message);
-                // await _userManager.AccessFailedAsync(user);
+                _log.LogError(ex, "Login failed with error");
                 throw;
-                //return (false, "Oops, an error occured, not your fault!", null);
             }
-
-
         }
+
+        /** public async Task<(bool Status, string Message, TokenModel response)> Login(LoginModel model, string businessCode, string header)
+         {
+             User user = new User();
+             if (string.IsNullOrEmpty(header)) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
+
+             var business = await _context.Businesses.Where(x => x.BusinessCode == businessCode).FirstOrDefaultAsync();
+             if(business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString()) { throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); }
+             try
+
+             {
+                 IList<string> userRole = new List<string>();
+                 if (model.LoginMethod == LoginType.Password)
+                 {
+                     if (header.Contains("IsAgrovesto"))
+                     {
+                         user = await _userManager.FindByNameAsync(model.Username);
+                     }
+                     else if (header.Contains("IsBusiness"))
+                     {
+                         if (string.IsNullOrEmpty(businessCode))
+                         {
+                             throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
+                         }
+                         user = await _context.Users.Where(x => x.UserName == model.Username && x.BusinessCode == businessCode).FirstOrDefaultAsync();
+                     }
+                     else
+                     {
+                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
+                     }
+
+                     if (user == null)
+                     {
+
+                         //  await _userManager.AccessFailedAsync(user);
+                         return (false, "Invalid username or password", null);
+                     }
+                     var checkPassword = await _userManager.CheckPasswordAsync(user, model.password);
+                     if (!checkPassword)
+                     {
+                         await _userManager.AccessFailedAsync(user);
+                         return (false, "Invalid username or password", null);
+                     }
+
+                 }
+                 else
+                 {
+
+                     if (header.Contains("IsAgrovesto"))
+                     {
+                         user = await FindByPhoneNumberAsync(model.phonenumber);
+                     }
+                     else if (header.Contains("IsBusiness"))
+                     {
+                         if (string.IsNullOrEmpty(businessCode))
+                         {
+                             throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Business not found");
+                         }
+                         user = await _context.Users.Where(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode).FirstOrDefaultAsync();
+                     }
+                     else
+                     {
+                         throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Unexpected Domain detected");
+                     }
+
+                     if (user == null)
+                     {
+                         return (false, "User not found", null);
+
+                     }
+                     if (string.IsNullOrEmpty(user.Salt))
+                     {
+                         return (false, "Could not login user. Contact administrator", null);
+
+                     }
+                     byte[] salt = Convert.FromBase64String(user.Salt);
+                     string transPin = model.pin.HashSecret(salt);
+                     if (string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
+                     {
+                         return (false, "Login with Email and Password, then enable login with Pin in settings", null);
+                     }
+                     var userPin = await ValidateTransactionPin(user, transPin);
+                     if (!userPin)
+                     {
+                         await _userManager.AccessFailedAsync(user);
+                         return (false, "Invalid pin", null);
+                     }
+                     //var result = await _signInManager.CheckPasswordSignInAsync(user, transPin, lockoutOnFailure: true);
+                     //if (!result.Succeeded) { return (false, "Invalid pin"); }
+                 }
+                 //get walletId
+
+                 userRole = await _userManager.GetRolesAsync(user);
+                 if (userRole == null) { throw new Exception("Could not sign in user, kindly contact Administrator"); }
+
+                 user.LastLoginDate = DateTimeOffset.Now;
+                 await _context.SaveChangesAsync();
+                 var userOrganizations = await _context.UserOrganizations
+     .Where(uo => uo.UserId == user.Id)
+     .Select(uo => uo.OrganizationCode)
+     .ToListAsync();
+
+                 var organizationCodes = (userOrganizations != null && userOrganizations.Any())
+                     ? string.Join(",", userOrganizations)
+                     : null;
+
+
+                 var userClaims = new List<Claim>
+             {
+                 new Claim(ClaimTypes.Name, $"{user.UserName}"),
+                 new Claim(ClaimTypes.NameIdentifier, user.Id),
+                 new Claim(JwtRegisteredClaimNames.Jti, user.Id),
+                 new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
+                 new Claim(JwtRegisteredClaimNames.Typ, "JWT"),
+                 new Claim(JwtRegisteredClaimNames.UniqueName, user.UserName),
+                 new Claim(JwtRegisteredClaimNames.Iss, _configuration["JWT:Issuer"]),
+                 new Claim(JwtRegisteredClaimNames.Aud, _configuration["JWT:Audience"]),
+              //   new Claim("WalletId", userWallet.WalletId.ToString()),
+                 new Claim("Role", string.Join(',' ,userRole)),
+                 new Claim("UserType", user.UserType),
+                 new Claim("User", user.Name),
+                 new Claim("Email", user.Email),
+                 new Claim("LastLogin", user.LastLoginDate.ToString()),
+                 new Claim("MemberSince", user.CreatedOn.ToString()),
+             new Claim("OrganizationCodes", organizationCodes ?? string.Empty),
+
+
+                 //new Claim("OrganizationCode", !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""),
+                 //new Claim("BelongToBusiness", user.BusinessCode),
+
+
+
+             };
+
+                 var signinKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Key"]));
+
+                 var securityToken = new JwtSecurityToken(
+                             issuer: _configuration["JWT:Issuer"],
+                             audience: _configuration["JWT:Audience"],
+                             expires: DateTime.Now.AddDays(1),
+                             claims: userClaims,
+
+                             signingCredentials: new SigningCredentials(signinKey, SecurityAlgorithms.HmacSha256));
+                 var token = new JwtSecurityTokenHandler().WriteToken(securityToken);
+
+
+                 var response = new TokenModel
+                 {
+
+                     Id = user.Id,
+                     ExpiresOn = DateTime.Now.AddDays(1),
+                     Roles = userRole.ToList(),
+                     Token = token,
+                     TokenType = TokenType.AccessToken,
+                     OrganizationCodes = userOrganizations
+                     //  organizationCode= !string.IsNullOrEmpty(user.OrganizationCode) ? user.OrganizationCode : ""
+                 };
+                 return (true, "Successful", response);
+             }
+             catch (Exception ex)
+             {
+                 _log.LogInformation("Login failed with error", ex.Message);
+                 // await _userManager.AccessFailedAsync(user);
+                 throw;
+                 //return (false, "Oops, an error occured, not your fault!", null);
+             }
+
+
+         }
+       **/
         public async Task<bool> ValidateTransactionPin(User user, string transactionPin)
         {
 
@@ -365,77 +493,80 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(UserModel model, bool status, string message)> RegisterBusinessUser(UserModel model, string roleName)
         {
-            IdentityResult createUser;
+            // Use phone number as email if email is not provided
             model.Email = !string.IsNullOrWhiteSpace(model.Email) ? model.Email : model.PhoneNumber;
 
-            // Check if user already exists by email
-            var existingUser = await _userManager.FindByNameAsync(model.Email);
-
+            // Generate salt for PIN encryption
             byte[] salt = EncryptionUtil.GetSalt();
             model.Salt = Convert.ToBase64String(salt);
 
+            // Check if the user already exists
+            var existingUser = await _userManager.FindByNameAsync(model.Email);
+
             if (existingUser != null)
             {
-                // Check if the user is already in this organization
-                bool alreadyInOrg = _context.UserOrganizations.Local.Any(x =>
-                               x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode)
-                           || await _context.UserOrganizations
-                               .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode);
-
-                if (alreadyInOrg)
+                // Only handle organization linkage if organizationCode is provided
+                if (!string.IsNullOrEmpty(model.OrganizationCode))
                 {
-                    return (model, false, "User already exists in this organization.");
+                    bool alreadyInOrg = await _context.UserOrganizations
+                        .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode);
+
+                    if (alreadyInOrg)
+                        return (model, false, "User already exists in this organization.");
+
+                    if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == model.OrganizationCode))
+                    {
+                        _context.UserOrganizations.Add(new UserOrganization
+                        {
+                            UserId = existingUser.Id,
+                            OrganizationCode = model.OrganizationCode
+                        });
+
+                        _log.LogInformation($"Existing user {model.PhoneNumber} added to organization {model.OrganizationCode}.");
+                    }
+                }
+                else
+                {
+                    _log.LogInformation($"Existing user {model.PhoneNumber} is a direct business user (no organization).");
                 }
 
-
-                // Add user to new organization
-                _context.UserOrganizations.Add(new UserOrganization
-                {
-                    UserId = existingUser.Id,
-                    OrganizationCode = model.OrganizationCode
-                });
-
-                //await _context.SaveChangesAsync();
-                return (existingUser.Map(), true, "User added to new organization.");
+                return (existingUser.Map(), true, "User already exists, linked to organization if applicable.");
             }
 
-   
-
-            // Generate custom user ID
-            var entity = model.Map(); // Ensure this doesn't map a list of organizations
+            // New user registration
+            var entity = model.Map();
             entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
             entity.IsActive = true;
             entity.UserType = model.UserType;
             entity.NIN = model.NIN;
             entity.BVN = model.Bvn;
+
             // Generate custom user ID
             var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
             var randomDigits = new Random().Next(100, 999);
-           
             entity.Id = !string.IsNullOrEmpty(model.BusinessCode)
-        ? $"{model.BusinessCode}{datePart}{randomDigits}"
-        : !string.IsNullOrEmpty(model.OrganizationCode)
-            ? $"{model.OrganizationCode}{datePart}{randomDigits}"
-            : Guid.NewGuid().ToString();
-
+                ? $"{model.BusinessCode}{datePart}{randomDigits}"
+                : !string.IsNullOrEmpty(model.OrganizationCode)
+                    ? $"{model.OrganizationCode}{datePart}{randomDigits}"
+                    : Guid.NewGuid().ToString();
 
             // Check for phone number conflict within the same organization
-            var existingPhoneInOrg = await _context.Users
-                .Include(u => u.UserOrganizations)
-                .Where(u => u.PhoneNumber == model.PhoneNumber &&
-                            u.UserOrganizations.Any(o => o.OrganizationCode == model.OrganizationCode))
-                .FirstOrDefaultAsync();
-
-            if (existingPhoneInOrg != null)
+            if (!string.IsNullOrEmpty(model.OrganizationCode))
             {
-                return (model, false, "A user with the same phone number exists in this organization.");
+                var existingPhoneInOrg = await _context.Users
+                    .Include(u => u.UserOrganizations)
+                    .Where(u => u.PhoneNumber == model.PhoneNumber &&
+                                u.UserOrganizations.Any(o => o.OrganizationCode == model.OrganizationCode))
+                    .FirstOrDefaultAsync();
+
+                if (existingPhoneInOrg != null)
+                    return (model, false, "A user with the same phone number exists in this organization.");
             }
 
-            // Register the user in Identity
-            if (string.IsNullOrEmpty(model.Password))
-                createUser = await _userManager.CreateAsync(entity);
-            else
-                createUser = await _userManager.CreateAsync(entity, model.Password);
+            // Register user in Identity
+            IdentityResult createUser = string.IsNullOrEmpty(model.Password)
+                ? await _userManager.CreateAsync(entity)
+                : await _userManager.CreateAsync(entity, model.Password);
 
             if (!createUser.Succeeded)
             {
@@ -443,7 +574,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return (model, false, $"Could not create account: {errors}");
             }
 
-            // Add to Identity role
+            // Assign role
             var role = await _roleManager.FindByNameAsync(roleName);
             if (role == null)
                 return (model, false, "Specified role does not exist.");
@@ -455,20 +586,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return (model, false, $"Could not assign role: {errors}");
             }
 
-            // Add user to organization
-            if (!_context.UserOrganizations.Local.Any(x => x.UserId == entity.Id && x.OrganizationCode == model.OrganizationCode))
+            // Add user to organization if applicable
+            if (!string.IsNullOrEmpty(model.OrganizationCode) &&
+                !_context.UserOrganizations.Local.Any(x => x.UserId == entity.Id && x.OrganizationCode == model.OrganizationCode))
             {
                 _context.UserOrganizations.Add(new UserOrganization
                 {
                     UserId = entity.Id,
                     OrganizationCode = model.OrganizationCode
                 });
+
+                _log.LogInformation($"New user {model.PhoneNumber} added to organization {model.OrganizationCode}.");
+            }
+            else if (string.IsNullOrEmpty(model.OrganizationCode))
+            {
+                _log.LogInformation($"New user {model.PhoneNumber} registered as a direct business user (no organization).");
             }
 
+            // Optionally save changes here if needed
+            // await _context.SaveChangesAsync();
 
-            //await _context.SaveChangesAsync();
-
-            return (entity.Map(), true, "User successfully registered and added to organization.");
+            return (entity.Map(), true, "User successfully registered and linked to organization if applicable.");
         }
 
         public async Task<List<string>> GetOrganizationsForUser(string userId)

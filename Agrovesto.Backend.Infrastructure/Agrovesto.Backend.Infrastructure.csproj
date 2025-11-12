@@ -17,6 +17,7 @@
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.107" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.415.12" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.2" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="EPPlus" Version="8.0.6" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
