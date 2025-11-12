@@ -53,7 +53,9 @@ echo "Building application..."
 dotnet build -c Release --no-restore
 
 echo "Publishing application (self-contained)..."
-dotnet publish -c Release -r linux-x64 --self-contained true -o "$BUILD_PATH"
+# dotnet publish -c Release -r linux-x64 --self-contained true -o "$BUILD_PATH"
+dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
+
 
 # --- 4. Deploy to target directory ---
 echo "Preparing deployment directory..."
