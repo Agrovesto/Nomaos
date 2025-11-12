@@ -130,6 +130,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Agent> Agents { get; set; }
         public DbSet<Cooperative> Cooperatives { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
+        public DbSet<FarmerOrganization> FarmerOrganizations { get; set; }
         public DbSet<FarmPlotDetails> FarmPlotDetails { get; set; }
         public DbSet<FarmFlagAuditTrail> FarmFlagAuditTrail { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }

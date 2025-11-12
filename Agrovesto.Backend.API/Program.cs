@@ -1,29 +1,30 @@
 using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using Agrovesto.Backend.Infrastructure.DB;
-using Agrovesto.Backend.API.HealthChecks;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 using System.Text.Json;
-using Amazon;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +58,7 @@ builder.Services.AddDbContext<DataContext>(options =>
 builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+builder.Services.AddHostedService<FarmerOrganizationSyncService>();
 
 
 builder.Services.AddIdentity<User, Role>(opt =>

@@ -1205,9 +1205,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("OrganizationCode")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1302,6 +1299,32 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("FarmerImages");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerOrganization", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("FarmerId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("OnBoardedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("OnboardedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OrganizationCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("FarmerOrganizations");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerSalesTracker", b =>

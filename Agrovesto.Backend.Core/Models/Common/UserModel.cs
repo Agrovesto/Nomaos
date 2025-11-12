@@ -165,11 +165,16 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
-        public List<string> OrganizationCodes { get; set; }
+        public List<OrganizationDto> Organizations { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
       //  public UserObject User { get; set; }
+    }
+    public class OrganizationDto
+    {
+        public string OrganizationCode { get; set; }
+        public string OrganizationName { get; set; }
     }
 
     public enum TokenType

@@ -101,8 +101,7 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -146,8 +145,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -192,8 +190,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId //: CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -294,12 +291,10 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
-
                 args.UserId ??= CurrentUserId;
                 var createWarehouse = await _warehouseManagementManager.CreateWarehouse(model, args);
                 return Ok(new Response<WarehouseModel>()
@@ -397,12 +392,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehousesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseModel>>()
@@ -441,8 +434,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -661,8 +653,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
@@ -723,8 +714,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId ??= CurrentUserId;
                 args.WarehouseId = args.WarehouseId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
@@ -984,8 +974,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
