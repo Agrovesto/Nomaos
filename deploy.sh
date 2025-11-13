@@ -3,7 +3,7 @@
 # Author: Dolapo Fashina
 
 set -e
-set -x   # Command tracing for debugging
+set -x   # Command tracing
 
 # --- Configuration ---
 APP_NAME="Agrovesto.Backend.API"
@@ -13,7 +13,7 @@ ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
 LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
 
-# --- Fix HOME for CI/CD environments ---
+# --- Fix HOME for CI/CD ---
 export HOME=/tmp
 export DOTNET_CLI_HOME=/tmp
 
@@ -23,7 +23,7 @@ echo "Starting deployment for $APP_NAME"
 sudo apt-get update
 sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
 
-# --- 2. Add Microsoft .NET repo (if not already added) ---
+# --- 2. Add Microsoft .NET repo if missing ---
 if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
     echo "Adding Microsoft .NET repository..."
     wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
@@ -41,11 +41,20 @@ fi
 # --- 4. Configure UFW ---
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 5000/tcp
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
-# --- 5. Restore, Build & Publish ---
+# --- 5. Ensure NuGet cache is writable ---
+DOTNET_NUGET_CACHE="$APP_DIR/.nuget/packages"
+mkdir -p "$DOTNET_NUGET_CACHE"
+export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
+
+# --- 6. Restore, Build & Publish ---
 echo "Restoring dependencies..."
+dotnet workload update --skip-manifest-update || true   # Fix workloads if missing
 dotnet restore --no-cache
 
 echo "Building application..."
@@ -55,12 +64,12 @@ echo "Publishing application (self-contained)..."
 BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
 dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
 
-# --- 6. Deploy to target directory ---
+# --- 7. Deploy to target directory ---
 sudo mkdir -p "$APP_DIR"
 sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
 sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
 
-# --- 7. Environment variables ---
+# --- 8. Environment variables ---
 sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
@@ -68,7 +77,7 @@ DOTNET_CLI_HOME=/tmp
 ASPNETCORE_URLS=http://0.0.0.0:5000
 EOF
 
-# --- 8. Systemd service ---
+# --- 9. Systemd service ---
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=$APP_NAME .NET application
@@ -92,7 +101,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$APP_NAME.service"
 sudo systemctl restart "$APP_NAME.service"
 
-# --- 9. Configure Nginx ---
+# --- 10. Configure Nginx ---
 sudo rm -f /etc/nginx/sites-enabled/default
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
