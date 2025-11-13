@@ -41,7 +41,7 @@ fi
 # --- 4. Configure UFW ---
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow 22/tcp 80/tcp 443/tcp 5000/tcp
+sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 443/tcp && sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
 # --- 5. Restore, Build & Publish ---
