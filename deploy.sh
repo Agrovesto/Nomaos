@@ -5,6 +5,10 @@
 set -e
 set -x   # Command tracing
 
+# ----- update certificate__________#
+sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /usr/local/share/ca-certificates/rds-global-bundle.crt
+sudo update-ca-certificates
+
 # --- Configuration ---
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
