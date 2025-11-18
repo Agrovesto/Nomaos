@@ -56,7 +56,7 @@ DOTNET_NUGET_CACHE="$APP_DIR/.nuget/packages"
 sudo mkdir -p "$DOTNET_NUGET_CACHE"
 export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
 sudo chown -R $USER:$USER /tmp/.nuget
-sudo chown _R $USER:$USER  "$APP_DIR/.nuget/packages"
+sudo chown -R $USER:$USER  "$APP_DIR/.nuget/packages"
 
 # --- 6. Restore, Build & Publish ---
 echo "Restoring dependencies..."
