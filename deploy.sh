@@ -16,6 +16,7 @@ SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
 LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+CI_USER="ubuntu"   # user who owns the repo and runs dotnet commands
 
 # --- Fix HOME for CI/CD ---
 export HOME=/tmp
@@ -52,30 +53,36 @@ sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
 # --- 5. Ensure NuGet cache is writable ---
-DOTNET_NUGET_CACHE="$APP_DIR/.nuget/packages"
-sudo mkdir -p "$DOTNET_NUGET_CACHE"
+DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
+mkdir -p "$DOTNET_NUGET_CACHE"
+sudo chown -R $CI_USER:$CI_USER "$DOTNET_NUGET_CACHE"
 export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
-sudo chown -R $USER:$USER /tmp/.nuget
-sudo chown -R $USER:$USER  "$APP_DIR/.nuget/packages"
 
-# --- 6. Restore, Build & Publish ---
+# --- 6. Fix project permissions ---
+sudo chown -R $CI_USER:$CI_USER "$(pwd)"
+sudo chown -R $CI_USER:$CI_USER "$APP_DIR"
+
+# --- 7. Clean previous build artifacts ---
+sudo -u $CI_USER dotnet clean
+
+# --- 8. Restore, Build & Publish as CI_USER ---
 echo "Restoring dependencies..."
-dotnet workload update --skip-manifest-update || true   # Fix workloads if missing
-dotnet restore --no-cache
+sudo -u $CI_USER dotnet workload update --skip-manifest-update || true
+sudo -u $CI_USER dotnet restore --no-cache
 
 echo "Building application..."
-dotnet build -c Release --no-restore
+sudo -u $CI_USER dotnet build -c Release --no-restore
 
 echo "Publishing application (self-contained)..."
 BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
-dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
+sudo -u $CI_USER dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
 
-# --- 7. Deploy to target directory ---
+# --- 9. Deploy to target directory ---
 sudo mkdir -p "$APP_DIR"
-sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
 sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
+sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
 
-# --- 8. Environment variables ---
+# --- 10. Environment variables ---
 sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
@@ -83,7 +90,7 @@ DOTNET_CLI_HOME=/tmp
 ASPNETCORE_URLS=http://0.0.0.0:5000
 EOF
 
-# --- 9. Systemd service ---
+# --- 11. Systemd service ---
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=$APP_NAME .NET application
@@ -107,7 +114,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$APP_NAME.service"
 sudo systemctl restart "$APP_NAME.service"
 
-# --- 10. Configure Nginx ---
+# --- 12. Configure Nginx ---
 sudo rm -f /etc/nginx/sites-enabled/default
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
