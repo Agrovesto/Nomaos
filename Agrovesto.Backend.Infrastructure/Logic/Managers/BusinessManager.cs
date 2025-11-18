@@ -1753,7 +1753,7 @@ ListQueryParams query, string imageKey)
             }
 
             // check if org already exists
-            var existingOrg = await _businessRepository.GetOrganizationAsync(org.OrganizationName);
+            var existingOrg = await _businessRepository.GetOrganizationAsync(org.OrganizationEmail);
             if (existingOrg != null)
             {
                 throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST,
