@@ -31,9 +31,9 @@ sudo apt-get install -y wget apt-transport-https software-properties-common ufw 
 # --- 2. Add Microsoft .NET repo if missing ---
 if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
     echo "Adding Microsoft .NET repository..."
-    wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
+    sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
     sudo dpkg -i packages-microsoft-prod.deb
-    rm packages-microsoft-prod.deb
+    sudo rm packages-microsoft-prod.deb
     sudo apt-get update
 fi
 
@@ -54,7 +54,7 @@ sudo ufw --force enable
 
 # --- 5. Ensure NuGet cache is writable ---
 DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
-mkdir -p "$DOTNET_NUGET_CACHE"
+sudo mkdir -p "$DOTNET_NUGET_CACHE"
 sudo chown -R $CI_USER:$CI_USER "$DOTNET_NUGET_CACHE"
 export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
 
