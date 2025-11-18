@@ -15,7 +15,8 @@ APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
-LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+LOAD_BALANCER_DNS="34.247.86.70"
+# LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
 CI_USER="ubuntu"   # user who owns the repo and runs dotnet commands
 
 # --- Fix HOME for CI/CD ---
