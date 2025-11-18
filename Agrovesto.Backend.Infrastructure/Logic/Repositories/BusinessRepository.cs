@@ -42,10 +42,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return org.Map();
         }
 
-        public async Task<OrganizationModel> GetOrganizationAsync(string organizationCode)
+        public async Task<OrganizationModel> GetOrganizationAsync(string organizationEmail)
         {
             var org = await _context.Set<Organization>()
-                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode || x.OrganizationName == organizationCode);
+                .FirstOrDefaultAsync(x => x.OrganizationEmail == organizationEmail);
             if (org == null)
             {
                 return null;
@@ -65,40 +65,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //}
         public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
         {
-            var organizations = await (from org in _context.BusinessOrganizations
-                                       join user in _context.Users on org.BusinessCode equals user.BusinessCode into orgUsers
-                                       from user in orgUsers.DefaultIfEmpty()
-                                       where org.BusinessCode == businessCode
-                                       select new
-                                       {
-                                           Organization = org,
-                                           User = user
-                                       })
-                                      .ToListAsync();
+            var organizations = await (
+                    from org in _context.BusinessOrganizations
+                    where org.BusinessCode == businessCode
+                    select new
+                    {
+                        Organization = org,
+                        Users = _context.Users
+                                .Where(u => u.BusinessCode == org.BusinessCode)
+                                .ToList()
+                    }
+                ).ToListAsync();
 
             if (organizations == null || !organizations.Any())
                 return null;
 
-            var result = organizations.Select(x => new OrganizationModel
-            {
-                OrganizaionId = x.Organization.OrganizationId,
-                OrganizationName = x.Organization.OrganizationName,
-                BusinessCode = x.Organization.BusinessCode,
-                Kick = x.User.Password,
-                OrganizationCode = x.Organization.OrganizationCode,
-                ContacPerson=x.Organization.ContacPerson,
-                Contact=x.Organization.Contact,
-                ContactEmail=x.Organization.ContactEmail,
-                Location=x.Organization.Location,
-                OrganizationEmail=x.Organization.OrganizationEmail,
-                OnboardedOn=x.User.CreatedOn,
-                // Add any user details you want to expose
-                //UserName = x.User != null ? x.User.FullName : null,
-                //UserEmail = x.User != null ? x.User.Email : null,
-                //UserPhone = x.User != null ? x.User.PhoneNumber : null,
-                //CreatedAt = x.Organization.CreatedAt
-                // Include other organization fields you need
-            }).ToList();
+            var result = organizations
+                .GroupBy(x => x.Organization.OrganizationId) // 🔥 Remove duplicates
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var user = first.Users.FirstOrDefault();   // Pick ANY user
+
+                    return new OrganizationModel
+                    {
+                        OrganizaionId = first.Organization.OrganizationId,
+                        OrganizationName = first.Organization.OrganizationName,
+                        BusinessCode = first.Organization.BusinessCode,
+                        OrganizationCode = first.Organization.OrganizationCode,
+                        ContacPerson = first.Organization.ContacPerson,
+                        Contact = first.Organization.Contact,
+                        ContactEmail = first.Organization.ContactEmail,
+                        Location = first.Organization.Location,
+                        OrganizationEmail = first.Organization.OrganizationEmail,
+
+                        // User fields
+                        Kick = user?.Password,
+                        OnboardedOn = user.CreatedOn
+                    };
+                })
+                .ToList();
 
             return result;
         }
