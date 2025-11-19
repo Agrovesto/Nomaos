@@ -42,17 +42,19 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
+  
       # 2️⃣ Add EC2 host to known_hosts
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
+  
       # 3️⃣ Execute deploy.sh
       - name: Execute deploy script
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
             echo "PR detected: running deploy.sh in dry-run mode"
             ssh ubuntu@${{ secrets.EC2_HOST }} 'bash -s -- --dry-run' < ./deploy.sh
           else
