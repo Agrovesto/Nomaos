@@ -30,7 +30,7 @@ jobs:
         run: dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o ./publish
       
       - name: Upload artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: app-publish
           path: ./publish
