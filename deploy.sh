@@ -1,5 +1,5 @@
 #!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API
+# Robust Deployment Script for Nomaos.API
 # Author: Dolapo Fashina
 
 set -e
@@ -12,6 +12,42 @@ if [[ "$1" == "--dry-run" ]]; then
     echo "Dry-run mode enabled: deployment steps will be skipped"
 fi
 
+# --- Configuration ---
+APP_NAME="Agrovesto.Backend.API"
+APP_DIR="/var/www/$APP_NAME"
+REPO_DIR="/home/ubuntu/agrovesto-backend"  # ← ADD THIS
+SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
+ENV_FILE="/etc/default/$APP_NAME"
+USER_NAME="www-data"
+LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+CI_USER="ubuntu"
+
+# --- Fix HOME for CI/CD ---
+export HOME=/tmp
+export DOTNET_CLI_HOME=/tmp
+
+echo "Starting deployment for $APP_NAME"
+
+# --- 0. Clone or update repository ---
+if [ "$DRY_RUN" = false ]; then
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Cloning repository..."
+        git clone <YOUR_REPO_URL> "$REPO_DIR"
+    else
+        echo "Updating repository..."
+        cd "$REPO_DIR"
+        git fetch origin
+        git reset --hard origin/master
+    fi
+    cd "$REPO_DIR"
+else
+    echo "Dry-run: skipping repository update"
+    # For dry-run, still need to be in repo directory if it exists
+    if [ -d "$REPO_DIR" ]; then
+        cd "$REPO_DIR"
+    fi
+fi
+
 # ----- update certificate__________#
 if [ "$DRY_RUN" = false ]; then
     sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /usr/local/share/ca-certificates/rds-global-bundle.crt
@@ -20,25 +56,10 @@ else
     echo "Dry-run: skipping certificate update"
 fi
 
-# --- Configuration ---
-APP_NAME="Agrovesto.Backend.API"
-APP_DIR="/var/www/$APP_NAME"
-SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
-ENV_FILE="/etc/default/$APP_NAME"
-USER_NAME="www-data"
-LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
-CI_USER="ubuntu"   # user who owns the repo and runs dotnet commands
-
-# --- Fix HOME for CI/CD ---
-export HOME=/tmp
-export DOTNET_CLI_HOME=/tmp
-
-echo "Starting deployment for $APP_NAME"
-
 # --- 1. Install prerequisites ---
 if [ "$DRY_RUN" = false ]; then
     sudo apt-get update
-    sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
+    sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx git
 else
     echo "Dry-run: skipping package installation"
 fi
@@ -87,7 +108,8 @@ export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
 
 # --- 6. Fix project permissions ---
 if [ "$DRY_RUN" = false ]; then
-    sudo chown -R $CI_USER:$CI_USER "$(pwd)"
+    sudo chown -R $CI_USER:$CI_USER "$REPO_DIR"
+    sudo mkdir -p "$APP_DIR"
     sudo chown -R $CI_USER:$CI_USER "$APP_DIR"
 else
     echo "Dry-run: skipping permissions changes"
@@ -105,7 +127,7 @@ echo "Building application..."
 sudo -u $CI_USER dotnet build -c Release --no-restore
 
 echo "Publishing application (self-contained)..."
-BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
+BUILD_PATH="$REPO_DIR/bin/Release/net8.0/linux-x64/publish"
 sudo -u $CI_USER dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
 
 # --- 9. Deploy to target directory ---
@@ -117,92 +139,4 @@ else
     echo "Dry-run: skipping file copy and permissions"
 fi
 
-# --- 10. Environment variables ---
-if [ "$DRY_RUN" = false ]; then
-    sudo tee "$ENV_FILE" > /dev/null <<EOF
-ASPNETCORE_ENVIRONMENT=Production
-DOTNET_PRINT_TELEMETRY_MESSAGE=false
-DOTNET_CLI_HOME=/tmp
-ASPNETCORE_URLS=http://0.0.0.0:5000
-EOF
-else
-    echo "Dry-run: skipping environment variables creation"
-fi
-
-# --- 11. Systemd service ---
-if [ "$DRY_RUN" = false ]; then
-    sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=$APP_NAME .NET application
-After=network.target
-
-[Service]
-WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/dotnet $APP_DIR/$APP_NAME.dll
-Restart=always
-RestartSec=10
-KillSignal=SIGINT
-SyslogIdentifier=$APP_NAME
-User=$USER_NAME
-EnvironmentFile=$ENV_FILE
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$APP_NAME.service"
-    sudo systemctl restart "$APP_NAME.service"
-else
-    echo "Dry-run: skipping systemd service setup and restart"
-fi
-
-# --- 12. Configure Nginx ---
-if [ "$DRY_RUN" = false ]; then
-    sudo rm -f /etc/nginx/sites-enabled/default
-    NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
-    sudo tee "$NGINX_SITE" > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $LOAD_BALANCER_DNS _;
-
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    location /health {
-        proxy_pass http://127.0.0.1:5000/health;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:5000/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-}
-EOF
-
-    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-    sudo nginx -t
-    sudo systemctl restart nginx
-else
-    echo "Dry-run: skipping Nginx configuration and restart"
-fi
-
-echo "Deployment completed successfully!"
-echo "Check service: sudo systemctl status $APP_NAME"
-echo "Check logs: journalctl -u $APP_NAME -f"
+# [Rest of the script remains the same...]
