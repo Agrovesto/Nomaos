@@ -53,11 +53,12 @@ jobs:
       - name: Execute deploy script
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
         run: |
           if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
             echo "PR detected: running deploy.sh in dry-run mode"
-            ssh ubuntu@${{ secrets.EC2_HOST }} 'bash -s -- --dry-run' < ./deploy.sh
+            ssh ubuntu@"$EC2_HOST" bash -s -- --dry-run < ./deploy.sh
           else
             echo "Push to master: running full deployment"
-            ssh ubuntu@${{ secrets.EC2_HOST }} 'bash -s' < ./deploy.sh
+            ssh ubuntu@"$EC2_HOST" bash -s < ./deploy.sh
           fi
