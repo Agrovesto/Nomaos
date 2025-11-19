@@ -58,3 +58,4 @@ jobs:
           else
             echo "Push to master: running full deployment"
             ssh ubuntu@${{ secrets.EC2_HOST }} 'bash -s' < ./deploy.sh
+          fi
