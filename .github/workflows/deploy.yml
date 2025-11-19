@@ -1,5 +1,4 @@
 name: CI/CD Deploy Agrovesto.Backend.API
-
 on:
   pull_request:
     branches:
@@ -7,60 +6,65 @@ on:
   push:
     branches:
       - master
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # 1️⃣ Checkout repository
       - uses: actions/checkout@v3
-
-      # 2️⃣ Setup .NET 8 SDK
+      
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
-
-      # 3️⃣ Restore dependencies
+      
       - name: Restore dependencies
         run: dotnet restore
-
-      # 4️⃣ Build application
+      
       - name: Build application
         run: dotnet build -c Release --no-restore
-
+      
+      - name: Publish application
+        run: dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o ./publish
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-publish
+          path: ./publish
+          
   deploy:
     runs-on: ubuntu-latest
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
-      # 1️⃣ Checkout repository (ADD THIS STEP!)
       - uses: actions/checkout@v3
-      # 1️⃣ Setup SSH
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: app-publish
+          path: ./publish
+      
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-  
-      # 2️⃣ Add EC2 host to known_hosts
+      
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-  
-      # 3️⃣ Execute deploy.sh
-      - name: Execute deploy script
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          EC2_HOST: ${{ secrets.EC2_HOST }}
+      
+      - name: Deploy to EC2
         run: |
-          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
-            echo "PR detected: running deploy.sh in dry-run mode"
-            ssh ubuntu@"$EC2_HOST" bash -s -- --dry-run < ./deploy.sh
-          else
-            echo "Push to master: running full deployment"
-            ssh ubuntu@"$EC2_HOST" bash -s < ./deploy.sh
-          fi
+          # Copy published files to EC2
+          scp -r ./publish ubuntu@${{ secrets.EC2_HOST }}:/tmp/app-publish
+          
+          # Copy deployment script
+          scp ./deploy-artifacts.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/
+          
+          # Execute deployment
+          ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /tmp/deploy-artifacts.sh'
