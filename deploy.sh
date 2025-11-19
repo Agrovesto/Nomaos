@@ -5,9 +5,20 @@
 set -e
 set -x   # Command tracing
 
+# --- Dry-run mode ---
+DRY_RUN=false
+if [[ "$1" == "--dry-run" ]]; then
+    DRY_RUN=true
+    echo "Dry-run mode enabled: deployment steps will be skipped"
+fi
+
 # ----- update certificate__________#
-sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /usr/local/share/ca-certificates/rds-global-bundle.crt
-sudo update-ca-certificates
+if [ "$DRY_RUN" = false ]; then
+    sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /usr/local/share/ca-certificates/rds-global-bundle.crt
+    sudo update-ca-certificates
+else
+    echo "Dry-run: skipping certificate update"
+fi
 
 # --- Configuration ---
 APP_NAME="Agrovesto.Backend.API"
@@ -15,7 +26,6 @@ APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
-#LOAD_BALANCER_DNS="34.247.86.70"
 LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
 CI_USER="ubuntu"   # user who owns the repo and runs dotnet commands
 
@@ -26,42 +36,62 @@ export DOTNET_CLI_HOME=/tmp
 echo "Starting deployment for $APP_NAME"
 
 # --- 1. Install prerequisites ---
-sudo apt-get update
-sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
+if [ "$DRY_RUN" = false ]; then
+    sudo apt-get update
+    sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
+else
+    echo "Dry-run: skipping package installation"
+fi
 
 # --- 2. Add Microsoft .NET repo if missing ---
-if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
+if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ] && [ "$DRY_RUN" = false ]; then
     echo "Adding Microsoft .NET repository..."
     sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
     sudo dpkg -i packages-microsoft-prod.deb
     sudo rm packages-microsoft-prod.deb
     sudo apt-get update
+else
+    echo "Dry-run: skipping adding Microsoft repo"
 fi
 
 # --- 3. Install .NET SDK & Runtime if missing ---
-if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks | grep -q "8\."; then
-    echo "Installing .NET 8 SDK and Runtime..."
-    sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
+if [ "$DRY_RUN" = false ]; then
+    if ! command -v dotnet &> /dev/null || ! dotnet --list-sdks | grep -q "8\."; then
+        echo "Installing .NET 8 SDK and Runtime..."
+        sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
+    fi
+else
+    echo "Dry-run: skipping .NET SDK installation"
 fi
 
 # --- 4. Configure UFW ---
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 5000/tcp
-sudo ufw --force enable
+if [ "$DRY_RUN" = false ]; then
+    sudo ufw default deny incoming
+    sudo ufw default allow outgoing
+    sudo ufw allow 22/tcp
+    sudo ufw allow 80/tcp
+    sudo ufw allow 443/tcp
+    sudo ufw allow 5000/tcp
+    sudo ufw --force enable
+else
+    echo "Dry-run: skipping UFW configuration"
+fi
 
 # --- 5. Ensure NuGet cache is writable ---
 DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
-sudo mkdir -p "$DOTNET_NUGET_CACHE"
-sudo chown -R $CI_USER:$CI_USER "$DOTNET_NUGET_CACHE"
+if [ "$DRY_RUN" = false ]; then
+    sudo mkdir -p "$DOTNET_NUGET_CACHE"
+    sudo chown -R $CI_USER:$CI_USER "$DOTNET_NUGET_CACHE"
+fi
 export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
 
 # --- 6. Fix project permissions ---
-sudo chown -R $CI_USER:$CI_USER "$(pwd)"
-sudo chown -R $CI_USER:$CI_USER "$APP_DIR"
+if [ "$DRY_RUN" = false ]; then
+    sudo chown -R $CI_USER:$CI_USER "$(pwd)"
+    sudo chown -R $CI_USER:$CI_USER "$APP_DIR"
+else
+    echo "Dry-run: skipping permissions changes"
+fi
 
 # --- 7. Clean previous build artifacts ---
 sudo -u $CI_USER dotnet clean
@@ -79,20 +109,29 @@ BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
 sudo -u $CI_USER dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o "$BUILD_PATH"
 
 # --- 9. Deploy to target directory ---
-sudo mkdir -p "$APP_DIR"
-sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
-sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
+if [ "$DRY_RUN" = false ]; then
+    sudo mkdir -p "$APP_DIR"
+    sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
+    sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
+else
+    echo "Dry-run: skipping file copy and permissions"
+fi
 
 # --- 10. Environment variables ---
-sudo tee "$ENV_FILE" > /dev/null <<EOF
+if [ "$DRY_RUN" = false ]; then
+    sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
 DOTNET_CLI_HOME=/tmp
 ASPNETCORE_URLS=http://0.0.0.0:5000
 EOF
+else
+    echo "Dry-run: skipping environment variables creation"
+fi
 
 # --- 11. Systemd service ---
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
+if [ "$DRY_RUN" = false ]; then
+    sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
 Description=$APP_NAME .NET application
 After=network.target
@@ -111,14 +150,18 @@ EnvironmentFile=$ENV_FILE
 WantedBy=multi-user.target
 EOF
 
-sudo systemctl daemon-reload
-sudo systemctl enable "$APP_NAME.service"
-sudo systemctl restart "$APP_NAME.service"
+    sudo systemctl daemon-reload
+    sudo systemctl enable "$APP_NAME.service"
+    sudo systemctl restart "$APP_NAME.service"
+else
+    echo "Dry-run: skipping systemd service setup and restart"
+fi
 
 # --- 12. Configure Nginx ---
-sudo rm -f /etc/nginx/sites-enabled/default
-NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
-sudo tee "$NGINX_SITE" > /dev/null <<EOF
+if [ "$DRY_RUN" = false ]; then
+    sudo rm -f /etc/nginx/sites-enabled/default
+    NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
+    sudo tee "$NGINX_SITE" > /dev/null <<EOF
 server {
     listen 80;
     server_name $LOAD_BALANCER_DNS _;
@@ -153,9 +196,12 @@ server {
 }
 EOF
 
-sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
+    sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl restart nginx
+else
+    echo "Dry-run: skipping Nginx configuration and restart"
+fi
 
 echo "Deployment completed successfully!"
 echo "Check service: sudo systemctl status $APP_NAME"
