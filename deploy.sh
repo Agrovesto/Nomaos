@@ -6,6 +6,12 @@ set -e
 set -x   # Command tracing
 
 # ------------------------------------------------------------
+# Detect project root directory (directory where deploy.sh lives)
+# ------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ------------------------------------------------------------
 # Update RDS SSL Certificate
 # ------------------------------------------------------------
 sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
@@ -29,7 +35,7 @@ CI_USER="ubuntu"
 export HOME=/tmp
 export DOTNET_CLI_HOME=/tmp
 
-echo "Starting deployment for $APP_NAME"
+echo "Starting deployment for $APP_NAME from $SCRIPT_DIR"
 
 
 # ------------------------------------------------------------
@@ -86,29 +92,29 @@ export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
 # ------------------------------------------------------------
 # 6. Fix permissions
 # ------------------------------------------------------------
-sudo chown -R "$CI_USER:$CI_USER" "$(pwd)"
+sudo chown -R "$CI_USER:$CI_USER" "$SCRIPT_DIR"
+sudo mkdir -p "$APP_DIR"
 sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
 
 
 # ------------------------------------------------------------
 # 7. Clean previous build artifacts
 # ------------------------------------------------------------
-sudo -u "$CI_USER" dotnet clean
-
+sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR"
 
 # ------------------------------------------------------------
 # 8. Restore, Build & Publish
 # ------------------------------------------------------------
 echo "Restoring dependencies..."
 sudo -u "$CI_USER" dotnet workload update --skip-manifest-update || true
-sudo -u "$CI_USER" dotnet restore --no-cache
+sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache
 
 echo "Building application..."
-sudo -u "$CI_USER" dotnet build -c Release --no-restore
+sudo -u "$CI_USER" dotnet build "$SCRIPT_DIR" -c Release --no-restore
 
 echo "Publishing application..."
-BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
-sudo -u "$CI_USER" dotnet publish -c Release -r linux-x64 --self-contained true \
+BUILD_PATH="$SCRIPT_DIR/bin/Release/net8.0/linux-x64/publish"
+sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" -c Release -r linux-x64 --self-contained true \
   /p:PublishTrimmed=false -o "$BUILD_PATH"
 
 
