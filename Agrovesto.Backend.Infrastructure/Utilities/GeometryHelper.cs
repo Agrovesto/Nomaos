@@ -48,5 +48,50 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
 
             return latOverlap && lonOverlap;
         }
+
+        public static double CalculatePolygonAreaDegrees(List<(double Lat, double Lng)> coords)
+        {
+            if (coords.Count < 3) return 0;
+
+            double area = 0;
+            int j = coords.Count - 1;
+
+            for (int i = 0; i < coords.Count; i++)
+            {
+                area += (coords[j].Lng + coords[i].Lng) * (coords[j].Lat - coords[i].Lat);
+                j = i;
+            }
+
+            return Math.Abs(area / 2.0);
+        }
+
+
+        public static double CalculatePolygonAreaSqMeters(List<(double Lat, double Lng)> coords)
+        {
+            if (coords.Count < 3) return 0;
+
+            const double R = 6378137; // Earth radius in meters
+            double area = 0;
+
+            for (int i = 0; i < coords.Count; i++)
+            {
+                var (lat1, lon1) = coords[i];
+                var (lat2, lon2) = coords[(i + 1) % coords.Count];
+
+                // Convert degrees to radians
+                double phi1 = lat1 * Math.PI / 180;
+                double phi2 = lat2 * Math.PI / 180;
+                double lambda1 = lon1 * Math.PI / 180;
+                double lambda2 = lon2 * Math.PI / 180;
+
+                area += (lambda2 - lambda1) * (2 + Math.Sin(phi1) + Math.Sin(phi2));
+            }
+
+            area = area * R * R / 2.0;
+            return Math.Abs(area); // in square meters
+        }
+
+        public static double DegreesToRadians(double deg) => deg * (Math.PI / 180.0);
+
     }
 }
