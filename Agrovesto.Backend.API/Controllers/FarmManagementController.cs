@@ -2,7 +2,9 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -17,12 +19,177 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly IFarmPlotDetailsManager _farmPlotDetailsManager;
         private readonly IBusinessManager _businessManager;
+        private readonly IFarmManager _farmManager;
         public FarmManagementController(IHttpContextAccessor httpContextAccessor,
-            IFarmPlotDetailsManager farmPlotDetailsManager, IBusinessManager businessManager) : base(httpContextAccessor)
+            IFarmPlotDetailsManager farmPlotDetailsManager, IBusinessManager businessManager, IFarmManager farmManager) : base(httpContextAccessor)
         {
             _businessManager = businessManager;
             _farmPlotDetailsManager = farmPlotDetailsManager;
+            _farmManager = farmManager;
         }
+        [HttpPost("create-farm-map")]
+        public async Task<IActionResult> CreateFarmMap([FromBody] CreateFarmDto dto, [FromQuery]BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                var updateDetail = await _farmManager.CreateFarmAsync(dto, args);
+
+
+                return Ok(new Response<CreateFarmDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = updateDetail
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("cooperative-farm-map")]
+        public async Task<IActionResult> GetCooperativeFarmLand([FromQuery] BusinessRegistrationArgs query)
+        {
+
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (query.CooperativeId == 0 && currentRole == "Cooperative")
+                {
+                    var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
+                    query.CooperativeId = coop.Id;
+                }
+
+
+                var audits = await _farmManager.GetFarmByCooperativeIdAsync(query.CooperativeId);
+
+
+                return Ok(new Response<List<Farm>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = audits
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+
+        [HttpGet("cooperatives-farm-map")]
+        public async Task<IActionResult> GetCooperativesFarmLand([FromQuery] BusinessRegistrationArgs query)
+        {
+
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+               
+                
+
+                var audits = await _farmManager.GetAllWithCoordinatesAsync(query);
+
+
+                return Ok(new Response<List<Farm>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = audits
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpPost("farm-plot-details")]    
         public async Task<IActionResult> UpdateFarmCoordinateDetails([FromBody] FarmPlotDetailsModel model, [FromQuery] BusinessRegistrationArgs args)
         {
