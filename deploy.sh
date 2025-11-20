@@ -32,7 +32,7 @@ echo "Starting deployment for $APP_NAME"
 if [ "$DRY_RUN" = false ]; then
     if [ ! -d "$REPO_DIR" ]; then
         echo "Cloning repository..."
-        git clone <YOUR_REPO_URL> "$REPO_DIR"
+        git clone <https://github.com/Agrovesto/Nomaos.git> "$REPO_DIR"
     else
         echo "Updating repository..."
         cd "$REPO_DIR"
