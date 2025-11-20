@@ -4,6 +4,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
@@ -40,7 +41,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double AreaInDegress { get; set; }
         public double AreaInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
-        public DateTimeOffset FlaggedOn { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset? FlaggedOn { get; set; } //= DateTimeOffset.Now;
         public string? OrganizationCode { get; set; }
         public bool IsFarmFlaggedBySystem { get; set; }
         public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
@@ -108,6 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         [ForeignKey(nameof(Farm))]
         public long FarmId { get; set; }
+        [JsonIgnore]
         public Farm Farm { get; set; } = null;
     }
 
