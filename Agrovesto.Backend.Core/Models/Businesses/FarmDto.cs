@@ -10,14 +10,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public class CreateFarmDto
         {
+            public long Id { get; set; }
             public string FarmName { get; set; } = string.Empty;
+            public string LocationDescription { get; set; } = string.Empty;
+
             public string OwnershipType { get; set; } = string.Empty; // "Farmer", "Cooperative", "Community"
             public string? FarmerUserId { get; set; }
             public long CooperativeId { get; set; } // only populated if OwnerType = "Cooperative"
-            public long CommunityId { get; set; } 
+            public long CommunityId { get; set; }
+            public string? CoordinateTakenBy { get; set; }
+            public string? CoordinateTakenByUserId { get; set; }
 
             public decimal TotalArea { get; set; } // e.g., 10 hectares
-            public string LocationDescription { get; set; } = string.Empty;
             public List<FarmCoordinateDto> Coordinates { get; set; } = new();
 
             // Optional mapping attributes
@@ -27,9 +31,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string FarmState { get; set; }
             public string FarmLga { get; set; }
             public string FarmWard { get; set; }
-            public string? CoordinateTakenBy { get; set; }
-            public string? CoordinateTakenByUserId { get; set; }
- 
+            
             public string? BelongToBusinessCode { get; set; }
             public string? OrganizationCode { get; set; }
 
@@ -48,8 +50,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class FarmCoordinateDto
     {
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
+        public double Lat { get; set; }
+        public double Lng { get; set; }
         public long Order { get; set; }
     }
     public class FarmAllocationDto

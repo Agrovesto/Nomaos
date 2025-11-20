@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Google;
@@ -20,6 +21,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         Task<Farm?> GetByIdAsync(long id);
         Task<List<Farm>> GetAllWithCoordinatesAsync();
         Task AddAuditTrailAsync(FarmMappingAuditTrail trail);
+        Task<List<Farm>> CooperativeFarmMaps(long CooperativeId);
+        Task<List<Farm>> GetAllWithCoordinatesAsync(BusinessRegistrationArgs args);
     }
     public class FarmRepository : IFarmRepository
     {
@@ -40,12 +43,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .Include(f => f.AuditTrails)
                 .FirstOrDefaultAsync(f => f.Id == id);
         }
+        public async Task<List<Farm>> CooperativeFarmMaps(long CooperativeId)
+        {
+            return await _context.Farms
+                .Where(c => c.CooperativeId == CooperativeId)
+                .Include(f => f.Coordinates)
+                .Include(f => f.AuditTrails)
+                .ToListAsync();
+        }
         public async Task<List<Farm>> GetAllWithCoordinatesAsync()
         {
             return await _context.Farms
                 .Include(f => f.Coordinates)
                 .Include(f => f.AuditTrails)
                 .ToListAsync();
+        }
+        public async Task<List<Farm>> GetAllWithCoordinatesAsync(BusinessRegistrationArgs args)
+        {
+            var query=  _context.Farms
+                .Include(f => f.Coordinates)
+                .Include(f => f.AuditTrails)
+                .AsNoTracking();
+
+            //if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            //{
+            //    query = query.Where(x => x.OrganizationCode == args.organizationCode);
+            //}
+            if (args.CooperativeId >0)
+            {
+                query = query.Where(x => x.CooperativeId == args.CooperativeId);
+            }
+            return await query
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync();
+
         }
         public async Task AddAuditTrailAsync(FarmMappingAuditTrail trail)
         {
