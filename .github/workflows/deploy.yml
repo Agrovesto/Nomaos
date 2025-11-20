@@ -65,7 +65,7 @@ jobs:
           scp -r ./publish ubuntu@${{ secrets.EC2_HOST }}:/tmp/app-publish
           
           # Copy deployment script
-          scp ./deploy-artifacts.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/
+          scp ./deploy.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/
           
           # Execute deployment
-          ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /tmp/deploy-artifacts.sh'
+          ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /tmp/deploy.sh'
