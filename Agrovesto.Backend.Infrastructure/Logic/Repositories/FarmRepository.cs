@@ -65,10 +65,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .Include(f => f.AuditTrails)
                 .AsNoTracking();
 
-            //if (!string.IsNullOrWhiteSpace(args.organizationCode))
-            //{
-            //    query = query.Where(x => x.OrganizationCode == args.organizationCode);
-            //}
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            {
+                query = query.Where(x => x.OrganizationCode == args.organizationCode);
+            }
             if (args.CooperativeId >0)
             {
                 query = query.Where(x => x.CooperativeId == args.CooperativeId);
