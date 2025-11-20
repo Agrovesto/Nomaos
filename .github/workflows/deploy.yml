@@ -62,10 +62,10 @@ jobs:
       - name: Deploy to EC2
         run: |
           # Copy published files to EC2
-          sudo scp -r ./publish ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
+          scp -r ./publish ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
           
           # Copy deployment script
-          sudo scp ./deploy.sh ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
+          scp ./deploy.sh ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
           
           # Execute deployment
           ssh ubuntu@${{ secrets.EC2_HOST }} 'sudo bash /var/www/Agrovesto.Backend.API/deploy.sh'
