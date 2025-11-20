@@ -55,15 +55,17 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Copy repo to EC2 (without .git)
+      # Copy repo directly to /var/www/Agrovesto.Backend.API
+      - name: Copy repo to EC2
         run: |
-          # Remove old deployment folder
-          ssh ubuntu@${{ secrets.EC2_HOST }} 'rm -rf /home/ubuntu/Nomaos/*'
+          # Ensure target folder exists
+          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
           
-          # Copy all files except .git
-          rsync -av --exclude='.git' . ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/Nomaos
+          # Sync all repo files to EC2, excluding .git
+          rsync -av --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
 
+      # Execute the deployment script on EC2
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /home/ubuntu/Nomaos/deploy.sh'
+          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo bash /var/www/Agrovesto.Backend.API/deploy.sh"
 
