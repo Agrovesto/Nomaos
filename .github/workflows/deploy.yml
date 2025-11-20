@@ -57,12 +57,9 @@ jobs:
 
       - name: Copy repo to EC2
         run: |
-          # Remove old folder on EC2 (optional)
-          ssh ubuntu@${{ secrets.EC2_HOST }} 'sudo rm -rf /var/www/Agrovesto.Backend.API'
-          
-          # Copy entire repo
-          scp -r . ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API
+          # Copy entire repo and overwrite existing files
+          scp -r -o StrictHostKeyChecking=no . ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/Nomaos
 
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} 'sudo bash /var/www/Agrovesto.Backend.API/deploy.sh'
+          ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /home/ubuntu/Nomaos/deploy.sh'
