@@ -1,66 +1,151 @@
 #!/bin/bash
-set -e
-set -x
+# Robust Deployment Script for Agrovesto.Backend.API
+# Author: Dolapo Fashina
 
-# ----- Update AWS RDS Certificate -----
+set -e
+set -x   # Command tracing
+
+# ------------------------------------------------------------
+# Update RDS SSL Certificate
+# ------------------------------------------------------------
 sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
   -O /usr/local/share/ca-certificates/rds-global-bundle.crt
+
 sudo update-ca-certificates
 
+
+# ------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
 LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+CI_USER="ubuntu"
+
+# Fix HOME for CI/CD
+export HOME=/tmp
+export DOTNET_CLI_HOME=/tmp
 
 echo "Starting deployment for $APP_NAME"
 
-# --- Ensure prerequisites ---
-sudo apt-get update
-sudo apt-get install -y nginx ufw wget software-properties-common
 
-# --- Ensure .NET Runtime Installed ---
-if ! command -v dotnet &> /dev/null; then
-    echo "Installing Microsoft repo & .NET runtime..."
-    sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb
+# ------------------------------------------------------------
+# 1. Install prerequisites
+# ------------------------------------------------------------
+sudo apt-get update
+sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
+
+
+# ------------------------------------------------------------
+# 2. Add Microsoft Repo if Missing
+# ------------------------------------------------------------
+if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
+    echo "Adding Microsoft .NET repository..."
+    sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
+      -O packages-microsoft-prod.deb
+
     sudo dpkg -i packages-microsoft-prod.deb
+    sudo rm packages-microsoft-prod.deb
     sudo apt-get update
-    sudo apt-get install -y aspnetcore-runtime-8.0
 fi
 
-# --- Configure UFW ---
-sudo ufw allow 22
-sudo ufw allow 80
-sudo ufw allow 443
-sudo ufw allow 5000
+
+# ------------------------------------------------------------
+# 3. Install .NET SDK/Runtime if Missing
+# ------------------------------------------------------------
+if ! command -v dotnet &>/dev/null || ! dotnet --list-sdks | grep -q "8\."; then
+    echo "Installing .NET 8 SDK & Runtime..."
+    sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
+fi
+
+
+# ------------------------------------------------------------
+# 4. Configure UFW Firewall
+# ------------------------------------------------------------
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
-# --- Deploy Published Build from /tmp/app-publish ---
-echo "Deploying published files..."
-sudo mkdir -p "$APP_DIR"
-sudo rm -rf "$APP_DIR"/*
-sudo cp -r /tmp/app-publish/* "$APP_DIR"/
-sudo chown -R $USER_NAME:$USER_NAME "$APP_DIR"
 
-# --- Create Environment Variables ---
+# ------------------------------------------------------------
+# 5. Ensure NuGet Cache Is Writable
+# ------------------------------------------------------------
+DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
+sudo mkdir -p "$DOTNET_NUGET_CACHE"
+sudo chown -R "$CI_USER:$CI_USER" "$DOTNET_NUGET_CACHE"
+export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
+
+
+# ------------------------------------------------------------
+# 6. Fix permissions
+# ------------------------------------------------------------
+sudo chown -R "$CI_USER:$CI_USER" "$(pwd)"
+sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
+
+
+# ------------------------------------------------------------
+# 7. Clean previous build artifacts
+# ------------------------------------------------------------
+sudo -u "$CI_USER" dotnet clean
+
+
+# ------------------------------------------------------------
+# 8. Restore, Build & Publish
+# ------------------------------------------------------------
+echo "Restoring dependencies..."
+sudo -u "$CI_USER" dotnet workload update --skip-manifest-update || true
+sudo -u "$CI_USER" dotnet restore --no-cache
+
+echo "Building application..."
+sudo -u "$CI_USER" dotnet build -c Release --no-restore
+
+echo "Publishing application..."
+BUILD_PATH="$(pwd)/bin/Release/net8.0/linux-x64/publish"
+sudo -u "$CI_USER" dotnet publish -c Release -r linux-x64 --self-contained true \
+  /p:PublishTrimmed=false -o "$BUILD_PATH"
+
+
+# ------------------------------------------------------------
+# 9. Deploy to target directory
+# ------------------------------------------------------------
+sudo mkdir -p "$APP_DIR"
+sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
+sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
+
+
+# ------------------------------------------------------------
+# 10. Environment Variables
+# ------------------------------------------------------------
 sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://0.0.0.0:5000
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
+DOTNET_CLI_HOME=/tmp
+ASPNETCORE_URLS=http://0.0.0.0:5000
 EOF
 
-# --- Create/Update systemd Service ---
+
+# ------------------------------------------------------------
+# 11. Systemd Service
+# ------------------------------------------------------------
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
-Description=$APP_NAME Service
+Description=$APP_NAME .NET Application
 After=network.target
 
 [Service]
 WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/$APP_NAME
+ExecStart=/usr/bin/dotnet $APP_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
+KillSignal=SIGINT
+SyslogIdentifier=$APP_NAME
 User=$USER_NAME
 EnvironmentFile=$ENV_FILE
 
@@ -69,11 +154,15 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable $APP_NAME.service
-sudo systemctl restart $APP_NAME.service
+sudo systemctl enable "$APP_NAME.service"
+sudo systemctl restart "$APP_NAME.service"
 
-# --- Configure Nginx ---
+
+# ------------------------------------------------------------
+# 12. NGINX Reverse Proxy
+# ------------------------------------------------------------
 sudo rm -f /etc/nginx/sites-enabled/default
+
 NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
@@ -81,12 +170,32 @@ server {
     listen 80;
     server_name $LOAD_BALANCER_DNS _;
 
-    location / {
-        proxy_pass http://127.0.0.1:5000/;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    location /health {
+        proxy_pass http://127.0.0.1:5000/health;
+        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:5000/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 }
 EOF
@@ -95,4 +204,10 @@ sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
 
+
+# ------------------------------------------------------------
+# Done
+# ------------------------------------------------------------
 echo "Deployment completed successfully!"
+echo "Check service: sudo systemctl status $APP_NAME"
+echo "Check logs: journalctl -u $APP_NAME -f"
