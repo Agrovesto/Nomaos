@@ -55,11 +55,15 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Copy repo to EC2
+      - name: Copy repo to EC2 (without .git)
         run: |
-          # Copy entire repo and overwrite existing files
-          scp -r -o StrictHostKeyChecking=no . ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/Nomaos
+          # Remove old deployment folder
+          ssh ubuntu@${{ secrets.EC2_HOST }} 'rm -rf /home/ubuntu/Nomaos/*'
+          
+          # Copy all files except .git
+          rsync -av --exclude='.git' . ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/Nomaos
 
       - name: Execute deployment script
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST }} 'bash /home/ubuntu/Nomaos/deploy.sh'
+
