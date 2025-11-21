@@ -122,6 +122,10 @@ sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" -c Release -r linux-x64 --self-c
 # 9. Deploy to target directory
 # ------------------------------------------------------------
 sudo mkdir -p "$APP_DIR"
++# Remove any conflicting Agrovesto.Backend.API (dir or file) to avoid cp errors
++if [ -e "$APP_DIR/$APP_NAME" ]; then
++  sudo rm -rf "$APP_DIR/$APP_NAME"
++fi
 sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
 sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
 
