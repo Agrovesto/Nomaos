@@ -754,7 +754,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FarmerUserId")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTimeOffset>("FlaggedOn")
+                    b.Property<DateTimeOffset?>("FlaggedOn")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("FlaggedReason")
@@ -1870,15 +1870,12 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OrganizationCode")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique();
 
                     b.ToTable("MandEActivityTypes");
                 });
