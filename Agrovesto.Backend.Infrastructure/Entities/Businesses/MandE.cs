@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? OptionsJson { get; set; }
         public bool IsRequired { get; set; }
         public long Order { get; set; } = 0;
-        public string BelongToBusinessCode { get; set; }
+        public string? BelongToBusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
 
     }
