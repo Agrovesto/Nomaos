@@ -897,22 +897,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var mappedFarmers = result.Select(item =>
             {
-//                var valueChainSelections = await (
-// from selection in _context.FarmerValueChainItems
-// where selection.FarmerId == item.Farmer.Id
-// group selection by selection.ValueChainType into g
-// select new FarmerValueChainsSelectionDto
-// {
-//     TypeName = g.Key,
-//     Items = g.Select(x => new ValueChainItemDto
-//     {
-//         ItemId = x.Id,
-//         Name = x.ItemName
-//     }).ToList()
-// }
-//).ToListAsync();
 
-                var mapped = item.Farmer.Map();
+            //                var valueChainSelections = await (
+            // from selection in _context.FarmerValueChainItems
+            // where selection.FarmerId == item.Farmer.Id
+            // group selection by selection.ValueChainType into g
+            // select new FarmerValueChainsSelectionDto
+            // {
+            //     TypeName = g.Key,
+            //     Items = g.Select(x => new ValueChainItemDto
+            //     {
+            //         ItemId = x.Id,
+            //         Name = x.ItemName
+            //     }).ToList()
+            // }
+            //).ToListAsync();
+
+
+            var mapped = item.Farmer.Map();
                 //mapped.ValueChainItems= valueChainSelections;
                 mapped.CooperativeName = item.Cooperative?.Name;
                 mapped.FarmerImage = item.FarmerImage?.IMageKey;
