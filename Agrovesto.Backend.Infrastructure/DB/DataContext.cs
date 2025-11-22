@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
             modelBuilder.Entity<MandEActivityType>().HasKey(x => x.Id);
-            modelBuilder.Entity<MandEActivityType>().HasIndex(x => x.Name).IsUnique();
+            //modelBuilder.Entity<MandEActivityType>().HasIndex(x => x.Name).IsUnique();
 
             modelBuilder.Entity<MandESubActivity>().HasKey(x => x.Id);
             modelBuilder.Entity<MandESubActivity>().HasIndex(x => new { x.MandEActivityTypeId, x.Name }).IsUnique();
