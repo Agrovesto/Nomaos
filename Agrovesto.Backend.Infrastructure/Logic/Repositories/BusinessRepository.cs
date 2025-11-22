@@ -100,8 +100,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         OrganizationEmail = first.Organization.OrganizationEmail,
 
                         // User fields
-                        Kick = first.Users?.Password,
-                        OnboardedOn = first.Organization.CreatedOn
+                        Kick = user.Password,
+                        OnboardedOn = user.CreatedOn
                     };
                 })
                 .ToList();
