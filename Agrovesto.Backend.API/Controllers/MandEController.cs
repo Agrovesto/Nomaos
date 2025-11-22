@@ -339,8 +339,47 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         [HttpGet("{subActivityId:long}/fields")]
-        public async Task<IActionResult> GetFields([FromRoute] long subActivityId) =>
-            Ok(await _svc.GetFieldsAsync(subActivityId));
+        public async Task<IActionResult> GetFields([FromRoute] long subActivityId)
+        {
+
+            try
+            {
+                //if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                //{
+                //    query.organizationCode = OrganizationCode;
+                //}
+                //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _svc.GetFieldsAsync(subActivityId);
+                return Ok(new PagedListResponse<IEnumerable<TrackableMandEFieldModel>>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Count = result.Count(),
+                    //   PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
         [HttpPost("log")]
         public async Task<IActionResult> Submit([FromBody] SubmitFarmerActivityEntryModel dto, [FromQuery] BusinessRegistrationArgs args)
         {
