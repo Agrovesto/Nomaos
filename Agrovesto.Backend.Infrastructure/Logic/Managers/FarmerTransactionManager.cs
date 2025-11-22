@@ -100,7 +100,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var farmer = await _farmerRepository.GetFarmerById(farmerId);
-                if (farmer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found For Farmer");
+
+                if (farmer == null)
+                {
+                    farmer = await _farmerRepository.GetFarmerByUserId(query.UserId);
+                }
+
+                if (farmer == null)
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Farmer record not found"
+                    );
+                }
                 var transactions = await _repository.GetTransactionByFarmer(farmer.UserId,
                     query.PageNumber, query.PageSize, query.transactionType,
                     query.startDate, query.endDate, query.Location);
