@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -67,7 +68,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             var organizations = await (
                 from org in _context.BusinessOrganizations
-                join user in _context.Users
+                join user in _context.Set<User>()
     on new { org.BusinessCode, Email = org.OrganizationEmail }
     equals new { user.BusinessCode, Email = user.Email }
                 where org.BusinessCode == businessCode
