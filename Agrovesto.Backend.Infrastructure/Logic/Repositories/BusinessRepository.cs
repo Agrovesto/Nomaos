@@ -131,7 +131,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                     // User fields
                     Kick = usr != null ? usr.Password : null,
-                    OnboardedOn = usr != null ? usr.CreatedOn : (DateTime?)null
+                    OnboardedOn = usr.CreatedOn 
                 }
             ).ToListAsync();
 
