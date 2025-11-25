@@ -63,80 +63,104 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         //    }
         //    return org.Select(x=>x.Map()).ToList();
         //}
-        //public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
-        //{
-        //    var organizations = await (
-        //            from org in _context.BusinessOrganizations
-        //            where org.BusinessCode == businessCode
-        //            select new
-        //            {
-        //                Organization = org,
-        //                Users = _context.Users
-        //                        .Where(u => u.BusinessCode == org.BusinessCode)
-        //                        .ToList()
-        //            }
-        //        ).ToListAsync();
-
-        //    if (organizations == null || !organizations.Any())
-        //        return null;
-
-        //    var result = organizations
-        //        .GroupBy(x => x.Organization.OrganizationId) // 🔥 Remove duplicates
-        //        .Select(g =>
-        //        {
-        //            var first = g.First();
-        //            var user = first.Users.FirstOrDefault();   // Pick ANY user
-
-        //            return new OrganizationModel
-        //            {
-        //                OrganizaionId = first.Organization.OrganizationId,
-        //                OrganizationName = first.Organization.OrganizationName,
-        //                BusinessCode = first.Organization.BusinessCode,
-        //                OrganizationCode = first.Organization.OrganizationCode,
-        //                ContacPerson = first.Organization.ContacPerson,
-        //                Contact = first.Organization.Contact,
-        //                ContactEmail = first.Organization.ContactEmail,
-        //                Location = first.Organization.Location,
-        //                OrganizationEmail = first.Organization.OrganizationEmail,
-
-        //                // User fields
-        //                Kick = user.Password,
-        //                OnboardedOn = first.Users.CreatedOn
-        //            };
-        //        })
-        //        .ToList();
-
-        //    return result;
-        //}
-
         public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
         {
-            var data = await (
+            var organizations = await (
                 from org in _context.BusinessOrganizations
                 join user in _context.Users
-                    on org.BusinessCode equals user.BusinessCode into userGroup
-                from usr in userGroup.DefaultIfEmpty()   // Left join — return org even if no user
+    on new { org.BusinessCode, Email = org.OrganizationEmail }
+    equals new { user.BusinessCode, Email = user.Email }
                 where org.BusinessCode == businessCode
-                select new OrganizationModel
+                select new
                 {
-                    OrganizaionId = org.OrganizationId,
-                    OrganizationName = org.OrganizationName,
-                    BusinessCode = org.BusinessCode,
-                    OrganizationCode = org.OrganizationCode,
-                    ContacPerson = org.ContacPerson,
-                    Contact = org.Contact,
-                    ContactEmail = org.ContactEmail,
-                    Location = org.Location,
-                    OrganizationEmail = org.OrganizationEmail,
-
-                    // User fields
-                    Kick = usr != null ? usr.Password : null,
-                    OnboardedOn = usr.CreatedOn 
+                    Org = org,
+                    User = user
                 }
             ).ToListAsync();
 
-            return data;
+            if (organizations == null || organizations.Count == 0)
+                return null;
+
+            var result = organizations
+                .GroupBy(x => x.Org.OrganizationId)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var org = first.Org;
+
+                    // Get the user who created the organization
+                    var creatorUser = g
+                        .OrderBy(u => u.User.CreatedOn)
+                        .First().User;
+
+                    return new OrganizationModel
+                    {
+                        OrganizaionId = org.OrganizationId,
+                        OrganizationName = org.OrganizationName,
+                        BusinessCode = org.BusinessCode,
+                        OrganizationCode = org.OrganizationCode,
+                        ContacPerson = org.ContacPerson,
+                        Contact = org.Contact,
+                        ContactEmail = org.ContactEmail,
+                        Location = org.Location,
+                        OrganizationEmail = org.OrganizationEmail,
+
+                        // Pulled from Users table
+                        Kick = creatorUser.Password,          // Your “kick” field
+                        OnboardedOn = creatorUser.CreatedOn   // Date they were onboarded
+                    };
+                })
+                .ToList();
+
+            return result;
         }
+
+        /** public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+         {
+             var organizations = await (
+                     from org in _context.BusinessOrganizations
+                     where org.BusinessCode == businessCode
+                     select new
+                     {
+                         Organization = org,
+                         Users = _context.Users
+                                 .Where(u => u.BusinessCode == org.BusinessCode)
+                                 .ToList()
+                     }
+                 ).ToListAsync();
+
+             if (organizations == null || !organizations.Any())
+                 return null;
+
+             var result = organizations
+                 .GroupBy(x => x.Organization.OrganizationId) // 🔥 Remove duplicates
+                 .Select(g =>
+                 {
+                     var first = g.First();
+                     var user = first.Users.FirstOrDefault();   // Pick ANY user
+
+                     return new OrganizationModel
+                     {
+                         OrganizaionId = first.Organization.OrganizationId,
+                         OrganizationName = first.Organization.OrganizationName,
+                         BusinessCode = first.Organization.BusinessCode,
+                         OrganizationCode = first.Organization.OrganizationCode,
+                         ContacPerson = first.Organization.ContacPerson,
+                         Contact = first.Organization.Contact,
+                         ContactEmail = first.Organization.ContactEmail,
+                         Location = first.Organization.Location,
+                         OrganizationEmail = first.Organization.OrganizationEmail,
+
+                         // User fields
+                         Kick = user.Password,
+                         OnboardedOn = 
+                     };
+                 })
+                 .ToList();
+
+             return result;
+         }
+         **/
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
         {
