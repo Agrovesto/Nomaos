@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
@@ -16,10 +17,12 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
 using DocumentFormat.OpenXml.InkML;
+using EFCore.BulkExtensions;
 using iTextSharp.text.pdf.security;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-
+using OfficeOpenXml;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -29,6 +32,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using User = Agrovesto.Backend.Infrastructure.Entities.Common.User;
+
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -77,6 +81,248 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _excelConverterService = excelConverterService;
 
         }
+        private async Task<List<UserModel>> ParseFarmerFileAsync(Stream fileContent, BusinessRegistrationArgs args)
+        {
+            var (validItems, errors) = await _excelConverterService.ExtractFarmersFromExcel(fileContent, args);
+
+            if (errors.Any())
+            {
+                var errorMessages = string.Join("\n", errors.Select(e => $"Row {e.Row}: {e.ErrorMessage}"));
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"The following errors were found in the uploaded file:\n{errorMessages}");
+            }
+
+            if (!validItems.Any())
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                    $"The file contains no valid farmer data.");
+            }
+
+            return (validItems);
+        }
+        public async Task<BulkUploadFarmersResponse> BulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args)
+        {
+            var summary = new BulkUploadFarmersResponse();
+            var errors = new List<BulkUploadError>();
+            var createdFarmers = new List<Farmer>();
+            var model = new BulkFarmerUpoad();
+            model.file = request.file;
+            model.FileContent = request.file.OpenReadStream();
+            if (request.file == null || request.file.OpenReadStream() == null)
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "No file was uploaded.");
+            }
+
+            // 1. Extract rows using your extractor
+            var allFarmers = await ParseFarmerFileAsync(model.FileContent, args);
+
+            if (allFarmers == null || !allFarmers.Any())
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "The uploaded file does not contain valid farmer data.");
+
+            var upload = await BulkCreateBusinessUsersFromExcelAsync(allFarmers, args);
+            summary.TotalRows = allFarmers.Count;
+            summary.Successful = upload.Results.Count;
+            summary.Failed = upload.Failed; //errors.Count;
+           summary.Errors = upload.Errors;
+            summary.Message = upload.Message;//"Bulk upload completed.";
+
+            return summary;
+        }
+        private void SplitFullNameSmart(string fullName, out string first, out string middle, out string last)
+        {
+            first = middle = last = null;
+
+            if (string.IsNullOrWhiteSpace(fullName))
+                return;
+
+            var parts = fullName
+                .Trim()
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (parts.Length == 1)
+            {
+                first = parts[0];
+            }
+            else if (parts.Length == 2)
+            {
+                first = parts[0];
+                last = parts[1];
+            }
+            else if (parts.Length == 3)
+            {
+                first = parts[0];
+                middle = parts[1];
+                last = parts[2];
+            }
+            else
+            {
+                first = parts[0];
+                last = parts[^1];
+                middle = string.Join(" ", parts.Skip(1).Take(parts.Length - 2));
+            }
+        }
+
+        private UserModel NormalizeUserFromExcel(UserModel model, BusinessRegistrationArgs args)
+        {
+            // 1. Normalize fullname → first/middle/last
+            SplitFullNameSmart(model.Name ?? model.FirstName,
+                out var f, out var m, out var l);
+
+            model.FirstName = model.FirstName ?? f;
+            model.MiddleName = model.MiddleName ?? m;
+            model.LastName = model.LastName ?? l;
+
+            // 2. Phone as email fallback
+            model.Email = !string.IsNullOrEmpty(model.Email)
+                ? model.Email
+                : model.PhoneNumber;
+
+            // 3. Wire business and org details
+            model.BusinessCode = args.businessCode;
+            model.OrganizationCode = args.organizationCode;
+
+            return model;
+        }
+        public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
+       List<UserModel> excelUsers,
+       BusinessRegistrationArgs args)
+        {
+            var results = new List<(UserModel user, bool status, string message)>();
+
+            foreach (var rawUser in excelUsers)
+            {
+                try
+                {
+                    var response = await CreateBusinessUser(rawUser, args);
+
+                    if (response == null)
+                    {
+                        results.Add((rawUser, false, "User creation returned null."));
+                        continue;
+                    }
+
+                    results.Add((rawUser, true, "Successfully processed."));
+                }
+                catch (Exception ex)
+                {
+                    results.Add((rawUser, false, ex.Message));
+                }
+            }
+
+            // summary
+            int successCount = results.Count(x => x.status == true);
+            int failedCount = results.Count(x => x.status == false);
+
+            return new BulkUploadFarmersResponse
+            {
+                TotalRows = excelUsers.Count,
+                Successful = successCount,
+                Failed = failedCount,
+                Results = results
+            };
+        }
+
+        //public async Task<List<(UserModel user, bool status, string message)>> BulkCreateBusinessUsersFromExcelAsync(
+        //    List<UserModel> excelUsers,
+        //    BusinessRegistrationArgs args)
+        //        {
+        //            var results = new List<(UserModel user, bool status, string message)>();
+
+        //            // EF Core retry execution strategy
+        //            var strategy = _context.Database.CreateExecutionStrategy();
+
+        //            await strategy.ExecuteAsync(async () =>
+        //            {
+        //                await using var trx = await _context.Database.BeginTransactionAsync();
+
+        //                try
+        //                {
+        //                    foreach (var rawUser in excelUsers)
+        //                    {
+        //                        try
+        //                        {
+        //                            //----------------------------------------------------------------------
+        //                            // PHASE 1: Normalize + Clean Input Model
+        //                            //----------------------------------------------------------------------
+        //                            var user = NormalizeUserFromExcel(rawUser, args);
+
+        //                            //----------------------------------------------------------------------
+        //                            // PHASE 2: Register / Link User
+        //                            //----------------------------------------------------------------------
+        //                            var registered = await RegisterUserAsync(user, args);
+
+        //                            if (!registered.status)
+        //                            {
+        //                                results.Add((user, false, registered.message));
+        //                                continue;
+        //                            }
+
+        //                            var registeredUser = registered.model;
+
+        //                            //----------------------------------------------------------------------
+        //                            // PHASE 3: SubAccount Creation
+        //                            //----------------------------------------------------------------------
+        //                            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+        //                            if (business == null)
+        //                            {
+        //                                results.Add((user, false, "Business not found for code: " + args.businessCode));
+        //                                continue;
+        //                            }
+
+        //                            var subaccount = await CreateSubAccountAsync(user, args, business, registeredUser.Id);
+        //                            if (subaccount == null)
+        //                            {
+        //                                results.Add((user, false, "Unable to create sub-account."));
+        //                                continue;
+        //                            }
+
+        //                            //----------------------------------------------------------------------
+        //                            // PHASE 4: Category / Worker / Profile Creation
+        //                            //----------------------------------------------------------------------
+        //                            BusinessWorkerModel workerEntity = new BusinessWorkerModel();
+        //                            BusinessWorkerModel newWorkerEntity = new BusinessWorkerModel();
+
+        //                            await CreateUserCategory(
+        //                                user,
+        //                                args,
+        //                                workerEntity,
+        //                                newWorkerEntity,
+        //                                business,
+        //                                subaccount,
+        //                                registered,
+        //                                args.SubAccountType
+        //                            );
+
+        //                            //----------------------------------------------------------------------
+        //                            // PHASE 5: Role Tracking
+        //                            //----------------------------------------------------------------------
+        //                            await _authenticationRepository.TrackUserRoleAssignment(registeredUser, args.SubAccountType);
+
+        //                            //----------------------------------------------------------------------
+        //                            // DONE — Add Success Result
+        //                            //----------------------------------------------------------------------
+        //                            results.Add((registeredUser, true, "Successfully processed."));
+        //                        }
+        //                        catch (Exception exSingle)
+        //                        {
+        //                            // Capture single-row failure without stopping entire batch
+        //                            results.Add((rawUser, false, $"Failed: {exSingle.Message}"));
+        //                        }
+        //                    }
+
+        //                    // COMMIT ALL SUCCESSFUL OPERATIONS
+        //                    await _context.SaveChangesAsync();
+        //                    await trx.CommitAsync();
+        //                }
+        //                catch (Exception ex)
+        //                {
+        //                    await trx.RollbackAsync();
+        //                    results.Add((null, false, "FATAL ERROR: " + ex.Message));
+        //                    throw; // Required so ExecutionStrategy retries safely
+        //                }
+        //            });
+
+        //            return results;
+        //        }
 
         public async Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(
 
@@ -137,7 +383,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
 
                 var walletDetails = await _walletManager.RetrieveCustomerWallet(query.UserId, query.env);
-               
+
                 return new Response<CafeOneCustomerWalletResponse>
                 {
                     Succeeded = true,
@@ -156,7 +402,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
-        
+
         public async Task<Response<UserWalletBalanceModel>> GetUserBankAccountBalance(
 
         ListQueryParams query)
@@ -301,7 +547,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             var sms = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
             {
                 campaign_name = "Onboarding",
-                contacts = new List<string> { "09061562512"},
+                contacts = new List<string> { "09061562512" },
                 message = messageBody,
             });
             var sms1 = await _whisperSMSService.HandleAfricasTalkingSMS(new WhisperSMSModel
@@ -438,8 +684,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             CreatedOn = DateTimeOffset.Now,
                             BusinessCode = business.BusinessCode,
                             Name = bWorker.FullName,
-                            OrganizationCode=bWorker.OrganizationCode
-                        
+                            OrganizationCode = bWorker.OrganizationCode
+
                         };
                         var registerBusinessWorker = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*rolename should be roles from businesses*/);
                         if (!registerBusinessWorker.status)
@@ -484,7 +730,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 FromName = business.BusinessName,
                 FullName = bWorker.FullName,
                 Platform = business.BusinessName,
-                Url= business.PropagateUrl,
+                Url = business.PropagateUrl,
                 DefaultPassword = args.DefaultPassword,
                 BusinessName = business.BusinessName,
                 PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={business.BusinessCodeSignageSalt}",
@@ -814,56 +1060,56 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
-                {
-                    _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
-                    return;
-                }
+        /**   private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
+           {
+               try
+               {
+                   if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
+                   {
+                       _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
+                       return;
+                   }
 
-                string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
+                   string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
 
-                var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                {
-                    to = $"234{phoneNumber[^10..]}",
-                    sms = message
-                });
+                   var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
+                   {
+                       to = $"234{phoneNumber[^10..]}",
+                       sms = message
+                   });
 
-                if (termiiResult.response != null && termiiResult.status)
-                {
-                    _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
-                }
-                else
-                {
-                    _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
+                   if (termiiResult.response != null && termiiResult.status)
+                   {
+                       _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
+                   }
+                   else
+                   {
+                       _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
 
-                    var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                    {
-                        campaign_name = "Agrovesto Notification",
-                        contacts = new List<string> { phoneNumber },
-                        message = message
-                    });
+                       var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
+                       {
+                           campaign_name = "Agrovesto Notification",
+                           contacts = new List<string> { phoneNumber },
+                           message = message
+                       });
 
-                    if (whisperResult.response is not null && whisperResult.status)
-                    {
-                        _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
-                    }
-                    else
-                    {
-                        _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
-                    }
-                }
+                       if (whisperResult.response is not null && whisperResult.status)
+                       {
+                           _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
+                       }
+                       else
+                       {
+                           _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
+                       }
+                   }
 
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "Failed to send role assignment SMS to {PhoneNumber}", phoneNumber);
-            }
-        }
-
+               }
+               catch (Exception ex)
+               {
+                   _log.LogError(ex, "Failed to send role assignment SMS to {PhoneNumber}", phoneNumber);
+               }
+           }
+           **/
         private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
         {
             if (userType != null)
@@ -877,7 +1123,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await CreateTraderProfile(model, business, registeredUser.model.Id);
                     break;
                 case SubAccountType.Agent:
-                    model.OrganizationCode= args.organizationCode;
+                    model.OrganizationCode = args.organizationCode;
                     //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     await CreateAgentProfileAsync(model, business, registeredUser.model.Id);
 
@@ -890,7 +1136,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     bWorker.OrganizationCode = args.organizationCode;
 
                     newBusinessWorker = await _businessRepository.CreateBusinessWorker(bWorker);
-                    
+
                     SendWorkerMail(bWorker, args, business);
                     break;
 
@@ -902,13 +1148,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     args.UserId = registeredUser.model.Id;
                     //then create user as a farmer as well
                     model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
-                  //  model.FarmerCategory = 
+                    //  model.FarmerCategory = 
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
 
                     break;
 
                 case SubAccountType.Farmer:
-                  //  model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+                    //  model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     model.Id = registeredUser.model.Id;
                     model.OrganizationCode = args.organizationCode;
                     await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
@@ -940,12 +1186,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedBy = args.UserId,
                 CreatedOn = DateTimeOffset.UtcNow,
                 Pin = model.Pin,
-                Name= model.Name,
-                NIN=model.NIN,
-                Bvn=model.Bvn,
-                shouldVerifyNin=model.shouldVerifyNin,
+                Name = model.Name,
+                NIN = model.NIN,
+                Bvn = model.Bvn,
+                shouldVerifyNin = model.shouldVerifyNin,
 
-                OrganizationCode =args.organizationCode,
+                OrganizationCode = args.organizationCode,
                 BusinessCode = args.businessCode,
             };
             //send mail
@@ -963,7 +1209,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 UserId = userId,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
-                MiddleName=model.MiddleName,
+                MiddleName = model.MiddleName,
                 SubAccountType = args.SubAccountType.ToEnum<SubAccountType>(),
                 PhoneNumber = model.PhoneNumber,
                 DOB = model.DateOfBirth,
@@ -974,9 +1220,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedBy = args.UserId,
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 IsMainAccount = false,
-                OrganizationCode=args.organizationCode,
+                OrganizationCode = args.organizationCode,
                 Status = BusinessStatus.Registered.ToString(),
-                IsNinVerified=model.shouldVerifyNin
+                IsNinVerified = model.shouldVerifyNin
             };
 
             return await _walletManager.CreateSubAccount(subaccount);
@@ -995,7 +1241,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = userId,
-                
+
             };
 
             await _traderRepository.CreateTrader(trader);
@@ -1014,9 +1260,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = userId,
-                Ward=model.Ward,
-                
-                OrganizationCode=model.OrganizationCode
+                Ward = model.Ward,
+
+                OrganizationCode = model.OrganizationCode
             };
 
             await _agentRepository.CreateAgent(agent);
@@ -1048,7 +1294,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 IsAssignedToAgentId = userId,
                 HasbeenAssignedAgent = isAssignedagent,
                 Ward = model.Ward,
-                OrganizationCode = model.OrganizationCode   
+                OrganizationCode = model.OrganizationCode
             };
 
             return await _cooperativeRepository.CreateCooperative(cooperative);
@@ -1078,12 +1324,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 DateOfBirth = model.DateOfBirth,
                 BelongToCooperativeId = cooperativeId,
                 Ward = model.Ward,
-                OrganizationCode =args.organizationCode,
-                FarmerCategory=model.FarmerCategory,
-                SelectedItems=model.ValueChainDto,
-                YearsInAgric=model.YearsInAgric,
-                HighestLevelOfEducation=model.HighestLevelOfEducation,
-               // ValueChainItems= model.ValueChainSelections
+                OrganizationCode = args.organizationCode,
+                FarmerCategory = model.FarmerCategory,
+                SelectedItems = model.ValueChainDto,
+                YearsInAgric = model.YearsInAgric,
+                HighestLevelOfEducation = model.HighestLevelOfEducation,
+                // ValueChainItems= model.ValueChainSelections
             };
 
             var farer = await _farmerRepository.CreateFarmer(farmer);
@@ -1148,7 +1394,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 var agents = await _agentRepository.GetAgentsByBusinessCode(business.BusinessCode, query);
 
-             
+
                 return new PagedListResponse<List<AgentModel>>
                 {
                     Succeeded = true,
@@ -1169,7 +1415,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode,string organizationCode)
+        public async Task<PagedListResponse<List<BusinessWorkerModel>>> GetStaffByBusinessCode(string businessCode, string organizationCode)
         {
             try
             {
@@ -1287,7 +1533,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-                
+
                 if (business == null)
                 {
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");
@@ -1943,14 +2189,14 @@ ListQueryParams query, string imageKey)
         {
             try
             {
-                
-                var farmers = await _farmerRepository.GetFarmerDetails( query.UserId);
+
+                var farmers = await _farmerRepository.GetFarmerDetails(query.UserId);
                 if (farmers == null) return null;
-                
-                    if (farmers.FarmerImage != null && !string.IsNullOrEmpty(farmers.FarmerImage.ImageKey))
-                    {
-                        farmers.FarmerImage.ImageKey = await _faceManager.GetImageUrlAsync(farmers.FarmerImage.ImageKey);
-                    }
+
+                if (farmers.FarmerImage != null && !string.IsNullOrEmpty(farmers.FarmerImage.ImageKey))
+                {
+                    farmers.FarmerImage.ImageKey = await _faceManager.GetImageUrlAsync(farmers.FarmerImage.ImageKey);
+                }
 
 
                 return farmers;
@@ -1977,8 +2223,8 @@ ListQueryParams query, string imageKey)
                 var model = new FileDownloadModel();
                 var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
 
-                var farmers = await _farmerRepository.GetAllFarmerDetails(query.businessCode,query.organizationCode,query.CooperativeId,query.UserId, query.Location,query.sortBy);
-                if (farmers.Data.Count ==0) return null;
+                var farmers = await _farmerRepository.GetAllFarmerDetails(query.businessCode, query.organizationCode, query.CooperativeId, query.UserId, query.Location, query.sortBy);
+                if (farmers.Data.Count == 0) return null;
 
                 foreach (var farmer in farmers.Data)
                 {
@@ -2010,6 +2256,21 @@ ListQueryParams query, string imageKey)
         {
             return await _businessRepository.GetBusinessOrganizationAsync(businessCode);
 
+        }
+    }
+    public class UserOrganizationComparer : IEqualityComparer<UserOrganization>
+    {
+        public bool Equals(UserOrganization x, UserOrganization y)
+        {
+            if (ReferenceEquals(x, y)) return true;
+            if (ReferenceEquals(x, null) || ReferenceEquals(y, null)) return false;
+
+            return x.UserId == y.UserId && x.OrganizationCode == y.OrganizationCode;
+        }
+
+        public int GetHashCode(UserOrganization obj)
+        {
+            return HashCode.Combine(obj.UserId, obj.OrganizationCode);
         }
     }
 }

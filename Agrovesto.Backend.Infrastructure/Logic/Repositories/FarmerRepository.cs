@@ -631,6 +631,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
+        public async Task<bool> DoesPhoneAlreadyExistWithinOrganization(string phonenumber, string organizationCode)
+        {
+            var query = from farmer in _context.Farmers
+                        join fo in _context.FarmerOrganizations
+                            on farmer.Id equals fo.FarmerId
+                        where farmer.PhoneNumber == phonenumber
+                              && fo.OrganizationCode == organizationCode
+                        select farmer;
+            return await query.AnyAsync();
+        }
+        public async Task<List<string>> GetAllPhonesForOrganizationAsync(string organizationCode)
+        {
+            var query =
+                from farmer in _context.Farmers
+                join fo in _context.FarmerOrganizations
+                    on farmer.Id equals fo.FarmerId
+                where fo.OrganizationCode == organizationCode
+                select farmer.PhoneNumber;
+
+            return await query
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct()
+                .ToListAsync();
+        }
+
         public async Task<List<FarmerModel>> GetFarmersByAgent(string agentId, ListQueryParams query)
         {
             var baseQuery = _context.Farmers.AsQueryable();
