@@ -20,6 +20,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OfficeOpenXml;
 using System;
 using System.Reflection;
 using System.Text;
@@ -184,6 +185,8 @@ builder.Services.AddSwaggerGen(option =>
 
    // option.OperationFilter<AddCustomHeaderParameter>();
 });
+
+
 // Add logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
