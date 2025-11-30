@@ -3,14 +3,10 @@ name: Build and Deploy .NET 8 App to Windows EC2
 on:
   push:
     branches:
-      - dev
       - master
-      - solution
   pull_request:
     branches:
-      - dev
       - master
-      - solution
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
