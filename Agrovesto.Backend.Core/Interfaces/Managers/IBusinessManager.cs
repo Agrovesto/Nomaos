@@ -47,5 +47,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<FileDownloadModel> GetAllFarmerDetails(ListQueryParams query);
         Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
         Task<Response<CooperativeModel>> GetCooperativeDetailById(long Id);
+        Task<BulkUploadFarmersResponse> BulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args);
     }
 }
