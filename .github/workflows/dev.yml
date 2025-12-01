@@ -42,25 +42,55 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+  
     steps:
       - uses: actions/checkout@v4.3.1
   
+      # -------------------------------
+      # SSH Agent
+      # -------------------------------
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
   
+      # -------------------------------
+      # Add keep-alive (prevents broken pipe)
+      # -------------------------------
+      - name: Configure SSH keepalive
+        run: |
+          echo "ServerAliveInterval 60" >> ~/.ssh/config
+          echo "ServerAliveCountMax 60" >> ~/.ssh/config
+          echo "TCPKeepAlive yes" >> ~/.ssh/config
+  
+      # -------------------------------
+      # Add EC2 host to known_hosts
+      # -------------------------------
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
   
+      # -------------------------------
+      # Copy repo to EC2 (hardened rsync)
+      # -------------------------------
       - name: Copy repo to EC2
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=60 ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
   
+          rsync -avz --delete \
+            -e "ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=60" \
+            --exclude='.git' \
+            ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
+  
+      # -------------------------------
+      # Execute deployment script (SSH keepalive included)
+      # -------------------------------
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy.sh"
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=60 \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "sudo bash /var/www/Agrovesto.Backend.API/deploy.sh"
+
 
