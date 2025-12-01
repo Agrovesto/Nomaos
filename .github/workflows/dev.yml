@@ -19,7 +19,8 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "Host: ${{ secrets.EC2_HOST_DEV }}"  # For debugging (value redacted in logs)
+          echo "Host: ${{ secrets.EC2_HOST_DEV }}" > ~/.ssh/noma-api # For debugging (value redacted in logs)
+          chmod 600 ~/.ssh/noma-api
           for i in {1..3}; do
             ssh-keyscan -T 10 -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts && break
             echo "Attempt $i failed. Retrying..."
