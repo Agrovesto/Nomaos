@@ -28,7 +28,7 @@ APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
-LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+LOAD_BALANCER_DNS="108.130.153.121"
 CI_USER="ubuntu"
 
 # Fix HOME for CI/CD
