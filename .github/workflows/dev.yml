@@ -23,7 +23,11 @@ jobs:
       - name: Add EC2 Host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+          echo "Attempting to scan: ${{ secrets.EC2_HOST_DEV }}"
+          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts || {
+            echo "ssh-keyscan failed. Trying with verbose output:"
+            ssh-keyscan -v -H ${{ secrets.EC2_HOST_DEV }}
+          }
 
       - name: Configure SSH Keepalive
         run: |
