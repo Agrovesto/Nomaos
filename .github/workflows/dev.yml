@@ -1,17 +1,13 @@
 name: Build & Deploy API (Remote Build Optimized)
-
 on:
   push:
     branches: [ dev ]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       # ----------------------------------------------------
       # SSH Setup
       # ----------------------------------------------------
@@ -19,22 +15,26 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-
       - name: Add EC2 Host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          echo "Attempting to scan: ${{ secrets.EC2_HOST_DEV }}"
-          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts || {
-            echo "ssh-keyscan failed. Trying with verbose output:"
-            ssh-keyscan -v -H ${{ secrets.EC2_HOST_DEV }}
+          chmod 700 ~/.ssh
+          echo "Host: ${{ secrets.EC2_HOST_DEV }}"  # For debugging (value redacted in logs)
+          for i in {1..3}; do
+            ssh-keyscan -T 10 -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts && break
+            echo "Attempt $i failed. Retrying..."
+            sleep 5
+          done || {
+            echo "ssh-keyscan failed after retries. Trying verbose:"
+            ssh-keyscan -v -T 10 -H ${{ secrets.EC2_HOST_DEV }}
+            exit 1
           }
-
       - name: Configure SSH Keepalive
         run: |
           echo "ServerAliveInterval 60" >> ~/.ssh/config
           echo "ServerAliveCountMax 120" >> ~/.ssh/config
           echo "TCPKeepAlive yes" >> ~/.ssh/config
-
+          chmod 600 ~/.ssh/config
       # ----------------------------------------------------
       # Upload ONLY the source code (not binaries)
       # rsync is incremental—only changed files upload
@@ -43,7 +43,6 @@ jobs:
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "sudo mkdir -p /var/www/Agrovesto.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.API"
-
           rsync -avz \
             --delete \
             --exclude='.git' \
@@ -51,7 +50,6 @@ jobs:
             --exclude='obj/' \
             -e "ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120" \
             ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.API/
-
       # ----------------------------------------------------
       # Build API DIRECTLY on the EC2 server
       # Saves lots of time and avoids artifact storage completely
@@ -61,12 +59,13 @@ jobs:
           ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 \
             ubuntu@${{ secrets.EC2_HOST_DEV }} "
               cd /var/www/Agrovesto.API && \
+              dotnet restore && \  # Ensure dependencies are fetched
               dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
               -c Release \
               -o ./publish \
-              --no-self-contained
+              --no-self-contained \
+              --no-restore  # Skip restore if already done
             "
-
       # ----------------------------------------------------
       # Restart the systemd service
       # ----------------------------------------------------
@@ -74,4 +73,4 @@ jobs:
         run: |
           ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 \
             ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo systemctl restart Agrovesto.Backend.API.service"
+            "sudo systemctl restart Agrovesto.Backend.API.service && sudo systemctl status Agrovesto.Backend.API.service"
