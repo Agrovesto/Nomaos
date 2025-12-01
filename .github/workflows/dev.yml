@@ -55,18 +55,18 @@ jobs:
       # Build API DIRECTLY on the EC2 server
       # Saves lots of time and avoids artifact storage completely
       # ----------------------------------------------------
-      - name: Build & Publish on EC2
+      - name: Build, Restore & Publish on EC2
         run: |
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} "
-              cd /var/www/Agrovesto.API && \
-              dotnet restore && \  # Ensure dependencies are fetched
-              dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 ubuntu@${{ secrets.EC2_HOST_DEV }} "
+            cd /var/www/Agrovesto.API && \
+            dotnet restore Agrovesto.Backend.API/Agrovesto.Backend.API.csproj && \
+            dotnet build Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -c Release && \
+            dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
               -c Release \
               -o ./publish \
-              --no-self-contained \
-              --no-restore  # Skip restore if already done
-            "
+              --no-self-contained
+          "
+
       # ----------------------------------------------------
       # Restart the systemd service
       # ----------------------------------------------------
