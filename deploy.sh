@@ -28,7 +28,7 @@ APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
-LOAD_BALANCER_DNS="108.130.153.121"
+LOAD_BALANCER_DNS="18.202.191.229"
 CI_USER="ubuntu"
 
 # Fix HOME for CI/CD
@@ -177,7 +177,7 @@ NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
 server {
-    listen 80;
+    listen 443;
     server_name $LOAD_BALANCER_DNS _;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
