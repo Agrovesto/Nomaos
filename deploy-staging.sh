@@ -78,7 +78,7 @@ sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
   -r linux-x64 \
   --self-contained true \
   /p:PublishTrimmed=false \
-  -o "$APP_DIR" \
+  -o "$APP_DIR/publish" \
   --no-restore
 
 sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
