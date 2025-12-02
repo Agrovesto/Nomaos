@@ -363,4 +363,5 @@ MigrationBackup/
 FodyWeavers.xsd
 
 #deployment script
-deploy.sh
+deploy-prod.sh
+deploy-staging.sh
