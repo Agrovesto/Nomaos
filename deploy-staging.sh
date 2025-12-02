@@ -63,7 +63,7 @@ sudo chown -R "$CI_USER:$CI_USER" "$NUGET_PACKAGES" "$SCRIPT_DIR" "$APP_DIR"
 # 5. Build & Publish (.NET 8 self-contained)
 # ------------------------------------------------------------
 sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" --configuration Release
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache
+sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache  --runtime linux-x64
 sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
   -c Release \
   -r linux-x64 \
