@@ -1,77 +1,82 @@
-name: Build & Deploy API (Remote Build Optimized)
+name: Build & Deploy API (Smart & Safe)
+
 on:
+  pull_request:
+    branches: [dev, staging]
   push:
-    branches: [ dev ]
+    branches: [staging]
+
 jobs:
-  deploy:
+  # ──────────────────────────────────────────────────────
+  # 1. Build & Publish Artifact (runs on PR + push)
+  # ──────────────────────────────────────────────────────
+  build-and-publish:
     runs-on: ubuntu-latest
+    outputs:
+      artifact-name: app-publish-${{ github.sha }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      # ----------------------------------------------------
-      # SSH Setup
-      # ----------------------------------------------------
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build & Publish
+        run: |
+          dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+            -c Release \
+            -o ./publish \
+            --no-restore \
+            /p:UseAppHost=false \
+            /p:PublishTrimmed=false
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-publish-${{ github.sha }}
+          path: ./publish
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────
+  # 2. Deploy to Server (ONLY on push to staging)
+  # ──────────────────────────────────────────────────────
+  deploy-to-staging:
+    needs: build-and-publish
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-publish-${{ github.sha }}
+          path: ./publish
+
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-      - name: Add EC2 Host to known_hosts
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_STAGING }}
+
+      - name: Add Host to known_hosts
+        run: ssh-keyscan -H ${{ secrets.EC2_HOST_STAGING }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2 (Zero-downtime style)
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          echo "Host: ${{ secrets.EC2_HOST_DEV }}" > ~/.ssh/noma-api # For debugging (value redacted in logs)
-          chmod 600 ~/.ssh/noma-api
-          for i in {1..3}; do
-            ssh-keyscan -T 10 -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts && break
-            echo "Attempt $i failed. Retrying..."
-            sleep 5
-          done || {
-            echo "ssh-keyscan failed after retries. Trying verbose:"
-            ssh-keyscan -v -T 10 -H ${{ secrets.EC2_HOST_DEV }}
-            exit 1
-          }
-      - name: Configure SSH Keepalive
-        run: |
-          echo "ServerAliveInterval 60" >> ~/.ssh/config
-          echo "ServerAliveCountMax 120" >> ~/.ssh/config
-          echo "TCPKeepAlive yes" >> ~/.ssh/config
-          chmod 600 ~/.ssh/config
-      # ----------------------------------------------------
-      # Upload ONLY the source code (not binaries)
-      # rsync is incremental—only changed files upload
-      # ----------------------------------------------------
-      - name: Upload source code to EC2
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo mkdir -p /var/www/Agrovesto.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.API"
-          rsync -avz \
-            --delete \
-            --exclude='.git' \
-            --exclude='bin/' \
-            --exclude='obj/' \
-            -e "ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120" \
-            ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.API/
-      # ----------------------------------------------------
-      # Build API DIRECTLY on the EC2 server
-      # Saves lots of time and avoids artifact storage completely
-      # ----------------------------------------------------
-      - name: Build, Restore & Publish on EC2
-        run: |
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 ubuntu@${{ secrets.EC2_HOST_DEV }} "
-            cd /var/www/Agrovesto.API && \
-            dotnet restore Agrovesto.Backend.API/Agrovesto.Backend.API.csproj && \
-            dotnet build Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -c Release && \
-            dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
-              -c Release \
-              -o ./publish \
-              --no-self-contained
+          rsync -avz --delete \
+            -e "ssh -o StrictHostKeyChecking=no \
+            ./publish/ ubuntu@${{ secrets.EC2_HOST_STAGING }}:/var/www/Agrovesto.API/publish/
+
+          ssh ubuntu@${{ secrets.EC2_HOST_STAGING }} "
+            sudo systemctl restart Agrovesto.Backend.API.service &&
+            sudo systemctl status Agrovesto.Backend.API.service --no-pager
           "
 
-      # ----------------------------------------------------
-      # Restart the systemd service
-      # ----------------------------------------------------
-      - name: Restart API Service
+      - name: Health Check (optional but recommended)
         run: |
-          ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=120 \
-            ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo systemctl restart Agrovesto.Backend.API.service && sudo systemctl status Agrovesto.Backend.API.service"
+          sleep 8
+          curl -f https://${{ secrets.EC2_HOST_STAGING }}/health || \
+          curl -f http://${{ secrets.EC2_HOST_STAGING }}:5000/health || exit 1
