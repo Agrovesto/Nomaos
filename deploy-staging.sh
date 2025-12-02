@@ -77,17 +77,15 @@ sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
   -r linux-x64 \
   --self-contained true \
   /p:PublishTrimmed=false \
-  -o "$APP_DIR/publish" \
+  -o "$PUBLISH_DIR" \
   --no-restore
-
-sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
-sudo systemctl restart "$APP_NAME"
 
 # ------------------------------------------------------------
 # 7. Update symlink atomically
 # ------------------------------------------------------------
 sudo ln -sfn "$PUBLISH_DIR" "$CURRENT_DIR"
 sudo chown -R "$USER_NAME:$USER_NAME" "$PUBLISH_DIR" "$CURRENT_DIR"
+sudo chown -h "$USER_NAME:$USER_NAME" "$CURRENT_DIR"
 
 # ------------------------------------------------------------
 # 8. Environment file
@@ -122,6 +120,7 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$APP_NAME.service"
+sudo systemctl restart "$APP_NAME"
 
 # ------------------------------------------------------------
 # 10. NGINX CONFIG — CORRECT & CERTBOT-READY
