@@ -1,3 +1,4 @@
+
 #!/bin/bash
 # Robust Deployment Script for Agrovesto.Backend.API (FINAL WORKING VERSION)
 # Tested on Ubuntu 22.04 + .NET 8 + Nginx + Let's Encrypt
@@ -19,6 +20,8 @@ USER_NAME="www-data"
 CI_USER="ubuntu"
 DOMAIN="dev-noma-api.nomaos.com"
 NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+PUBLISH_DIR="$APP_DIR/publish"
+CURRENT_DIR="$APP_DIR/current"
 
 # Fix home for dotnet/NuGet in CI
 export HOME=/tmp
