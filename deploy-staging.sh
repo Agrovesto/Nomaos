@@ -191,12 +191,12 @@ sudo nginx -t && sudo systemctl reload nginx
 # ------------------------------------------------------------
 # 11. Get + Install Let's Encrypt SSL 
 # ------------------------------------------------------------
-if ! sudo certbot certificates --quiet | grep -q "$APP_NAME"; then
+if ! sudo certbot certificates --quiet | grep -q "$DOMAIN"; then
     echo "Obtaining Let's Encrypt certificate..."
-    sudo certbot --nginx -d "$APP_NAME" --non-interactive --agree-tos --email dolapofashina@gmail.com --redirect
+    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email dolapofashina@gmail.com --redirect
 else
     echo "Certificate already exists — installing/updating Nginx config..."
-    sudo certbot install --nginx --cert-name "$APP_NAME"
+    sudo certbot install --nginx --cert-name "$DOMAIN"
 fi
 
 # Final Nginx reload after cert install
