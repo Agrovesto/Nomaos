@@ -59,7 +59,7 @@ jobs:
       - name: Copy repo to EC2
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API/
+          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
   
       - name: Execute deployment script
         run: |
