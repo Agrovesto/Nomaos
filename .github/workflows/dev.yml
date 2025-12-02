@@ -3,9 +3,10 @@ on:
   pull_request:
     branches:
       - dev
+      - staging
   push:
     branches:
-      - dev
+      - staging
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -41,7 +42,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v4.3.1
   
@@ -62,5 +63,5 @@ jobs:
   
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy.sh"
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
 
