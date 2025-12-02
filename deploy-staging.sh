@@ -1,10 +1,9 @@
 
 #!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API (FINAL WORKING VERSION)
-# Tested on Ubuntu 22.04 + .NET 8 + Nginx + Let's Encrypt
+# Robust Deployment Script for Agrovesto.Backend.API
 # Author: Dolapo Fashina 
-set -euo pipefail  # Better than just set -e
-set -x             # Keep command tracing
+set -euo pipefail  
+set -x 
 
 # ------------------------------------------------------------
 # Variables
@@ -149,8 +148,8 @@ server {
     listen [::]:443 ssl http2;
     server_name $DOMAIN;
 
-    ssl_certificate     /etc/letsencrypt/live/$APP_NAME/fullchain.pem;
-    ssl_certificate_key /etc/etc/letsencrypt/live/$APP_NAME/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
