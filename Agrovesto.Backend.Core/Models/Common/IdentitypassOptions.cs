@@ -18,11 +18,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string preembleySecretKey { get; set; }
         public string preembleyAppId { get; set; }
     }
-    public class AesOptions
-    {
-        public string Key { get; set; }
-        public string Iv { get; set; }
-        public string Salt { get; set; }
-    }
+    //public class AesOptions
+    //{
+    //    public string Key { get; set; }
+    //    public string Iv { get; set; }
+    //    public string Salt { get; set; }
+    //}
 
 }

@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? CooperativeName { get; set; }
         public string BusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
-        public long Score { get; set; }
+        public decimal Score { get; set; }
         public string RiskLevel { get; set; } = "High";
 
         public long Id { get; set; }

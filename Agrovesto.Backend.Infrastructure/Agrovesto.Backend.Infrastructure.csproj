@@ -17,7 +17,11 @@
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.107" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.415.12" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.2" />
+    <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.502" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.502" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
     <PackageReference Include="EPPlus" Version="8.0.6" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
     <PackageReference Include="iTextSharp" Version="5.5.13.4" />
@@ -36,7 +40,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.0" />
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.1" />
+<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
+     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="NetTopologySuite.IO.GeoJSON" Version="4.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -44,4 +46,32 @@ namespace Agrovesto.Backend.Core.Models.Businesses.MandE
         //public FarmPlot FarmPlot { get; set; }
     }
 
+    public class CreateMandEActivityTypeModel
+    {
+        public string Name { get; set; }
+        public string? Description { get; set; }
+    }
+    public class CreateMandESubActivityModel
+    {
+        
+        public string Name { get; set; }
+        public string? Description { get; set; }
+    }
+
+    public class CreateMandEFieldDefinitionModel
+    {
+
+        public long Id { get; set; }
+        public long MandESubActivityId { get; set; }
+        public string Label { get; set; }
+        public string Key { get; set; }
+        public string Type { get; set; } = "text"; // text, number, date, select, checkbox, textarea
+        public string[]? Options { get; set; }
+        public string? OptionsJson { get; set; }
+        public bool IsRequired { get; set; }
+        public long Order { get; set; } = 0;
+        public string? BelongToBusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
+
+    }
 }

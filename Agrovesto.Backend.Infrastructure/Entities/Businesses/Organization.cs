@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public long OrganizaionId { get; set; }
+        public long OrganizationId { get; set; }
         public string BusinessCode { get; set; }
         public string OrganizationCode { get; set; }
         public string OrganizationName { get; set;}
@@ -21,5 +21,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactEmail { get; set; }
         public string? OrganizationEmail { get; set; }
         public string? Location { get; set; }
-    }
+
+        public ICollection<OrganizationConfiguration> OrganizationConfigurations { get; set; } = new List<OrganizationConfiguration>();
+    //    public ICollection<OrganizationBundlePlans> OrganizationBundlePlans { get; set; } = new List<OrganizationBundlePlans>();
+    
+}
 }

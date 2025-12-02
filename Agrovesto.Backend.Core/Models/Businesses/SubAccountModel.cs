@@ -6,6 +6,22 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class WalletModel
+    {
+        public long Id { get; set; }
+        public string UserId { get; set; }
+        public string AccountNumber { get; set; }
+        public string AccountName { get; set; }
+        public string BankName { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? WalletCode { get; set; }
+        public string WalletProviderCode { get; set; }
+        public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
+        public string? CreatedBy { get; set; }
+        public string? OrganizationCode { get; set; }
+        public decimal WalletBalance { get; set; }
+
+    }
     public class SubAccountModel
     {
         public long SubAccountId { get; set; }
@@ -31,7 +47,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string City { get; set; }
         public string Alias { get; set; }
         public string Address { get; set; }
-        public SubAccountType SubAccountType { get; set; }  
+        public SubAccountType SubAccountType { get; set; }
+        public bool IsNinVerified { get; set; } = false;
     }
     public enum SubAccountType
     {

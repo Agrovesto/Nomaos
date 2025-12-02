@@ -67,12 +67,10 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 var result = await _inputFinancingManagement.GetInterestRequestByLocation(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
@@ -191,12 +189,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetInterestRequestByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
@@ -324,12 +320,11 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
-
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
                 var bundle = await _inputFinancingManagement.CreateInputFinancingInterest(model, args);
@@ -444,12 +439,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetAllInputDisbursement(query);
                 return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
@@ -507,12 +500,11 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
-
                 var input = await _inputFinancingManagement.DisburseInput(model, args);
                 return Ok(new Response<BundleDisbursementModel>()
                 {
@@ -605,12 +597,10 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 var result = await _inputFinancingManagement.GetDisbursementByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleDisbursementModel>>()
                 {
@@ -728,12 +718,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
-
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _inputFinancingManagement.GetPaidSubscriptionInterestByBusiness(query);
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
@@ -792,13 +780,12 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-               
-                var hasOrgCode = OrganizationCode;
-                if (!string.IsNullOrEmpty(hasOrgCode))
+
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
-
                 var input = await _inputFinancingManagement.SaveBundleSubscriptionRepayment( args, model);
                 return Ok(new Response<(bool status, string message)>()
                 {
