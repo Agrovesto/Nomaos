@@ -149,8 +149,8 @@ server {
     listen [::]:443 ssl http2;
     server_name $DOMAIN;
 
-    ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/$APP_NAME/fullchain.pem;
+    ssl_certificate_key /etc/etc/letsencrypt/live/$APP_NAME/privkey.pem;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -192,12 +192,12 @@ sudo nginx -t && sudo systemctl reload nginx
 # ------------------------------------------------------------
 # 11. Get + Install Let's Encrypt SSL 
 # ------------------------------------------------------------
-if ! sudo certbot certificates --quiet | grep -q "$DOMAIN"; then
+if ! sudo certbot certificates --quiet | grep -q "$APP_NAME"; then
     echo "Obtaining Let's Encrypt certificate..."
-    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email dolapofashina@gmail.com --redirect
+    sudo certbot --nginx -d "$APP_NAME" --non-interactive --agree-tos --email dolapofashina@gmail.com --redirect
 else
     echo "Certificate already exists — installing/updating Nginx config..."
-    sudo certbot install --nginx --cert-name "$DOMAIN"
+    sudo certbot install --nginx --cert-name "$APP_NAME"
 fi
 
 # Final Nginx reload after cert install
@@ -210,5 +210,5 @@ echo ""
 echo "DEPLOYMENT SUCCESSFUL!"
 echo "→ API running at: https://$DOMAIN"
 echo "→ Service status: sudo systemctl status $APP_NAME"
-echo "→ Logs: journalctl -u $APP_NAME -f"
+echo "→ Logs: sudo journalctl -u $APP_NAME -f"
 echo "→ Nginx status: sudo nginx -t && sudo systemctl status nginx"
