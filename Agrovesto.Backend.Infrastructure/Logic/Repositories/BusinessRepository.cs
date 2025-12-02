@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -42,10 +43,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return org.Map();
         }
 
-        public async Task<OrganizationModel> GetOrganizationAsync(string organizationCode)
+        public async Task<OrganizationModel> GetOrganizationAsync(string organizationEmail)
         {
             var org = await _context.Set<Organization>()
-                .FirstOrDefaultAsync(x => x.OrganizationCode == organizationCode || x.OrganizationName == organizationCode);
+                .FirstOrDefaultAsync(x => x.OrganizationEmail == organizationEmail);
             if (org == null)
             {
                 return null;
@@ -53,16 +54,114 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return org.Map();
         }
 
+        //public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+        //{
+        //    var org = await _context.Set<Organization>()
+        //        .Where(x => x.BusinessCode == businessCode).ToListAsync();
+        //    if (org == null)
+        //    {
+        //        return null;
+        //    }
+        //    return org.Select(x=>x.Map()).ToList();
+        //}
         public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
         {
-            var org = await _context.Set<Organization>()
-                .Where(x => x.BusinessCode == businessCode).ToListAsync();
-            if (org == null)
-            {
+            var organizations = await (
+                from org in _context.BusinessOrganizations
+                join user in _context.Set<User>()
+    on new { org.BusinessCode, Email = org.OrganizationEmail }
+    equals new { user.BusinessCode, Email = user.Email }
+                where org.BusinessCode == businessCode
+                select new
+                {
+                    Org = org,
+                    User = user
+                }
+            ).ToListAsync();
+
+            if (organizations == null || organizations.Count == 0)
                 return null;
-            }
-            return org.Select(x=>x.Map()).ToList();
+
+            var result = organizations
+                .GroupBy(x => x.Org.OrganizationId)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var org = first.Org;
+
+                    // Get the user who created the organization
+                    var creatorUser = g
+                        .OrderBy(u => u.User.CreatedOn)
+                        .First().User;
+
+                    return new OrganizationModel
+                    {
+                        OrganizaionId = org.OrganizationId,
+                        OrganizationName = org.OrganizationName,
+                        BusinessCode = org.BusinessCode,
+                        OrganizationCode = org.OrganizationCode,
+                        ContacPerson = org.ContacPerson,
+                        Contact = org.Contact,
+                        ContactEmail = org.ContactEmail,
+                        Location = org.Location,
+                        OrganizationEmail = org.OrganizationEmail,
+
+                        // Pulled from Users table
+                        Kick = creatorUser.Password,          // Your “kick” field
+                        OnboardedOn = creatorUser.CreatedOn   // Date they were onboarded
+                    };
+                })
+                .ToList();
+
+            return result;
         }
+
+        /** public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+         {
+             var organizations = await (
+                     from org in _context.BusinessOrganizations
+                     where org.BusinessCode == businessCode
+                     select new
+                     {
+                         Organization = org,
+                         Users = _context.Users
+                                 .Where(u => u.BusinessCode == org.BusinessCode)
+                                 .ToList()
+                     }
+                 ).ToListAsync();
+
+             if (organizations == null || !organizations.Any())
+                 return null;
+
+             var result = organizations
+                 .GroupBy(x => x.Organization.OrganizationId) // 🔥 Remove duplicates
+                 .Select(g =>
+                 {
+                     var first = g.First();
+                     var user = first.Users.FirstOrDefault();   // Pick ANY user
+
+                     return new OrganizationModel
+                     {
+                         OrganizaionId = first.Organization.OrganizationId,
+                         OrganizationName = first.Organization.OrganizationName,
+                         BusinessCode = first.Organization.BusinessCode,
+                         OrganizationCode = first.Organization.OrganizationCode,
+                         ContacPerson = first.Organization.ContacPerson,
+                         Contact = first.Organization.Contact,
+                         ContactEmail = first.Organization.ContactEmail,
+                         Location = first.Organization.Location,
+                         OrganizationEmail = first.Organization.OrganizationEmail,
+
+                         // User fields
+                         Kick = user.Password,
+                         OnboardedOn = 
+                     };
+                 })
+                 .ToList();
+
+             return result;
+         }
+         **/
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
         {

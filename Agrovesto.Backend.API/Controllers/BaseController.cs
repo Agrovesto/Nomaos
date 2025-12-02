@@ -114,40 +114,75 @@ namespace Agrovesto.Backend.API.Controllers
                 return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
             }
         }
+        //public string OrganizationCode
+        //{
+        //    get
+        //    {
+        //        var token = Token;
+        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
+
+        //        var handler = new JsonWebTokenHandler();
+
+        //        // Ensure the token is a well-formed JWT before reading it
+        //        if (!handler.CanReadToken(token))
+        //        {
+        //            throw new SecurityTokenException("Invalid JWT format");
+        //        }
+
+        //        var jst = handler.ReadJsonWebToken(token);
+        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
+
+
+        //        //[{"OrganizationCode":"KIC115","OrganizationName":"Kickstart Abj"}]
+        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
+        //    }
+        //}
+
         public string OrganizationCode
         {
             get
             {
                 var token = Token;
-                if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
+                if (string.IsNullOrEmpty(token))
+                    return null;
 
                 var handler = new JsonWebTokenHandler();
 
-                // Ensure the token is a well-formed JWT before reading it
                 if (!handler.CanReadToken(token))
-                {
                     throw new SecurityTokenException("Invalid JWT format");
-                }
 
                 var jst = handler.ReadJsonWebToken(token);
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("OrganizationCodes", StringComparison.OrdinalIgnoreCase));
+                var claims = jst.Claims.FirstOrDefault(x =>
+                    x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
 
-                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
+                if (string.IsNullOrEmpty(claims?.Value))
+                    return null;
+
+                try
+                {
+                    // Deserialize the JSON array
+                    var organizations = System.Text.Json.JsonSerializer.Deserialize<List<OrganizationClaim>>(claims.Value);
+
+                    // Return a comma-separated list if there are multiple organization codes
+                    return organizations != null && organizations.Count > 0
+                        ? string.Join(",", organizations.Select(o => o.OrganizationCode))
+                        : null;
+                }
+                catch
+                {
+                    // Handle invalid JSON or unexpected format
+                    return null;
+                }
             }
         }
 
-        //public string CurrentUserId
-        //{
-        //    get
-        //    {
-        //        if (string.IsNullOrEmpty(Token)) return null;
-        //        var handler = new JwtSecurityTokenHandler();
-        //        var jst = handler.ReadJwtToken(Token);
+        // Helper class to match the claim structure
+        public class OrganizationClaim
+        {
+            public string OrganizationCode { get; set; }
+            public string OrganizationName { get; set; }
+        }
 
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
-        //        return claims?.Value;
-        //    }
-        //}
     }
 
 }

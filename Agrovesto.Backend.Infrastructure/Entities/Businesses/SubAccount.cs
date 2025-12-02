@@ -33,6 +33,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? LastName { get; set; }
         public string SubAccountType { get; set; }
         public string? OrganizationCode { get; set; }
+        public bool IsNinVerified { get; set; } = false;
     }
 
     //when user signsup
