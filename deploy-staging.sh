@@ -19,7 +19,7 @@ ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
 CI_USER="ubuntu"
 DOMAIN="dev-noma-api.nomaos.com"
-NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
 PUBLISH_DIR="$APP_DIR/publish"
 CURRENT_DIR="$APP_DIR/current"
 
