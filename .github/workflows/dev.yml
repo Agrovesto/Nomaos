@@ -4,9 +4,8 @@ on:
     branches:
       - dev
       - staging
-  pull_request:
+  push:
     branches:
-      - dev
       - staging
 
 concurrency:
@@ -51,7 +50,8 @@ jobs:
     needs: build-and-test
     if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
-    environment: staging
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v4
 
@@ -75,21 +75,9 @@ jobs:
 
       - name: Deploy source code + run deploy script
         run: |
-          # 1. Ensure target directory exists and is owned by ubuntu
-          ssh -o StrictHostKeyChecking=yes ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-
-          # 2. Sync only source code (fast, incremental)
-          rsync -avz --delete \
-            --exclude='.git*' \
-            --exclude='bin/' --exclude='obj/' \
-            --exclude='*.csproj.user' \
-            --exclude='deploy*.sh' \   # don't overwrite the server script
-            -e "ssh -o StrictHostKeyChecking=yes" \
-            ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
-
-          # 3. Run the deployment script on the server
-          ssh -o StrictHostKeyChecking=yes ubuntu@${{ secrets.EC2_HOST_DEV}} \
-            "bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
-
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
   
+      - name: Execute deployment script
+        run: |
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
