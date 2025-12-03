@@ -128,6 +128,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return summary;
         }
+        public async Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args)
+        {
+            var summary = new BulkUploadFarmersResponse();
+            var errors = new List<BulkUploadError>();
+            var createdFarmers = new List<Farmer>();
+            var model = new BulkFarmerUpoad();
+            model.file = request.file;
+            model.FileContent = request.file.OpenReadStream();
+            if (request.file == null || request.file.OpenReadStream() == null)
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "No file was uploaded.");
+            }
+
+            // 1. Extract rows using your extractor
+            var allFarmers = await ParseFarmerFileAsync(model.FileContent, args);
+
+            if (allFarmers == null || !allFarmers.Any())
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "The uploaded file does not contain valid farmer data.");
+
+            var upload = await NewBulkCreateBusinessUsersFromExcelAsync(allFarmers, args);
+            summary.TotalRows = allFarmers.Count;
+            summary.Successful = upload.Successful;//.Results.Count;
+            summary.Failed = upload.Failed; //errors.Count;
+           summary.Errors = upload.Errors;
+            summary.Message = upload.Message;//"Bulk upload completed.";
+
+            return summary;
+        }
         private void SplitFullNameSmart(string fullName, out string first, out string middle, out string last)
         {
             first = middle = last = null;
@@ -183,7 +211,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return model;
         }
-        public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
+       public async Task<BulkUploadFarmersResponse> NewBulkCreateBusinessUsersFromExcelAsync(
     List<UserModel> excelUsers,
     BusinessRegistrationArgs args)
         {
@@ -222,6 +250,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Results = results.ToList()
             };
         }
+        
         private async Task<List<PreparedUser>> ValidateAndPrepareUsers(
     List<UserModel> excelUsers,
     BusinessModel business)
@@ -349,7 +378,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        /** public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
+        public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
         List<UserModel> excelUsers,
         BusinessRegistrationArgs args)
          {
@@ -387,7 +416,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                  Results = results
              };
          }
-         **/
+         
         public async Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(
 
         ListQueryParams query)
