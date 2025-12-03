@@ -250,4 +250,12 @@ namespace Agrovesto.Backend.Core.Models.Common
         Password,
         Pin
     }
+
+    public class PreparedUser
+    {
+        public UserModel User { get; set; }
+        public bool IsValid => string.IsNullOrEmpty(ValidationError);
+        public string ValidationError { get; set; }
+    }
+
 }

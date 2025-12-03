@@ -1,6 +1,6 @@
 name: CI/CD Deploy Agrovesto.Backend.API
 on:
-  pull_request:
+  push:
     branches:
       - dev
       - staging
@@ -9,54 +9,71 @@ on:
       - staging
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  # ------------------------------------------------------------------
+  # 1. Build & Test (runs on PRs and pushes)
+  # ------------------------------------------------------------------
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.3.1
-      
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-      
-      - name: Restore dependencies
-        run: dotnet restore
-      
-      - name: Build application
-        run: dotnet build -c Release --no-restore
-      
-      - name: Publish application
-        run: dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o ./publish
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-publish
-          path: ./publish
+      - uses: actions/checkout@v4
 
-          
-  deploy:
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test --no-build --verbosity normal
+
+      # Optional: upload artifact only if you really need it
+      # - name: Publish (for artifact backup)
+      #   run: dotnet publish -c Release -o ./publish
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: publish-artifact
+      #     path: ./publish
+
+  # ------------------------------------------------------------------
+  # 2. Deploy to Staging (only on push to staging)
+  # ------------------------------------------------------------------
+  deploy-staging:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     steps:
-      - uses: actions/checkout@v4.3.1
-  
-      - name: Setup SSH
+      - uses: actions/checkout@v4
+
+      - name: Install rsync (sometimes missing)
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
+      - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-  
-      - name: Add EC2 host to known_hosts
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}   # Use separate key per env!
+
+      - name: Add EC2 host to known_hosts (with retry + timeout)
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
-  
-      - name: Copy repo to EC2
+          chmod 700 ~/.ssh
+          for i in {1..5}; do
+            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
+            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            sleep 5
+          done
+
+      - name: Deploy source code + run deploy script
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
           rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/

@@ -363,4 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 
 #deployment script
-deploy.sh
+deploy-prod.sh
+deploy-staging.sh
+/Agrovesto.Backend.API/appsettings.json
