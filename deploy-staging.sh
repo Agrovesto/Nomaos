@@ -1,9 +1,9 @@
+
 #!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API (FINAL WORKING VERSION)
-# Tested on Ubuntu 22.04 + .NET 8 + Nginx + Let's Encrypt
+# Robust Deployment Script for Agrovesto.Backend.API
 # Author: Dolapo Fashina 
-set -euo pipefail  # Better than just set -e
-set -x             # Keep command tracing
+set -euo pipefail  
+set -x 
 
 # ------------------------------------------------------------
 # Variables
@@ -19,6 +19,8 @@ USER_NAME="www-data"
 CI_USER="ubuntu"
 DOMAIN="dev-noma-api.nomaos.com"
 NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+PUBLISH_DIR="$APP_DIR/publish"
+CURRENT_DIR="$APP_DIR/current"
 
 # Fix home for dotnet/NuGet in CI
 export HOME=/tmp
@@ -54,37 +56,48 @@ sudo ufw allow 443/tcp
 sudo ufw --force enable
 
 # ------------------------------------------------------------
-# 4. Fix permissions & NuGet cache
+# 4. Stop existing service
 # ------------------------------------------------------------
-sudo mkdir -p "$NUGET_PACKAGES"
-sudo chown -R "$CI_USER:$CI_USER" "$NUGET_PACKAGES" "$SCRIPT_DIR" "$APP_DIR"
+sudo systemctl stop "$APP_NAME" || true
 
 # ------------------------------------------------------------
-# 5. Build & Publish (.NET 8 self-contained)
+# 5. Prepare publish folder
+# ------------------------------------------------------------
+sudo rm -rf "$PUBLISH_DIR"
+sudo mkdir -p "$PUBLISH_DIR"
+sudo chown -R "$CI_USER:$CI_USER" "$PUBLISH_DIR" "$SCRIPT_DIR"
+
+# ------------------------------------------------------------
+# 6. Build & Publish (.NET 8 self-contained)
 # ------------------------------------------------------------
 sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" --configuration Release
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache
+sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache  --runtime linux-x64
 sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
   -c Release \
   -r linux-x64 \
   --self-contained true \
   /p:PublishTrimmed=false \
-  -o "$APP_DIR" \
+  -o "$PUBLISH_DIR" \
   --no-restore
 
-sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
+# ------------------------------------------------------------
+# 7. Update symlink atomically
+# ------------------------------------------------------------
+sudo ln -sfn "$PUBLISH_DIR" "$CURRENT_DIR"
+sudo chown -R "$USER_NAME:$USER_NAME" "$PUBLISH_DIR" "$CURRENT_DIR"
+sudo chown -h "$USER_NAME:$USER_NAME" "$CURRENT_DIR"
 
 # ------------------------------------------------------------
-# 6. Environment file
+# 8. Environment file
 # ------------------------------------------------------------
 sudo tee "$ENV_FILE" > /dev/null <<EOF
-ASPNETCORE_ENVIRONMENT=Production
+ASPNETCORE_ENVIRONMENT=staging
 ASPNETCORE_URLS=http://0.0.0.0:5000
 DOTNET_PRINT_TELEMETRY_MESSAGE=false
 EOF
 
 # ------------------------------------------------------------
-# 7. Systemd service
+# 9. Systemd service
 # ------------------------------------------------------------
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
@@ -93,7 +106,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/dotnet $APP_DIR/$APP_NAME.dll
+ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
@@ -107,9 +120,10 @@ EOF
 
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$APP_NAME.service"
+sudo systemctl restart "$APP_NAME"
 
 # ------------------------------------------------------------
-# 8. NGINX CONFIG — CORRECT & CERTBOT-READY
+# 10. NGINX CONFIG — CORRECT & CERTBOT-READY
 # ------------------------------------------------------------
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
 # HTTP → HTTPS redirect
@@ -134,7 +148,7 @@ server {
     server_name $DOMAIN;
 
     ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -174,7 +188,7 @@ sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t && sudo systemctl reload nginx
 
 # ------------------------------------------------------------
-# 9. Get + Install Let's Encrypt SSL (this will now WORK)
+# 11. Get + Install Let's Encrypt SSL 
 # ------------------------------------------------------------
 if ! sudo certbot certificates --quiet | grep -q "$DOMAIN"; then
     echo "Obtaining Let's Encrypt certificate..."
@@ -188,11 +202,11 @@ fi
 sudo systemctl reload nginx
 
 # ------------------------------------------------------------
-# Done!
+# Done
 # ------------------------------------------------------------
 echo ""
 echo "DEPLOYMENT SUCCESSFUL!"
 echo "→ API running at: https://$DOMAIN"
 echo "→ Service status: sudo systemctl status $APP_NAME"
-echo "→ Logs: journalctl -u $APP_NAME -f"
+echo "→ Logs: sudo journalctl -u $APP_NAME -f"
 echo "→ Nginx status: sudo nginx -t && sudo systemctl status nginx"
