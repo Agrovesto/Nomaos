@@ -28,7 +28,11 @@ APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
+<<<<<<<< HEAD:deploy-prod.sh
+LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
+========
 LOAD_BALANCER_DNS="18.202.191.229"
+>>>>>>>> 84ab29cc0b9930acfc4574bbfbf54f232e82d035:Agrovesto.Backend.API/deploy-staging.sh
 CI_USER="ubuntu"
 
 # Fix HOME for CI/CD

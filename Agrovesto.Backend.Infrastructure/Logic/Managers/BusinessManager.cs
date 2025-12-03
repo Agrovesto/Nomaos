@@ -24,6 +24,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OfficeOpenXml;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Globalization;
@@ -120,7 +121,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             var upload = await BulkCreateBusinessUsersFromExcelAsync(allFarmers, args);
             summary.TotalRows = allFarmers.Count;
-            summary.Successful = upload.Results.Count;
+            summary.Successful = upload.Successful;//.Results.Count;
             summary.Failed = upload.Failed; //errors.Count;
            summary.Errors = upload.Errors;
             summary.Message = upload.Message;//"Bulk upload completed.";
@@ -183,147 +184,210 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return model;
         }
         public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
-       List<UserModel> excelUsers,
-       BusinessRegistrationArgs args)
+    List<UserModel> excelUsers,
+    BusinessRegistrationArgs args)
         {
-            var results = new List<(UserModel user, bool status, string message)>();
+            var results = new ConcurrentBag<(UserModel user, bool status, string message)>();
 
-            foreach (var rawUser in excelUsers)
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(ExceptionType.NOTFOUND, "Business does not exist.");
+            args.UserId ??= business.UserId;
+            args.businessEmail=business.BusinessEmail;
+            var prepared = await ValidateAndPrepareUsers(excelUsers, business);
+
+            foreach (var p in prepared)
             {
+                if (!p.IsValid)
+                {
+                    results.Add((p.User, false, p.ValidationError));
+                    continue;
+                }
+
                 try
                 {
-                    var response = await CreateBusinessUser(rawUser, args);
-
-                    if (response == null)
-                    {
-                        results.Add((rawUser, false, "User creation returned null."));
-                        continue;
-                    }
-
-                    results.Add((rawUser, true, "Successfully processed."));
+                    var sub = await CreateBulBusinessUser(p, args);
+                    results.Add((p.User, true, "SUCCESS"));
                 }
                 catch (Exception ex)
                 {
-                    results.Add((rawUser, false, ex.Message));
+                    results.Add((p.User, false, ex.Message));
                 }
             }
-
-            // summary
-            int successCount = results.Count(x => x.status == true);
-            int failedCount = results.Count(x => x.status == false);
 
             return new BulkUploadFarmersResponse
             {
                 TotalRows = excelUsers.Count,
-                Successful = successCount,
-                Failed = failedCount,
-                Results = results
+                Successful = results.Count(x => x.status),
+                Failed = results.Count(x => !x.status),
+                Results = results.ToList()
             };
         }
+        private async Task<List<PreparedUser>> ValidateAndPrepareUsers(
+    List<UserModel> excelUsers,
+    BusinessModel business)
+        {
+            var output = new ConcurrentBag<PreparedUser>();
 
-        //public async Task<List<(UserModel user, bool status, string message)>> BulkCreateBusinessUsersFromExcelAsync(
-        //    List<UserModel> excelUsers,
-        //    BusinessRegistrationArgs args)
-        //        {
-        //            var results = new List<(UserModel user, bool status, string message)>();
+            await Parallel.ForEachAsync(excelUsers, new ParallelOptions { MaxDegreeOfParallelism = 20 },
+            async (u, token) =>
+            {
+                var envelope = new PreparedUser { User = u };
 
-        //            // EF Core retry execution strategy
-        //            var strategy = _context.Database.CreateExecutionStrategy();
+                try
+                {
+                    // PHONE VALIDATION
+                    if (string.IsNullOrWhiteSpace(u.PhoneNumber) || u.PhoneNumber.Length != 11)
+                    {
+                        envelope.ValidationError = $"Invalid phone number: {u.PhoneNumber}";
+                        output.Add(envelope);
+                        return;
+                    }
 
-        //            await strategy.ExecuteAsync(async () =>
-        //            {
-        //                await using var trx = await _context.Database.BeginTransactionAsync();
+                    // Normalize date
+                    u.DateOfBirth = ConvertedDate(u.DateOfBirth);
+                    u.Lga = string.IsNullOrEmpty(u.Lga) ? u.Location : u.Lga;
 
-        //                try
-        //                {
-        //                    foreach (var rawUser in excelUsers)
-        //                    {
-        //                        try
-        //                        {
-        //                            //----------------------------------------------------------------------
-        //                            // PHASE 1: Normalize + Clean Input Model
-        //                            //----------------------------------------------------------------------
-        //                            var user = NormalizeUserFromExcel(rawUser, args);
+                    // NIN verification
+                    if (u.shouldVerifyNin && !string.IsNullOrWhiteSpace(u.NIN))
+                    {
+                        var nin = await _identityVerificationManager.VerifyNIN(
+                            new NINDataModel { number = u.NIN });
 
-        //                            //----------------------------------------------------------------------
-        //                            // PHASE 2: Register / Link User
-        //                            //----------------------------------------------------------------------
-        //                            var registered = await RegisterUserAsync(user, args);
+                        if (!nin.status)
+                        {
+                            u.shouldVerifyNin = false;
+                        }
+                        else
+                        {
+                            u.shouldVerifyNin = true;
+                            u.FirstName = nin.nin_data.firstname;
+                            u.LastName = nin.nin_data.surname;
+                            u.MiddleName = nin.nin_data.middlename;
+                            u.NIN = nin.nin_data.nin;
+                        }
+                    }
 
-        //                            if (!registered.status)
-        //                            {
-        //                                results.Add((user, false, registered.message));
-        //                                continue;
-        //                            }
+                    output.Add(envelope);
+                }
+                catch (Exception ex)
+                {
+                    envelope.ValidationError = ex.Message;
+                    output.Add(envelope);
+                }
+            });
 
-        //                            var registeredUser = registered.model;
+            return output.ToList();
+        }
+        public async Task<SubAccountModel> CreateBulBusinessUser(PreparedUser model, BusinessRegistrationArgs args)
+        {
+            // If validation failed earlier, skip DB logic
+            if (!string.IsNullOrEmpty(model.ValidationError))
+                throw new Exception(model.ValidationError);
 
-        //                            //----------------------------------------------------------------------
-        //                            // PHASE 3: SubAccount Creation
-        //                            //----------------------------------------------------------------------
-        //                            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-        //                            if (business == null)
-        //                            {
-        //                                results.Add((user, false, "Business not found for code: " + args.businessCode));
-        //                                continue;
-        //                            }
+            await using var trx = await _context.Database.BeginTransactionAsync();
 
-        //                            var subaccount = await CreateSubAccountAsync(user, args, business, registeredUser.Id);
-        //                            if (subaccount == null)
-        //                            {
-        //                                results.Add((user, false, "Unable to create sub-account."));
-        //                                continue;
-        //                            }
+            try
+            {
+                var existingUser = await FindByPhoneNumberAsync(model.User.PhoneNumber);
+                bool isNewUser = false;
 
-        //                            //----------------------------------------------------------------------
-        //                            // PHASE 4: Category / Worker / Profile Creation
-        //                            //----------------------------------------------------------------------
-        //                            BusinessWorkerModel workerEntity = new BusinessWorkerModel();
-        //                            BusinessWorkerModel newWorkerEntity = new BusinessWorkerModel();
+                // 1. IF USER EXISTS → add to org if needed
+                if (existingUser != null)
+                {
+                    if (!string.IsNullOrEmpty(args.organizationCode))
+                    {
+                        bool alreadyExists = await _context.UserOrganizations
+                            .AnyAsync(x => x.UserId == existingUser.Id &&
+                                           x.OrganizationCode == args.organizationCode);
 
-        //                            await CreateUserCategory(
-        //                                user,
-        //                                args,
-        //                                workerEntity,
-        //                                newWorkerEntity,
-        //                                business,
-        //                                subaccount,
-        //                                registered,
-        //                                args.SubAccountType
-        //                            );
+                        if (!alreadyExists)
+                        {
+                            _context.UserOrganizations.Add(new UserOrganization
+                            {
+                                UserId = existingUser.Id,
+                                OrganizationCode = args.organizationCode
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    // 2. REGISTER NEW USER
+                    if (string.IsNullOrWhiteSpace(model.User.Name))
+                        model.User.Name = $"{model.User.FirstName} {model.User.MiddleName} {model.User.LastName}".Trim();
 
-        //                            //----------------------------------------------------------------------
-        //                            // PHASE 5: Role Tracking
-        //                            //----------------------------------------------------------------------
-        //                            await _authenticationRepository.TrackUserRoleAssignment(registeredUser, args.SubAccountType);
+                    var reg = await RegisterUserAsync(model.User, args);
+                    if (!reg.status)
+                        throw new Exception(reg.message);
 
-        //                            //----------------------------------------------------------------------
-        //                            // DONE — Add Success Result
-        //                            //----------------------------------------------------------------------
-        //                            results.Add((registeredUser, true, "Successfully processed."));
-        //                        }
-        //                        catch (Exception exSingle)
-        //                        {
-        //                            // Capture single-row failure without stopping entire batch
-        //                            results.Add((rawUser, false, $"Failed: {exSingle.Message}"));
-        //                        }
-        //                    }
+                    existingUser = reg.model;
+                    isNewUser = true;
+                }
 
-        //                    // COMMIT ALL SUCCESSFUL OPERATIONS
-        //                    await _context.SaveChangesAsync();
-        //                    await trx.CommitAsync();
-        //                }
-        //                catch (Exception ex)
-        //                {
-        //                    await trx.RollbackAsync();
-        //                    results.Add((null, false, "FATAL ERROR: " + ex.Message));
-        //                    throw; // Required so ExecutionStrategy retries safely
-        //                }
-        //            });
+                // 3. CREATE SUBACCOUNT
+                model.User.Email ??= GenerateEmail(model.User.FirstName, args.businessEmail);
 
-        //            return results;
-        //        }
+                var sub = await _walletManager.GetSubAccountByUserId(existingUser.Id)
+                        ?? await CreateSubAccountAsync(model.User, args, null, existingUser.Id);
 
+                // 4. ASSIGN ROLES
+                await _authenticationRepository.TrackUserRoleAssignment(existingUser, args.UserType);
+
+                // 5. CREATE BUSINESS WORKER
+                await CreateUserCategory(model.User, args, new BusinessWorkerModel(), new BusinessWorkerModel(),
+                    null, sub, (existingUser, !isNewUser, ""), args.UserType);
+
+                await _context.SaveChangesAsync();
+                await trx.CommitAsync();
+
+                return sub;
+            }
+            catch (Exception ex)
+            {
+                await trx.RollbackAsync();
+                throw; // return REAL error to caller
+            }
+        }
+
+        /** public async Task<BulkUploadFarmersResponse> BulkCreateBusinessUsersFromExcelAsync(
+        List<UserModel> excelUsers,
+        BusinessRegistrationArgs args)
+         {
+             var results = new List<(UserModel user, bool status, string message)>();
+
+             foreach (var rawUser in excelUsers)
+             {
+                 try
+                 {
+                     var response = await CreateBusinessUser(rawUser, args);
+
+                     if (response == null)
+                     {
+                         results.Add((rawUser, false, "User creation returned null."));
+                         continue;
+                     }
+
+                     results.Add((rawUser, true, "Successfully processed."));
+                 }
+                 catch (Exception ex)
+                 {
+                     results.Add((rawUser, false, ex.Message));
+                 }
+             }
+
+             // summary
+             int successCount = results.Count(x => x.status == true);
+             int failedCount = results.Count(x => x.status == false);
+
+             return new BulkUploadFarmersResponse
+             {
+                 TotalRows = excelUsers.Count,
+                 Successful = successCount,
+                 Failed = failedCount,
+                 Results = results
+             };
+         }
+         **/
         public async Task<Response<UserAccountDetailsModel>> GetUserBankAccountDetails(
 
         ListQueryParams query)
@@ -1060,57 +1124,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        /**   private async Task NotifyUserOfRoleReuse(string phoneNumber, string newUserType)
-           {
-               try
-               {
-                   if (string.IsNullOrWhiteSpace(phoneNumber) || phoneNumber.Length != 11)
-                   {
-                       _log.LogWarning("Invalid phone number for SMS notification: {PhoneNumber}", phoneNumber);
-                       return;
-                   }
-
-                   string message = $"You've been added as a '{newUserType}' on the Agrovesto platform. Login to access your dashboard.";
-
-                   var termiiResult = await _whisperSMSService.HandleTermiiSMS(new TermiiSmsRequest
-                   {
-                       to = $"234{phoneNumber[^10..]}",
-                       sms = message
-                   });
-
-                   if (termiiResult.response != null && termiiResult.status)
-                   {
-                       _log.LogInformation("Role notification SMS successfully sent to {PhoneNumber}", phoneNumber);
-                   }
-                   else
-                   {
-                       _log.LogWarning("Termii SMS failed for {PhoneNumber}. Attempting WhisperSMS fallback...", phoneNumber);
-
-                       var whisperResult = await _whisperSMSService.HandleWhisperSMS(new WhisperSMSModel
-                       {
-                           campaign_name = "Agrovesto Notification",
-                           contacts = new List<string> { phoneNumber },
-                           message = message
-                       });
-
-                       if (whisperResult.response is not null && whisperResult.status)
-                       {
-                           _log.LogInformation("Fallback WhisperSMS sent to {PhoneNumber}", phoneNumber);
-                       }
-                       else
-                       {
-                           _log.LogError("All SMS attempts failed for {PhoneNumber}", phoneNumber);
-                       }
-                   }
-
-               }
-               catch (Exception ex)
-               {
-                   _log.LogError(ex, "Failed to send role assignment SMS to {PhoneNumber}", phoneNumber);
-               }
-           }
-           **/
-        private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
+         private async Task<BusinessWorkerModel> CreateUserCategory(UserModel model, BusinessRegistrationArgs args, BusinessWorkerModel bWorker, BusinessWorkerModel newBusinessWorker, BusinessModel business, SubAccountModel subaccount, (UserModel model, bool status, string message) registeredUser, string userType)
         {
             if (userType != null)
             {
