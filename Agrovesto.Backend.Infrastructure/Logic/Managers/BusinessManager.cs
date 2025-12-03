@@ -120,7 +120,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             var upload = await BulkCreateBusinessUsersFromExcelAsync(allFarmers, args);
             summary.TotalRows = allFarmers.Count;
-            summary.Successful = upload.Results.Count;
+            summary.Successful = upload.Successful;//.Results.Count;
             summary.Failed = upload.Failed; //errors.Count;
            summary.Errors = upload.Errors;
             summary.Message = upload.Message;//"Bulk upload completed.";
