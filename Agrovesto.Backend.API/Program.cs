@@ -32,7 +32,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
-await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
+//await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
 
 // Add services to the container.
 //builder.Services.AddDbContext<DataContext>(options =>
@@ -157,7 +157,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSwaggerGen(option =>
 {
-    option.SwaggerDoc("v1", new OpenApiInfo { Title = "Agrovesto Enterprise Platform", Version = "v1" });
+    option.SwaggerDoc("v1", new OpenApiInfo { Title = "NOMAOS Platform", Version = "v1" });
     option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -224,10 +224,16 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
-    c.DocumentTitle = "Agrovesto Enterprise Platform";
+    c.DocumentTitle = "NOMAOS Platform";
     //  c.RoutePrefix = "/docs";
 
 });
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+    db.Database.Migrate();
+}
+
 //using (var scope = app.Services.CreateScope())
 //{
 //    var services = scope.ServiceProvider;
