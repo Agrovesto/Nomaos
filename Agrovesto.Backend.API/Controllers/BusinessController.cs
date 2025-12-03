@@ -701,6 +701,68 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
+        [HttpPost("new-bulk-upload-farmers")]
+        public async Task<IActionResult> NewBulkUploadFarmers([FromForm] FarmerUploadModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            if (model.file == null || model.file.Length == 0)
+                return BadRequest(new Response<string> { Message = "Uploaded file is empty.", Succeeded = false });
+
+            try
+            {
+
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                var registerUser = await _businessManager.NewBulkUploadFarmersAsync(model, args);
+
+                return Ok(new Response<BulkUploadFarmersResponse>()
+                {
+                    Data = registerUser,
+                    Message = registerUser.Message,
+                    Succeeded = true,//registerUser.Successful,
+                    Code = ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
 
         [HttpPost("register")]
         [AllowAnonymous]
