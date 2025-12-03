@@ -113,6 +113,7 @@ KillSignal=SIGINT
 User=$USER_NAME
 EnvironmentFile=$ENV_FILE
 SyslogIdentifier=$APP_NAME
+Environment=ASPNETCORE_ENVIRONMENT=Staging
 
 [Install]
 WantedBy=multi-user.target
