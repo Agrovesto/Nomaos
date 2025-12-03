@@ -365,3 +365,4 @@ FodyWeavers.xsd
 #deployment script
 deploy-prod.sh
 deploy-staging.sh
+/Agrovesto.Backend.API/appsettings.json
