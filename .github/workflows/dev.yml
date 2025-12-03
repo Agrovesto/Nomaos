@@ -1,0 +1,95 @@
+name: CI/CD Deploy Agrovesto.Backend.API
+on:
+  push:
+    branches:
+      - dev
+      - staging
+  pull_request:
+    branches:
+      - dev
+      - staging
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ------------------------------------------------------------------
+  # 1. Build & Test (runs on PRs and pushes)
+  # ------------------------------------------------------------------
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test --no-build --verbosity normal
+
+      # Optional: upload artifact only if you really need it
+      # - name: Publish (for artifact backup)
+      #   run: dotnet publish -c Release -o ./publish
+      # - uses: actions/upload-artifact@v4
+      #   with:
+      #     name: publish-artifact
+      #     path: ./publish
+
+  # ------------------------------------------------------------------
+  # 2. Deploy to Staging (only on push to staging)
+  # ------------------------------------------------------------------
+  deploy-staging:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rsync (sometimes missing)
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}   # Use separate key per env!
+
+      - name: Add EC2 host to known_hosts (with retry + timeout)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          for i in {1..5}; do
+            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
+            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            sleep 5
+          done
+
+      - name: Deploy source code + run deploy script
+        run: |
+          # 1. Ensure target directory exists and is owned by ubuntu
+          ssh -o StrictHostKeyChecking=yes ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+
+          # 2. Sync only source code (fast, incremental)
+          rsync -avz --delete \
+            --exclude='.git*' \
+            --exclude='bin/' --exclude='obj/' \
+            --exclude='*.csproj.user' \
+            --exclude='deploy*.sh' \   # don't overwrite the server script
+            -e "ssh -o StrictHostKeyChecking=yes" \
+            ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
+
+          # 3. Run the deployment script on the server
+          ssh -o StrictHostKeyChecking=yes ubuntu@${{ secrets.EC2_HOST_DEV}} \
+            "bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
+
+  

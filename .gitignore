@@ -361,3 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+#deployment script
+deploy-prod.sh
+deploy-staging.sh
