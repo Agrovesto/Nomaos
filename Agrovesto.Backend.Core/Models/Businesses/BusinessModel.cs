@@ -57,6 +57,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? UserId { get; set; }
         public string? DefaultPassword { get; set; }
         public string? businessCode { get; set; }
+        public string? businessEmail { get; set; }
         public string? organizationCode { get; set; }
         public string? SubAccountType { get; set; }
         public string? Env { get; set; }
