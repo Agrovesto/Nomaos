@@ -1,10 +1,9 @@
 name: CI/CD Deploy Agrovesto.Backend.API
 on:
   push:
-    branches:
-      - dev
+    branches
       - staging
-  push:
+  pull_request:
     branches:
       - staging
 
