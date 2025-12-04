@@ -251,13 +251,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             })).ToList();
 
             // Wait for all tasks to complete
-            await Task.WhenAll(tasks);
+            // 🚨 CRITICAL ADDITION: Global Try/Catch for Task Failure
+            try
+            {
+                // Wait for all tasks to complete
+                await Task.WhenAll(tasks);
+            }
+            catch (AggregateException aggregateEx)
+            {
+                // This handles exceptions that weren't gracefully handled inside the individual tasks.
+                _log.LogError(aggregateEx, "Bulk upload failed due to AggregateException. Checking inner errors.");
+
+                // Ensure the global failure is recorded in the results
+                var innerErrors = aggregateEx.InnerExceptions.Select(e => e.Message).Take(3);
+                results.Add((
+                    new UserModel(),
+                    false,
+                    $"CRITICAL BATCH FAILURE: {string.Join(" | ", innerErrors)}..."
+                ));
+            }
+            catch (Exception ex)
+            {
+                // Catch any other unexpected, non-Aggregate exceptions at the top level
+                _log.LogError(ex, "Bulk upload failed unexpectedly at the top level.");
+                results.Add((new UserModel(), false, $"CRITICAL FAILURE: {ex.Message}"));
+            }
 
             // summary
             int successCount = results.Count(x => x.status == true);
             int failedCount = results.Count(x => x.status == false);
 
-            // You'll need to convert the ConcurrentBag back to a List/IEnumerable if the return type requires it
+            // This response will now always return, even on global failure.
             return new BulkUploadFarmersResponse
             {
                 TotalRows = excelUsers.Count,
