@@ -106,12 +106,11 @@ After=network.target
 
 [Service]
 WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
+ExecStart=$CURRENT_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
 User=$USER_NAME
-EnvironmentFile=$ENV_FILE
 SyslogIdentifier=$APP_NAME
 Environment=ASPNETCORE_ENVIRONMENT=Staging
 
