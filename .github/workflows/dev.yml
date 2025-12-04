@@ -4,7 +4,7 @@ on:
     branches:
       - dev
       - staging
-  push:
+  pull_request:
     branches:
       - staging
 
@@ -48,9 +48,7 @@ jobs:
   # ------------------------------------------------------------------
   deploy-staging:
     needs: build-and-test
-    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
-    needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     steps:
       - uses: actions/checkout@v4
