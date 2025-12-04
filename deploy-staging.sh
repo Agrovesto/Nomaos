@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # Robust Deployment Script for Agrovesto.Backend.API
 # Author: Dolapo Fashina 
@@ -111,7 +110,6 @@ Restart=always
 RestartSec=10
 KillSignal=SIGINT
 User=$USER_NAME
-EnvironmentFile=$ENV_FILE
 SyslogIdentifier=$APP_NAME
 Environment=ASPNETCORE_ENVIRONMENT=Staging
 
@@ -122,6 +120,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$APP_NAME.service"
 sudo systemctl restart "$APP_NAME"
+sudo systemctl status $APP_NAME
 
 # ------------------------------------------------------------
 # 10. NGINX CONFIG — CORRECT & CERTBOT-READY
