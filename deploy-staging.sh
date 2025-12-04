@@ -105,7 +105,7 @@ Description=$APP_NAME
 After=network.target
 
 [Service]
-WorkingDirectory=$APP_DIR
+WorkingDirectory=$CURRENT_DIR
 ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
