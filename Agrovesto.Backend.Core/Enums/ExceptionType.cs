@@ -8,7 +8,8 @@
         UNAUTHORIZED,
         NOTFOUND,
         OPERATION_FAILED,
-        CONFLICT
+        CONFLICT,
+        INTERNAL_SERVER_ERROR,
     }
 
 }

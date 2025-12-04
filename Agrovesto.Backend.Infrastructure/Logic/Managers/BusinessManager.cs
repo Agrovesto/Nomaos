@@ -217,7 +217,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 try
                 {
                     // 2. Execute the user creation logic
-                    var response = await CreateBulkBusinessUser(rawUser,business, args);
+                    var response = await CreateBulkBusinessUser(rawUser, business, args);
 
                     if (response == null)
                     {
@@ -229,8 +229,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
                 catch (Exception ex)
                 {
-                    // The exception handling from your original code
-                    results.Add((rawUser, false, ex is BaseException ? ex.Message : "An unexpected error occurred."));
+                    // Check if the exception is our specific BaseException
+                    if (ex is BaseException bex)
+                    {
+                        // Record the specific, detailed message from the inner function's catch block
+                        results.Add((rawUser, false, bex.Message));
+                    }
+                    // Catch anything else unexpected
+                    else
+                    {
+                        // Use a generic catch for safety, but log/monitor these closely
+                        _log.LogError(ex, "Unexpected non-BaseException occurred during bulk user processing.");
+                        results.Add((rawUser, false, "An unexpected error occurred. Check server logs for details."));
+                    }
                 }
                 finally
                 {
@@ -393,15 +404,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
                 catch (Exception ex)
                 {
-                    _log.LogError(ex, "Error occurred during CreateBusinessUser");
+                    // 1. Log the full exception and stack trace
+                    _log.LogError(ex, "Error occurred during CreateBulkBusinessUser and transaction rollback initiated.");
+
+                    // 2. Rollback the database transaction
                     await transaction.RollbackAsync();
 
-                    // Handle specific exception types if possible, otherwise throw generic error
-                    if (ex is BaseException bex)
+                    // 3. Determine the root cause message
+                    string errorMessage;
+
+                    // Check for specific exceptions that wrap the database error (like EF Core)
+                    if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
                     {
-                        throw bex; // Rethrow BaseExceptions for specific error messages
+                        // Extract the most specific database error message (e.g., SQL server constraint violation)
+                        errorMessage = $"DB Constraint Error: {dbEx.InnerException?.Message ?? dbEx.Message}";
                     }
-                    throw new Exception("Unable to register user at this time. Please try again later.");
+                    // Check if it's already a handled business exception
+                    else if (ex is BaseException bex)
+                    {
+                        // Keep the original, clear business message
+                        errorMessage = bex.Message;
+                    }
+                    // Catch other internal errors, like identity creation failures (if not using BaseException)
+                    else if (ex.InnerException != null)
+                    {
+                        errorMessage = $"System Error: {ex.InnerException.Message}";
+                    }
+                    else
+                    {
+                        errorMessage = ex.Message;
+                    }
+
+                    // 4. Wrap the root message in a BaseException and rethrow. 
+                    // This ensures the outer Task.WhenAll loop catches a BaseException for clear reporting.
+                    throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, errorMessage);
                 }
             });
         }
