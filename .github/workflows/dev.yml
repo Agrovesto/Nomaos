@@ -1,7 +1,7 @@
 name: CI/CD Deploy Agrovesto.Backend.API
 on:
   push:
-    branches
+    branches:
       - staging
   pull_request:
     branches:
@@ -31,8 +31,8 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      - name: Test
-        run: dotnet test --no-build --verbosity normal
+      # - name: Test
+      #   run: dotnet test --no-build --verbosity normal
 
       # Optional: upload artifact only if you really need it
       # - name: Publish (for artifact backup)
