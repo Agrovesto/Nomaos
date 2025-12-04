@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # Robust Deployment Script for Agrovesto.Backend.API
 # Author: Dolapo Fashina 
@@ -106,7 +105,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=$APP_DIR
-ExecStart=$CURRENT_DIR/$APP_NAME.dll
+ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
@@ -121,6 +120,7 @@ EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$APP_NAME.service"
 sudo systemctl restart "$APP_NAME"
+sudo systemctl status $APP_NAME
 
 # ------------------------------------------------------------
 # 10. NGINX CONFIG — CORRECT & CERTBOT-READY
