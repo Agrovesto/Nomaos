@@ -16,7 +16,9 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
+using ClosedXML.Excel;
 using DocumentFormat.OpenXml.InkML;
+using DocumentFormat.OpenXml.Spreadsheet;
 using EFCore.BulkExtensions;
 using iTextSharp.text.pdf.security;
 using Microsoft.AspNetCore.Http;
@@ -84,7 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
         private async Task<List<UserModel>> ParseFarmerFileAsync(Stream fileContent, BusinessRegistrationArgs args)
         {
-            var (validItems, errors) = await _excelConverterService.ExtractFarmersFromExcel(fileContent, args);
+            var (allFarmers, errors) = await _excelConverterService.ExtractFarmersFromExcel(fileContent, args);
 
             if (errors.Any())
             {
@@ -92,13 +94,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, $"The following errors were found in the uploaded file:\n{errorMessages}");
             }
 
-            if (!validItems.Any())
+            if (!allFarmers.Any())
             {
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                     $"The file contains no valid farmer data.");
             }
 
-            return (validItems);
+            return (allFarmers);
         }
         public async Task<BulkUploadFarmersResponse> BulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args)
         {
@@ -128,7 +130,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return summary;
         }
-        public async Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args)
+        public async Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args, IProgress<BulkUploadProgress> progress = null)
         {
             var summary = new BulkUploadFarmersResponse();
             var errors = new List<BulkUploadError>();
@@ -147,7 +149,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (allFarmers == null || !allFarmers.Any())
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "The uploaded file does not contain valid farmer data.");
 
-            var upload = await NewBulkCreateBusinessUsersFromExcelAsync(allFarmers, args);
+            var upload = await NewBulkCreateBusinessUsersFromExcelAsync(allFarmers, args, progress);
             summary.TotalRows = allFarmers.Count;
             summary.Successful = upload.Successful;//.Results.Count;
             summary.Failed = upload.Failed; //errors.Count;
@@ -156,140 +158,388 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return summary;
         }
-        private void SplitFullNameSmart(string fullName, out string first, out string middle, out string last)
+     
+        public async Task<BulkUploadFarmersResponse> NewBulkCreateBusinessUsersFromExcelAsync(
+    List<UserModel> users,
+    BusinessRegistrationArgs args,
+        IProgress<BulkUploadProgress> progress = null)
         {
-            first = middle = last = null;
+            const int batchSize = 50;
+            var allResults = new List<(UserModel user, bool status, string message)>();
+            var totalRows = users.Count;
+            var processedRows = 0;
+            var existingPhones = await _farmerRepository.GetAllPhonesForOrganizationAsync(args.organizationCode);
+            var phoneSet = new HashSet<string>(existingPhones, StringComparer.OrdinalIgnoreCase);
 
-            if (string.IsNullOrWhiteSpace(fullName))
-                return;
+            for (int i=0; i< users.Count; i +=batchSize)
+            {
+                var batch = users.Skip(i).Take(batchSize).ToList();
+                var batchResults = await ProcessBatchAsync(batch, args, phoneSet);
+                allResults.AddRange(batchResults);
 
-            var parts = fullName
-                .Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                processedRows += batch.Count;
+                progress?.Report(new BulkUploadProgress
+                {
+                    TotalRows = totalRows,
+                    ProcressedRows = processedRows,
+                    SuccessfulRows = allResults.Count(r => r.status),
+                    FailedRows = allResults.Count(r => !r.status),
+                    Status = "Processing"
+                });
 
-            if (parts.Length == 1)
-            {
-                first = parts[0];
+                // Small delay to prevent overwhelming system
+                await Task.Delay(50);
             }
-            else if (parts.Length == 2)
+
+            return new BulkUploadFarmersResponse
             {
-                first = parts[0];
-                last = parts[1];
-            }
-            else if (parts.Length == 3)
-            {
-                first = parts[0];
-                middle = parts[1];
-                last = parts[2];
-            }
-            else
-            {
-                first = parts[0];
-                last = parts[^1];
-                middle = string.Join(" ", parts.Skip(1).Take(parts.Length - 2));
-            }
+                TotalRows = totalRows,
+                Successful = allResults.Count(r => r.status),
+                Failed = allResults.Count(r => !r.status),
+                Results = allResults,
+                Message = "Bulk upload completed successfully"
+            };
         }
 
-         public async Task<BulkUploadFarmersResponse> NewBulkCreateBusinessUsersFromExcelAsync(
-       List<UserModel> excelUsers,
-       BusinessRegistrationArgs args)
+        private async Task<List<(UserModel user, bool status, string message)>> ProcessBatchAsync(
+       List<UserModel> batch,
+       BusinessRegistrationArgs args,
+       HashSet<string> existingPhoneSet)
         {
-            // Define the maximum number of concurrent operations
-            const int MaxConcurrency = 10;
+            var results = new List<(UserModel user, bool status, string message)>();
 
-            // SemaphoreSlim controls the number of tasks running concurrently
-            using var semaphore = new SemaphoreSlim(MaxConcurrency);
-
-            // Use a thread-safe list for results
-            var results = new ConcurrentBag<(UserModel user, bool status, string message)>();
-            // 2. Fetch the Business (Outside the transaction for read efficiency)
-            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
-
-            // 3. Prepare Model/Args
-            args.UserId ??= business.UserId;
-            args.businessEmail = business.BusinessEmail;
-            var tasks = excelUsers.Select(rawUser => Task.Run(async () =>
-            {
-                // 1. Wait for a slot in the semaphore
-                await semaphore.WaitAsync();
-
-                try
-                {
-                    // 2. Execute the user creation logic
-                    var response = await CreateBulkBusinessUser(rawUser, business, args);
-
-                    if (response == null)
-                    {
-                        results.Add((rawUser, false, "User creation returned null."));
-                        return;
-                    }
-
-                    results.Add((rawUser, true, "Successfully processed."));
-                }
-                catch (Exception ex)
-                {
-                    // Check if the exception is our specific BaseException
-                    if (ex is BaseException bex)
-                    {
-                        // Record the specific, detailed message from the inner function's catch block
-                        results.Add((rawUser, false, bex.Message));
-                    }
-                    // Catch anything else unexpected
-                    else
-                    {
-                        // Use a generic catch for safety, but log/monitor these closely
-                        _log.LogError(ex, "Unexpected non-BaseException occurred during bulk user processing.");
-                        results.Add((rawUser, false, "An unexpected error occurred. Check server logs for details."));
-                    }
-                }
-                finally
-                {
-                    // 3. Release the slot so another task can run
-                    semaphore.Release();
-                }
-            })).ToList();
-
-            // Wait for all tasks to complete
-            // 🚨 CRITICAL ADDITION: Global Try/Catch for Task Failure
+            using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                // Wait for all tasks to complete
-                await Task.WhenAll(tasks);
-            }
-            catch (AggregateException aggregateEx)
-            {
-                // This handles exceptions that weren't gracefully handled inside the individual tasks.
-                _log.LogError(aggregateEx, "Bulk upload failed due to AggregateException. Checking inner errors.");
+                foreach (var user in batch)
+                {
+                    try
+                    {
+                        // Skip if phone already exists in organization
+                        if (existingPhoneSet.Contains(user.PhoneNumber))
+                        {
+                            results.Add((user, false, $"Phone number {user.PhoneNumber} already exists"));
+                            continue;
+                        }
 
-                // Ensure the global failure is recorded in the results
-                var innerErrors = aggregateEx.InnerExceptions.Select(e => e.Message).Take(3);
-                results.Add((
-                    new UserModel(),
-                    false,
-                    $"CRITICAL BATCH FAILURE: {string.Join(" | ", innerErrors)}..."
-                ));
+                        var response = await CreateBusinessUserOptimizedAsync(user, args);
+                        results.Add((user, true, "Successfully processed."));
+
+                        // Add to existing set to prevent duplicates in same batch
+                        existingPhoneSet.Add(user.PhoneNumber);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogError(ex, $"Error processing user {user.PhoneNumber}");
+                        results.Add((user, false, ex.Message));
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
             }
             catch (Exception ex)
             {
-                // Catch any other unexpected, non-Aggregate exceptions at the top level
-                _log.LogError(ex, "Bulk upload failed unexpectedly at the top level.");
-                results.Add((new UserModel(), false, $"CRITICAL FAILURE: {ex.Message}"));
+                await transaction.RollbackAsync();
+                _log.LogError(ex, "Batch transaction failed");
+
+                // Mark all users in batch as failed
+                foreach (var user in batch.Where(u => !results.Any(r => r.user == u)))
+                {
+                    results.Add((user, false, $"Batch processing failed: {ex.Message}"));
+                }
             }
 
-            // summary
-            int successCount = results.Count(x => x.status == true);
-            int failedCount = results.Count(x => x.status == false);
-
-            // This response will now always return, even on global failure.
-            return new BulkUploadFarmersResponse
-            {
-                TotalRows = excelUsers.Count,
-                Successful = successCount,
-                Failed = failedCount,
-                Results = results.ToList()
-            };
+            return results;
         }
+
+        private async Task<SubAccountModel> CreateBusinessUserOptimizedAsync(
+            UserModel model,
+            BusinessRegistrationArgs args)
+        {
+            // Validate phone number
+            if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Phone number must be exactly 11 digits.");
+
+            // Fetch business once per batch
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
+
+            args.UserId ??= business.UserId;
+            model.DateOfBirth = ConvertedDate(model.DateOfBirth);
+            model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
+
+            // NIN verification if required
+            if (model.shouldVerifyNin)
+            {
+                try
+                {
+                    var ninVerification = await _identityVerificationManager.VerifyNIN(
+                        new NINDataModel { number = model.NIN });
+
+                    if (ninVerification.status)
+                    {
+                        model.shouldVerifyNin = true;
+                        model.NIN = ninVerification.nin_data.nin;
+                        model.FirstName = ninVerification.nin_data.firstname;
+                        model.LastName = ninVerification.nin_data.surname;
+                        model.MiddleName = ninVerification.nin_data.middlename;
+                        _log.LogInformation($"NIN verification succeeded for NIN: {model.NIN}");
+                    }
+                    else
+                    {
+                        model.shouldVerifyNin = false;
+                        _log.LogWarning($"NIN verification failed: {ninVerification.detail}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, $"NIN verification error for {model.NIN}");
+                    model.shouldVerifyNin = false;
+                }
+            }
+
+            // Use execution strategy for database resilience
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
+                    UserModel userToUse;
+                    bool isNewUser = false;
+
+                    if (existingUser != null)
+                    {
+                        userToUse = existingUser;
+                    }
+                    else
+                    {
+                        // Generate full name if empty
+                        if (string.IsNullOrEmpty(model.Name))
+                            model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+
+                        var registrationResult = await RegisterUserAsync(model, args);
+                        if (!registrationResult.status)
+                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                                $"User registration failed: {registrationResult.message}");
+
+                        userToUse = registrationResult.model;
+                        isNewUser = true;
+                    }
+
+                    // Handle organization linkage
+                    if (!string.IsNullOrEmpty(args.organizationCode))
+                    {
+                        bool alreadyInOrg = await _context.UserOrganizations
+                            .AnyAsync(x => x.UserId == userToUse.Id && x.OrganizationCode == args.organizationCode);
+
+                        if (!alreadyInOrg)
+                        {
+                            _context.UserOrganizations.Add(new UserOrganization
+                            {
+                                UserId = userToUse.Id,
+                                OrganizationCode = args.organizationCode
+                            });
+
+                            if (isNewUser)
+                            {
+                                await NotifyUserOfOrganizationAddition(userToUse.PhoneNumber, args.organizationCode);
+                            }
+                        }
+                    }
+
+                    // Ensure subaccount exists
+                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(userToUse.Id);
+                    SubAccountModel subAccount;
+
+                    if (string.IsNullOrEmpty(model.Email))
+                        model.Email = GenerateEmail(model.FirstName, business.BusinessEmail);
+
+                    if (existingSubAccount != null)
+                    {
+                        subAccount = existingSubAccount;
+                    }
+                    else
+                    {
+                        subAccount = await CreateSubAccountAsync(model, args, business, userToUse.Id);
+                    }
+
+                    // Track role assignments
+                    await _authenticationRepository.TrackUserRoleAssignment(userToUse, model.UserType);
+
+                    // Create user category/profile
+                    await CreateUserCategory(model, args, new BusinessWorkerModel(),
+                        new BusinessWorkerModel(), business, subAccount,
+                        (userToUse, !isNewUser, ""), args.UserType);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Populate subaccount response
+                    subAccount.UserId = userToUse.Id;
+                    subAccount.Address = model.Location;
+                    subAccount.City = model.Lga;
+                    subAccount.FirstName = model.FirstName;
+                    subAccount.LastName = model.LastName;
+                    subAccount.MiddleName = model.MiddleName;
+                    subAccount.Alias = !string.IsNullOrEmpty(model.Alias) ? model.Alias : "Mr";
+
+                    return subAccount;
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    _log.LogError(ex, "Error occurred during CreateBusinessUserOptimized");
+                    throw new Exception($"Unable to register user {model.PhoneNumber}: {ex.Message}");
+                }
+            });
+        }
+
+        public async Task<SubAccountModel> NewCreateBusinessUser(UserModel model, BusinessRegistrationArgs args)
+        {
+            if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
+
+            // Fetch the business
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
+
+            args.UserId ??= business.UserId;
+            model.DateOfBirth = ConvertedDate(model.DateOfBirth);
+            model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
+
+            // NIN verification if required
+            if (model.shouldVerifyNin)
+            {
+                var ninVerification = await _identityVerificationManager.VerifyNIN(new NINDataModel { number = model.NIN });
+                if (!ninVerification.status)
+                {
+                    _log.LogError($"NIN verification failed: {ninVerification.detail}");
+                    model.shouldVerifyNin = false;
+                }
+                else
+                {
+                    model.shouldVerifyNin = true;
+                    model.NIN = ninVerification.nin_data.nin;
+                    model.FirstName = ninVerification.nin_data.firstname;
+                    model.LastName = ninVerification.nin_data.surname;
+                    model.MiddleName = ninVerification.nin_data.middlename;
+                    _log.LogInformation($"NIN verification succeeded for NIN: {model.NIN}");
+                }
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    var existingUser = await FindByPhoneNumberAsync(model.PhoneNumber);
+                    bool isNewUser = false;
+
+                    if (existingUser != null)
+                    {
+                        // Only handle organization linkage if organizationCode is provided
+                        if (!string.IsNullOrEmpty(args.organizationCode))
+                        {
+                            bool alreadyInOrg = await _context.UserOrganizations
+                                .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode);
+
+                            if (alreadyInOrg)
+                                throw new BaseException(Core.Enums.ExceptionType.CONFLICT,
+                                    $"A user with phone number {model.PhoneNumber} already exists in this organization.");
+
+                            if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
+                            {
+                                _context.UserOrganizations.Add(new UserOrganization
+                                {
+                                    UserId = existingUser.Id,
+                                    OrganizationCode = args.organizationCode
+                                });
+                                _log.LogInformation($"User {model.PhoneNumber} added to organization {args.organizationCode}.");
+                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                            }
+                        }
+                        else
+                        {
+                            _log.LogInformation($"User {model.PhoneNumber} is a direct business user (no organization).");
+                        }
+                    }
+                    else
+                    {
+                        // Generate full name if empty
+                        if (string.IsNullOrEmpty(model.Name))
+                            model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
+
+                        var registrationResult = await RegisterUserAsync(model, args);
+                        if (!registrationResult.status)
+                            throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                                $"User registration failed: {registrationResult.message}");
+
+                        existingUser = registrationResult.model;
+                        isNewUser = true;
+
+                        // Add to organization if applicable
+                        if (!string.IsNullOrEmpty(args.organizationCode) &&
+                            !_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
+                        {
+                            _context.UserOrganizations.Add(new UserOrganization
+                            {
+                                UserId = existingUser.Id,
+                                OrganizationCode = args.organizationCode
+                            });
+                            _log.LogInformation($"New user {model.PhoneNumber} added to organization {args.organizationCode}.");
+                        }
+                    }
+
+                    // Ensure subaccount exists
+                    var existingSubAccount = await _walletManager.GetSubAccountByUserId(existingUser.Id);
+                    SubAccountModel subAccount;
+                    model.Email ??= GenerateEmail(model.FirstName, business.BusinessEmail);
+
+                    subAccount = existingSubAccount ?? await CreateSubAccountAsync(model, args, business, existingUser.Id);
+
+                    // Track role assignments
+                    await _authenticationRepository.TrackUserRoleAssignment(existingUser, model.UserType);
+
+                    // Create business worker
+                    await CreateUserCategory(
+                        model,
+                        args,
+                        new BusinessWorkerModel(),
+                        new BusinessWorkerModel(),
+                        business,
+                        subAccount,
+                        (existingUser, !isNewUser, ""),
+                        args.UserType
+                    );
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    // Populate subaccount response
+                    subAccount.UserId = existingUser.Id;
+                    subAccount.Address = model.Location;
+                    subAccount.City = model.Lga;
+                    subAccount.FirstName = model.FirstName;
+                    subAccount.LastName = model.LastName;
+                    subAccount.MiddleName = model.MiddleName;
+                    subAccount.Alias = !string.IsNullOrEmpty(model.Alias) ? model.Alias : "Mr";
+
+                    return subAccount;
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "Error occurred during CreateBusinessUser");
+                    await transaction.RollbackAsync();
+                    throw new Exception("Unable to register user at this time. Please try again later.");
+                }
+            });
+        }
+
         public async Task<SubAccountModel> CreateBulkBusinessUser(UserModel model, BusinessModel business, BusinessRegistrationArgs args)
         {
             // 1. Initial Validation
