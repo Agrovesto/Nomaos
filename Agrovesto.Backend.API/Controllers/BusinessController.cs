@@ -701,7 +701,7 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [HttpPost("new-bulk-upload-farmers")]
+        [HttpPost("new-bulkupload-farmers")]
         public async Task<IActionResult> NewBulkUploadFarmers([FromForm] FarmerUploadModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             if (!ModelState.IsValid)
