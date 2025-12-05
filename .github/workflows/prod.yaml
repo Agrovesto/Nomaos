@@ -30,12 +30,6 @@ jobs:
       
       - name: Publish application
         run: dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o ./publish
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-publish
-          path: ./publish
 
           
   deploy:
@@ -55,10 +49,10 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
   
-      - name: Copy repo to EC2
+      - name: Upload files to EC2
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API/
+          rsync -avz --delete ./publish/ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API/
   
       - name: Execute deployment script
         run: |
