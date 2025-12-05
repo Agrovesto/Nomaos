@@ -29,179 +29,145 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
             _cooperativeRepository = cooperativeRepository;
             _farmerRepository = farmerRepository;
         }
-    
-        public static (string FirstName, string MiddleName, string LastName) SplitFullName(string fullName)
+
+
+        public async Task<(List<UserModel> ValidItems, List<(int Row, string ErrorMessage)> Errors)>
+        ExtractFarmersFromExcel(Stream content, BusinessRegistrationArgs args)
         {
-            if (string.IsNullOrWhiteSpace(fullName))
-                return (null, null, null);
+            var errors = new List<(int Row, string ErrorMessage)>();
+            var validItems = new List<UserModel>();
+            var seenPhoneNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            // Clean: trim and remove multiple spaces
-            var parts = fullName
-                .Trim()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // Fetch all existing DB phone numbers once
+            var existingPhones = await _farmerRepository.GetAllPhonesForOrganizationAsync(args.organizationCode);
+            var existingPhoneSet = new HashSet<string>(existingPhones, StringComparer.OrdinalIgnoreCase);
 
-            if (parts.Length == 1)
+            using var workbook = new XLWorkbook(content);
+            var worksheet = workbook.Worksheets.FirstOrDefault();
+            if (worksheet == null)
             {
-                // Only one name present
-                return (parts[0], null, null);
+                errors.Add((0, "The Excel file does not contain any worksheets."));
+                return (validItems, errors);
             }
 
-            if (parts.Length == 2)
+            int rowCount = worksheet.LastRowUsed()?.RowNumber() ?? 0;
+            if (rowCount < 2)
             {
-                // First + Last only
-                return (parts[0], null, parts[1]);
+                errors.Add((0, "The selected worksheet is empty."));
+                return (validItems, errors);
             }
 
-            if (parts.Length == 3)
+            for (int row = 2; row <= rowCount; row++)
             {
-                // First + Middle + Last
-                return (parts[0], parts[1], parts[2]);
-            }
+                var rowErrors = new List<string>();
 
-            // More than 3 parts → First name = first token, Last name = last token,
-            // Middle name = everything in between
-            string firstName = parts[0];
-            string lastName = parts[^1];
-            string middleName = string.Join(" ", parts.Skip(1).Take(parts.Length - 2));
+                // --- Read Excel Cells ---
+                string dateString = worksheet.Cell(row, 1).GetValue<string>()?.Trim() ?? string.Empty;
+                string fullName = worksheet.Cell(row, 2).GetValue<string>()?.Trim() ?? string.Empty;
+                string dob = worksheet.Cell(row, 3).GetValue<string>()?.Trim() ?? string.Empty;
+                string gender = worksheet.Cell(row, 4).GetValue<string>()?.Trim() ?? string.Empty;
+                string state = worksheet.Cell(row, 5).GetValue<string>()?.Trim() ?? string.Empty;
+                string lga = worksheet.Cell(row, 6).GetValue<string>()?.Trim() ?? string.Empty;
+                string ward = worksheet.Cell(row, 7).GetValue<string>()?.Trim() ?? string.Empty;
+                string location = worksheet.Cell(row, 8).GetValue<string>()?.Trim() ?? string.Empty;
+                string phoneNumber = worksheet.Cell(row, 9).GetValue<string>()?.Trim() ?? string.Empty;
+                string email = worksheet.Cell(row, 10).GetValue<string>()?.Trim() ?? string.Empty;
+                string farmerCategory = worksheet.Cell(row, 11).GetValue<string>()?.Trim() ?? string.Empty;
 
-            return (firstName, middleName, lastName);
-        }
+                string valueChainType = worksheet.Cell(row, 12).GetValue<string>()?.Trim() ?? string.Empty;
+                string valueChainItem = worksheet.Cell(row, 13).GetValue<string>()?.Trim() ?? string.Empty;
+                string yearsInAgricRaw = worksheet.Cell(row, 14).GetValue<string>()?.Trim() ?? string.Empty;
+                string education = worksheet.Cell(row, 15).GetValue<string>()?.Trim() ?? string.Empty;
+                string bvn = worksheet.Cell(row, 16).GetValue<string>()?.Trim() ?? string.Empty;
+                string nin = worksheet.Cell(row, 17).GetValue<string>()?.Trim() ?? string.Empty;
+                string shouldVerifyNIN = worksheet.Cell(row, 18).GetValue<string>()?.Trim() ?? string.Empty;
+                var itemsList = !string.IsNullOrEmpty(valueChainItem)
+                    ? valueChainItem.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                   .Select(i => i.Trim()).ToList()
+                    : new List<string>();
+
+                int.TryParse(yearsInAgricRaw, out int yearsInAgric);
+                if (yearsInAgric < 0)
+                    rowErrors.Add("YearsInAgric cannot be negative.");
+                // --- Validations ---
+                if (string.IsNullOrEmpty(fullName)) rowErrors.Add("Full Name cannot be empty.");
+                if (string.IsNullOrEmpty(phoneNumber)) rowErrors.Add("Phone number cannot be empty.");
+                if (string.IsNullOrEmpty(gender)) rowErrors.Add("Gender cannot be empty.");
+                if (string.IsNullOrEmpty(farmerCategory)) rowErrors.Add("Farmer Category cannot be empty.");
+                // Validate phone number format
+                if (phoneNumber.Length != 11)
+                    rowErrors.Add("Phone number must be exactly 11 digits.");
+                // Check for duplicate phone numbers in the file
 
 
-public async Task<(List<UserModel> ValidItems, List<(int Row, string ErrorMessage)> Errors)>
-ExtractFarmersFromExcel(Stream content, BusinessRegistrationArgs args)
-    {
-        var errors = new List<(int Row, string ErrorMessage)>();
-        var validItems = new List<UserModel>();
-        var seenPhoneNumbers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        // Fetch all existing DB phone numbers once
-        var existingPhones = await _farmerRepository.GetAllPhonesForOrganizationAsync(args.organizationCode);
-        var existingPhoneSet = new HashSet<string>(existingPhones, StringComparer.OrdinalIgnoreCase);
-
-        using var workbook = new XLWorkbook(content);
-        var worksheet = workbook.Worksheets.FirstOrDefault();
-        if (worksheet == null)
-        {
-            errors.Add((0, "The Excel file does not contain any worksheets."));
-            return (validItems, errors);
-        }
-
-        int rowCount = worksheet.LastRowUsed()?.RowNumber() ?? 0;
-        if (rowCount < 2)
-        {
-            errors.Add((0, "The selected worksheet is empty."));
-            return (validItems, errors);
-        }
-
-        for (int row = 2; row <= rowCount; row++)
-        {
-            var rowErrors = new List<string>();
-
-            // --- Read Excel Cells ---
-            var dateString = worksheet.Cell(row, 1).GetValue<string>().Trim();
-            var fullName = worksheet.Cell(row, 2).GetValue<string>().Trim();
-            var (first, middle, last) = SplitFullName(fullName);
-
-            var firstName = first;
-            var middleName = middle;
-            var lastName = last;
-            var dob = worksheet.Cell(row, 3).GetValue<string>().Trim();
-            var gender = worksheet.Cell(row, 4).GetValue<string>().Trim();
-            var state = worksheet.Cell(row, 5).GetValue<string>().Trim();
-            var lga = worksheet.Cell(row, 6).GetValue<string>().Trim();
-            var ward = worksheet.Cell(row, 7).GetValue<string>().Trim();
-            var location = worksheet.Cell(row, 8).GetValue<string>().Trim();
-            var phoneNumber = worksheet.Cell(row, 9).GetValue<string>().Trim();
-            var email = worksheet.Cell(row, 10).GetValue<string>().Trim();
-            var farmerCategory = worksheet.Cell(row, 11).GetValue<string>().Trim();
-            var valueChainType = worksheet.Cell(row, 12).GetValue<string>().Trim();
-            var valueChainItem = worksheet.Cell(row, 13).GetValue<string>().Trim();
-            var yearsInAgricRaw = worksheet.Cell(row, 14).GetValue<string>().Trim();
-            var education = worksheet.Cell(row, 15).GetValue<string>().Trim();
-            var bvn = worksheet.Cell(row, 16).GetValue<string>().Trim();
-            var nin = worksheet.Cell(row, 17).GetValue<string>().Trim();
-            var shouldVerifyNIN = worksheet.Cell(row, 18).GetValue<string>().Trim();
-
-            var itemsList = !string.IsNullOrEmpty(valueChainItem)
-                ? valueChainItem.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                               .Select(i => i.Trim()).ToList()
-                : new List<string>();
-
-            int.TryParse(yearsInAgricRaw, out int yearsInAgric);
-
-            // --- Validations ---
-            if (string.IsNullOrEmpty(firstName)) rowErrors.Add("First Name cannot be empty.");
-            //if (string.IsNullOrEmpty(lastName)) rowErrors.Add("Last Name cannot be empty.");
-            if (string.IsNullOrEmpty(phoneNumber)) rowErrors.Add("Phone number cannot be empty.");
-            else
-            {
                 if (seenPhoneNumbers.Contains(phoneNumber))
                     rowErrors.Add($"Duplicate phone number in this Excel: {phoneNumber}.");
                 else
-                {
                     seenPhoneNumbers.Add(phoneNumber);
-                    if (existingPhoneSet.Contains(phoneNumber))
-                        rowErrors.Add($"Phone number {phoneNumber} already exists in this business.");
-                }
-            }
-            if (string.IsNullOrEmpty(gender)) rowErrors.Add("Gender cannot be empty.");
-           // if (string.IsNullOrEmpty(state)) rowErrors.Add("State cannot be empty.");
-            //if (string.IsNullOrEmpty(lga)) rowErrors.Add("LGA cannot be empty.");
-           // if (string.IsNullOrEmpty(farmerCategory)) rowErrors.Add("Farmer Category cannot be empty.");
-            //if (yearsInAgric < 0) rowErrors.Add("YearsInAgric cannot be negative.");
-
-            if (rowErrors.Any())
-            {
-                errors.Add((row, string.Join("; ", rowErrors)));
-                continue;
-            }
-
-            // --- Build UserModel ---
-            var farmer = new UserModel
-            {
-                FirstName = firstName,
-                MiddleName = middleName,
-                LastName = lastName,
-                PhoneNumber = phoneNumber,
-                Email = email,
-                Gender = gender,
-                Location = location,
-                State = state,
-                Lga = lga,
-                Ward = ward,
-                DateOfBirth = dob,
-                FarmerCategory = farmerCategory,
-                HighestLevelOfEducation = education,
-                YearsInAgric = yearsInAgric,
-                UserType = "Farmer",
-                shouldVerifyNin = false,
-                BusinessCode = args.businessCode,
-                Password = args.DefaultPassword,
-                Pin = "0000",
-                OrganizationCode = args.organizationCode,
-                CreatedOn = dateString != null ? DateTimeOffset.Parse(dateString) : DateTimeOffset.UtcNow,
-                Bvn = bvn,
-                NIN = nin,
-                Name= $"{first} {middle} {last}",
-
-                ValueChainDto = new List<ValueChainSelectionDto>
-            {
-                new ValueChainSelectionDto
+                // Check if phone number already exists in the organization
+                if (existingPhoneSet.Contains(phoneNumber))
+                    rowErrors.Add($"Phone number {phoneNumber} already exists in this business.");
+                // Check date of birth format (if needed)
+                // (No validation shown here for brevity)
+                // If any row errors, add to the list and skip processing this row
+                if (rowErrors.Any())
                 {
-                    ValueChainType = valueChainType,
-                    Items = itemsList
+                    errors.Add((row, string.Join("; ", rowErrors)));
+                    continue;
                 }
+                // Split full name into parts
+                var (first, middle, last) = SplitFullName(fullName);
+                // Build UserModel object
+                var farmer = new UserModel
+                {
+                    FirstName = first,
+                    MiddleName = middle,
+                    LastName = last,
+                    PhoneNumber = phoneNumber,
+                    Email = email,
+                    Gender = gender,
+                    DateOfBirth = dob,
+                    State = state,
+                    Lga = lga,
+                    Ward = ward,
+                    Location = location,
+                    FarmerCategory = farmerCategory,
+                    HighestLevelOfEducation = education,
+                    YearsInAgric = yearsInAgric,
+                    UserType = "Farmer",
+                    shouldVerifyNin = false,
+                    BusinessCode = args.businessCode,
+                    Password = args.DefaultPassword,
+                    Pin = "0000",
+                    OrganizationCode = args.organizationCode,
+                    CreatedOn = !string.IsNullOrEmpty(dateString) ? DateTimeOffset.Parse(dateString) : DateTimeOffset.UtcNow,
+                    Bvn = bvn,
+                    NIN = nin,
+                    Name = $"{first} {middle} {last}",
+                    ValueChainDto = new List<ValueChainSelectionDto>
+{
+new ValueChainSelectionDto
+{
+ValueChainType = valueChainType,
+Items = itemsList
+}
+}
+                };
+                validItems.Add(farmer);
             }
-            };
-
-            validItems.Add(farmer);
+            return (validItems, errors);
+        }
+        // Helper to split full name into first, middle, last
+        private (string, string, string) SplitFullName(string fullName)
+        {
+            var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            string first = parts.Length > 0 ? parts[0] : string.Empty;
+            string middle = parts.Length > 1 ? parts[1] : string.Empty;
+            string last = parts.Length > 2 ? string.Join(" ", parts.Skip(2)) : parts.Length > 1 ? parts[1] : string.Empty;
+            return (first, middle, last);
         }
 
-        return (validItems, errors);
-    }
-
-    public byte[] ConvertFarmerTransactionsToExcel(IEnumerable<FarmerSalesTrackerModel> farmers)
+        public byte[] ConvertFarmerTransactionsToExcel(IEnumerable<FarmerSalesTrackerModel> farmers)
 
         {
             var list = farmers.ToList();

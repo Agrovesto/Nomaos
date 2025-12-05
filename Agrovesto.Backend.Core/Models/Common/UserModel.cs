@@ -33,12 +33,19 @@ namespace Agrovesto.Backend.Core.Models.Common
         public List<(UserModel user, bool status, string message)> Results { get; set; }
     }
 
+    public class BulkUploadProgress
+    {
+        public int TotalRows { get; set; }
+        public int ProcressedRows { get; set; }
+        public int SuccessfulRows { get; set; }
+        public int FailedRows { get; set; }
+        public string Status { get; set; }
+    }
     public class BulkUploadError
     {
         public int RowNumber { get; set; }
         public string Message { get; set; }
     }
-
     public class ExtractedFarmerRow
     {
         public int RowNumber { get; set; }
