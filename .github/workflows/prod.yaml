@@ -53,7 +53,7 @@ jobs:
           chmod 700 ~/.ssh
           for i in {1..5}; do
             echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null && break
             sleep 5
           done
   
