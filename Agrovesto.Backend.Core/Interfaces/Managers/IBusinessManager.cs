@@ -48,7 +48,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<CooperativeModel> GetCooperativeDetailByUserId(string userId);
         Task<Response<CooperativeModel>> GetCooperativeDetailById(long Id);
         Task<BulkUploadFarmersResponse> BulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args);
-        Task<BulkUploadFarmersResponse> NewBulkCreateBusinessUsersFromExcelAsync(List<UserModel> excelUsers, BusinessRegistrationArgs args);
-        Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args);
+        Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args,
+        IProgress<BulkUploadProgress> progress = null);
     }
 }
