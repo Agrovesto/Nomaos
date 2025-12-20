@@ -43,7 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             try
             {
-                var org = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+                var org = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (org == null) { throw new Exception($"Organization not found"); }
 
                         config.OrganizationCode = args.organizationCode;
