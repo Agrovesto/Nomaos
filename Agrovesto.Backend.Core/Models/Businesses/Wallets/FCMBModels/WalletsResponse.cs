@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels
 {
 
-    public class FCMBWalletResponse<T>
+    public class WalletsResponse<T>
     {
         public string message { get; set; }
         public string status { get; set; }
@@ -63,10 +63,19 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels
         public string LastName { get; set; }
         public string PhoneNumber { get; set; }
         public string AccountNumber { get; set; }
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
+        public string? CustomerId { get; set; }
+        public string? CurrencyId { get; set; }
+        public string? DOB { get; set; }
+        public string? MiddleName { get; set; }
+        public string? Address { get; set; }
+        public string? City { get; set; }
+        public string? Alias { get; set; }
     }
 
 
-    public class FCMBBankData
+    public class BanksResponseData
     {
 
         [JsonPropertyName("bankCode")]

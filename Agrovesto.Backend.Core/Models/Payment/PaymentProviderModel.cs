@@ -39,6 +39,6 @@ namespace Agrovesto.Backend.Core.Models.Payment
     }
     public enum ProviderStatus
     {
-        Active, Suspended, Disabled
+        Active, Disabled, Suspended
     }
 }
