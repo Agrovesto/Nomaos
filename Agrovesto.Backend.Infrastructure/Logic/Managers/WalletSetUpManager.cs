@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -29,18 +30,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     public class WalletSetUpManager: IWalletSetUpManager
     {
         private readonly IWalletService _walletService;
-        private readonly IWalletRepository _walletRepository;
+        private readonly IWalletManager _walletManager;
         private readonly IFarmerRepository _farmerRepository;
         private readonly IBusinessRepository _businessRepository;
 
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IOrganizationConfigurationRepository _orgConfig;
-        public WalletSetUpManager(IBusinessRepository businessRepository, IFarmerRepository farmerRepository,IWalletRepository walletRepository,IOrganizationConfigurationRepository orgConfig,IWalletService walletService, IWalletProviderRepository providerRepo)
+        public WalletSetUpManager(IBusinessRepository businessRepository, IFarmerRepository farmerRepository,
+            IWalletManager walletManager,IOrganizationConfigurationRepository orgConfig,IWalletService walletService, IWalletProviderRepository providerRepo)
         {
             _walletService = walletService;
             _providerRepo = providerRepo;
             _orgConfig = orgConfig;
-            _walletRepository = walletRepository;
+            _walletManager = walletManager;
             _farmerRepository = farmerRepository;
             _businessRepository = businessRepository;
         }
@@ -82,7 +84,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 foreach (var user in users)
                 {
-                    var existingWallet = await _walletRepository.GetUserWalletByProviderAsync(user.UserId, walletProviderCode);
+                    var existingWallet = await _walletManager.GetUserWalletByProviderAsync(user.UserId, walletProviderCode);
                     if (existingWallet != null)
                     {
                         results.Add($"{user.UserId}: Wallet already exists, skipped.");
@@ -139,7 +141,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             WalletProviderParameterModel[] providerParams,
             ListQueryParams args)
         {
-            var getUserCred = await _walletRepository.GetSubAccount(userId);
+            var getUserCred = await _walletManager.GetSubAccount(userId);
             if (getUserCred == null)
                 return (false, "User not found");
 
@@ -160,11 +162,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 case Providers.FCMBWallet:
                     return await HandleFcmbWalletCreation(userId, args, walletRequest, providerParams);
                 case Providers.SterlingWallet:
-                    return (false, "SterlingWallet provider not implemented yet");
+                    return await HandleSterlingWalletCreation(userId, args, walletRequest, providerParams);
+                case Providers.MTNMOMO:
+                    return(false, "MOMO Wallet provider not configuration not available yet, contact administrator");
+                case Providers.ETRANSACT:
+                    return (false, "MOMO Wallet provider not configuration not available yet, contact administrator");
                 default:
                     return await HandleFcmbWalletCreation(userId, args, walletRequest, providerParams); // fallback
             }
         }
+
+        /// <summary>
+        /// Handles wallet creation for Sterling provider.
+        /// </summary>
+        private async Task<(bool status, string message)> HandleSterlingWalletCreation(
+            string userId,
+            ListQueryParams args,
+            WalletsRequest request,
+            WalletProviderParameterModel[] providerParams
+           )
+        {
+            var accouuntModel = new SubAccountModel
+            {
+                PhoneNumber=request.PhoneNumber,
+                FirstName=request.FirstName,
+                LastName=request.LastName,
+                MiddleName= request.MiddleName,
+                DOB=request.DOB,
+                Bvn=request.BVN,
+                Email=request.Email,
+                NIN=request.NIN,
+                Address=request.Address,
+                Alias=request.Alias,
+                City=request.City
+            };
+           // var response = await _walletService.CreateWallet(request, providerParams, args.Env);
+            var response = await _walletManager.UpdateUserSterlingWalletProfile(accouuntModel, new ParameterArgs { Env=args.Env, UserId=userId});
+
+            if (response == null)
+                return (false, "Wallet creation failed, try again later!");
+
+            //if (response.status != "SUCCESS")
+            //    return (false, response.message ?? "Wallet creation failed");
+
+            //var account = response.data.SuccessfulVirtualAccounts.FirstOrDefault();
+            //if (account == null)
+            //    return (false, "No virtual account returned from wallet service");
+
+            var userWallet = new WalletModel
+            {
+                AccountName = response.SubAccountName,
+                AccountNumber = response.BankAccount,
+                BankName = Providers.FCMBWallet,
+                WalletProviderCode = Providers.FCMBWallet,
+                OrganizationCode = args.organizationCode,
+                UserId = userId,
+                CreatedBy = args.UserId
+            };
+
+            await _walletManager.CreateUserWallet(userWallet);
+
+            return (true, "Wallet created successfully");
+        }
+
 
         /// <summary>
         /// Handles wallet creation for FCMB provider.
@@ -199,7 +259,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 CreatedBy = args.UserId
             };
 
-            await _walletRepository.CreateUserWallet(userWallet);
+            await _walletManager.CreateUserWallet(userWallet);
 
             return (true, "Wallet created successfully");
         }
@@ -215,7 +275,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     return (false, $"Business with code {args.businessCode} does not exist");
 
                 // 2. Validate user
-                var getUserCred = await _walletRepository.GetSubAccount(args.UserId);
+                var getUserCred = await _walletManager.GetSubAccount(args.UserId);
                 if (getUserCred  == null)
                     return (false, "User not found");
 
@@ -223,7 +283,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 // 3. Resolve wallet provider
                 var walletProviderCode = await ResolveWalletProviderAsync(args);
-                var existingWallet = await _walletRepository.GetUserWalletByProviderAsync(args.UserId, walletProviderCode);
+                var existingWallet = await _walletManager.GetUserWalletByProviderAsync(args.UserId, walletProviderCode);
                 if (existingWallet != null)
                 {
                     return (true, $"User Wallet Exist for {walletProviderCode}");
@@ -258,7 +318,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<ResponseDto> GetUserWalletAsync(ListQueryParams query)
         {
             var walletProviderCode = await ResolveWalletProviderAsync(query);
-            var existingWallet = await _walletRepository.GetUserWalletByProviderAsync(query.UserId, walletProviderCode);
+            var existingWallet = await _walletManager.GetUserWalletByProviderAsync(query.UserId, walletProviderCode);
             if (existingWallet == null)
             {
                 return ResponseDto.Failure($"User Wallet does not Exist");
