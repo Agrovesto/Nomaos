@@ -354,6 +354,74 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
         //[Authorize(Roles = "Admin")]
+
+        [HttpGet("wallets")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetAllWallets()
+        {
+            var result = await _walletProvider.GetAll();
+            return Ok(new Response<WalletProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        [HttpGet("wallets/{id}")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetById(long id)
+        {
+            var result = await _walletProvider.Get(id);
+            return Ok(new Response<WalletProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Disables provider
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+      //  [Authorize(Roles = "Admin")]
+        [HttpPut("wallet/{id}/deactivate")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> DisableWalletProvider(long id)
+        {
+            bool result = await _walletProvider.DisableProvider(id);
+            return Ok(new Response<object>()
+            {
+                Succeeded = result,
+                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
+
+        [HttpPut("wallet/{id}/activate")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> EnableWalletProvider(long id)
+        {
+            bool result = await _walletProvider.EnableProvider(id);
+            return Ok(new Response<object>()
+            {
+                Succeeded = result,
+                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
         [HttpGet("wallet/parameters/{id}/{Env}")]
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
@@ -363,6 +431,21 @@ namespace Agrovesto.Backend.API.Controllers
         {
             var result = await _walletProvider.GetParametersByProvider(id, Env);
             return Ok(new Response<WalletProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+        [HttpGet("wallet/parameter/{id}")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetWalletParameter(long id)
+        {
+            var result = await _walletProvider.GetParametersById(id);
+            return Ok(new Response<WalletProviderParameterModel>()
             {
                 Succeeded = true,
                 Data = result
@@ -429,6 +512,57 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
+        [HttpPost("wallet/parameter/edit")]
+        [ProducesResponseType(typeof(Response<WalletProviderParameterModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderParameterModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderParameterModel>), 422)]
+        [ProducesResponseType(typeof(Response<WalletProviderParameterModel>), 500)]
+        public async Task<IActionResult> EditParameterValue([FromBody] WalletProviderParameterModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _walletProvider.EditParameterValue(model);
+
+
+                return Ok(new Response<WalletProviderParameterModel>()
+                {
+                    Succeeded = true,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
 
         #endregion
 

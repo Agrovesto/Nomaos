@@ -89,7 +89,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         }
 
-        public async Task<FCMBWalletResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
+        public async Task<WalletsResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
             
@@ -143,7 +143,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 _log.LogInformation($"reading response from Create wallet {readResponse}");
 
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<CreateWalletResponse>>(readResponse);
+                var response = JsonConvert.DeserializeObject<WalletsResponse<CreateWalletResponse>>(readResponse);
 
                     
                     return response;
@@ -159,7 +159,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         }
 
-        public  async Task<FCMBBankData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
+        public  async Task<BanksResponseData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
 
@@ -178,7 +178,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var request = await _httpService.Get($"{@params.BaseUrl}/banks", headers);
                 // request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<FCMBBankData>>(readResponse);
+                var response = JsonConvert.DeserializeObject<WalletsResponse<BanksResponseData>>(readResponse);
 
                 return response.data;
 
@@ -214,7 +214,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var request = await _httpService.Get($"{@params.BaseUrl}/virtual-account/static/{accountNumber}", headers);
                 // request.EnsureSuccessStatusCode();
                 var readResponse = await request.Content.ReadAsStringAsync();
-                var response = JsonConvert.DeserializeObject<FCMBWalletResponse<CreateWalletResponse>>(readResponse);
+                var response = JsonConvert.DeserializeObject<WalletsResponse<CreateWalletResponse>>(readResponse);
 
                 return response.data;
 

@@ -11,8 +11,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
     public interface IWalletService
     {
         //Task<(R data, bool status, string message)> GetToken(T model, string env);
-        Task<FCMBBankData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
-        Task<FCMBWalletResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<BanksResponseData> GetBanks(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletsResponse<CreateWalletResponse>> CreateWallet(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
         Task<CreateWalletResponse> NameEnquiry(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);
         Task<CreateWalletResponse> GetWalletDetails(WalletsRequest model,WalletProviderParameterModel[] parameters, string env);
         Task<CreateWalletResponse> InitiateFundTransfer(WalletsRequest model, WalletProviderParameterModel[] parameters, string env);

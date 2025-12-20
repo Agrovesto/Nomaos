@@ -55,9 +55,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return result;
         }
 
-        public async Task<WalletProviderModel[]> Get()
+        public async Task<WalletProviderModel[]> GetAll()
         {
-            return await _providerRepo.Get();
+            return await _providerRepo.GetAll();
         }
 
         public async Task<WalletProviderModel> Get(long providerId)
@@ -88,6 +88,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return res;
         }
 
+        public async Task<WalletProviderParameterModel> GetParametersById(long parameterId)
+        {
+            var res = await _providerRepo.GetParametersById(parameterId);
+            if (res == null) throw new NotFoundException("parameter not found");
+            return res;
+        }
         public async Task<WalletProviderModel> UpdateProvider(WalletProviderModel model)
         {
 
@@ -103,6 +109,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<WalletProviderModel> UpdateProviderParameter(WalletProviderModel model)
         {
             var result = await _providerRepo.UpdateProviderParameter(model);
+            if (result == null)
+                throw new Exception("Failed to update parameter");
+            return result;
+        }
+        public async Task<WalletProviderParameterModel> EditParameterValue(WalletProviderParameterModel model)
+        {
+            var result = await _providerRepo.EditParameterValue(model);
             if (result == null)
                 throw new Exception("Failed to update parameter");
             return result;
