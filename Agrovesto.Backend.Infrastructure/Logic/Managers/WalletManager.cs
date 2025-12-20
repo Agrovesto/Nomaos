@@ -40,7 +40,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _context = context;
             _walletRepository = walletRepository;   
         }
-
+        public async Task<WalletModel> GetUserWalletByProviderAsync(string userId, string walletProviderCode)
+        {
+            return await _walletRepository.GetUserWalletByProviderAsync(userId, walletProviderCode);
+        }
+        public async Task<WalletModel> CreateUserWallet(WalletModel model)
+        {
+            return await _walletRepository.CreateUserWallet(model);
+        }
         public async Task<SubAccountModel> GetSubAccount(string userId)
         {
             return await _walletRepository.GetSubAccount(userId);
@@ -97,7 +104,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 throw new Exception(ex.Message);
             }
-        }  public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string env)
+        }  
+        public async Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string env)
         {
             try
             {
@@ -408,7 +416,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return $"{firstName}.{lastName}@{domain}";
         }
-        public async Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args)
+        public async Task<SubAccountModel> UpdateUserSterlingWalletProfile(SubAccountModel model, ParameterArgs args)
         {
             model.City = !string.IsNullOrEmpty(model.City) ? model.City : model.Address;
             var user = await _walletRepository.GetSubAccount(model.UserId);
@@ -485,6 +493,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 model.CreatedBy = business.BusinessName;
                                 model.OnBoardedOn = DateTimeOffset.Now;
                                 model.BusinessId = business.BusinessId;
+                                model.BankAccount = createCustomerWallet.virtualAccount.accountNumber;
 
                                 model.Status = BusinessStatus.Live.ToString();
                                 var createSubaccount = await _walletRepository.UpdateSubAccount(model);
@@ -529,8 +538,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 model.OnBoardedOn = DateTimeOffset.Now;
                                // model.SubAccountType = Enum.GetName(typeof(SubAccountType), model.s)
                                 //  model.BusinessId = business.BusinessId;
-
-                                var createSubaccount = await _walletRepository.UpdateSubAccount(model);
+                                model.BankAccount = createCustomerWallet.virtualAccount.accountNumber;
+                                    var createSubaccount = await _walletRepository.UpdateSubAccount(model);
                                 var sterlingWallet = await _walletRepository.CreateSterlingWallet(new SterlingBankWalletModel
                                 {
                                     CustomerId = createCustomer.Id,

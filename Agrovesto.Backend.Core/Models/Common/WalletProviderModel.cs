@@ -11,12 +11,12 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class WalletProviderModel : Model
     {
         //[Key]
-        public long ProviderId { get; set; }
+        public long ProviderId { get; set; } = 0;
         public string Code { get; set; }
         public string Name { get; set; }
         public ProviderStatus Status { get; set; } = ProviderStatus.Active;
 
-        public List<WalletProviderParameterModel> WalletProviderParameters { get; set; }
+        public List<WalletProviderParameterModel> WalletProviderParameters { get; set; } = new();
 
     }
     public class WalletProviderParameterModel
