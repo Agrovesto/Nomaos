@@ -39,7 +39,7 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-                var data = await _walletManager.UpdateUserProfile(model, args);
+                var data = await _walletManager.UpdateUserSterlingWalletProfile(model, args);
                 return Ok(new AgrovestoResponse<SubAccountModel>()
                 {
                     Message = "",

@@ -50,10 +50,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entity.Map();
         }
 
-        public async Task<WalletProviderModel[]> Get()
+        public async Task<WalletProviderModel[]> GetAll()
         {
             WalletProvider[] entities = await _context.Set<WalletProvider>()
-
+                .Include(x=>x.WalletProviderParameters)
                 .OrderBy(x => x.Name).ToArrayAsync();
 
             return entities.Select(x => x.Map()).ToArray();
@@ -111,6 +111,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entities.Select(c => c.Map()).ToArray();
         }
 
+        public async Task<WalletProviderParameterModel> GetParametersById(long parameterId)
+        {
+            WalletProviderParameter entities = await _context.Set<WalletProviderParameter>()
+                                   .Where(x => x.ParameterId == parameterId)
+                                   .FirstOrDefaultAsync();
+
+            return entities.Map();
+        }
+
         public async Task<WalletProviderModel> UpdateProvider(WalletProviderModel model)
         {
             WalletProvider entity = await _context.Set<WalletProvider>().FindAsync(model.ProviderId);
@@ -128,7 +137,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return entity.Map();
         }
+        public async Task<WalletProviderParameterModel> EditParameterValue(WalletProviderParameterModel model)
+        {
+            WalletProviderParameter entity = await _context.Set<WalletProviderParameter>().FindAsync(model.ParameterId);
+            if (entity == null)
+            {
+                throw new Exception("Provider is invalid");
+            }
 
+          entity.Value= model.Value;
+            int count = await _context.SaveChangesAsync();
+            if (count < 1)
+            {
+                return null;
+            }
+            return entity.Map();
+        }
         public async Task<WalletProviderModel> UpdateProviderParameter(WalletProviderModel model)
         {
             var strategy = _context.Database.CreateExecutionStrategy();

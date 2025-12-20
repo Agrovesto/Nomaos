@@ -12,15 +12,17 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     public interface IWalletManager
     {
         Task<SubAccountModel> CreateSubAccount(SubAccountModel model);
+        Task<WalletModel> CreateUserWallet(WalletModel model);
         Task<SubAccountModel> GetSubAccount(string userId);
         Task<SubAccountModel> GetSubAccountByUserId(string userId);
         Task<SterlingBankWalletModel> GetUserSterlingAccount(string userId);
+        Task<WalletModel> GetUserWalletByProviderAsync(string userId, string walletProviderCode);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToAgrovestoAccount(PostWalletToWalletTransferRequestModel request, string env);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> PayoutTransferFromUserAccountToBusinessAccount(PostWalletToWalletTransferRequestModel request, string env);
         Task<CafeOneCustomerWalletResponse> RetrieveCustomerWallet(string userId, string env);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToAgrovestoAccount(WalletToWalletTransferRequestModel request, string env);
         Task<CafeoneResponseModel<CafeOneCustomerWalletResponse>> TransferFromUserAccountToBusinessAccount(WalletToWalletTransferRequestModel request, string env);
         Task<SubAccountModel> UpdateBusinessProfile(SubAccountModel model, ParameterArgs args);
-        Task<SubAccountModel> UpdateUserProfile(SubAccountModel model, ParameterArgs args);
+        Task<SubAccountModel> UpdateUserSterlingWalletProfile(SubAccountModel model, ParameterArgs args);
     }
 }
