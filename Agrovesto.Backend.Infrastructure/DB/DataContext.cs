@@ -112,7 +112,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
             //for market transaction
-            modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
+          //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
         }
 
         //public DbSet<MarketTransaction> MarketTransactions { get; set; }
