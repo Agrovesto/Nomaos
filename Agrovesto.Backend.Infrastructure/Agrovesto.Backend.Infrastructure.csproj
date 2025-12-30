@@ -10,6 +10,15 @@
     <Folder Include="Entities\FarmerMgts\" />
     <Folder Include="Utilities\EmailTemplates\" />
     <Folder Include="Utilities\TextTemplates\" />
+    <Folder Include="V2\Core\Auth\" />
+    <Folder Include="V2\Core\Billing\" />
+    <Folder Include="V2\Core\Audit\" />
+    <Folder Include="V2\Core\Tenancy\" />
+    <Folder Include="V2\Internal\" />
+    <Folder Include="V2\Public\MandE\" />
+    <Folder Include="V2\Public\Financing\" />
+    <Folder Include="V2\Public\KYC\" />
+    <Folder Include="V2\Public\DataandAnalytics\" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Core.Models.Market;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -36,6 +37,55 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 return new();
             }
+        }
+
+        //public static MarketDayDto ToModel(this MarketDay entity)
+        //{
+        //    if (entity == null) return null;
+        //}
+        //public static MarketDay ToEntity(this MarketDayDto model)
+        //{
+        //    if (model == null) return null;
+        //}
+        public static MarketDto ToModel(this Market entity)
+        {
+            if (entity == null) return null;
+
+            return new MarketDto
+            {
+                EstimatedCapacityKg=entity.EstimatedCapacityKg,
+                Id=entity.Id,
+                Latitude=entity.Latitude,
+                LgaId=entity.LgaId,
+                Location=entity.Location,   
+                Name=entity.Name,
+                StateId=entity.StateId,
+                Longitude=entity.Longitude,
+
+                MarketType = Enum.GetName(typeof(MarketType), entity.MarketType),
+                //MarketDays=entity.MarketDays.Select(md => md.ToModel()).ToList(),
+               // MarketCommodities= entity.MarketCommodities.Select(mc=> mc.ToModel()).ToList()
+
+            };
+        }
+        public static Market ToEntity(this MarketDto model)
+        {
+            if (model == null) return null;
+            return new Market
+            {
+                EstimatedCapacityKg = model.EstimatedCapacityKg,
+                Latitude = model.Latitude,
+                LgaId = model.LgaId,
+                Location = model.Location,
+                Name = model.Name,
+                StateId = model.StateId,
+                Longitude = model.Longitude,
+                MarketType = model.MarketType.ToEnum<MarketType>(),
+
+              //  MarketDays = model.MarketDays.Select(md => md.ToEntity()).ToList(),
+                // MarketCommodities= entity.MarketCommodities.Select(mc=> mc.ToModel()).ToList()
+
+            };
         }
 
         public static InputFinancingConfigurationModel ToModel(this InputFinancingConfiguration entity)
