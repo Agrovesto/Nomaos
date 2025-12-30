@@ -47,12 +47,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 try
                 {
-                    var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
+                    var business =
+                    //    await _businessRepository.GetBusinessByUserIdAsync(userId);
 
-                    if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
-                    {
-                        business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-                    }
+                    //if (business == null && !string.IsNullOrWhiteSpace(query.businessCode))
+                    //{
+                    //    business = 
+                            await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                    //}
                     if (business == null)
                     {
                         throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "No Record Found");

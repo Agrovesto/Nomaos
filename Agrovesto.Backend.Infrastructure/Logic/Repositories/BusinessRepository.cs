@@ -37,6 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return orgExist.Map();
             }
             Organization org = orgModel.Map();
+            
 
             _context.Set<Organization>().Add(org);
            // await _context.SaveChangesAsync();
@@ -97,8 +98,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 {
                     var first = g.First();
                     var org = first.Org;
-
-                    // Get the user who created the organization
                     var creatorUser = g
                         .OrderBy(u => u.User.CreatedOn)
                         .First().User;
