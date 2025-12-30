@@ -670,6 +670,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.Reference = inputName.Reference;
                     model.WarehouseId = warehouse.Id;
                     model.WarehouseInputInventoryId = model.WarehouseInputInventoryId;
+                    model.OrganizationCode = args.organizationCode;
                     var logDelivery = await _repository.LogDeliveryTracker(model);
 
                     var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
@@ -745,6 +746,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     var status = Enum.GetName(typeof(InputTransitStatus), model.Status);
                     model.Reference = tracker.Reference;
                     model.BusinessCode = business.BusinessCode;
+                    model.OrganizationCode = args.organizationCode;
                     var logDelivery = await _repository.LogDeliveryTracker(model);
                     var update = await _repository.UpdateInputReceiptStatus(business.BusinessCode, tracker.WarehouseInputInventoryId, status,
                         model.DeliveredTo, DateTimeOffset.Now, model.QuantityReceived);
