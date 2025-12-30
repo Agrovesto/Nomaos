@@ -5,6 +5,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using System;
 using System.Collections.Generic;
@@ -108,7 +109,22 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .Property(i => i.InvoiceNumber)
                 .HasMaxLength(64)
                 .IsRequired();
+
+
+            //for market transaction
+            modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
         }
+
+        //public DbSet<MarketTransaction> MarketTransactions { get; set; }
+        //public DbSet<Commodity> Commodities { get; set; }
+        //public DbSet<CommodityVariety> CommodityVarieties { get; set; }
+        //public DbSet<CommodityCategory> CommodityCategories { get; set; }
+        //public DbSet<TransactionCost> TransactionCosts { get; set; }
+        //public DbSet<Market> Markets { get; set; }
+        //public DbSet<MarketCommodity> MarketCommodities { get; set; }
+        //public DbSet<MarketDay> MarketDays { get; set; }
+
+
 
         public DbSet<MandEActivityType> MandEActivityTypes { get; set; }
         public DbSet<MandESubActivity> MandESubActivities { get; set; }
@@ -177,6 +193,73 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
 
     }
+    public class MarketTransactionConfiguration
+    : IEntityTypeConfiguration<MarketTransaction>
+    {
+        public void Configure(EntityTypeBuilder<MarketTransaction> builder)
+        {
+            builder.ToTable("MarketTransactions");
+
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.QuantityKg)
+                .HasPrecision(18, 4)
+                .IsRequired();
+
+            builder.Property(x => x.PricePerKg)
+                .HasPrecision(18, 4)
+                .IsRequired();
+
+            builder.Property(x => x.MoistureContent)
+                .HasPrecision(5, 2);
+
+            builder.Property(x => x.CreatedOn)
+                .IsRequired();
+
+            // Relationships
+            builder.HasOne(x => x.Commodity)
+                .WithMany()
+                .HasForeignKey(x => x.CommodityId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.CommodityVariety)
+                .WithMany()
+                .HasForeignKey(x => x.CommodityVarietyId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.Market)
+                .WithMany()
+                .HasForeignKey(x => x.MarketId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.HasOne(x => x.MarketDay)
+                .WithMany()
+                .HasForeignKey(x => x.MarketDayId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Indexes
+            builder.HasIndex(x => new
+            {
+                x.CommodityId,
+                x.MarketId,
+                x.MarketDayId,
+                x.SalesDate
+            });
+
+            builder.HasIndex(x => new
+            {
+                x.MarketId,
+                x.SalesDate
+            });
+
+            builder.HasIndex(x => new
+            {
+                x.Status,
+                x.Source
+            });
+        }
+    }
+
     //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
     //{
     //    public DataContext CreateDbContext(string[] args)
@@ -185,7 +268,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
     //   optionsBuilder.UseSqlServer("Data Source=SQL5113.site4now.net;Initial Catalog=db_a971fc_agrovestopassdev;User Id=db_a971fc_agrovestopassdev_admin;Password=Agro144828@", //staging
     //    // optionsBuilder.UseSqlServer("Data Source=SQL8006.site4now.net;Initial Catalog=db_a971fc_farmermanagementpl;User Id=db_a971fc_farmermanagementpl_admin;Password=Agro144828@",
     //     // optionsBuilder.UseSqlServer("Data Source=agrovestodbinstance.cxgc0aq4mmfo.eu-west-1.rds.amazonaws.com;Initial Catalog=agrovestodbinstance;User Id=agrovesto;Password=sphRm,5WSQcwXlGZvxbkib,R7K8D52",
-          
+
 
 
     //            options =>
