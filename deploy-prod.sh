@@ -1,184 +1,154 @@
 #!/bin/bash
 # Robust Deployment Script for Agrovesto.Backend.API
-# Author: Dolapo Fashina
-
-set -e
-set -x   # Command tracing
+# Author: Dolapo Fashina 
+set -euo pipefail  
+set -x 
 
 # ------------------------------------------------------------
-# Detect project root directory (directory where deploy.sh lives)
+# Variables
 # ------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# ------------------------------------------------------------
-# Update RDS SSL Certificate
-# ------------------------------------------------------------
-sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  -O /usr/local/share/ca-certificates/rds-global-bundle.crt
-
-sudo update-ca-certificates
-
-
-# ------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
 SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
 ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
-LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
 CI_USER="ubuntu"
+DOMAIN="noma-api.nomaos.com"
+NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+PUBLISH_DIR="$APP_DIR/publish"
+CURRENT_DIR="$APP_DIR/current"
 
-# Fix HOME for CI/CD
+# Fix home for dotnet/NuGet in CI
 export HOME=/tmp
 export DOTNET_CLI_HOME=/tmp
+export NUGET_PACKAGES="/tmp/.nuget/packages"
 
-echo "Starting deployment for $APP_NAME from $SCRIPT_DIR"
-
+echo "Starting deployment for $APP_NAME → https://$DOMAIN"
 
 # ------------------------------------------------------------
-# 1. Install prerequisites
+# 1. System update & prerequisites
 # ------------------------------------------------------------
 sudo apt-get update
 sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
 
-
 # ------------------------------------------------------------
-# 2. Add Microsoft Repo if Missing
+# 2. Install .NET 8 (only if missing)
 # ------------------------------------------------------------
-if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
-    echo "Adding Microsoft .NET repository..."
-    sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
-      -O packages-microsoft-prod.deb
-
-    sudo dpkg -i packages-microsoft-prod.deb
-    sudo rm packages-microsoft-prod.deb
+if ! dotnet --list-sdks | grep -q "8.0"; then
+    echo "Installing .NET 8 SDK..."
+    wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
+    sudo dpkg -i /tmp/packages-microsoft-prod.deb
+    rm /tmp/packages-microsoft-prod.deb
     sudo apt-get update
+    sudo apt-get install -y dotnet-sdk-8.0
 fi
 
-
 # ------------------------------------------------------------
-# 3. Install .NET SDK/Runtime if Missing
+# 3. Firewall
 # ------------------------------------------------------------
-if ! command -v dotnet &>/dev/null || ! dotnet --list-sdks | grep -q "8\."; then
-    echo "Installing .NET 8 SDK & Runtime..."
-    sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
-fi
-
-
-# ------------------------------------------------------------
-# 4. Configure UFW Firewall
-# ------------------------------------------------------------
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
 sudo ufw allow 22/tcp
 sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
-sudo ufw allow 5000/tcp
 sudo ufw --force enable
 
+# ------------------------------------------------------------
+# 4. Stop existing service
+# ------------------------------------------------------------
+sudo systemctl stop "$APP_NAME" || true
 
 # ------------------------------------------------------------
-# 5. Ensure NuGet Cache Is Writable
+# 5. Prepare publish folder
 # ------------------------------------------------------------
-DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
-sudo mkdir -p "$DOTNET_NUGET_CACHE"
-sudo chown -R "$CI_USER:$CI_USER" "$DOTNET_NUGET_CACHE"
-export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
-
+sudo rm -rf "$PUBLISH_DIR"
+sudo mkdir -p "$PUBLISH_DIR"
+sudo chown -R "$CI_USER:$CI_USER" "$PUBLISH_DIR" "$SCRIPT_DIR"
 
 # ------------------------------------------------------------
-# 6. Fix permissions
+# 6. Build & Publish (.NET 8 self-contained)
 # ------------------------------------------------------------
-sudo chown -R "$CI_USER:$CI_USER" "$SCRIPT_DIR"
-sudo mkdir -p "$APP_DIR"
-sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
-
-
-# ------------------------------------------------------------
-# 7. Clean previous build artifacts
-# ------------------------------------------------------------
-sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR"
-
-# ------------------------------------------------------------
-# 8. Restore, Build & Publish
-# ------------------------------------------------------------
-echo "Restoring dependencies..."
-sudo -u "$CI_USER" dotnet workload update --skip-manifest-update || true
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache
-
-echo "Building application..."
-sudo -u "$CI_USER" dotnet build "$SCRIPT_DIR" -c Release --no-restore
-
-echo "Publishing application..."
-BUILD_PATH="$SCRIPT_DIR/bin/Release/net8.0/linux-x64/publish"
-sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" -c Release -r linux-x64 --self-contained true \
-  /p:PublishTrimmed=false -o "$BUILD_PATH"
-
+sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" --configuration Release
+sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache  --runtime linux-x64
+sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
+  -c Release \
+  -r linux-x64 \
+  --self-contained true \
+  /p:PublishTrimmed=false \
+  -o "$PUBLISH_DIR" \
+  --no-restore
 
 # ------------------------------------------------------------
-# 9. Deploy to target directory
+# 7. Update symlink atomically
 # ------------------------------------------------------------
-sudo mkdir -p "$APP_DIR"
-# Remove any conflicting Agrovesto.Backend.API (dir or file) to avoid cp errors
-if [ -e "$APP_DIR/$APP_NAME" ]; then
-  sudo rm -rf "$APP_DIR/$APP_NAME"
-fi
-sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
-sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
-
+sudo ln -sfn "$PUBLISH_DIR" "$CURRENT_DIR"
+sudo chown -R "$USER_NAME:$USER_NAME" "$PUBLISH_DIR" "$CURRENT_DIR"
+sudo chown -h "$USER_NAME:$USER_NAME" "$CURRENT_DIR"
 
 # ------------------------------------------------------------
-# 10. Environment Variables
+# 8. Environment file
 # ------------------------------------------------------------
 sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
-DOTNET_PRINT_TELEMETRY_MESSAGE=false
-DOTNET_CLI_HOME=/tmp
 ASPNETCORE_URLS=http://0.0.0.0:5000
+DOTNET_PRINT_TELEMETRY_MESSAGE=false
 EOF
 
-
 # ------------------------------------------------------------
-# 11. Systemd Service
+# 9. Systemd service
 # ------------------------------------------------------------
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
-Description=$APP_NAME .NET Application
+Description=$APP_NAME
 After=network.target
 
 [Service]
-WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/dotnet $APP_DIR/$APP_NAME.dll
+WorkingDirectory=$CURRENT_DIR
+ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
-SyslogIdentifier=$APP_NAME
 User=$USER_NAME
-EnvironmentFile=$ENV_FILE
+SyslogIdentifier=$APP_NAME
+Environment=ASPNETCORE_ENVIRONMENT=Production
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable "$APP_NAME.service"
-sudo systemctl restart "$APP_NAME.service"
-
+sudo systemctl enable --now "$APP_NAME.service"
+sudo systemctl restart "$APP_NAME"
+sudo systemctl status $APP_NAME
 
 # ------------------------------------------------------------
-# 12. NGINX Reverse Proxy
+# 10. NGINX CONFIG — CORRECT & CERTBOT-READY
 # ------------------------------------------------------------
-sudo rm -f /etc/nginx/sites-enabled/default
-
-NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
-
 sudo tee "$NGINX_SITE" > /dev/null <<EOF
+# HTTP → HTTPS redirect
 server {
     listen 80;
-    server_name $LOAD_BALANCER_DNS _;
+    listen [::]:80;
+    server_name $DOMAIN;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        return 301 https://\$server_name\$request_uri;
+    }
+}
+
+# HTTPS server (Certbot will auto-fill ssl_certificate lines)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name $DOMAIN;
+
+    ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
 
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -186,7 +156,6 @@ server {
 
     location /health {
         proxy_pass http://127.0.0.1:5000/health;
-        proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -197,27 +166,47 @@ server {
         proxy_pass http://127.0.0.1:5000/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+
         proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
+        proxy_send_timeout    60s;
+        proxy_read_timeout    60s;
     }
 }
 EOF
 
+# Enable site
 sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
+sudo rm -f /etc/nginx/sites-enabled/default
 
+# Test + reload Nginx
+sudo nginx -t && sudo systemctl reload nginx
+
+# ------------------------------------------------------------
+# 11. Get + Install Let's Encrypt SSL 
+# ------------------------------------------------------------
+if ! sudo certbot certificates --quiet | grep -q "$DOMAIN"; then
+    echo "Obtaining Let's Encrypt certificate..."
+    sudo certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email dolapofashina@gmail.com --redirect
+else
+    echo "Certificate already exists — installing/updating Nginx config..."
+    sudo certbot install --nginx --cert-name "$DOMAIN"
+fi
+
+# Final Nginx reload after cert install
+sudo systemctl reload nginx
 
 # ------------------------------------------------------------
 # Done
 # ------------------------------------------------------------
-echo "Deployment completed successfully!"
-echo "Check service: sudo systemctl status $APP_NAME"
-echo "Check logs: journalctl -u $APP_NAME -f"
+echo ""
+echo "DEPLOYMENT SUCCESSFUL!"
+echo "→ API running at: https://$DOMAIN"
+echo "→ Service status: sudo systemctl status $APP_NAME"
+echo "→ Logs: sudo journalctl -u $APP_NAME -f"
+echo "→ Nginx status: sudo nginx -t && sudo systemctl status nginx"
