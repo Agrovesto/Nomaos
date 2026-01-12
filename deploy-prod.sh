@@ -112,6 +112,7 @@ KillSignal=SIGINT
 User=$USER_NAME
 SyslogIdentifier=$APP_NAME
 Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
 
 [Install]
 WantedBy=multi-user.target
