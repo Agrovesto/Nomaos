@@ -23,12 +23,12 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IIdentityVerificationManager _verificationManager;
 
         private readonly IWebHostEnvironment _hostingEnvironment;
-        private readonly ISMSService _smsService;
+        private readonly INotificationService _smsService;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
             IGoogleDriveService googleDriveService,
             IIdentityVerificationManager verificationManager,
             INigeriaStateImporterService nigeriaStateImporterService,
-             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, ISMSService smsService)
+             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, INotificationService smsService)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;

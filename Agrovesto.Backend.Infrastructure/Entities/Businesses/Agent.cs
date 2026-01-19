@@ -10,23 +10,24 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
     public class Agent
     {
-        public string Name { get; set; }
-        public string Location { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? Name { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
 
         public string? Ward { get; set; }
         public string? Email { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string UserId { get; set; }
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 
         public long Id { get; set; }
-        public string BelongToBusinessCode { get; set; }  //which business
+        public string? BelongToBusinessCode { get; set; }  //which business
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? SupervisorUserId { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? OnboardedById { get; set; }
 
     }
 }

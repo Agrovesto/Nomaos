@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IFarmPlotDetailRepository _farmPlotDetailRepository;
         private readonly IFaceManager _faceManager;
-        private readonly ISMSService _whisperSMSService;
+        private readonly INotificationService _whisperSMSService;
         private readonly IInputFinancingManagementRepository _inputRepository;
         private readonly ITraderRepository _traderRepository;
         private readonly IExcelConverterService _excelConverterService;
@@ -61,7 +61,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
             IIdentityVerificationManager identityVerificationManager,
             IFarmPlotDetailRepository farmPlotDetailRepository,
-            IAgentRepository agentRepository, ISMSService whisperSMSService,
+            IAgentRepository agentRepository, INotificationService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
             ITraderRepository traderRepository, IExcelConverterService excelConverterService,
 
