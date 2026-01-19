@@ -36,12 +36,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
     public class Farmer
     {
         public string BelongToBusinessCode { get; set; }  //which business
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }
         public string? Lga { get; set; }
         public string? Ward { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? Email { get; set; }       
         public string UserId { get; set; }
         [Key]
@@ -51,10 +51,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
-        public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
+        public string? OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
         public long BelongToCooperativeId { get; set; }
         //public string? OrganizationCode { get; set; }
-        public string FarmerCategory { get; set; }
+        public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
     }

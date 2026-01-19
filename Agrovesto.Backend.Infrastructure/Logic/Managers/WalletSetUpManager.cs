@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 // Resolve wallet provider
                 var walletProviderCode = ResolveWalletProvider(orgConfig, args.SelectedProviderCode);
-                var providerParams = await RetrieveParams(walletProviderCode, args.Env);
+                var providerParams = await RetrieveParams(walletProviderCode, args.env);
                 var users = await _farmerRepository.GetFarmersByBusinessCode(args.businessCode, args);
                 if (users.Count < 0)
                     return (false, $"Organization {args.organizationCode} has no user");
@@ -197,7 +197,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 City=request.City
             };
            // var response = await _walletService.CreateWallet(request, providerParams, args.Env);
-            var response = await _walletManager.UpdateUserSterlingWalletProfile(accouuntModel, new ParameterArgs { Env=args.Env, UserId=userId});
+            var response = await _walletManager.UpdateUserSterlingWalletProfile(accouuntModel, new ParameterArgs { Env=args.env, UserId=userId});
 
             if (response == null)
                 return (false, "Wallet creation failed, try again later!");
@@ -236,7 +236,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             WalletProviderParameterModel[] providerParams
            )
         {
-            var response = await _walletService.CreateWallet(request, providerParams, args.Env);
+            var response = await _walletService.CreateWallet(request, providerParams, args.env);
 
             if (response == null)
                 return (false, "No response from wallet service");
@@ -289,7 +289,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     return (true, $"User Wallet Exist for {walletProviderCode}");
                 }
                 // 4. Retrieve provider parameters
-                var providerParams = await RetrieveParams(walletProviderCode, args.Env);
+                var providerParams = await RetrieveParams(walletProviderCode, args.env);
 
                 // 5. Build request payload
                 var walletRequest = new WalletsRequest

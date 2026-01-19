@@ -27,5 +27,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalFarmers { get; set; }
         public List<FarmerModel> Farmers { get; set; }
         public WalletModel Wallet { get; set; }
+        public string? OnboardedById { get; set; }
     }
 }

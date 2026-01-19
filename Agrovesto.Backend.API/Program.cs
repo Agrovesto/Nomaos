@@ -59,6 +59,7 @@ builder.Services.AddDbContext<DataContext>(options =>
 builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
 
 

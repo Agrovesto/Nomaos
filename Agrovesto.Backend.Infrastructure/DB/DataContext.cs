@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -7,15 +8,44 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
+    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    //{
+    //    public DataContext CreateDbContext(string[] args)
+    //    {
+    //        var config = new ConfigurationBuilder()
+    //            .SetBasePath(Directory.GetCurrentDirectory())
+    //            .AddJsonFile("appsettings.Development.json")
+    //            .Build();
+
+    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+    //        optionsBuilder.UseSqlServer(
+    //          config.GetConnectionString("DefaultConnection"),
+    //    sqlOptions =>
+    //    {
+    //        sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+    //        sqlOptions.EnableRetryOnFailure(
+    //            maxRetryCount: 5,
+    //            maxRetryDelay: TimeSpan.FromSeconds(10),
+    //            errorNumbersToAdd: null);
+    //        sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
+    //    });
+
+    //        return new DataContext(optionsBuilder.Options);
+    //    }
+    //}
+   
+    
     public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
@@ -36,6 +66,14 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasOne(uo => uo.User)
                 .WithMany(u => u.UserOrganizations)
                 .HasForeignKey(uo => uo.UserId);
+            modelBuilder.Entity<OneTimePassword>()
+    .HasIndex(x => new { x.UserId, x.Purpose, x.Target });
+
+            modelBuilder.Entity<OneTimePassword>()
+                .HasIndex(x => x.ExpiresAt);
+
+            modelBuilder.Entity<OneTimePassword>()
+                .HasIndex(x => x.Destination);
 
 
             modelBuilder.Entity<MandEActivityType>().HasKey(x => x.Id);
@@ -110,9 +148,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasMaxLength(64)
                 .IsRequired();
 
+            modelBuilder.Entity<MandEDataset>()
+       .HasMany(d => d.Fields)
+       .WithOne(f => f.MandEDataset)
+       .HasForeignKey(f => f.MandEDatasetId)
+       .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<MandEDataset>()
+                .HasMany(d => d.Records)
+                .WithOne(r => r.MandEDataset)
+                .HasForeignKey(r => r.MandEDatasetId)
+                .OnDelete(DeleteBehavior.Cascade);
             //for market transaction
-          //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
+            //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
         }
 
         //public DbSet<MarketTransaction> MarketTransactions { get; set; }
@@ -125,7 +173,11 @@ namespace Agrovesto.Backend.Infrastructure.DB
         //public DbSet<MarketDay> MarketDays { get; set; }
 
 
-
+        public DbSet<OneTimePassword> OneTimePasswords { get; set; }
+        public DbSet<MandEDataset> MandEDatasets { get; set; }
+        public DbSet<MandEDataFieldDefinition> MandEDataFieldDefinitions { get; set; }
+        public DbSet<MandERecord> MandERecords { get; set; }
+        public DbSet<MandEChartDefinition> MandEChartDefinitions { get; set; }
         public DbSet<MandEActivityType> MandEActivityTypes { get; set; }
         public DbSet<MandESubActivity> MandESubActivities { get; set; }
         public DbSet<MandEFieldDefinition> MandEFieldDefinitions { get; set; }
@@ -198,6 +250,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
     {
         public void Configure(EntityTypeBuilder<MarketTransaction> builder)
         {
+           
+
             builder.ToTable("MarketTransactions");
 
             builder.HasKey(x => x.Id);
