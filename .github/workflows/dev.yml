@@ -52,8 +52,9 @@ jobs:
       - name: Add EC2 host to known_hosts (with retry + timeout)
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
-          chmod 600 ~/.ssh
+          chmod 700 ~/.ssh
+          touch ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
           for i in {1..5}; do
             echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
             ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
