@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -92,28 +92,60 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-
-        public string CurrentUserId
+        public string? CurrentUserId
         {
             get
             {
-                var token = Token;
-                if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
-
-                var handler = new JsonWebTokenHandler();
-
-                // Ensure the token is a well-formed JWT before reading it
-                if (!handler.CanReadToken(token))
+                try
                 {
-                    throw new SecurityTokenException("Invalid JWT format");
+                    var token = Token;
+
+                    if (string.IsNullOrWhiteSpace(token))
+                        return null;
+
+          
+                    if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        token = token.Substring("Bearer ".Length).Trim();
+
+                    var handler = new JsonWebTokenHandler();
+
+                    if (!handler.CanReadToken(token))
+                        return null; 
+
+                    var jwt = handler.ReadJsonWebToken(token);
+
+                    return jwt.Claims
+                        .FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase))
+                        ?.Value;
                 }
-
-                var jst = handler.ReadJsonWebToken(token);
-                var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
-
-                return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
+                catch
+                {
+                    return null;
+                }
             }
         }
+
+        //public string CurrentUserId
+        //{
+        //    get
+        //    {
+        //        var token = Token;
+        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
+
+        //        var handler = new JsonWebTokenHandler();
+
+        //        // Ensure the token is a well-formed JWT before reading it
+        //        if (!handler.CanReadToken(token))
+        //        {
+        //            throw new SecurityTokenException("Invalid JWT format");
+        //        }
+
+        //        var jst = handler.ReadJsonWebToken(token);
+        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
+
+        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
+        //    }
+        //}
         //public string OrganizationCode
         //{
         //    get
