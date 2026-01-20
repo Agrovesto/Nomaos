@@ -466,7 +466,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 MandEDatasetId =args.Id, // datasetId,
                 Name = dto.Name,
-                Label = dto.Name,
+                Label = dto.Label,
+                
                 Key = dto.Key,
                 Type = dto.Type,
                 IsComputed = dto.IsComputed,
