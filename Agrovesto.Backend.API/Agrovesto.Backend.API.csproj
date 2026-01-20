@@ -37,8 +37,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Controllers\V2\Internal\" />
-    <Folder Include="Controllers\V2\Public\" />
     <Folder Include="Extensions\JSONs\" />
   </ItemGroup>
 

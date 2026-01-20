@@ -11,7 +11,11 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -74,7 +78,7 @@ namespace Agrovesto.Backend.API.Extensions
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
-            services.AddScoped<ISMSService, SMSService>();
+            services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
@@ -82,6 +86,9 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
             services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IOtpService, OtpService>();
+            services.AddScoped<IOnBoardingManager, OnBoardingManager>();
+            services.AddScoped<IOnboardingRepository, OnboardingRepository>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
            
 
@@ -91,6 +98,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandERepositories, MandERepositories>();
             services.AddScoped<IActivityEntryRepository, ActivityEntryRepository>();
             services.AddScoped<IMandEActivityManager, MandEActivityManager>();
+            services.AddScoped<IMandEServiceRepository, MandEServiceRepositories>();
+            services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
 
         }
     }
