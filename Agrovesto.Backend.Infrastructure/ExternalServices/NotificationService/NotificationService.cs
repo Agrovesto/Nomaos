@@ -174,11 +174,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 var response = await client.PostAsync(url, content);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
-                var result = JsonConvert.DeserializeObject<TermiiResponse>(responseBody);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _log.LogError(
+                        "Termii EMAIL failed. Status: {Status}, Body: {Body}",
+                        response.StatusCode,
+                        responseBody
+                    );
+                    return;
+                }
 
-                Console.WriteLine($"Status Code: {response.StatusCode}");
-                Console.WriteLine($"Response: {responseBody}");
-                _log.LogInformation($"Email sent to {destination} with message: {message}");
+                _log.LogInformation("Email sent to {Destination}", destination);
+
                 // return (result, response.IsSuccessStatusCode);
             }
             catch (HttpRequestException ex)
@@ -202,6 +209,13 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             var type = _config["TermiSMS:type"];
             var url = $"{_config["TermiSMS:url"]}/api/sms/send";
 
+
+            _log.LogWarning(
+    "Termii config check → key:{HasKey}, url:{Url}",
+    !string.IsNullOrWhiteSpace(apikey),
+    _config["TermiSMS:url"]
+);
+
             var payload = new
             {
                 api_key = apikey,
@@ -223,7 +237,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 var response = await client.PostAsync(url, content);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
-                _log.LogInformation($"SMS sent to {formattedDestination}: {message}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    _log.LogError(
+                        "Termii SMS failed. Status: {Status}, Body: {Body}",
+                        response.StatusCode,
+                        responseBody
+                    );
+                    return;
+                }
+
+                _log.LogInformation("SMS sent to {Destination}", formattedDestination);
+
             }
             catch (HttpRequestException ex)
             {
