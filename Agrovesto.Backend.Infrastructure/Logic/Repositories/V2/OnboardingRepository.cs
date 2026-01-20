@@ -98,81 +98,100 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 DeviceId = deviceId
             };
         }
-
-        private async Task<User> ResolveUserAsync(string identifier, string businessCode)
+        private async Task<User?> ResolveUserAsync(LoginModel model, string businessCode)
         {
-            identifier = identifier?.Trim();
+            User? user = null;
 
-            return await _context.Users.FirstOrDefaultAsync(u =>
-                u.BusinessCode == businessCode &&
-                (
-                    u.UserName == identifier ||
-                    u.Email == identifier ||
-                    u.PhoneNumber == identifier
-                ));
-        }
+            switch (model.LoginMethod)
+            {
+                case LoginType.Password:
+                    if (string.IsNullOrWhiteSpace(model.Username))
+                        return null;
 
-        public async Task<(bool Status, string Message, TokenModel Response)> Login(
-     LoginModel model,
-     string businessCode
-            //,
-    // string header
-            )
-        {
-            //if (string.IsNullOrWhiteSpace(header))
-              //  return (false, "Unauthorized request", null);
+                    user = await _userManager.FindByEmailAsync(model.Username);
+                    break;
 
-            var business = await _context.Businesses
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
+                case LoginType.Pin:
+                    if (string.IsNullOrWhiteSpace(model.phonenumber))
+                        return null;
 
-            if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
-                return (false, "Business is inactive or not found", null);
-
-            User user = null;
-
-            // 🔹 Resolve user by username first (authoritative identity)
-            user = await _userManager.FindByNameAsync(model.Username);
+                    user = await _userManager.Users
+                        .FirstOrDefaultAsync(x =>
+                            x.PhoneNumber == model.phonenumber &&
+                            x.BusinessCode == businessCode);
+                    break;
+            }
 
             if (user == null || user.BusinessCode != businessCode)
-                return (false, "Invalid credentials", null);
+                return null;
 
-            // 🔹 Validate credential
-            var credentialResult = await ValidateCredentialsAsync(user, model);
-            if (!credentialResult.Success)
-                return (false, credentialResult.Message, null);
-
-            // 🔹 Retrieve roles
-            var roles = await _userManager.GetRolesAsync(user);
-            if (roles == null || !roles.Any())
-                return (false, "User has no assigned roles", null);
-
-            // 🔹 Check onboarding completeness
-            var hasPendingOnboarding = HasPendingOnboarding(user);
-
-            // 🔹 Update last login
-            user.LastLoginDate = DateTimeOffset.UtcNow;
-            await _context.SaveChangesAsync();
-
-            // 🔹 Organizations
-            var organizations = await GetUserOrganizationsAsync(user.Id);
-
-            // 🔹 Build claims
-            var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
-
-            var token = GenerateJwtToken(claims);
-
-            return (true, "Successful", new TokenModel
-            {
-                Id = user.Id,
-                Token = token,
-                TokenType = TokenType.AccessToken,
-                ExpiresOn = DateTime.UtcNow.AddDays(1),
-                Roles = roles.ToList(),
-                Organizations = organizations,
-              //  HasPendingOnboarding = hasPendingOnboarding
-            });
+            return user;
         }
+
+
+     //   public async Task<(bool Status, string Message, TokenModel Response)> Login(
+     //LoginModel model,
+     //string businessCode
+     //       //,
+     //       // string header
+     //       )
+     //   {
+     //       //if (string.IsNullOrWhiteSpace(header))
+     //       //  return (false, "Unauthorized request", null);
+
+     //       var business = await _context.Businesses
+     //           .AsNoTracking()
+     //           .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
+
+     //       if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
+     //           return (false, "Business is inactive or not found", null);
+
+     //       User user = null;
+
+     //       // 🔹 Resolve user by username first (authoritative identity)
+     //       user = await _userManager.FindByNameAsync(model.Username);
+
+     //       if (user == null || user.BusinessCode != businessCode)
+     //           return (false, "Invalid credentials", null);
+
+     //       // 🔹 Validate credential
+     //       var credentialResult = await ValidateCredentialsAsync(user, model);
+     //       if (!credentialResult.Success)
+     //           return (false, credentialResult.Message, null);
+
+     //       // 🔹 Retrieve roles
+     //       var roles = await _userManager.GetRolesAsync(user);
+     //       if (roles == null || !roles.Any())
+     //           return (false, "User has no assigned roles", null);
+
+     //       // 🔹 Check onboarding completeness
+     //       var hasPendingOnboarding = HasPendingOnboarding(user);
+
+     //       // 🔹 Update last login
+     //       user.LastLoginDate = DateTimeOffset.UtcNow;
+     //       await _context.SaveChangesAsync();
+
+     //       // 🔹 Organizations
+     //       var organizations = await GetUserOrganizationsAsync(user.Id);
+
+     //       // 🔹 Build claims
+     //       var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
+
+     //       var token = GenerateJwtToken(claims);
+
+     //       return (true, "Successful", new TokenModel
+     //       {
+     //           Id = user.Id,
+     //           Token = token,
+     //           TokenType = TokenType.AccessToken,
+     //           ExpiresOn = DateTime.UtcNow.AddDays(1),
+     //           Roles = roles.ToList(),
+     //           Organizations = organizations,
+     //           //  HasPendingOnboarding = hasPendingOnboarding
+     //       });
+     //   }
+
+
         private bool HasPendingOnboarding(User user)
         {
             return string.IsNullOrWhiteSpace(user.Email)
@@ -181,27 +200,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
         private List<Claim> BuildClaims(
-    User user,
-    IList<string> roles,
-    List<OrganizationDto> organizations,
-    bool hasPendingOnboarding)
+      User user,
+      IList<string>? roles,
+      List<OrganizationDto>? organizations,
+      bool hasPendingOnboarding)
         {
-            return new List<Claim>
+            var claims = new List<Claim>
     {
-        new Claim(ClaimTypes.NameIdentifier, user.Id),
-        new Claim(ClaimTypes.Name, user.UserName),
+
+        // 🔹 Identity / JWT core
         new Claim(JwtRegisteredClaimNames.Sub, user.Id),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-        new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
-        new Claim("PhoneNumber", user.PhoneNumber ?? ""),
-        new Claim("DisplayName", user.Name ?? user.UserName),
-        new Claim("Roles", string.Join(",", roles)),
-        new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString()),
-        new Claim("Organizations", JsonConvert.SerializeObject(organizations)),
-     //   new Claim("OnboardingStep", user.OnboardingStep.ToString())
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+       // new Claim(ClaimTypes.Name, user.UserName),
 
+        // 🔹 State
+        new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString())
     };
+            var principalName =
+    user.Name ??
+    user.Email ??
+    user.PhoneNumber ??
+    user.Id;
+
+            claims.Add(new Claim(ClaimTypes.Name, principalName));
+
+            // 🔹 Optional identity fields
+            if (!string.IsNullOrWhiteSpace(user.Email))
+                claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
+
+            if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
+                claims.Add(new Claim("PhoneNumber", user.PhoneNumber));
+
+            //claims.Add(new Claim(
+            //    "DisplayName",
+            //    user.Name ?? user.UserName
+            //));
+            claims.Add(new Claim(
+    "DisplayName",
+    user.Name ??
+    user.Email ??
+    user.PhoneNumber ??
+    "User"
+));
+
+            // 🔹 Roles
+            if (roles?.Any() == true)
+            {
+                // For ASP.NET authorization
+                foreach (var role in roles)
+                {
+                    claims.Add(new Claim(ClaimTypes.Role, role));
+                }
+
+                // For frontend convenience
+                claims.Add(new Claim("Roles", string.Join(",", roles)));
+            }
+
+            // 🔹 User metadata
+            if (!string.IsNullOrWhiteSpace(user.UserType))
+                claims.Add(new Claim("UserType", user.UserType));
+
+            if (user.LastLoginDate.HasValue)
+                claims.Add(new Claim("LastLogin", user.LastLoginDate.Value.ToString("O")));
+       
+            claims.Add(new Claim("MemberSince", user.CreatedOn.ToString("O")));
+
+            // 🔹 Organizations (JSON)
+            if (organizations?.Any() == true)
+            {
+                claims.Add(new Claim(
+                    "Organizations",
+                    JsonConvert.SerializeObject(
+                        organizations.Select(o => new
+                        {
+                            o.OrganizationCode,
+                            o.OrganizationName
+                        })
+                    )
+                ));
+            }
+
+            return claims;
         }
+
 
         private async Task<List<OrganizationDto>> GetUserOrganizationsAsync(string userId)
         {
@@ -228,37 +310,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.PinEncrypt == hashedPin;
         }
+        public async Task<(bool Status, string Message, TokenModel Response)> Login(
+    LoginModel model,
+    string businessCode)
+        {
+            var business = await _context.Businesses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
+
+            if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
+                return (false, "Business is inactive or not found", null);
+
+            var user = await ResolveUserAsync(model, businessCode);
+            if (user == null)
+                return (false, "Invalid credentials", null);
+
+            var credentialResult = await ValidateCredentialsAsync(user, model);
+            if (!credentialResult.Success)
+                return (false, credentialResult.Message, null);
+
+            var roles = await _userManager.GetRolesAsync(user);
+            if (!roles.Any())
+                return (false, "User has no assigned roles", null);
+
+            var hasPendingOnboarding = HasPendingOnboarding(user);
+
+            user.LastLoginDate = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
+
+            var organizations = await GetUserOrganizationsAsync(user.Id);
+
+            var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
+
+            var token = GenerateJwtToken(claims);
+
+            return (true, "Successful", new TokenModel
+            {
+                Id = user.Id,
+                Token = token,
+                TokenType = TokenType.AccessToken,
+                ExpiresOn = DateTime.UtcNow.AddDays(1),
+                Roles = roles.ToList(),
+                Organizations = organizations
+            });
+        }
 
         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
-    User user,
-    LoginModel model)
+      User user,
+      LoginModel model)
         {
-            if (model.LoginMethod == LoginType.Password)
+            switch (model.LoginMethod)
             {
-                var valid = await _userManager.CheckPasswordAsync(user, model.password);
-                if (!valid)
-                {
-                    await _userManager.AccessFailedAsync(user);
-                    return (false, "Invalid username or password");
-                }
-                return (true, null);
+                case LoginType.Password:
+                    if (!await _userManager.CheckPasswordAsync(user, model.password))
+                        return (false, "Invalid email or password");
+                    break;
+
+                case LoginType.Pin:
+                    if (!ValidateUserPin(user, model.pin))
+                        return (false, "Invalid phone number or PIN");
+                    break;
             }
 
-            // 🔹 PIN Login
-            if (string.IsNullOrEmpty(user.PinEncrypt) || string.IsNullOrEmpty(user.Salt))
-                return (false, "PIN login not enabled. Login with password to enable it.");
-
-            if (string.IsNullOrWhiteSpace(model.pin))
-                return (false, "PIN is required");
-
-            var isValidPin = ValidateUserPin(user, model.pin);
-            if (!isValidPin)
-            {
-                await _userManager.AccessFailedAsync(user);
-                return (false, "Invalid PIN");
-            }
-
-            return (true, null);
+            return (true, "OK");
         }
         private string GenerateJwtToken(IEnumerable<Claim> claims)
         {
