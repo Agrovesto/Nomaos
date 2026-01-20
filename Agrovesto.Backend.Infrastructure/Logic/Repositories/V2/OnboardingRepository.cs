@@ -1,4 +1,6 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -11,10 +13,14 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -35,6 +41,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task AddUserToOrganizationAsync(User user, string organizationCode, string phoneNumber);
         Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -53,6 +60,229 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
         }
+        //public async Task<TokenModel> RefreshAsync(string refreshToken, string deviceId)
+        //{
+        //    var stored = await _context.RefreshTokens
+        //        .FirstOrDefaultAsync(x =>
+        //            x.Token == refreshToken &&
+        //            !x.IsRevoked &&
+        //            x.ExpiresAt > DateTime.UtcNow &&
+        //            x.DeviceId == deviceId);
+
+        //    if (stored == null)
+        //        throw new BaseException(ExceptionType.UNAUTHORIZED, "Invalid refresh token");
+
+        //    var user = await _userManager.FindByIdAsync(stored.UserId);
+
+        //    stored.IsRevoked = true;
+        //    var newRefreshToken = CreateRefreshToken(user.Id, deviceId);
+
+        //    _context.RefreshTokens.Add(newRefreshToken);
+        //    await _context.SaveChangesAsync();
+
+        //    var claims = BuildClaims(user, ...);
+
+        //    return new TokenModel
+        //    {
+        //        Token = GenerateJwtToken(claims),
+        //        RefreshToken = newRefreshToken.Token
+        //    };
+        //}
+        private RefreshToken CreateRefreshToken(string userId, string deviceId)
+        {
+            return new RefreshToken
+            {
+                UserId = userId,
+                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                DeviceId = deviceId
+            };
+        }
+
+        private async Task<User> ResolveUserAsync(string identifier, string businessCode)
+        {
+            identifier = identifier?.Trim();
+
+            return await _context.Users.FirstOrDefaultAsync(u =>
+                u.BusinessCode == businessCode &&
+                (
+                    u.UserName == identifier ||
+                    u.Email == identifier ||
+                    u.PhoneNumber == identifier
+                ));
+        }
+
+        public async Task<(bool Status, string Message, TokenModel Response)> Login(
+     LoginModel model,
+     string businessCode
+            //,
+    // string header
+            )
+        {
+            //if (string.IsNullOrWhiteSpace(header))
+              //  return (false, "Unauthorized request", null);
+
+            var business = await _context.Businesses
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
+
+            if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
+                return (false, "Business is inactive or not found", null);
+
+            User user = null;
+
+            // 🔹 Resolve user by username first (authoritative identity)
+            user = await _userManager.FindByNameAsync(model.Username);
+
+            if (user == null || user.BusinessCode != businessCode)
+                return (false, "Invalid credentials", null);
+
+            // 🔹 Validate credential
+            var credentialResult = await ValidateCredentialsAsync(user, model);
+            if (!credentialResult.Success)
+                return (false, credentialResult.Message, null);
+
+            // 🔹 Retrieve roles
+            var roles = await _userManager.GetRolesAsync(user);
+            if (roles == null || !roles.Any())
+                return (false, "User has no assigned roles", null);
+
+            // 🔹 Check onboarding completeness
+            var hasPendingOnboarding = HasPendingOnboarding(user);
+
+            // 🔹 Update last login
+            user.LastLoginDate = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
+
+            // 🔹 Organizations
+            var organizations = await GetUserOrganizationsAsync(user.Id);
+
+            // 🔹 Build claims
+            var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
+
+            var token = GenerateJwtToken(claims);
+
+            return (true, "Successful", new TokenModel
+            {
+                Id = user.Id,
+                Token = token,
+                TokenType = TokenType.AccessToken,
+                ExpiresOn = DateTime.UtcNow.AddDays(1),
+                Roles = roles.ToList(),
+                Organizations = organizations,
+              //  HasPendingOnboarding = hasPendingOnboarding
+            });
+        }
+        private bool HasPendingOnboarding(User user)
+        {
+            return string.IsNullOrWhiteSpace(user.Email)
+                || string.IsNullOrWhiteSpace(user.PhoneNumber)
+                || string.IsNullOrWhiteSpace(user.UserType);
+        }
+
+        private List<Claim> BuildClaims(
+    User user,
+    IList<string> roles,
+    List<OrganizationDto> organizations,
+    bool hasPendingOnboarding)
+        {
+            return new List<Claim>
+    {
+        new Claim(ClaimTypes.NameIdentifier, user.Id),
+        new Claim(ClaimTypes.Name, user.UserName),
+        new Claim(JwtRegisteredClaimNames.Sub, user.Id),
+        new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+        new Claim(JwtRegisteredClaimNames.Email, user.Email ?? ""),
+        new Claim("PhoneNumber", user.PhoneNumber ?? ""),
+        new Claim("DisplayName", user.Name ?? user.UserName),
+        new Claim("Roles", string.Join(",", roles)),
+        new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString()),
+        new Claim("Organizations", JsonConvert.SerializeObject(organizations)),
+     //   new Claim("OnboardingStep", user.OnboardingStep.ToString())
+
+    };
+        }
+
+        private async Task<List<OrganizationDto>> GetUserOrganizationsAsync(string userId)
+        {
+            var orgCodes = await _context.UserOrganizations
+                .Where(x => x.UserId == userId)
+                .Select(x => x.OrganizationCode)
+                .Distinct()
+                .ToListAsync();
+
+            return await _context.BusinessOrganizations
+                .Where(o => orgCodes.Contains(o.OrganizationCode))
+                .Select(o => new OrganizationDto
+                {
+                    OrganizationCode = o.OrganizationCode,
+                    OrganizationName = o.OrganizationName
+                })
+                .ToListAsync();
+        }
+
+        private bool ValidateUserPin(User user, string plainPin)
+        {
+            var salt = Convert.FromBase64String(user.Salt);
+            var hashedPin = plainPin.HashSecret(salt);
+
+            return user.PinEncrypt == hashedPin;
+        }
+
+        private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
+    User user,
+    LoginModel model)
+        {
+            if (model.LoginMethod == LoginType.Password)
+            {
+                var valid = await _userManager.CheckPasswordAsync(user, model.password);
+                if (!valid)
+                {
+                    await _userManager.AccessFailedAsync(user);
+                    return (false, "Invalid username or password");
+                }
+                return (true, null);
+            }
+
+            // 🔹 PIN Login
+            if (string.IsNullOrEmpty(user.PinEncrypt) || string.IsNullOrEmpty(user.Salt))
+                return (false, "PIN login not enabled. Login with password to enable it.");
+
+            if (string.IsNullOrWhiteSpace(model.pin))
+                return (false, "PIN is required");
+
+            var isValidPin = ValidateUserPin(user, model.pin);
+            if (!isValidPin)
+            {
+                await _userManager.AccessFailedAsync(user);
+                return (false, "Invalid PIN");
+            }
+
+            return (true, null);
+        }
+        private string GenerateJwtToken(IEnumerable<Claim> claims)
+        {
+            var key = _configuration["JWT:Key"];
+            if (string.IsNullOrWhiteSpace(key))
+                throw new InvalidOperationException("JWT key is not configured");
+
+            var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key));
+
+            var token = new JwtSecurityToken(
+                issuer: _configuration["JWT:Issuer"],
+                audience: _configuration["JWT:Audience"],
+                claims: claims,
+                notBefore: DateTime.UtcNow,
+                expires: DateTime.UtcNow.AddDays(1),
+                signingCredentials: new SigningCredentials(
+                    signingKey,
+                    SecurityAlgorithms.HmacSha256)
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+
         public async Task ConfirmUserEmailOrPassword(string userId)
         {
             var user = await _userManager.FindByIdAsync(userId);
@@ -509,6 +739,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
             return (entity.Map(), true, "User successfully registered and linked to organization if applicable.");
+        }
+        private async Task TrackDeviceAsync(
+    string userId,
+    string deviceId,
+    string deviceName,
+    string ip)
+        {
+            var device = await _context.UserDevices
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.DeviceId == deviceId);
+
+            if (device == null)
+            {
+                _context.UserDevices.Add(new UserDevice
+                {
+                    UserId = userId,
+                    DeviceId = deviceId,
+                    DeviceName = deviceName,
+                    IPAddress = ip,
+                    LastSeen = DateTime.UtcNow
+                });
+            }
+            else
+            {
+                device.LastSeen = DateTime.UtcNow;
+                device.IPAddress = ip;
+            }
+
+            await _context.SaveChangesAsync();
         }
 
     }
