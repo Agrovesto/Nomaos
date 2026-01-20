@@ -12,7 +12,7 @@ using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
-    [Route("api/v2/[controller]")]
+    [Route("api/v2/account")]
     [ApiController]
     public class AuthenticationController : BaseController
     {
@@ -270,6 +270,70 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
+        }
+        [HttpPost("login")]
+        [AllowAnonymous]
+        public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string? businessCode)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            var isAgrovesto = "IsBusiness";//DomainHeader;
+            try
+            {
+                var createUser = await _onBoardingManager.Login(model, businessCode);
+                if (createUser.Status)
+                {
+                    return Ok(new Response<TokenModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = createUser.Status,
+                        Message = createUser.Message,
+                        Data = createUser.Response
+                    });
+                }
+                else
+                {
+                    return BadRequest(new Response<TokenModel>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = createUser.Status,
+                        Message = createUser.Message,
+                        Data = createUser.Response
+                    });
+                }
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
     }
