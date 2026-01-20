@@ -52,7 +52,8 @@ jobs:
       - name: Add EC2 host to known_hosts (with retry + timeout)
         run: |
           mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh
           for i in {1..5}; do
             echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
             ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
@@ -61,6 +62,7 @@ jobs:
 
       - name: Deploy source code + run deploy script
         run: |
+          RELEASE=$(date +%Y%m%d_%H%M%S)
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
           rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
   
