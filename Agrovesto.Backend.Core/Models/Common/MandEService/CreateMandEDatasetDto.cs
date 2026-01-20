@@ -39,6 +39,7 @@ namespace Agrovesto.Backend.Core.Models.Common.MandEService
     public class CreateMandEFieldDto
     {
         public string Name { get; set; }
+        public string Label { get; set; }
         public string Key { get; set; }
         public string Type { get; set; }        // number, text, date
         public bool IsComputed { get; set; }

@@ -32,6 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> ConfirmOtp(ConfirmOtpRequest request);
         Task<OnboardingRequestModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
         Task ResendOnboardingOtp(ResendOtpRequest model);
     }
     public class OnBoardingManager : IOnBoardingManager
@@ -58,7 +59,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _walletManager = walletManager;
             _otpService = otpService;
         }
-    
+
+        public async Task<(bool Status, string Message, TokenModel Response)> Login(
+     LoginModel model,
+     string businessCode
+            //,
+            // string header
+            )
+        {
+            return await _onboardingRepository.Login(model, businessCode);
+        }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
             // ---- Phone validation ----

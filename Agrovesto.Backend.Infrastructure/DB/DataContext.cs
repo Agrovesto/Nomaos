@@ -174,6 +174,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
+        public DbSet<UserDevice> UserDevices { get; set; }
         public DbSet<MandEDataset> MandEDatasets { get; set; }
         public DbSet<MandEDataFieldDefinition> MandEDataFieldDefinitions { get; set; }
         public DbSet<MandERecord> MandERecords { get; set; }

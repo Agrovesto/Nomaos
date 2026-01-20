@@ -63,6 +63,30 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Password { get; set; }
         public string? Email { get; set; }
     }
+    public enum OnboardingStatus
+    {
+        Pending,
+        ProfileCompleted,
+        SecuritySetup,
+        Completed
+    }
+    public class RefreshToken
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString();
+        public string UserId { get; set; }
+        public string Token { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public bool IsRevoked { get; set; }
+        public string DeviceId { get; set; }
+    }
+
+    public class LoginRequestModel
+    {
+        public string Identifier { get; set; } // username | email | phone
+        public string Password { get; set; }
+        public string Pin { get; set; }
+        public LoginType LoginMethod { get; set; }
+    }
 
     public class ProfileRequestModel 
     {
