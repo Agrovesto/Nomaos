@@ -5,7 +5,6 @@ set -euo pipefail
 set -x
 
 
-PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
 RELEASES_DIR="$APP_DIR/releases"
@@ -15,6 +14,7 @@ CURRENT_DIR="$APP_DIR/current"
 PREVIOUS_DIR="$APP_DIR/previous"
 USER_NAME="www-data"
 CI_USER="ubuntu"
+PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
 
 export HOME=/tmp
 export DOTNET_CLI_HOME=/tmp
