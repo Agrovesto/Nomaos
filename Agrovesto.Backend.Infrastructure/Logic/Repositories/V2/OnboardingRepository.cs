@@ -256,6 +256,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 // For frontend convenience
                 claims.Add(new Claim("Roles", string.Join(",", roles)));
             }
+            claims.Add(new Claim("UserLevel", user.UserLevel.ToString()));
+
+
 
             // 🔹 User metadata
             if (!string.IsNullOrWhiteSpace(user.UserType))

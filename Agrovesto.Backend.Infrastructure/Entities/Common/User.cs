@@ -36,11 +36,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     {
       Level1, //not verified
         
-      Level2, //
-        
-      Level3,
+      Level2, //phone or email verified
+
+      Level3, //farmer: crop and their picture, agent: picture, cooperatuve: cooperative registration document
       
-      Level4
+      Level4,//farmer: land mapping
+      Level5, //nin/bvn
     }
     public class UserOrganization
     {
