@@ -28,7 +28,7 @@ sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
 # ------------------------------------------------------------
 # Build & publish
 # ------------------------------------------------------------
-dotnet publish "PROJECT_PATH"\
+dotnet publish "$PROJECT_PATH"\
   -c Release \
   -r linux-x64 \
   --self-contained true \
