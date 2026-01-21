@@ -5,7 +5,7 @@ set -euo pipefail
 set -x
 
 
-PROJECT_PATH="$APP_DIR/$APP_NAME/$APP_NAME.csproj" 
+PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
 RELEASES_DIR="$APP_DIR/releases"
