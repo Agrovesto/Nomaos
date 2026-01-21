@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     public class User : IdentityUser
     {
         public string? Salt { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? Pin { get; set; } 
         public string? PinEncrypt { get; set; }
         public string? Password { get; set; }         

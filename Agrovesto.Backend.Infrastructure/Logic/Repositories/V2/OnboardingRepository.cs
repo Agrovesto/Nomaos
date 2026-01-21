@@ -8,6 +8,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
+using PhoneNumbers;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
@@ -494,10 +496,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var entity = new User
             {
                 UserName = !string.IsNullOrWhiteSpace(model.Email) ? model.Email : model.PhoneNumber,
-                Email = model.Email,
-                PhoneNumber = model.PhoneNumber,
-                Salt = Convert.ToBase64String(salt)
+              
+               
             };
+            entity.Salt = Convert.ToBase64String(salt);
+            entity.Email = model.Email;
+            entity.PhoneNumber = model.PhoneNumber;
             entity.Pin = model.Pin;
             entity.UserLevel = UserLevel.Level1;
             entity.Password = model.Password;
