@@ -4,6 +4,8 @@
 set -euo pipefail
 set -x
 
+
+PROJECT_PATH="$APP_DIR/$APP_NAME/$APP_NAME.csproj" 
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
 RELEASES_DIR="$APP_DIR/releases"
@@ -26,7 +28,7 @@ sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
 # ------------------------------------------------------------
 # Build & publish
 # ------------------------------------------------------------
-dotnet publish \
+dotnet publish "PROJECT_PATH"\
   -c Release \
   -r linux-x64 \
   --self-contained true \
