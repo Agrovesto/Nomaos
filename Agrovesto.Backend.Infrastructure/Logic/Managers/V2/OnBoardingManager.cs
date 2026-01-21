@@ -273,6 +273,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<OnboardingRequestModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
+            try { 
             ValidateQuickOnboarding(model);
 
             if (string.IsNullOrEmpty(args.businessCode))
@@ -351,6 +352,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             model.Id = createUser.model.Id;
             return model;
+            }
+            catch(Exception ex)
+            {
+                _log.LogError($"User Registration failed with error: {ex.Message}");
+                throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, "An error occured");
+
+            }
         }
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
         {
