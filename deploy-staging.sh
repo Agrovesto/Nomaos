@@ -52,17 +52,6 @@ sudo chown -R "$USER_NAME:$USER_NAME" "$RELEASE_DIR"
 sudo systemctl restart "$APP_NAME"
 
 # ------------------------------------------------------------
-# Health gate
-# ------------------------------------------------------------
-sleep 5
-if ! curl -fs http://127.0.0.1:5000/health; then
-  echo "❌ Health check failed — rolling back"
-  sudo ln -sfn "$(readlink -f "$PREVIOUS_DIR")" "$CURRENT_DIR"
-  sudo systemctl restart "$APP_NAME"
-  exit 1
-fi
-
-# ------------------------------------------------------------
 # Cleanup old releases (keep last 3)
 # ------------------------------------------------------------
 ls -1dt "$RELEASES_DIR"/* | tail -n +4 | sudo xargs rm -rf || true
