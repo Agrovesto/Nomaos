@@ -182,7 +182,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                     await image.CopyToAsync(memoryStream);
                     imageBytes = memoryStream.ToArray();
                 }
-                var imageExist = await _farmerRepository.GetFarmerImage(userId, businessCode, organizationCode);
+                var imageExist = await _farmerRepository.GetUserImage(userId, businessCode, organizationCode);
                 if (imageExist != null)
                 {
                     try
@@ -220,6 +220,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                     BelongToBusinessCode = businessCode,
                     FarmerUserId = userId,
                     ImageKey = imageKey,
+                    OrganizationCode = organizationCode,
                     ImageName = image.FileName
                 });
 
