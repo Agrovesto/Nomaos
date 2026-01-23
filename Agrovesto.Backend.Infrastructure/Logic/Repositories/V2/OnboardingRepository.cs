@@ -44,6 +44,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<(bool status, string message)> OnProfileUpdateAsync(string userId, UserLevel level);
+        Task<bool> OnNINBVNUpdate(UserModel model);
+        Task OnCreateKYC(KYCDetails kYC);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -100,6 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 DeviceId = deviceId
             };
         }
+
         private async Task<User?> ResolveUserAsync(LoginModel model, string businessCode)
         {
             User? user = null;
@@ -107,19 +111,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
-                    if (string.IsNullOrWhiteSpace(model.Username))
+                    if (string.IsNullOrWhiteSpace(model.Email))
                         return null;
 
-                    user = await _userManager.FindByEmailAsync(model.Username);
+                    user = await _userManager.FindByEmailAsync(model.Email);
                     break;
 
                 case LoginType.Pin:
-                    if (string.IsNullOrWhiteSpace(model.phonenumber))
+                    if (string.IsNullOrWhiteSpace(model.Phonenumber))
                         return null;
 
                     user = await _userManager.Users
                         .FirstOrDefaultAsync(x =>
-                            x.PhoneNumber == model.phonenumber &&
+                            x.PhoneNumber == model.Phonenumber &&
                             x.BusinessCode == businessCode);
                     break;
             }
@@ -367,12 +371,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
-                    if (!await _userManager.CheckPasswordAsync(user, model.password))
+                    if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
 
                 case LoginType.Pin:
-                    if (!ValidateUserPin(user, model.pin))
+                    if (!ValidateUserPin(user, model.Pin))
                         return (false, "Invalid phone number or PIN");
                     break;
             }
@@ -727,7 +731,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (false, "Invalid username");
         }
 
-         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
+        public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
             var userExist = await _userManager.FindByEmailAsync(model.UserName);
             if (userExist != null)
@@ -890,5 +894,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
 
-    }
+        public async Task<bool> OnNINBVNUpdate(UserModel model)
+        {
+            var user = await _context.Users.Where(x => x.Id == model.Id).FirstOrDefaultAsync();
+            if (user == null)
+            {
+                return false;
+            }
+            user.NIN=model.NIN;
+                user.BVN=model.Bvn;
+                await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task OnCreateKYC(KYCDetails kYC)
+        {
+            await _context.KYCDetails.AddAsync(kYC);
+            await _context.SaveChangesAsync();
+
+            
+        }
+        public async Task<(bool status, string message)> OnProfileUpdateAsync(string userId, UserLevel level)
+        {
+            var user = await _context.Users.Where(x => x.Id == userId).FirstOrDefaultAsync();
+            if (user == null) {
+                return (false, null);
+            }
+            user.UserLevel = level;
+            await _context.SaveChangesAsync();
+
+            return (true, "Level Updated");
+        }
+
+        }
 }

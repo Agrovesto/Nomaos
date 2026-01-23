@@ -10,12 +10,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class FarmerDetailDto
     {
         public FarmerModel Farmer { get; set; }
-        public CooperativeModel Cooperative { get; set; }
-        public AgentModel? Agent { get; set; }
+        public List<CooperativeModel>? Cooperatives { get; set; }
+        public List<AgentModel>? Agents { get; set; }
         public FarmerImagesModel? FarmerImage { get; set; }
-        public List<FarmPlotDetailsModel> PlotDetails { get; set; }
-        public List<FarmVisitationActivityModel> Visitations { get; set; }
-        public List<RepaymentModel> Repayments { get; set; }
+        public List<FarmPlotDetailsModel>? PlotDetails { get; set; }
+        public List<FarmVisitationActivityModel>? Visitations { get; set; }
+        public List<RepaymentModel>? Repayments { get; set; }
         public List<FarmerValueChainSelectionDto>? ValueChainItems { get; set; }
 
     }
@@ -39,8 +39,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
         public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
-        public long BelongToCooperativeId { get; set; }
-        public string? CooperativeName { get; set; }
+       // public long BelongToCooperativeId { get; set; }
+       // public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
         public string? OrganizationCode { get; set; }
         public string? NIN { get; set; }
@@ -52,6 +52,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? OnboardedById { get; set; }
         public List<ValueChainSelectionDto> SelectedItems { get; set; }
         public List<FarmerValueChainsSelectionDto>? ValueChainItems { get; set; }
+        public List<long>? CooperativeIds { get; set; }
+        public List<long>? AgentIds { get; set; }
+        public List<string>? CooperativeNames { get; set; }
+        public string? CooperativeName { get; set; }
+
+
     }
     public class FarmerValueChainSelectionDto
     {

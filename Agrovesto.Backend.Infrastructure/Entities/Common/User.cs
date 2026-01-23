@@ -36,9 +36,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     {
       Level1, //not verified
         
-      Level2, //phone or email verified
+      Level2, //phone or email verified && crop
 
-      Level3, //farmer: crop and their picture, agent: picture, cooperatuve: cooperative registration document
+        Level3, //farmer:  and their picture, agent: picture, cooperatuve: cooperative registration document
       
       Level4,//farmer: land mapping
       Level5, //nin/bvn

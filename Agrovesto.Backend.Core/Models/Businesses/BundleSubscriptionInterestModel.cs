@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public List<OtherBundlePaymentCostModel>? OtherBundlePaymentCosts { get; set; }
         // Add these new properties:
         public FarmerModel Farmer { get; set; }
-        public CooperativeModel Cooperative { get; set; }
+        public List<CooperativeModel> Cooperatives { get; set; }
         public decimal BundlePrice { get; set; }
         public long QuantityOfInterest { get; set; }
         public decimal TotalEquityPaid { get; set; }

@@ -35,7 +35,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             try
             {
-                var score = await _scoreRepo.GetCreditScorebybusiness(args.businessCode,args.PageNumber,args.PageSize,args.organizationCode);
+                var score = await _scoreRepo.GetCreditScoreByBusiness(args.businessCode,args.PageNumber,args.PageSize,args.organizationCode);
             if (score == null) return null;
 
             if (score == null) return new PagedListResponse<List<FarmerCreditScoreModel>>

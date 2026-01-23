@@ -625,7 +625,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 TotalEquityPaid = subscription.SubscriptionInterest.TotalEquityPaid + settlementPlatformSplitAmount,
                 OnBoardedOn = subscription.SubscriptionInterest.OnBoardedOn,
                 Farmer = subscription.Farmer,
-                Cooperative = subscription.Cooperative,
+                Cooperatives = subscription.Cooperatives.ToList(),
                 SubscriptionInterest = subscription.SubscriptionInterest,
                 MaturityDate = subscription.SubscriptionInterest.MaturityDate,
                 BelongToBusinessCode = subscription.SubscriptionInterest.BelongToBusinessCode,
@@ -679,7 +679,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.InterestedBundleName = getInputInventory.Name;
                     model.Status = EquityPaymentStatus.Initial;
                     model.FarmerName = farmer.Name;
-                    model.CooperativeId = farmer.BelongToCooperativeId;
+                    model.CooperativeId = args.CooperativeId;//farmer.BelongToCooperativeId;
                     model.Location = farmer.State;
                     if (getInputInventory.ShouldAddCommission)
                     {

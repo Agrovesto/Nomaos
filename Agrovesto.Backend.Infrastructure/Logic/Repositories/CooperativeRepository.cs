@@ -61,12 +61,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .AsNoTracking()
                 .FirstOrDefaultAsync(w => w.UserId == cooperative.UserId);
 
-            // Fetch farmers sequentially (safe)
-            var farmers = await _context.Farmers
-                .AsNoTracking()
-                .Where(f => f.BelongToCooperativeId == cooperative.Id)
-                .ToListAsync();
-            //var mappingTask = _context.FarmMappings.AsNoTracking().FirstOrDefaultAsync(f => f.UserId == cooperative.UserId);
+            // Fetch farmers belonging to this cooperative via FarmerCooperatives
+            var farmers = await (
+                from f in _context.Farmers.AsNoTracking()
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on f.Id equals fc.FarmerId
+                where fc.CooperativeId == cooperative.Id
+                select f
+            ).ToListAsync();
+
             // Map results
             var response = cooperative.Map();
             response.Wallet = wallet?.Map();
@@ -110,13 +113,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-
         public async Task<List<CooperativeModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
         {
+            // Base query: cooperatives assigned to this agent via join table
             var cooperativesQuery = _context.Cooperatives
-                .AsNoTracking()
-                .Where(s => s.IsAssignedToAgentId == agentId);
+             .AsNoTracking()
+             .Where(s => s.IsAssignedToAgentId == agentId);
 
+
+            // Filter by organization code
             if (!string.IsNullOrWhiteSpace(query.organizationCode))
             {
                 cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
@@ -124,8 +129,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
-                //.Skip(query.PageNumber)
-                //.Take(query.PageSize)
                 .Select(s => new CooperativeModel
                 {
                     Id = s.Id,
@@ -133,21 +136,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Location = s.Location,
                     State = s.State,
                     Lga = s.Lga,
-                    IsAssignedToAgentId = s.IsAssignedToAgentId,
                     OnBoardedOn = s.OnBoardedOn,
                     BelongToBusinessCode = s.BelongToBusinessCode,
                     ContactPerson = s.ContactPerson,
                     Email = s.Email,
-                    HasbeenAssignedAgent = s.HasbeenAssignedAgent,
                     PhoneNumber = s.PhoneNumber,
                     UserId = s.UserId,
-                    TotalFarmers = _context.Farmers.Count(f => f.BelongToCooperativeId == s.Id)
+                    // Count farmers via FarmerCooperatives
+                    TotalFarmers = _context.FarmerCooperatives.Count(fc => fc.CooperativeId == s.Id)
                 })
                 .ToListAsync();
 
-            return cooperatives.Any() ? cooperatives : null;
+            return cooperatives.Any() ? cooperatives : new List<CooperativeModel>();
         }
 
+      
 
         public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
         {
@@ -172,22 +175,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
         {
-            var farmers = await _context.Farmers
-                .Where(f => f.BelongToCooperativeId == cooperativeId)
-                .ToListAsync();
+            var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
+            // Get all farmers in this cooperative via FarmerCooperatives
+            var farmers = await (
+                from f in _context.Farmers.AsNoTracking()
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on f.Id equals fc.FarmerId
+                where fc.CooperativeId == cooperativeId
+                select f
+            ).ToListAsync();
 
             if (!farmers.Any())
-                return null;
+                return new List<FarmerModel>();
 
             foreach (var farmer in farmers)
             {
-                farmer.OnboardedByUserId = agentUserId;
+                // Check if the assignment already exists
+                var alreadyAssigned = await _context.FarmerAgents
+                    .AnyAsync(fa => fa.FarmerId == farmer.Id && fa.AgentId == agent.Id);
+
+                if (!alreadyAssigned)
+                {
+                    // Assign agent
+                    await _context.FarmerAgents.AddAsync(new FarmerAgent
+                    {
+                        FarmerId = farmer.Id,
+                        AgentId = agent.Id,
+                        AssignedOn = DateTimeOffset.UtcNow
+                    });
+                }
             }
 
             await _context.SaveChangesAsync();
 
-            return farmers.Select(x=>x.Map()).ToList();
-
+            // Return mapped farmers
+            return farmers.Select(f => f.Map()).ToList();
         }
 
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
