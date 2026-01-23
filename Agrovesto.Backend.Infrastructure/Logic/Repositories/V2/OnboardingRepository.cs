@@ -103,6 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 DeviceId = deviceId
             };
         }
+
         private async Task<User?> ResolveUserAsync(LoginModel model, string businessCode)
         {
             User? user = null;
@@ -110,19 +111,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
-                    if (string.IsNullOrWhiteSpace(model.Username))
+                    if (string.IsNullOrWhiteSpace(model.Email))
                         return null;
 
-                    user = await _userManager.FindByEmailAsync(model.Username);
+                    user = await _userManager.FindByEmailAsync(model.Email);
                     break;
 
                 case LoginType.Pin:
-                    if (string.IsNullOrWhiteSpace(model.phonenumber))
+                    if (string.IsNullOrWhiteSpace(model.Phonenumber))
                         return null;
 
                     user = await _userManager.Users
                         .FirstOrDefaultAsync(x =>
-                            x.PhoneNumber == model.phonenumber &&
+                            x.PhoneNumber == model.Phonenumber &&
                             x.BusinessCode == businessCode);
                     break;
             }
@@ -370,12 +371,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
-                    if (!await _userManager.CheckPasswordAsync(user, model.password))
+                    if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
 
                 case LoginType.Pin:
-                    if (!ValidateUserPin(user, model.pin))
+                    if (!ValidateUserPin(user, model.Pin))
                         return (false, "Invalid phone number or PIN");
                     break;
             }

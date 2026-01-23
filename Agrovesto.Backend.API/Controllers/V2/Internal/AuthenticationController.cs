@@ -205,7 +205,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-profile")]
         [AllowAnonymous]
-        public async Task<IActionResult> Register([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)
