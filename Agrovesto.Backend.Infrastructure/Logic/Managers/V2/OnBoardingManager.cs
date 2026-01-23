@@ -5,10 +5,13 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
@@ -29,14 +32,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOnBoardingManager
     {
+        Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args);
+        Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args);
         Task<bool> ConfirmOtp(ConfirmOtpRequest request);
-        Task<OnboardingRequestModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
+        Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
         Task ResendOnboardingOtp(ResendOtpRequest model);
+        Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
+        Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
+        Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
+        private readonly IFaceManager _faceManager;
+
         private readonly IWalletManager _walletManager;
         private readonly INotificationService _sMSService;
         private readonly IOnboardingRepository _onboardingRepository;
@@ -46,8 +56,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ICooperativeRepository _cooperativeRepository;
         private readonly IOtpService _otpService;
         private readonly ILogger<OnBoardingManager> _log;
-        public OnBoardingManager(IWalletManager walletManager, IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, ICooperativeRepository cooperativeRepository,
-            IAgentRepository agentRepository, IOtpService otpService, INotificationService sMSService, IOnboardingRepository onboardingRepository)
+        private readonly IFarmManager _farmManager;
+        private readonly IIdentityVerificationManager _identityVerificationManager;
+        public OnBoardingManager(IWalletManager walletManager,
+            IFaceManager faceManager,
+            IIdentityVerificationManager identityVerificationManager,
+            IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, ICooperativeRepository cooperativeRepository,
+            IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository)
         {
             _onboardingRepository = onboardingRepository;
             _farmerRepository = farmerRepository;
@@ -58,6 +73,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _sMSService = sMSService;
             _walletManager = walletManager;
             _otpService = otpService;
+            _faceManager=faceManager;
+            _farmManager = farmManager;
+            _identityVerificationManager = identityVerificationManager;
         }
 
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
@@ -132,7 +150,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 //check if user is farmer,
                 //if true, check model for compulsory fields
                 //create user as farmer
-
+                if (!string.IsNullOrEmpty(model.NIN))
+                {
+                    user.model.NIN = model.NIN;
+                }
+                if (!string.IsNullOrEmpty(model.Bvn))
+                {
+                    user.model.Bvn = model.Bvn;
+                }
+                await _onboardingRepository.OnNINBVNUpdate(user.model);
                 return (true, "User Profile Created");
             }
 
@@ -255,23 +281,60 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 DateOfBirth = model.DateOfBirth,
-                BelongToCooperativeId = args.Id,
+                CooperativeIds=  args.CooperativeIds,
+                AgentIds=args.AgentIds,
+                //BelongToCooperativeId = args.Id,
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
                 FarmerCategory = model.FarmerCategory,
                 SelectedItems = model.ValueChainDto,
                 YearsInAgric = model.YearsInAgric,
+                
                 OnboardedById=model.OnboardedByUserId,
-                HighestLevelOfEducation = model.HighestLevelOfEducation,
+                HighestLevelOfEducation = model.HighestLevelOfEducation
                 // ValueChainItems= model.ValueChainSelections
             };
-
+           
+            
             var farer = await _farmerRepository.CreateFarmer(farmer);
 
-
+            
         }
+        public async Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args)
+        {
+            if (!args.CooperativeIds.Any())
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "No Cooperative selected.");
+            }
+            if (args.Id < 0)
+            {
+                throw new BaseException(
+    Core.Enums.ExceptionType.BAD_REQUEST,
+    "Farmer Id is required.");
+            }
+            ;
 
-        public async Task<OnboardingRequestModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
+            return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
+        }
+        public async Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args)
+        {
+            if (!args.AgentIds.Any()) { 
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "No Agent selected.");
+            }
+            if(args.Id < 0)
+            {
+                                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Farmer Id is required.");
+            };
+
+            return await _farmerRepository.AssignFarmerToAgents(args, args.Id);
+        }
+        public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
             try { 
             ValidateQuickOnboarding(model);
@@ -351,7 +414,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     $"Your verification code is {otp.Code}. Expires in 5 minutes.");
             }
             model.Id = createUser.model.Id;
-            return model;
+            return new OnboardingResponseModel { 
+                Id = model.Id,
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+            };
             }
             catch(Exception ex)
             {
@@ -438,6 +505,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return otp;
         }
 
+
+        public async Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId)
+        {
+            var user = await _onboardingRepository.GetUserById(args.UserId);
+            if (user.model == null)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "User not found.");
+            }
+            var verifyNin = await _identityVerificationManager.VerifyNIN(new NINDataModel
+            {
+                number = nin
+            });
+            if (!verifyNin.status)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    verifyNin.detail);
+            }
+            user.model.NIN = nin;
+            var kyc = verifyNin.nin_data.ToEntity();
+            kyc.VerifiedBy = CurrentUserId;
+            kyc.UserId = args.UserId;
+            kyc.LoggedOn= DateTimeOffset.UtcNow; 
+            await _onboardingRepository.OnCreateKYC(kyc);
+            await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level5);
+            return true;
+        }
         private static string GenerateEmail(string fullName, string domain)
         {
             if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(domain))
@@ -536,6 +632,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 to = $"2349061562512",
                 sms = messageBody
             });
+        }
+
+
+        public async Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args)
+        {
+            var saveFace = new ImageUploadResponse();
+                try
+            {
+                saveFace = await _faceManager.UploadImage(model.File, args.UserId, args.businessCode, args.organizationCode);
+
+                if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey)) 
+                {
+                    var updateLevel = await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level3);
+                }
+                return saveFace;
+            }
+            catch (Exception ex)
+            {
+                //await dbTransaction.RollbackAsync();
+                throw new Exception($"{ex.Message}", ex);
+            }
+            // });
+            //return saveFace;
+        }
+        public async Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args)
+        {
+           
+            try
+            {
+                var updateDetail = await _farmManager.CreateFarmAsync(model, args);
+
+                if (updateDetail != null && (updateDetail.Id > 0))
+                {
+                    var updateLevel = await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level4);
+                }
+                return updateDetail;
+            }
+            catch (Exception ex)
+            {
+                //await dbTransaction.RollbackAsync();
+                throw new Exception($"{ex.Message}", ex);
+            }
+            // });
+            //return saveFace;
         }
     }
 

@@ -38,7 +38,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? sortBy { get; set; }
         public DateTimeOffset? startDate { get; set; }
         public DateTimeOffset? endDate { get; set; }
-        public long CooperativeId { get; set; }
+        public long? CooperativeId { get; set; }
+        public long? AgentId { get; set; }
         public long Id { get; set; }
         public string? env { get; set; }
         public string? SelectedProviderCode { get; set; }
