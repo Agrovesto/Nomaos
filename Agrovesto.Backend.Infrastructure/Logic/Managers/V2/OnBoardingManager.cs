@@ -1,5 +1,6 @@
 ﻿using AfricasTalkingCS;
 using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
@@ -22,6 +23,7 @@ using NetTopologySuite.Operation.Valid;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -77,6 +79,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _farmManager = farmManager;
             _identityVerificationManager = identityVerificationManager;
         }
+        private static void ValidateLoginModel(LoginModel model)
+        {
+            switch (model.LoginMethod)
+            {
+                case LoginType.Password:
+                    if (string.IsNullOrWhiteSpace(model.Email))
+                        throw new BaseException(ExceptionType.BAD_REQUEST, "Email is required.");
+
+                    if (!new EmailAddressAttribute().IsValid(model.Email))
+                        throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid email format.");
+
+                    if (string.IsNullOrWhiteSpace(model.Password) || model.Password.Length < 4)
+                        throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid password.");
+                    break;
+
+                case LoginType.Pin:
+                    if (string.IsNullOrWhiteSpace(model.Phonenumber))
+                        throw new BaseException(ExceptionType.BAD_REQUEST, "Phone number is required.");
+
+                    if (!Regex.IsMatch(model.Phonenumber, @"^\d{11}$"))
+                        throw new BaseException(ExceptionType.BAD_REQUEST, "Phone number must be 11 digits.");
+
+                    if (string.IsNullOrWhiteSpace(model.Pin) || !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                    {
+                        throw new BaseException(
+                            ExceptionType.BAD_REQUEST,
+                            "PIN must be exactly 4 digits."
+                        );
+                    }
+
+                    break;
+            }
+        }
 
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
      LoginModel model,
@@ -85,48 +120,86 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             // string header
             )
         {
+            ValidateLoginModel(model);
             return await _onboardingRepository.Login(model, businessCode);
         }
-        private static void ValidateQuickOnboarding(OnboardingRequestModel model)
+
+private static void ValidateQuickOnboarding(OnboardingRequestModel model)
+    {
+        var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
+        var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
+
+        // ---- Must choose ONE method ----
+        if (!hasEmail && !hasPhone)
         {
-            // ---- Phone validation ----
-            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
-            {
-                if (model.PhoneNumber.Length != 11)
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Phone number must be exactly 11 digits.");
+            throw new BaseException(
+                Core.Enums.ExceptionType.BAD_REQUEST,
+                "Either email or phone number must be provided.");
+        }
 
-                if (string.IsNullOrWhiteSpace(model.Pin))
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Registration with phone number must include a PIN.");
-            }
+        if (hasEmail && hasPhone)
+        {
+            throw new BaseException(
+                Core.Enums.ExceptionType.BAD_REQUEST,
+                "Use either email or phone number, not both.");
+        }
 
-            // ---- Email validation ----
-            if (!string.IsNullOrWhiteSpace(model.Email))
-            {
-                if (string.IsNullOrWhiteSpace(model.Password))
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Password is required when registering with email.");
-
-                if (model.Password.Length < 6)
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Password must be at least 6 characters long.");
-            }
-
-            // ---- Ensure at least one onboarding method is used ----
-            if (string.IsNullOrWhiteSpace(model.Email) &&
-                string.IsNullOrWhiteSpace(model.PhoneNumber))
+        // ================= EMAIL + PASSWORD =================
+        if (hasEmail)
+        {
+            // Email format
+            var emailValidator = new EmailAddressAttribute();
+            if (!emailValidator.IsValid(model.Email))
             {
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Either email or phone number must be provided.");
+                    "Invalid email address format.");
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Password))
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Password is required when using email.");
+            }
+
+            if (model.Password.Length < 4)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Password must be alphanumeric and at least 8 characters long.");
             }
         }
-        public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
+
+        // ================= PHONE + PIN =================
+        if (hasPhone)
+        {
+            // Must be exactly 11 digits
+            if (!Regex.IsMatch(model.PhoneNumber!, @"^\d{11}$"))
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Phone number must be exactly 11 digits and numeric only.");
+            }
+
+            if (string.IsNullOrWhiteSpace(model.Pin))
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "PIN is required when using phone number.");
+            }
+
+                if (string.IsNullOrWhiteSpace(model.Pin) || !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                {
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "PIN must be exactly 4 digits."
+                    );
+                }
+
+            }
+        }
+    public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
         {
             try
             { // fetch user by id
@@ -407,12 +480,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Confirm your account",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes.");
             }
-            else
-            {
-                await _sMSService.SendSmsAsync(
-                    destination,
-                    $"Your verification code is {otp.Code}. Expires in 5 minutes.");
-            }
+            //else
+            //{
+            //    await _sMSService.SendSmsAsync(
+            //        destination,
+            //        $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+            //}
             model.Id = createUser.model.Id;
             return new OnboardingResponseModel { 
                 Id = model.Id,
@@ -420,12 +493,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 PhoneNumber = model.PhoneNumber,
             };
             }
-            catch(Exception ex)
+            catch (BaseException)
             {
-                _log.LogError($"User Registration failed with error: {ex.Message}");
-                throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, "An error occured");
-
+                // Let known business errors bubble up untouched
+                throw;
             }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "User Registration failed unexpectedly");
+
+                throw new BaseException(
+                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
+                    "An unexpected error occurred. Please try again.");
+            }
+
         }
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
         {
