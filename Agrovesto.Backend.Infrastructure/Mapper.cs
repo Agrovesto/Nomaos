@@ -16,6 +16,32 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+        public static KYCDetails ToEntity(this NINData model)
+        {
+            if (model == null) return null;
+            return new KYCDetails
+            {
+               // Id = model.Id,
+                Birthcountry = model.birthcountry,
+                Surname = model.surname,
+                Birthdate = model.birthdate,
+                Birthlga = model.birthlga,
+               // Birthstate = model.sta,
+                Firstname = model.firstname,
+                Gender = model.gender,
+                //LoggedOn = model.LoggedOn,
+                //Maidenname = model.,
+                Middlename = model.middlename,
+                Nin = model.nin,
+                Phonenumber = model.telephoneno,
+                Photourl = model.photo,
+                Residentialaddress = model.residence_address,
+            //    UserId = model.UserId,
+              //  VerifiedBy = model.VerifiedBy
+            };
+        }
+
+
         public static Dictionary<string, decimal> SafeDeserializeContributions(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return new();
@@ -1286,7 +1312,7 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 OnboardedByUserId = entities.OnboardedByUserId,
-                BelongToCooperativeId = entities.BelongToCooperativeId,
+               // BelongToCooperativeId = entities.BelongToCooperativeId,
                 Ward = entities.Ward,
              //   OrganizationCode = entities.OrganizationCode,
                 FarmerCategory=entities.FarmerCategory,
@@ -1298,10 +1324,11 @@ namespace Agrovesto.Backend.Infrastructure
 
         public static Farmer Map(this FarmerModel model)
         {
-            if (model == null) { return null; }
+            if (model == null) return null;
+
             return new Farmer
             {
-                //Id = model.Id,
+                // Id = model.Id,
                 Location = model.Location,
                 Name = model.Name,
                 Email = model.Email,
@@ -1314,12 +1341,12 @@ namespace Agrovesto.Backend.Infrastructure
                 PhoneNumber = model.PhoneNumber,
                 DateOfBirth = model.DateOfBirth,
                 Gender = model.Gender,
-                BelongToCooperativeId = model.BelongToCooperativeId,
-                Ward=model.Ward,
-                //OrganizationCode = model.OrganizationCode,
+                // BelongToCooperativeId = model.BelongToCooperativeId, // remove this
+                Ward = model.Ward,
+                // OrganizationCode = model.OrganizationCode,
                 FarmerCategory = model.FarmerCategory,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
-                YearsInAgric=model.YearsInAgric
+                YearsInAgric = model.YearsInAgric
             };
         }
 

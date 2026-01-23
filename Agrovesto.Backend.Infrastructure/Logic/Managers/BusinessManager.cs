@@ -1529,7 +1529,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //then create user as a farmer as well
                     model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     //  model.FarmerCategory = 
-                    await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
+                    await CreateFarmerProfileAsync(
+    model,
+    args,
+    business,
+    registeredUser.model.Id,
+    subaccount,
+    cooperativeIds: new List<long> { coop.model.Id } // wrap single cooperative ID
+);
+
+                    //await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, coop.model.Id);
 
                     break;
 
@@ -1537,7 +1546,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     //  model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
                     model.Id = registeredUser.model.Id;
                     model.OrganizationCode = args.organizationCode;
-                    await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
+                    await CreateFarmerProfileAsync(
+    model,
+    args,
+    business,
+    registeredUser.model.Id,
+    subaccount,
+    cooperativeIds: new List<long> {args.CooperativeId } // wrap single cooperative ID
+);
+
+                    //   await CreateFarmerProfileAsync(model, args, business, registeredUser.model.Id, subaccount, args.CooperativeId);
                     break;
             }
 
@@ -1681,13 +1699,56 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
 
-        private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount,
-            long cooperativeId)
+        //private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount,
+        //    long cooperativeId)
+        //{
+        //    if (string.IsNullOrEmpty(model.Email))
+        //    {
+        //        model.Email = GenerateEmail(model.FirstName, business.BusinessEmail);
+        //    }
+        //    var farmer = new FarmerModel
+        //    {
+        //        OnboardedByUserId = args.UserId,
+        //        BelongToBusinessCode = business.BusinessCode,
+        //        Email = model.Email,
+        //        Gender = model.Gender,
+        //        State = model.State,
+        //        Lga = model.Lga,
+        //        Location = model.Location,
+        //        Name = !string.IsNullOrEmpty(model.Name) ? model.Name : $"{model.FirstName} {model.MiddleName} {model.LastName}",
+        //        OnBoardedOn = DateTimeOffset.UtcNow,
+        //        PhoneNumber = model.PhoneNumber,
+        //        UserId = model.Id,
+        //        DateOfBirth = model.DateOfBirth,
+        //       // BelongToCooperativeId = cooperativeId,
+        //        Ward = model.Ward,
+        //        OrganizationCode = args.organizationCode,
+        //        FarmerCategory = model.FarmerCategory,
+        //        SelectedItems = model.ValueChainDto,
+        //        YearsInAgric = model.YearsInAgric,
+        //        HighestLevelOfEducation = model.HighestLevelOfEducation,
+        //        // ValueChainItems= model.ValueChainSelections
+        //    };
+
+        //    var farer = await _farmerRepository.CreateFarmer(farmer);
+
+
+        //}
+        private async Task CreateFarmerProfileAsync(
+    UserModel model,
+    BusinessRegistrationArgs args,
+    BusinessModel business,
+    string userId,
+    SubAccountModel subaccount,
+    List<long> cooperativeIds = null,
+    List<long> agentIds = null)
         {
+            // Generate email if missing
             if (string.IsNullOrEmpty(model.Email))
             {
                 model.Email = GenerateEmail(model.FirstName, business.BusinessEmail);
             }
+
             var farmer = new FarmerModel
             {
                 OnboardedByUserId = args.UserId,
@@ -1697,25 +1758,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 State = model.State,
                 Lga = model.Lga,
                 Location = model.Location,
-                Name = !string.IsNullOrEmpty(model.Name) ? model.Name : $"{model.FirstName} {model.MiddleName} {model.LastName}",
+                Name = !string.IsNullOrEmpty(model.Name)
+                    ? model.Name
+                    : $"{model.FirstName} {model.MiddleName} {model.LastName}",
                 OnBoardedOn = DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 DateOfBirth = model.DateOfBirth,
-                BelongToCooperativeId = cooperativeId,
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
                 FarmerCategory = model.FarmerCategory,
                 SelectedItems = model.ValueChainDto,
                 YearsInAgric = model.YearsInAgric,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
-                // ValueChainItems= model.ValueChainSelections
+                CooperativeIds = cooperativeIds ?? new List<long>(), // assign multiple cooperatives
+                AgentIds = agentIds ?? new List<long>(),             // assign multiple agents
             };
 
-            var farer = await _farmerRepository.CreateFarmer(farmer);
+            // Create the farmer and handle linking to organizations, cooperatives, agents
+            var (status, createdFarmer) = await _farmerRepository.CreateFarmer(farmer);
 
-
+           
         }
+
         private static string GenerateEmail(string fullName, string domain)
         {
             if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(domain))
@@ -2602,8 +2667,22 @@ ListQueryParams query, string imageKey)
             {
                 var model = new FileDownloadModel();
                 var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
+                var cooperativeIds = query.CooperativeId.HasValue
+    ? new List<long> { query.CooperativeId.Value }
+    : null;
+                var AgentId = query.AgentId.HasValue
+ ? new List<long> { query.AgentId.Value }
+ : null;
+                var farmers = await _farmerRepository.GetAllFarmerDetails(
+                    query.businessCode,
+                    query.organizationCode,
+                    cooperativeIds,   // <-- pass list
+                   AgentId,
+                    query.Location,
+                    query.sortBy
+                );
 
-                var farmers = await _farmerRepository.GetAllFarmerDetails(query.businessCode, query.organizationCode, query.CooperativeId, query.UserId, query.Location, query.sortBy);
+                // var farmers = await _farmerRepository.GetAllFarmerDetails(query.businessCode, query.organizationCode, query.CooperativeId, query.UserId, query.Location, query.sortBy);
                 if (farmers.Data.Count == 0) return null;
 
                 foreach (var farmer in farmers.Data)

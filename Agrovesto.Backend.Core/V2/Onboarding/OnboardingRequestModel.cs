@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -54,7 +55,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         Login,
         PasswordReset
     }
-
+    public class OnboardingResponseModel
+    {
+        public string? Id { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+    }
     public class OnboardingRequestModel
     {
         public string? Id { get; set; }
@@ -87,7 +93,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Pin { get; set; }
         public LoginType LoginMethod { get; set; }
     }
-
+    public class ProfileImageModel
+    {
+        public IFormFile File { get; set; }
+    }
     public class ProfileRequestModel 
     {
         public string? OnboardedByUserId { get; set; }
@@ -126,6 +135,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? UserId { get; set; }
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
+        public List<long> CooperativeIds { get; set; }
+        public List<long> AgentIds { get; set; }
         //public string? env { get; set; }
     }
   

@@ -432,8 +432,8 @@ Items = itemsList
                 worksheet.Cell(row, 5).Value = f.Lga;
                 worksheet.Cell(row, 6).Value = f.Ward;
                 worksheet.Cell(row, 7).Value = f.Location;
-                worksheet.Cell(row, 8).Value = farmer.Cooperative?.Name;
-                worksheet.Cell(row, 9).Value = farmer.Agent?.Name;
+                worksheet.Cell(row, 8).Value = string.Join(',', farmer.Cooperatives.Select(x=>x.Name));
+                worksheet.Cell(row, 9).Value = string.Join(',', farmer.Agents.Select(x=>x.Name));
 
                 //  worksheet.Cells[row, 10].Value = f.SSN;
                 worksheet.Cell(row, 10).Value = f.NIN;

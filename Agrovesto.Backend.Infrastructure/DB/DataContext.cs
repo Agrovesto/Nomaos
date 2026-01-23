@@ -200,6 +200,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<Cooperative> Cooperatives { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
         public DbSet<FarmerOrganization> FarmerOrganizations { get; set; }
+        public DbSet<FarmerCooperative> FarmerCooperatives { get; set; }
+        public DbSet<FarmerAgent> FarmerAgents { get; set; }
         public DbSet<FarmPlotDetails> FarmPlotDetails { get; set; }
         public DbSet<FarmFlagAuditTrail> FarmFlagAuditTrail { get; set; }
         public DbSet<Warehouse> Warehouses { get; set; }
@@ -244,6 +246,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmAllocation> FarmAllocations { get; set; }
         public DbSet<Farm> Farms { get; set; }
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
+        public DbSet<KYCDetails> KYCDetails { get; set; }
 
     }
     public class MarketTransactionConfiguration

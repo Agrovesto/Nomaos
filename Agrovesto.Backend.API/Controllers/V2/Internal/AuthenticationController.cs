@@ -63,7 +63,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var request = await _onBoardingManager.CreateBusinessUser(model, args);
               
 
-                return Ok(new Response<OnboardingRequestModel>()
+                return Ok(new Response<OnboardingResponseModel>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -335,6 +335,159 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+        [HttpPost("assign-agents-to-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AssignFarmerToAgents([FromQuery] OnBoardingArgs args)
+        {
+
+            try
+            {
+                args.UserId =CurrentUserId;
+
+                var request = await _onBoardingManager.AssignFarmerToAgents(args);
+
+
+                return Ok(new Response<FarmerModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpPost("assign-cooperatives-to-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AssignFarmerToCooperatives([FromQuery] OnBoardingArgs args)
+        {
+
+            try
+            {
+                args.UserId = CurrentUserId;
+
+                var request = await _onBoardingManager.AssignFarmerToCooperatives(args);
+
+
+                return Ok(new Response<FarmerModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+
+        //[HttpPost("Verify-NIN")]
+        //[AllowAnonymous]
+        //public async Task<IActionResult> VerifyNIN([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        //{
+
+        //    if (!ModelState.IsValid)
+        //    {
+
+        //        return BadRequest(new Response<Dictionary<string, string>>()
+        //        {
+        //            Message = "Validation failed.",
+        //            Succeeded = false,
+        //            Data = ModelState
+        //                .Where(ms => ms.Value.Errors.Any())
+        //                .ToDictionary(
+        //                    ms => ms.Key,
+        //                    ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+        //                )
+        //        });
+        //    }
+        //    try
+        //    {
+        //        if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+        //        {
+        //            args.organizationCode = OrganizationCode;
+        //        }
+        //        var currentRole = CurrentUserRole;
+
+        //        model.OnboardedByUserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : null;
+        //        args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+        //        if (args.Id == 0 && currentRole == "Cooperative")
+        //        {
+        //            var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+        //            args.Id = coop.Id;
+        //        }
+        //        var request = await _onBoardingManager.CreateUserProfile(model, args);
+
+
+        //        return Ok(new Response<(bool status, string message)>()
+        //        {
+        //            Code = ResponseCodes.Success,
+        //            Succeeded = true,
+        //            Message = "Successful",
+        //            Data = request
+        //        });
+
+
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
+
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+        //            Succeeded = false,
+        //        });
+        //    }
+
+        //}
 
     }
 }

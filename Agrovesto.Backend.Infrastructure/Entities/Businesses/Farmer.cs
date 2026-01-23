@@ -52,11 +52,37 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
         public string? OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
-        public long BelongToCooperativeId { get; set; }
+     //   public long BelongToCooperativeId { get; set; }
         //public string? OrganizationCode { get; set; }
         public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
     }
-   
+    public class FarmerCooperative
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long FarmerId { get; set; }
+        public long CooperativeId { get; set; }
+
+        public DateTimeOffset JoinedOn { get; set; } = DateTimeOffset.Now;
+        public string? OnboardedByUserId { get; set; }
+    }
+    public class FarmerAgent
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long FarmerId { get; set; }
+        public long AgentId { get; set; }
+
+        public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
+        public string? AssignedByUserId { get; set; }
+    }
+
 }
