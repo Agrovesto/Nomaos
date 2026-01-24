@@ -218,7 +218,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
                 ResolveUserContext(args);
-                await EnrichArgsByRoleAsync(args);
+                if (CurrentUserRole != args.userType)
+                {
+                    await EnrichArgsByRoleAsync(args);
+                }
 
                 var result = await _onBoardingManager.CreateUserProfile(model, args);
 
@@ -682,7 +685,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
-            if (CurrentUserRole != args.userType) ;
+          //  if (CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
 
             var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
@@ -701,7 +704,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task EnrichAgentAsync(OnBoardingArgs args)
         {
-            if(CurrentUserRole != args.userType) return;
+          //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
             
             var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
