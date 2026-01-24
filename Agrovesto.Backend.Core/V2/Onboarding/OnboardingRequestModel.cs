@@ -110,6 +110,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ModifiedBy { get; set; }
         public string? FirstName { get; set; }
         public string? FullName { get; set; }
+        public string? CooperativeName { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string? Location { get; set; }
@@ -133,11 +134,26 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long Id { get; set; }
         public string userType { get; set; }
         public string? UserId { get; set; }
+        public string? OnboardedByUserId { get; set; }
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
-        public List<long> CooperativeIds { get; set; }
-        public List<long> AgentIds { get; set; }
+        public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? AgentIds { get; set; }
+
         //public string? env { get; set; }
     }
-  
+
+    public class AssignmentArgs
+    {
+        public long Id { get; set; }
+        public string? UserId { get; set; }
+        public string? OnboardedByUserId { get; set; }
+        public string businessCode { get; set; }
+        public string? organizationCode { get; set; }
+        public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? AgentIds { get; set; }
+
+        //public string? env { get; set; }
+    }
+
 }

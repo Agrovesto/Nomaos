@@ -118,7 +118,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // Base query: cooperatives assigned to this agent via join table
             var cooperativesQuery = _context.Cooperatives
              .AsNoTracking()
-             .Where(s => s.IsAssignedToAgentId == agentId);
+             .Where(s => s.IsAssignedToAgentId == agentId || s.OnboardedById == agentId);
 
 
             // Filter by organization code

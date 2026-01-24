@@ -42,7 +42,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<bool> DoesPhoneAlreadyExistWithinOrganization(string phonenumber, string organizationCode);
         Task<List<string>> GetAllPhonesForOrganizationAsync(string organizationCode);
         Task<FarmerImagesModel> GetUserImage(string userId, string businessCode, string? organizationCode);
-        Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args, long farmerId);
-        Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args, long farmerId);
+        Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args, long farmerId);
+        Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId);
     }
 }
