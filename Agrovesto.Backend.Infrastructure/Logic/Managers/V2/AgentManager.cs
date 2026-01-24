@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -122,6 +123,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new NotFoundException($"No Record Found");
             }
         }
+        public async Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query)
+        {
+            var currentAgentId = query.UserId; // Assume you have helper for JWT
 
+            // 1️⃣ Total cooperatives linked to this agent
+            var cooperatives = await _cooperativeRepository.GetCooperativeByAgent(currentAgentId, query);
+
+            // 2️⃣ Farmers linked to this agent
+            var farmers = await _farmerRepository.GetFarmersByAgent(currentAgentId, query);
+
+            // 3️⃣ Farms
+            //var farms = await _farmRepository.GetFarmsByAgentId(currentAgentId);
+            //var mappedFarms = farms.Count(f => f.IsMapped);
+            //var unmappedFarms = farms.Count(f => !f.IsMapped);
+
+            // 4️⃣ Farmers linked to cooperatives
+            var farmersLinkedToCoops = farmers.Count(f => f.CooperativeIds.Any());
+            var farmersNotLinkedToCoops = farmers.Count - farmersLinkedToCoops;
+
+            // 5️⃣ Total farm size (sum hectares)
+           // var totalFarmSize = farms.Sum(f => f.SizeHectares);
+
+            // 6️⃣ Build DTO
+            var dto = new AgentDashboardDto
+            {
+                TotalCooperatives = cooperatives.Count,
+                TotalFarmers = farmers.Count,
+              //  TotalFarmSizeHectares = totalFarmSize,
+              //  TotalFarms = farms.Count,
+              //  MappedFarms = mappedFarms,
+              //  UnmappedFarms = unmappedFarms,
+                FarmersLinkedToCooperatives = farmersLinkedToCoops,
+                FarmersNotLinkedToCooperatives = farmersNotLinkedToCoops
+            };
+
+            return dto;
+        }
     }
 }

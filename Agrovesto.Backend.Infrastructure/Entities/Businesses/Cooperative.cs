@@ -18,6 +18,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? CooperativeLeaderFirstName { get; set; }
+        public string? CooperativeLeaderMiddleName { get; set; }
+        public string? CooperativeLeaderLastName { get; set; }
+        public string? CooperativeLeaderGender { get; set; }
         public string UserId { get; set; }
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -30,5 +34,15 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool HasbeenAssignedAgent { get; set; }
         public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
+        public Tier Tier { get; set; }
+    }
+    public enum Tier
+    {
+        None,
+        Tier1,
+        Tier2,
+        Tier3,
+        Tier4
+
     }
 }
