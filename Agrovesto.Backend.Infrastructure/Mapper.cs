@@ -1393,7 +1393,8 @@ namespace Agrovesto.Backend.Infrastructure
                 OnBoardedOn = model.OnBoardedOn,
                 HasbeenAssignedAgent = model.HasbeenAssignedAgent,
                 Ward = model.Ward,
-                OrganizationCode = model.OrganizationCode
+                OrganizationCode = model.OrganizationCode,
+                OnboardedById= model.OnboardedById,
             };
         }
 

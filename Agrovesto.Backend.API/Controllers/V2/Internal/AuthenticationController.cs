@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -61,7 +62,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     args.Id = coop.Id;
                 }
                 var request = await _onBoardingManager.CreateBusinessUser(model, args);
-              
+
 
                 return Ok(new Response<OnboardingResponseModel>()
                 {
@@ -114,9 +115,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-               
+
                 var request = await _onBoardingManager.ConfirmOtp(model);
-              
+
 
                 return Ok(new Response<bool>()
                 {
@@ -170,7 +171,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-               await _onBoardingManager.ResendOnboardingOtp(model);
+                await _onBoardingManager.ResendOnboardingOtp(model);
 
 
                 return Ok(new Response<string>()
@@ -205,52 +206,29 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-profile")]
         [AllowAnonymous]
-        public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> CreateProfile(
+    [FromBody] ProfileRequestModel model,
+    [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                ResolveUserContext(args);
+                await EnrichArgsByRoleAsync(args);
 
-                model.OnboardedByUserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : null; 
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-                if (args.Id == 0 && currentRole == "Cooperative")
-                {
-                    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-                    args.Id = coop.Id;
-                }
-                var request = await _onBoardingManager.CreateUserProfile(model, args);
-
+                var result = await _onBoardingManager.CreateUserProfile(model, args);
 
                 return Ok(new Response<(bool status, string message)>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = "Successful",
-                    Data = request
+                    Data = result
                 });
-
-
             }
             catch (BaseException ex)
             {
@@ -269,8 +247,164 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = false,
                 });
             }
-
         }
+
+        /** public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+         {
+
+             if (!ModelState.IsValid)
+             {
+
+                 return BadRequest(new Response<Dictionary<string, string>>()
+                 {
+                     Message = "Validation failed.",
+                     Succeeded = false,
+                     Data = ModelState
+                         .Where(ms => ms.Value.Errors.Any())
+                         .ToDictionary(
+                             ms => ms.Key,
+                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                         )
+                 });
+             }
+             try
+             {
+                 if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                 {
+                     args.organizationCode = OrganizationCode;
+                 }
+                 var currentRole = CurrentUserRole;
+
+                 // FARMER: allow implicit self-onboarding
+                 if (currentRole == "Farmer")
+                 {
+
+
+                     args.UserId = !string.IsNullOrWhiteSpace(CurrentUserId)
+                         ? CurrentUserId
+                         : args.UserId;
+                 }
+                 else
+                 {
+                     // NON-FARMER: must explicitly provide UserId
+                     if (string.IsNullOrWhiteSpace(args.UserId))
+                     {
+                         throw new BaseException(
+                             ExceptionType.BAD_REQUEST,
+                             "UserId must be provided to create a profile for the farmer."
+                         );
+                     }
+
+                 }
+
+
+                 model.OnboardedByUserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : null;
+                 // args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+
+                 if (args.Id == 0 && currentRole == "Cooperative")
+                 {
+                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+
+                     if (coop == null)
+                     {
+                         throw new BaseException(
+                             ExceptionType.NOTFOUND,
+                             "Cooperative not found for the specified user."
+                         );
+                     }
+
+                     // Set cooperative Id
+                     args.Id = coop.Id;
+
+                     // Ensure CooperativeIds list exists
+                     args.CooperativeIds ??= new List<long?>();
+
+                     // Add cooperative Id if not already present
+                     if (!args.CooperativeIds.Any(x => x == coop.Id))
+                     {
+                         args.CooperativeIds.Add(coop.Id);
+                     }
+                 }// ================= COOPERATIVE ROLE =================
+                 if (args.Id == 0 && currentRole == "Cooperative")
+                 {
+                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+
+                     if (coop == null)
+                     {
+                         throw new BaseException(
+                             ExceptionType.NOTFOUND,
+                             "Cooperative not found for the specified user."
+                         );
+                     }
+
+                     args.Id = coop.Id;
+
+                     args.CooperativeIds ??= new List<long?>();
+
+                     if (!args.CooperativeIds.Any(x => x == coop.Id))
+                     {
+                         args.CooperativeIds.Add(coop.Id);
+                     }
+                 }
+
+                 // ================= AGENT ROLE =================
+                 if (args.Id == 0 && currentRole == "Agent")
+                 {
+                     var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
+
+                     if (agent == null)
+                     {
+                         throw new BaseException(
+                             ExceptionType.NOTFOUND,
+                             "Agent not found for the specified user."
+                         );
+                     }
+
+                     args.Id = agent.Id;
+
+                     args.AgentIds ??= new List<long?>();
+
+                     if (!args.AgentIds.Any(x => x == agent.Id))
+                     {
+                         args.AgentIds.Add(agent.Id);
+                     }
+                 }
+
+                 var request = await _onBoardingManager.CreateUserProfile(model, args);
+
+
+                 return Ok(new Response<(bool status, string message)>()
+                 {
+                     Code = ResponseCodes.Success,
+                     Succeeded = true,
+                     Message = "Successful",
+                     Data = request
+                 });
+
+
+             }
+             catch (BaseException ex)
+             {
+                 return StatusCode(400, new Response<string>
+                 {
+                     Message = ex.ExceptionMessage,
+                     Succeeded = false,
+
+                 });
+             }
+             catch (Exception ex)
+             {
+                 return StatusCode(400, new Response<string>
+                 {
+                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                     Succeeded = false,
+                 });
+             }
+
+         }
+         **/
+
         [HttpPost("login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string? businessCode)
@@ -337,12 +471,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("assign-agents-to-farmer")]
         [AllowAnonymous]
-        public async Task<IActionResult> AssignFarmerToAgents([FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> AssignFarmerToAgents([FromQuery] AssignmentArgs args)
         {
 
             try
             {
-                args.UserId =CurrentUserId;
+                args.UserId = CurrentUserId;
 
                 var request = await _onBoardingManager.AssignFarmerToAgents(args);
 
@@ -379,12 +513,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("assign-cooperatives-to-farmer")]
         [AllowAnonymous]
-        public async Task<IActionResult> AssignFarmerToCooperatives([FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> AssignFarmerToCooperatives([FromQuery] AssignmentArgs args)
         {
 
             try
             {
-                args.UserId = CurrentUserId;
+                args.UserId ??= CurrentUserId;
+                args.OnboardedByUserId = CurrentUserId;
 
                 var request = await _onBoardingManager.AssignFarmerToCooperatives(args);
 
@@ -488,6 +623,99 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //    }
 
         //}
+
+
+        private IActionResult ValidationProblemResponse()
+        {
+            return BadRequest(new Response<Dictionary<string, string>>
+            {
+                Message = "Validation failed.",
+                Succeeded = false,
+                Data = ModelState
+                    .Where(ms => ms.Value.Errors.Any())
+                    .ToDictionary(
+                        ms => ms.Key,
+                        ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage)))
+            });
+        }
+        private void NormalizeOrganizationCode(OnBoardingArgs args)
+        {
+            if (!string.IsNullOrEmpty(OrganizationCode) &&
+                string.IsNullOrEmpty(args.organizationCode))
+            {
+                args.organizationCode = OrganizationCode;
+            }
+        }
+        private void ResolveUserContext(OnBoardingArgs args)
+        {
+            var currentRole = CurrentUserRole;
+
+            if (currentRole == "Farmer")
+            {
+                args.UserId ??= CurrentUserId;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(args.UserId))
+                {
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "UserId must be provided to create a profile for the farmer."
+                    );
+                }
+            }
+        }
+        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
+        {
+            var currentRole = CurrentUserRole;
+
+            switch (currentRole)
+            {
+                case "Cooperative":
+                    await EnrichCooperativeAsync(args);
+                    break;
+
+                case "Agent":
+                    await EnrichAgentAsync(args);
+                    break;
+            }
+        }
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+           // if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+          //  if (args.Id != 0) return;
+
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
 
     }
 }

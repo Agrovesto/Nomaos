@@ -50,5 +50,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<BulkUploadFarmersResponse> BulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args);
         Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args,
         IProgress<BulkUploadProgress> progress = null);
+        Task<AgentModel> GetAgentDetailByUserId(string userId);
     }
 }
