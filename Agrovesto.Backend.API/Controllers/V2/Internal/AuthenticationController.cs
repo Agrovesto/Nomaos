@@ -682,7 +682,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
-           // if (args.Id != 0) return;
+            if (CurrentUserRole != args.userType) ;
+            if (args.Id != 0) return;
 
             var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
 
@@ -700,8 +701,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task EnrichAgentAsync(OnBoardingArgs args)
         {
-          //  if (args.Id != 0) return;
-
+            if(CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+            
             var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
 
             if (agent == null)
