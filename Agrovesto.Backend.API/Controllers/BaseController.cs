@@ -70,10 +70,28 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
-        public string? CurrentUserRole =>
-    TryReadJwt()?
-        .Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase))
-        ?.Value;
+        //    public string? CurrentUserRole =>
+        //TryReadJwt()?
+        //    .Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase))
+        //    ?.Value;
+        public string? CurrentUserRole
+        {
+            get
+            {
+                var jwt = TryReadJwt();
+                if (jwt == null) return null;
+
+                var roleClaim = jwt.Claims.FirstOrDefault(c =>
+                    c.Type.Equals("http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+                                  StringComparison.OrdinalIgnoreCase));
+
+                if (roleClaim != null) return roleClaim.Value;
+
+                // fallback to "Roles" claim
+                roleClaim = jwt.Claims.FirstOrDefault(c => c.Type.Equals("Roles", StringComparison.OrdinalIgnoreCase));
+                return roleClaim?.Value;
+            }
+        }
 
         public string? OrganizationCode
         {

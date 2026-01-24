@@ -34,8 +34,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOnBoardingManager
     {
-        Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args);
-        Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args);
+        Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args);
+        Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args);
         Task<bool> ConfirmOtp(ConfirmOtpRequest request);
         Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args);
@@ -182,14 +182,16 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                     "Phone number must be exactly 11 digits and numeric only.");
             }
 
-            if (string.IsNullOrWhiteSpace(model.Pin))
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "PIN is required when using phone number.");
-            }
+            //if (string.IsNullOrWhiteSpace(model.Pin))
+            //{
+            //    throw new BaseException(
+            //        Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "PIN is required when using phone number.");
+            //}
 
-                if (string.IsNullOrWhiteSpace(model.Pin) || !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+               
+                if (!string.IsNullOrWhiteSpace(model.Pin)
+    && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
                 {
                     throw new BaseException(
                         ExceptionType.BAD_REQUEST,
@@ -223,15 +225,20 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                 //check if user is farmer,
                 //if true, check model for compulsory fields
                 //create user as farmer
-                if (!string.IsNullOrEmpty(model.NIN))
+                if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
                 {
-                    user.model.NIN = model.NIN;
+                    ValidateIdentifier(model.NIN, "NIN");
+                    ValidateIdentifier(model.Bvn, "BVN");
+
+                    if (!string.IsNullOrWhiteSpace(model.NIN))
+                        user.model.NIN = model.NIN;
+
+                    if (!string.IsNullOrWhiteSpace(model.Bvn))
+                        user.model.Bvn = model.Bvn;
+
+                    await _onboardingRepository.OnNINBVNUpdate(user.model);
                 }
-                if (!string.IsNullOrEmpty(model.Bvn))
-                {
-                    user.model.Bvn = model.Bvn;
-                }
-                await _onboardingRepository.OnNINBVNUpdate(user.model);
+
                 return (true, "User Profile Created");
             }
 
@@ -240,6 +247,24 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
             }
 
         }
+        private static void ValidateIdentifier(string? value, string fieldName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return;
+
+            if (value.Length != 11)
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    $"{fieldName} must be exactly 11 digits."
+                );
+
+            if (!value.All(char.IsDigit))
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    $"{fieldName} must contain only numbers."
+                );
+        }
+
         private async Task CreateUserCategory(ProfileRequestModel model, OnBoardingArgs args )
         {
             
@@ -303,19 +328,34 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                 Lga = model.Lga,
                 Email = model.Email,
                 Location = model.Location,
-                Name = model.FullName,
+                // Name = model.FullName,
+                Name = !string.IsNullOrWhiteSpace(model.FullName)
+    ? model.FullName
+    : string.Join(" ",
+        new[] { model.FirstName, model.MiddleName, model.LastName }
+            .Where(x => !string.IsNullOrWhiteSpace(x))),
+
                 OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 Ward = model.Ward,
-                OnboardedById=model.OnboardedByUserId,
+                OnboardedById=args.OnboardedByUserId,
                 OrganizationCode = args.organizationCode
             });
         }
 
         private async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
-
+            if (string.IsNullOrEmpty(model.CooperativeName)) { 
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Cooperative Name is required.");
+            }
+            var isAssignedagent = false;
+            if (args.OnboardedByUserId != null)
+            {
+                isAssignedagent = true;
+            }
              await _cooperativeRepository.CreateCooperative(new CooperativeModel
              {
                  BelongToBusinessCode = args.businessCode,
@@ -324,13 +364,20 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                  ContactPerson = model.FirstName,//string.Empty,
                  Email = model.Email,
                  Location = model.Location,
-                 Name = model.FullName,
+    //             Name = !string.IsNullOrWhiteSpace(model.FullName)
+    //? model.FullName
+    //: string.Join(" ",
+    //    new[] { model.FirstName, model.MiddleName, model.LastName }
+    //        .Where(x => !string.IsNullOrWhiteSpace(x))),
+
+                  Name= model.CooperativeName,
                  OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
                  PhoneNumber = model.PhoneNumber,
                  UserId = model.Id,
-                 OnboardedById=model.OnboardedByUserId,
-                // IsAssignedToAgentId = userId,
-                 //HasbeenAssignedAgent = isAssignedagent,
+                 OnboardedById=args.OnboardedByUserId,
+
+                 IsAssignedToAgentId = args.OnboardedByUserId,
+                 HasbeenAssignedAgent = isAssignedagent,
                  Ward = model.Ward,
                  OrganizationCode = args.organizationCode
 
@@ -342,7 +389,7 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
             var farmer = new FarmerModel
             {
-                OnboardedByUserId = args.UserId,
+                OnboardedByUserId = args.OnboardedByUserId,
                 BelongToBusinessCode = args.businessCode,
                 Email = model.Email,
                 Gender = model.Gender,
@@ -354,8 +401,16 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 DateOfBirth = model.DateOfBirth,
-                CooperativeIds=  args.CooperativeIds,
-                AgentIds=args.AgentIds,
+               CooperativeIds = args.CooperativeIds?
+    .Where(x => x.HasValue)
+    .Select(x => x.Value)
+    .ToList() ?? new List<long>(),
+
+AgentIds = args.AgentIds?
+    .Where(x => x.HasValue)
+    .Select(x => x.Value)
+    .ToList() ?? new List<long>(),
+
                 //BelongToCooperativeId = args.Id,
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
@@ -373,7 +428,7 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
 
             
         }
-        public async Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args)
+        public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args)
         {
             if (!args.CooperativeIds.Any())
             {
@@ -391,7 +446,7 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
         }
-        public async Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args)
+        public async Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args)
         {
             if (!args.AgentIds.Any()) { 
                 throw new BaseException(

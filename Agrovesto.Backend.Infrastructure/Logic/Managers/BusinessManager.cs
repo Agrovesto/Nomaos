@@ -2066,6 +2066,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             return await _cooperativeRepository.GetCooperativeDetailByUserId(userId);
         }
+        public async Task<AgentModel> GetAgentDetailByUserId(string userId)
+        {
+
+            return await _agentRepository.GetAgentDetailByUserId(userId);
+        }
 
 
         public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeUserId(string userId,

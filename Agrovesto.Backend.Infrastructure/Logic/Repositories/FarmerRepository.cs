@@ -140,9 +140,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
         #endregion agent
-        public async Task<FarmerModel> AssignFarmerToCooperatives(OnBoardingArgs args, long farmerId)
+        public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId)
         {
-            if (args.AgentIds == null || !args.AgentIds.Any())
+            if (args.CooperativeIds == null || !args.CooperativeIds.Any())
                 return null;
 
             // Check if the farmer exists
@@ -160,7 +160,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .ToListAsync();
 
             // Filter out agents that are already assigned
-            var newCooperativeIds = args.CooperativeIds.Except(existingAssignments).ToList();
+            var newCooperativeIds = args.CooperativeIds
+       .Where(x => x.HasValue)
+       .Select(x => x.Value)
+       .Except(existingAssignments)
+       .ToList();
 
             // Create new assignments
             if (newCooperativeIds.Any())
@@ -169,7 +173,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 {
                     FarmerId = farmerId,
                     CooperativeId = cooperativeId,
-                    OnboardedByUserId=args.UserId,
+                    OnboardedByUserId=args.OnboardedByUserId,
                     JoinedOn= DateTimeOffset.UtcNow
                 }).ToList();
 
@@ -626,9 +630,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
                 await _context.SaveChangesAsync();
             }
-
-            // Update value chain items
-            await UpdateFarmerValueChainItems(farmer.Id, data.SelectedItems);
+            if (data.SelectedItems != null && data.SelectedItems.Any())
+            {
+                // Update value chain items
+                await UpdateFarmerValueChainItems(farmer.Id, data.SelectedItems);
+            }
 
             return (true, farmer.Map());
         }
@@ -1257,7 +1263,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return query.Select(x => x.Map()).ToList();
         }
-        public async Task<FarmerModel> AssignFarmerToAgents(OnBoardingArgs args, long farmerId)
+        public async Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args, long farmerId)
         {
             if (args.AgentIds == null || !args.AgentIds.Any())
                 return null;
@@ -1277,7 +1283,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .ToListAsync();
 
             // Filter out agents that are already assigned
-            var newAgentIds = args.AgentIds.Except(existingAssignments).ToList();
+           
+            var newAgentIds = args.AgentIds
+    .Where(x => x.HasValue)
+    .Select(x => x.Value)
+    .Except(existingAssignments)
+    .ToList();
 
             // Create new assignments
             if (newAgentIds.Any())
