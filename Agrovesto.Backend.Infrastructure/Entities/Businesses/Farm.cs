@@ -15,20 +15,20 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 
         public long Id { get; set; }
-        public string Name { get; set; } = string.Empty;
+        public string? Name { get; set; } = string.Empty;
         public double AreaSize { get; set; }
-        public string LocationDescription { get; set; } = string.Empty;
+        public string? LocationDescription { get; set; } = string.Empty;
 
         // Ownership: Farmer / Cooperative / Community
-        public string OwnershipType { get; set; } = string.Empty;
+        public string? OwnershipType { get; set; } = string.Empty;
         public string? FarmerUserId { get; set; }
         public long CooperativeId { get; set; }
         public long CommunityId { get; set; }
-        public string MappedBy { get; set; } = string.Empty;
+        public string? MappedBy { get; set; } = string.Empty;
 
         public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
-        public string CreatedBy { get; set; } = string.Empty;
+        public string? CreatedBy { get; set; } = string.Empty;
         public string FarmLocation { get; set; }
         public string FarmState { get; set; }
 
@@ -36,8 +36,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string FarmWard { get; set; }
 
 
-        public string CoordinateTakenBy { get; set; }
-        public string CoordinateTakenByUserId { get; set; }
+        public string? CoordinateTakenBy { get; set; }
+        public string? CoordinateTakenByUserId { get; set; }
         public double AreaInDegress { get; set; }
         public double AreaInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
@@ -56,6 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public ICollection<FarmCoordinate> Coordinates { get; set; }
         public ICollection<FarmAllocation> Allocations { get; set; } // NEW - track who cultivates this land
+        public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
 
     }
     public class FarmAllocation

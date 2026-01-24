@@ -364,12 +364,16 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
                  ContactPerson = model.FirstName,//string.Empty,
                  Email = model.Email,
                  Location = model.Location,
+                 CooperativeLeaderFirstName=model.FirstName,
+                 CooperativeLeaderGender=model.Gender,
+                 CooperativeLeaderLastName=model.LastName,
+                 CooperativeLeaderMiddleName=model.MiddleName,
     //             Name = !string.IsNullOrWhiteSpace(model.FullName)
     //? model.FullName
     //: string.Join(" ",
     //    new[] { model.FirstName, model.MiddleName, model.LastName }
     //        .Where(x => !string.IsNullOrWhiteSpace(x))),
-
+    
                   Name= model.CooperativeName,
                  OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
                  PhoneNumber = model.PhoneNumber,
