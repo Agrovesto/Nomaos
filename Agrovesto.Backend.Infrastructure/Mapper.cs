@@ -1369,7 +1369,12 @@ namespace Agrovesto.Backend.Infrastructure
                 IsAssignedToAgentId = entities.IsAssignedToAgentId,
                 HasbeenAssignedAgent = entities.HasbeenAssignedAgent,
                 Ward = entities.Ward,
-                OrganizationCode = entities.OrganizationCode
+                OrganizationCode = entities.OrganizationCode,
+                CooperativeLeaderMiddleName = entities.CooperativeLeaderMiddleName,
+                CooperativeLeaderFirstName = entities.CooperativeLeaderFirstName,
+                CooperativeLeaderLastName = entities.CooperativeLeaderLastName,
+                CooperativeLeaderGender = entities.CooperativeLeaderGender,
+                OnboardedById = entities.OnboardedById,
             };
         }
 
@@ -1388,6 +1393,10 @@ namespace Agrovesto.Backend.Infrastructure
                 Lga = model.Lga,
                 BelongToBusinessCode = model.BelongToBusinessCode
                 ,
+                CooperativeLeaderMiddleName= model.CooperativeLeaderMiddleName, 
+                CooperativeLeaderFirstName= model.CooperativeLeaderFirstName,
+                CooperativeLeaderLastName=model.CooperativeLeaderLastName,
+                CooperativeLeaderGender=model.CooperativeLeaderGender,
                 IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
@@ -1395,6 +1404,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Ward = model.Ward,
                 OrganizationCode = model.OrganizationCode,
                 OnboardedById= model.OnboardedById,
+                
             };
         }
 

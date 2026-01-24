@@ -20,7 +20,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string BelongToBusinessCode { get; set; }  //which business
         public string? OrganizationCode { get; set; }  //which business
-
+        public string? CooperativeLeaderFirstName { get; set; }
+        public string? CooperativeLeaderMiddleName { get; set; }
+        public string? CooperativeLeaderLastName { get; set; }
+        public string? CooperativeLeaderGender { get; set; }
         public bool HasbeenAssignedAgent { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string IsAssignedToAgentId { get; set; }

@@ -246,6 +246,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmAllocation> FarmAllocations { get; set; }
         public DbSet<Farm> Farms { get; set; }
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
+        public DbSet<FarmLandDocument> FarmLandDocuments { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
 
     }
