@@ -18,7 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     public interface IAgentManager
     {
         Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId, ListQueryParams query);
-        Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
     }
     public class AgentManager : IAgentManager
     {
@@ -76,7 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new NotFoundException($"No Record Found");
             }
         }
-        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId,
+        public async Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId,
 
     ListQueryParams query)
         {
@@ -88,7 +88,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
-                if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+                if (farmers == null) return new PagedListResponse<List<FarmerAgentDto>>
                 {
                     Succeeded = true,
                     Data = null,
@@ -96,18 +96,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Message = "No Record Found"
                 };
 
-                foreach (var farmer in farmers)
-                {
-                    if (!string.IsNullOrEmpty(farmer.FarmerImage))
-                    {
-                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
-                    }
-                }
+                //foreach (var farmer in farmers)
+                //{
+                //    if (!string.IsNullOrEmpty(farmer.FarmerImage))
+                //    {
+                //        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+                //    }
+                //}
 
-                return new PagedListResponse<List<FarmerModel>>
+                return new PagedListResponse<List<FarmerAgentDto>>
                 {
                     Succeeded = true,
-                    Data = farmers,
+                    Data = farmers.Data,
                     Count = farmers.Count,
                     Message = "Retrieved Successfully"
                 };
@@ -138,24 +138,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             //var mappedFarms = farms.Count(f => f.IsMapped);
             //var unmappedFarms = farms.Count(f => !f.IsMapped);
 
-            // 4️⃣ Farmers linked to cooperatives
-            var farmersLinkedToCoops = farmers.Count(f => f.CooperativeIds.Any());
-            var farmersNotLinkedToCoops = farmers.Count - farmersLinkedToCoops;
+            // 4️⃣ Farmers linked to cooperatives (based on projection)
+            var totalFarmersLinkedToCoops = farmers.Data.Count(f => string.Equals(f.CooperativeStatus, "Linked", StringComparison.OrdinalIgnoreCase));
+            var totalFarmersNotLinkedToCoops = farmers.Count - totalFarmersLinkedToCoops;
 
-            // 5️⃣ Total farm size (sum hectares)
-           // var totalFarmSize = farms.Sum(f => f.SizeHectares);
+            // 5️⃣ Total mapped / unmapped farms (based on whether farmer has any farm plots)
+            var totalMappedFarms = farmers.Data.Count(f => string.Equals(f.MappingStatus, "Mapped", StringComparison.OrdinalIgnoreCase));
+            var totalUnmappedFarms = farmers.Count - totalMappedFarms;
 
             // 6️⃣ Build DTO
             var dto = new AgentDashboardDto
             {
                 TotalCooperatives = cooperatives.Count,
                 TotalFarmers = farmers.Count,
-              //  TotalFarmSizeHectares = totalFarmSize,
-              //  TotalFarms = farms.Count,
-              //  MappedFarms = mappedFarms,
-              //  UnmappedFarms = unmappedFarms,
-                FarmersLinkedToCooperatives = farmersLinkedToCoops,
-                FarmersNotLinkedToCooperatives = farmersNotLinkedToCoops
+                // leave TotalFarmSizeHectares and TotalFarms unchanged unless farm repo is available
+                MappedFarms = totalMappedFarms,
+                UnmappedFarms = totalUnmappedFarms,
+                FarmersLinkedToCooperatives = totalFarmersLinkedToCoops,
+                FarmersNotLinkedToCooperatives = totalFarmersNotLinkedToCoops
             };
 
             return dto;
