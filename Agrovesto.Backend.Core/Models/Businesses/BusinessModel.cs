@@ -24,6 +24,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? UserId { get; set; } //logging officerId
         public long CooperativeId { get; set; }
         public long FarmerId { get; set; }
+        public string? MappingStatus { get; set; } // "Mapped" or "Unmapped"
+        public string? CooperativeStatus { get; set; } // "Linked" or "Not Linked"
     }
     public class ListQueryParams
     {
@@ -31,6 +33,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
         public string? Location { get; set; }
+        public string? State { get; set; }
         public string? UserId { get; set; }
         public long warehouseId { get; set; }
         public string? businessCode { get; set; }
@@ -43,6 +46,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string? env { get; set; }
         public string? SelectedProviderCode { get; set; }
+        // filters
+        public string? MappingStatus { get; set; } // "Mapped" or "Unmapped"
+        public string? CooperativeStatus { get; set; } // "Linked" or "Not Linked"
     }
     public class BusinessRegistrationArgs
     {

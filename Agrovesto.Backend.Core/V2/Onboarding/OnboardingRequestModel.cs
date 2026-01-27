@@ -142,7 +142,14 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         //public string? env { get; set; }
     }
+    public class Params
+    {
+        public long Id { get; set; }
+        public string? UserId { get; set; }
 
+        public string businessCode { get; set; }
+        public string? organizationCode { get; set; }
+    }
     public class AssignmentArgs
     {
         public long Id { get; set; }

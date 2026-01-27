@@ -39,11 +39,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> ConfirmOtp(ConfirmOtpRequest request);
         Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args);
+        Task<FarmerProfileDto> GetFarmerProfileAsync(string userId);
+        // Backwards-compatible wrapper
+        Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
         Task ResendOnboardingOtp(ResendOtpRequest model);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
+        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -78,6 +83,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _faceManager=faceManager;
             _farmManager = farmManager;
             _identityVerificationManager = identityVerificationManager;
+        }
+
+        public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || update == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
+
+            // validate identifiers if present
+            if (!string.IsNullOrWhiteSpace(update.NIN))
+                ValidateIdentifier(update.NIN, "NIN");
+
+            if (!string.IsNullOrWhiteSpace(update.BVN))
+                ValidateIdentifier(update.BVN, "BVN");
+
+            var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
+            if (updated == null)
+            {
+                return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
+                {
+                    Success = false,
+                    Message = "Farmer not found or update failed."
+                };
+            }
+
+            // Build updated fields list from the update model
+            var updatedFields = new List<string>();
+            foreach (var prop in typeof(Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel).GetProperties())
+            {
+                var val = prop.GetValue(update);
+                if (val != null)
+                {
+                    // treat empty strings as not-updated
+                    if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
+                    updatedFields.Add(prop.Name);
+                }
+            }
+
+            return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
+            {
+                Success = true,
+                UpdatedFields = updatedFields,
+                UpdatedFarmer = updated,
+                Message = "Farmer profile updated successfully."
+            };
         }
         private static void ValidateLoginModel(LoginModel model)
         {
@@ -114,8 +163,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-     LoginModel model,
-     string businessCode
+        LoginModel model,
+        string businessCode
             //,
             // string header
             )
@@ -124,7 +173,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _onboardingRepository.Login(model, businessCode);
         }
 
-private static void ValidateQuickOnboarding(OnboardingRequestModel model)
+        private static void ValidateQuickOnboarding(OnboardingRequestModel model)
     {
         var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
         var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
@@ -201,7 +250,7 @@ private static void ValidateQuickOnboarding(OnboardingRequestModel model)
 
             }
         }
-    public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
+        public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
         {
             try
             { // fetch user by id
@@ -644,6 +693,62 @@ AgentIds = args.AgentIds?
 
             return otp;
         }
+        public async Task<FarmerProfileDto> GetFarmerProfileAsync(string userId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+
+                var profile = await _farmerRepository.GetFarmerProfileAsync(userId);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Farmer profile not found.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching farmer profile for {UserId}", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
+
+        // Backwards-compatible wrapper that calls repository method
+        public async Task<FarmerProfileDto> GetFarmerProfile(string userId)
+        {
+            return await GetFarmerProfileAsync(userId);
+        }
+        public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var profile = await _farmerRepository.RemoveFarmerFromCooperative(getFarmer.Id, cooperativeId);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Remove Farmer failed.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
 
 
         public async Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId)
@@ -671,7 +776,7 @@ AgentIds = args.AgentIds?
             kyc.UserId = args.UserId;
             kyc.LoggedOn= DateTimeOffset.UtcNow; 
             await _onboardingRepository.OnCreateKYC(kyc);
-            await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level5);
+            await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level5);
             return true;
         }
         private static string GenerateEmail(string fullName, string domain)
@@ -784,7 +889,7 @@ AgentIds = args.AgentIds?
 
                 if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey)) 
                 {
-                    var updateLevel = await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level3);
+                    var updateLevel = await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level3);
                 }
                 return saveFace;
             }
@@ -805,7 +910,7 @@ AgentIds = args.AgentIds?
 
                 if (updateDetail != null && (updateDetail.Id > 0))
                 {
-                    var updateLevel = await _onboardingRepository.OnProfileUpdateAsync(args.UserId, UserLevel.Level4);
+                    var updateLevel = await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level4);
                 }
                 return updateDetail;
             }
