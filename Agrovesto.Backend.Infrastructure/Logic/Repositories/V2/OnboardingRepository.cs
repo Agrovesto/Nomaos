@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool status, string message)> OnProfileUpdateAsync(string userId, UserLevel level);
+        Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model);
         Task OnCreateKYC(KYCDetails kYC);
     }
@@ -914,7 +914,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             
         }
-        public async Task<(bool status, string message)> OnProfileUpdateAsync(string userId, UserLevel level)
+        public async Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level)
         {
             var user = await _context.Users.Where(x => x.Id == userId).FirstOrDefaultAsync();
             if (user == null) {

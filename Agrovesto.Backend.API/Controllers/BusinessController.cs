@@ -1740,7 +1740,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<FarmerModel>>()
+                return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
                     Data = result.Data,
                     Message = result.Message,

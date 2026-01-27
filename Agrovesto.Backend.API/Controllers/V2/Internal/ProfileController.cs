@@ -182,6 +182,196 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        //remove farmer
+        [HttpPost("remove-farmer-from-cooperative")]
+        public async Task<IActionResult> CreateFarmMap([FromQuery] Params args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                if (string.IsNullOrEmpty(args.UserId))
+                {
+                    return BadRequest(new Response<Dictionary<string, string>>()
+                    {
+                        Message = "Validation failed, User Id missing.",
+                        Succeeded = false,
+                        Data = ModelState
+                      .Where(ms => ms.Value.Errors.Any())
+                      .ToDictionary(
+                          ms => ms.Key,
+                          ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                      )
+                    });
+                }
+
+                var updateDetail = await _onBoardingManager.RemoveFarmerFromCooperative(args.UserId, args.Id);
+
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = updateDetail
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        //edit farmer profile
+
+        [HttpPut("update-farmer-profile")]
+        public async Task<IActionResult> UpdateFarmerProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                // determine target user id
+                var targetUserId = !string.IsNullOrEmpty(CurrentUserId) && CurrentUserRole == "Farmer"
+                    ? CurrentUserId
+                    : userId;
+
+                if (string.IsNullOrEmpty(targetUserId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
+
+                return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result.Success,
+                    Message = result.Message,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        //fetch farmer detail
+
+        [HttpGet("farmer")]
+        public async Task<IActionResult> GetFarmerProfile([FromQuery] string? userId)
+        {
+            try
+            {
+                var targetUserId = !string.IsNullOrEmpty(CurrentUserId) && CurrentUserRole == "Farmer"
+                    ? CurrentUserId
+                    : userId;
+
+                if (string.IsNullOrEmpty(targetUserId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+                var profile = await _onBoardingManager.GetFarmerProfile(targetUserId);
+
+                return Ok(new Response<FarmerProfileDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = profile
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
 
     }
 }
