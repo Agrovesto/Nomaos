@@ -2185,7 +2185,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
-        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByAgent(string userId,
+        public async Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId,
 
       ListQueryParams query)
         {
@@ -2197,7 +2197,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
-                if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+                if (farmers == null) return new PagedListResponse<List<FarmerAgentDto>>
                 {
                     Succeeded = true,
                     Data = null,
@@ -2205,19 +2205,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Message = "No Record Found"
                 };
 
-                foreach (var farmer in farmers)
-                {
-                    if (!string.IsNullOrEmpty(farmer.FarmerImage))
-                    {
-                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
-                    }
-                }
+                //foreach (var farmer in farmers)
+                //{
+                //    if (!string.IsNullOrEmpty(farmer.FarmerImage))
+                //    {
+                //        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+                //    }
+                //}
 
-                return new PagedListResponse<List<FarmerModel>>
+                return new PagedListResponse<List<FarmerAgentDto>>
                 {
                     Succeeded = true,
-                    Data = farmers,
-                    Count = farmers.Count,
+                    Data = farmers.Data,
+                    Count = farmers.Data.Count,
                     Message = "Retrieved Successfully"
                 };
             }
