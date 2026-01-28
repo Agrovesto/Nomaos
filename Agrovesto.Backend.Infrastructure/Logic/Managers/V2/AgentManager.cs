@@ -152,6 +152,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 TotalCooperatives = cooperatives.Count,
                 TotalFarmers = farmers.Count,
+
                 // leave TotalFarmSizeHectares and TotalFarms unchanged unless farm repo is available
                 MappedFarms = totalMappedFarms,
                 UnmappedFarms = totalUnmappedFarms,
