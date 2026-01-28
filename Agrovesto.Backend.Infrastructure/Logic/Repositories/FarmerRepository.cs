@@ -705,16 +705,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (farmer != null)
             {
                 // Update basic details if changed
-                bool isModified = false;
-                if (farmer.Name != data.Name) { farmer.Name = data.Name; isModified = true; }
-                if (farmer.PhoneNumber != data.PhoneNumber) { farmer.PhoneNumber = data.PhoneNumber; isModified = true; }
-                if (farmer.Email != data.Email) { farmer.Email = data.Email; isModified = true; }
-
-                if (isModified)
+                await UpdateFarmerProfileAsync(data.UserId, new FarmerUpdateModel
                 {
-                    _context.Farmers.Update(farmer);
-                    await _context.SaveChangesAsync();
-                }
+                    DateOfBirth=data.DateOfBirth,
+                    SelectedItems=data.SelectedItems,
+                    State=data.State,
+                    AgentIds=data.AgentIds,
+                    CooperativeIds=data.CooperativeIds,
+                    BVN=data.BVN,
+                    Email=data.Email,
+                    FarmerCategory=data.FarmerCategory,
+                    FarmerImage=data.FarmerImage,
+                    Gender=data.Gender,
+                    HighestLevelOfEducation=data.HighestLevelOfEducation,
+                    IsNinVerified=data.IsNinVerified,
+                    Lga=data.Lga,
+                    Location=data.Location,
+                    Name=data.Name,
+                    NIN=data.NIN,
+                    OrganizationCode=data.OrganizationCode,
+                    PhoneNumber=data.PhoneNumber,
+                    Ward=data.Ward,
+                    YearsInAgric=data.YearsInAgric
+                });
+
+                //bool isModified = false;
+
+                //if (farmer.Name != data.Name) { farmer.Name = data.Name; isModified = true; }
+                //if (farmer.PhoneNumber != data.PhoneNumber) { farmer.PhoneNumber = data.PhoneNumber; isModified = true; }
+                //if (farmer.Email != data.Email) { farmer.Email = data.Email; isModified = true; }
+
+                //if (isModified)
+                //{
+                //    _context.Farmers.Update(farmer);
+                //    await _context.SaveChangesAsync();
+                //}
             }
             else
             {

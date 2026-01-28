@@ -283,12 +283,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 "Either email or phone number must be provided.");
         }
 
-        if (hasEmail && hasPhone)
-        {
-            throw new BaseException(
-                Core.Enums.ExceptionType.BAD_REQUEST,
-                "Use either email or phone number, not both.");
-        }
+        //if (hasEmail && hasPhone)
+        //{
+        //    throw new BaseException(
+        //        Core.Enums.ExceptionType.BAD_REQUEST,
+        //        "Use either email or phone number, not both.");
+        //}
 
         // ================= EMAIL + PASSWORD =================
         if (hasEmail)
@@ -302,19 +302,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Invalid email address format.");
             }
 
-            if (string.IsNullOrWhiteSpace(model.Password))
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Password is required when using email.");
-            }
+            //if (string.IsNullOrWhiteSpace(model.Password))
+            //{
+            //    throw new BaseException(
+            //        Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Password is required when using email.");
+            //}
 
-            if (model.Password.Length < 4)
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Password must be alphanumeric and at least 8 characters long.");
-            }
+            //if (model.Password.Length < 4)
+            //{
+            //    throw new BaseException(
+            //        Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Password must be alphanumeric and at least 8 characters long.");
+            //}
         }
 
         // ================= PHONE + PIN =================
@@ -648,6 +648,15 @@ AgentIds = args.AgentIds?
                     CreatedBy = createUser.model.Id
                 });
 
+                var updateProfile = await CreateUserProfile(new ProfileRequestModel {
+                    
+                    Email = model.Email,
+                   FirstName= model.FirstName,
+                   LastName= model.LastName,
+                   MiddleName=model.MiddleName,
+               Id= createUser.model.Id,
+               PhoneNumber= model.PhoneNumber,
+                }, args);
             // ------------------ Track role & user type ------------------
             await _onboardingRepository.TrackUserRoleAssignment(
                 createUser.model.Id,
