@@ -11,6 +11,30 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
+    public class BulkOnboardingExcelRow
+    {
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Role { get; set; }
+    }
+    public class BulkOnboardingResult
+    {
+        public int Total { get; set; }
+        public int Successful { get; set; }
+        public int Failed { get; set; }
+
+        public List<BulkOnboardingError> Errors { get; set; } = new();
+    }
+
+    public class BulkOnboardingError
+    {
+        public int RowNumber { get; set; }
+        public string Email { get; set; }
+        public string Error { get; set; }
+    }
+
     public class GenerateOtpRequest
     {
         public string UserId { get; set; }
@@ -65,6 +89,9 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public string? Id { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? LastName { get; set; }
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
         public string? Pin { get; set; }
         public string? Password { get; set; }
         public string? Email { get; set; }
@@ -127,6 +154,20 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? HighestLevelOfEducation { get; set; }
 
         public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
+    }
+    public class BulkOnboardingJobArgs
+    {
+        public long Id { get; set; }
+        public string userType { get; set; }
+        public string? UserId { get; set; }
+        public string? OnboardedByUserId { get; set; }
+        public string businessCode { get; set; }
+        public string? organizationCode { get; set; }
+        public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? AgentIds { get; set; }
+        public List<BulkOnboardingExcelRow> Rows { get; set; }
+        public bool DisableOtp { get; set; }
+        public bool IsDryRun { get; set; }
     }
 
     public class OnBoardingArgs
