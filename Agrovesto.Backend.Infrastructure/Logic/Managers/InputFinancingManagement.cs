@@ -37,13 +37,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<InputFinancingManagement> _log;
         private readonly ICafeOneWalletService _cafeOneWalletService;
         // private readonly IWalletRepository _walletRepository;
-        private readonly ISMSService _whisperSMSService;
+        private readonly INotificationService _whisperSMSService;
         private readonly IFaceManager _faceManager;
         private readonly IConfiguration _configuration;
         private readonly IWalletManager _walletManager;
         public InputFinancingManagement(IFarmerCreditScoremanager farmerCreditScoremanager,IInputFinancingManagementRepository repository,
             IFaceManager faceManager, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
-            DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, ISMSService whisperSMSService,
+            DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, INotificationService whisperSMSService,
             IFarmerRepository farmerRepository,
             ICafeOneWalletService cafeOneWalletService,
             // IWalletRepository walletRepository, 
@@ -625,7 +625,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 TotalEquityPaid = subscription.SubscriptionInterest.TotalEquityPaid + settlementPlatformSplitAmount,
                 OnBoardedOn = subscription.SubscriptionInterest.OnBoardedOn,
                 Farmer = subscription.Farmer,
-                Cooperative = subscription.Cooperative,
+                Cooperatives = subscription.Cooperatives.ToList(),
                 SubscriptionInterest = subscription.SubscriptionInterest,
                 MaturityDate = subscription.SubscriptionInterest.MaturityDate,
                 BelongToBusinessCode = subscription.SubscriptionInterest.BelongToBusinessCode,
@@ -679,7 +679,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.InterestedBundleName = getInputInventory.Name;
                     model.Status = EquityPaymentStatus.Initial;
                     model.FarmerName = farmer.Name;
-                    model.CooperativeId = farmer.BelongToCooperativeId;
+                    model.CooperativeId = args.CooperativeId;//farmer.BelongToCooperativeId;
                     model.Location = farmer.State;
                     if (getInputInventory.ShouldAddCommission)
                     {

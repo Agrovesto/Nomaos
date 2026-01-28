@@ -67,7 +67,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
               ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
-            var org = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+            var org = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
             if (org == null) { throw new Exception($"Organization not found"); }
 
             

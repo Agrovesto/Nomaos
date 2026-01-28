@@ -137,7 +137,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             try
             {
-                var plots = await _farmPlotDetailRepository.GetFarmDetailsByCooperative(args.CooperativeId, args.businessCode, args.organizationCode);
+                var plots = await _farmPlotDetailRepository.GetFarmDetailsByCooperative(args.CooperativeId.Value, args.businessCode, args.organizationCode);
                 if (plots == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return plots;
@@ -499,7 +499,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = business.BusinessCode;
                     model.FarmerName = farmer.Name;
                     model.FarmActivityId = activityType.Id;
-                    model.CooperativeId = farmer.BelongToCooperativeId;
+                    model.CooperativeId = args.CooperativeId;//farmer.BelongToCooperativeId;
                     model.OfficerInChargeId = args.UserId;
                     model.OfficerName = getUserCred.model.FirstName;
                     model.CreatedBy = getUserCred.model.FirstName;

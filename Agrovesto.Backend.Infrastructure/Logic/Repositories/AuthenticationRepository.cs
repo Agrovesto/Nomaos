@@ -69,12 +69,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 if (model.LoginMethod == LoginType.Password)
                 {
                     user = header.Contains("IsAgrovesto")
-                        ? await _userManager.FindByNameAsync(model.Username)
+                        ? await _userManager.FindByNameAsync(model.Email)
                         : await _context.Users
-                            .FirstOrDefaultAsync(x => x.UserName == model.Username && x.BusinessCode == businessCode)
+                            .FirstOrDefaultAsync(x => x.UserName == model.Email && x.BusinessCode == businessCode)
                             ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found");
 
-                    var validPassword = await _userManager.CheckPasswordAsync(user, model.password);
+                    var validPassword = await _userManager.CheckPasswordAsync(user, model.Password);
                     if (!validPassword)
                     {
                         await _userManager.AccessFailedAsync(user);
@@ -84,16 +84,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 else
                 {
                     user = header.Contains("IsAgrovesto")
-                        ? await FindByPhoneNumberAsync(model.phonenumber)
+                        ? await FindByPhoneNumberAsync(model.Phonenumber)
                         : await _context.Users
-                            .FirstOrDefaultAsync(x => x.PhoneNumber == model.phonenumber && x.BusinessCode == businessCode)
+                            .FirstOrDefaultAsync(x => x.PhoneNumber == model.Phonenumber && x.BusinessCode == businessCode)
                             ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User not found");
 
                     if (string.IsNullOrEmpty(user.Salt))
                         return (false, "Could not login user. Contact administrator", null);
 
                     var salt = Convert.FromBase64String(user.Salt);
-                    var hashedPin = model.pin.HashSecret(salt);
+                    var hashedPin = model.Pin.HashSecret(salt);
 
                     if (string.IsNullOrEmpty(user.Pin) || string.IsNullOrEmpty(user.PinEncrypt))
                         return (false, "Login with Email and Password, then enable login with Pin in settings", null);

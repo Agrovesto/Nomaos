@@ -8,8 +8,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 {
     public class TermiiResponse
     {
-        public string message_id { get; set; }
+        public string code { get; set; }
         public string message { get; set; }
+        public string message_id { get; set; }
         public double balance { get; set; }
         public string user { get; set; }
     }
