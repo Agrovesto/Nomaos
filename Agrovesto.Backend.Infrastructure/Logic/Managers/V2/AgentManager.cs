@@ -17,6 +17,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IAgentManager
     {
+        Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query);
         Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
     }
