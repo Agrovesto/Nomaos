@@ -389,7 +389,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
 
             catch (Exception ex) {
-                throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, "An error occurred");
+                throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, $"An error occurred {ex.Message}");
             }
 
         }
@@ -612,7 +612,124 @@ AgentIds = args.AgentIds?
 
             return await _farmerRepository.AssignFarmerToAgents(args, args.Id);
         }
+
         public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
+        {
+            try
+            {
+                ValidateQuickOnboarding(model);
+
+                if (string.IsNullOrEmpty(args.businessCode))
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Business code is required.");
+
+                // ------------------ Fetch business ------------------
+                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                    ?? throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Business does not exist.");
+
+                // ------------------ Register or attach user ------------------
+                var createUser = await _onboardingRepository.RegisterUser(model, args);
+
+                if (!createUser.status)
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        createUser.message);
+
+                // Everything after this point is “best effort”
+                try
+                {
+                    // ------------------ Wallet / Sub-account ------------------
+                    var subAccount =
+                        await _walletManager.GetSubAccountByUserId(createUser.model.Id)
+                        ?? await _walletManager.CreateSubAccount(new SubAccountModel
+                        {
+                            UserId = createUser.model.Id,
+                            Email = createUser.model.Email,
+                            PhoneNumber = model.PhoneNumber,
+                            BusinessId = business.BusinessId,
+                            CreatedBy = createUser.model.Id,
+                        });
+
+                    // ------------------ Create Profile ------------------
+                    var updateProfile = await CreateUserProfile(new ProfileRequestModel
+                    {
+                        Email = model.Email,
+                        FirstName = model.FirstName,
+                        LastName = model.LastName,
+                        MiddleName = model.MiddleName,
+                        Id = createUser.model.Id,
+                        PhoneNumber = model.PhoneNumber,
+                    }, args);
+
+                    // ------------------ Track role & user type ------------------
+                    await _onboardingRepository.TrackUserRoleAssignment(
+                        createUser.model.Id,
+                        args.userType);
+
+                    // ------------------ OTP Generation ------------------
+                    var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+                        ? OtpTarget.Email
+                        : OtpTarget.Phone;
+
+                    var destination = otpTarget == OtpTarget.Email
+                        ? model.Email
+                        : model.PhoneNumber;
+
+                    await _otpService.InvalidateActiveOtps(
+                        createUser.model.Id,
+                        otpTarget);
+
+                    var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+                    {
+                        UserId = createUser.model.Id,
+                        Target = otpTarget,
+                        Destination = destination,
+                        Purpose = OtpPurpose.Onboarding,
+                        ExpiryMinutes = 5
+                    });
+
+                    // ------------------ Send OTP ------------------
+                    if (otpTarget == OtpTarget.Email)
+                    {
+                        await _sMSService.SendEmailAsync(
+                            destination,
+                            "Confirm your account",
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log as info/warning, do NOT throw
+                    _log.LogWarning(ex, $"Non-critical onboarding step failed for user {createUser.model.Id}. User may need to update profile manually.");
+                }
+
+                model.Id = createUser.model.Id;
+
+                return new OnboardingResponseModel
+                {
+                    Id = model.Id,
+                    Email = model.Email,
+                    PhoneNumber = model.PhoneNumber,
+                    Message = "User created successfully. Some post-registration steps may need manual completion."
+                };
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "User Registration failed unexpectedly");
+                throw new BaseException(
+                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
+                    "An unexpected error occurred. Please try again.");
+            }
+        }
+
+        /**public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
             try { 
             ValidateQuickOnboarding(model);
@@ -723,6 +840,8 @@ AgentIds = args.AgentIds?
             }
 
         }
+        
+        **/
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
         {
             var isValid= await _otpService.VerifyOtpAsync(
