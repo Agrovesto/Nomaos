@@ -25,6 +25,78 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _onBoardingManager = onBoardingManager;
             _businessManager = businessManager;
         }
+        [HttpPost("bulk-onboard")]
+        public async Task<IActionResult> BulkOnboard(
+    IFormFile file,
+    [FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                //if (args.Id == 0 && currentRole == "Cooperative")
+                //{
+                //    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+                //    args.Id = coop.Id;
+                //}
+                if (file == null || file.Length == 0)
+                return BadRequest("Excel file is required.");
+
+
+            using var stream = file.OpenReadStream();
+            var response = await _onBoardingManager.BulkOnboardBusinessUsers(stream, args);
+
+            //return Ok(response);
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
 
         [HttpPost("create-account")]
         [AllowAnonymous]

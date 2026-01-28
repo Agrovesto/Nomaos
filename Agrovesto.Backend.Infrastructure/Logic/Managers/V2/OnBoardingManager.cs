@@ -49,6 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
+        Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -65,11 +66,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ILogger<OnBoardingManager> _log;
         private readonly IFarmManager _farmManager;
         private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IExcelConverterService _excelConverterService;
         public OnBoardingManager(IWalletManager walletManager,
             IFaceManager faceManager,
             IIdentityVerificationManager identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, ICooperativeRepository cooperativeRepository,
-            IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository)
+            IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
+            , IExcelConverterService excelConverterService)
         {
             _onboardingRepository = onboardingRepository;
             _farmerRepository = farmerRepository;
@@ -80,10 +83,104 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _sMSService = sMSService;
             _walletManager = walletManager;
             _otpService = otpService;
-            _faceManager=faceManager;
+            _faceManager = faceManager;
             _farmManager = farmManager;
             _identityVerificationManager = identityVerificationManager;
+            _excelConverterService = excelConverterService;
         }
+    //    public string EnqueueBulkOnboarding(
+    //Stream excelStream,
+    //OnBoardingArgs args,
+    //bool disableOtp,
+    //bool isDryRun)
+    //    {
+    //        var rows = _excelConverterService.ParseExcel(excelStream);
+
+    //        var jobArgs = new BulkOnboardingJobArgs
+    //        {
+    //            businessCode = args.businessCode,
+    //            Rows = rows,
+    //            DisableOtp = disableOtp,
+    //            IsDryRun = isDryRun
+    //        };
+
+    //        return BackgroundJob.Enqueue<IBulkOnboardingJob>(
+    //            job => job.Process(jobArgs));
+    //    }
+
+        public async Task<BulkOnboardingResult> BulkOnboardBusinessUsers(
+    Stream excelStream,
+    OnBoardingArgs args)
+        {
+            if (excelStream == null)
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Excel file is required.");
+
+            var rows = _excelConverterService.ParseExcel(excelStream);
+
+            if (!rows.Any())
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Excel file contains no records.");
+
+            var result = new BulkOnboardingResult
+            {
+                Total = rows.Count
+            };
+
+            int rowNumber = 1; // header = 1
+
+            foreach (var row in rows)
+            {
+                rowNumber++;
+
+                try
+                {
+                    var model = new OnboardingRequestModel
+                    {
+                        
+                        FirstName = row.FirstName,
+                        LastName = row.LastName,
+                        Email = row.Email,
+                        PhoneNumber = row.PhoneNumber
+                    };
+
+                    args.userType = row.Role;
+
+                    await CreateBusinessUser(model, args);
+
+                    result.Successful++;
+                }
+                catch (BaseException ex)
+                {
+                    result.Failed++;
+
+                    result.Errors.Add(new BulkOnboardingError
+                    {
+                        RowNumber = rowNumber,
+                        Email = row.Email,
+                        Error = ex.Message
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _log.LogError(ex, "Bulk onboarding failed on row {Row}", rowNumber);
+
+                    result.Failed++;
+
+                    result.Errors.Add(new BulkOnboardingError
+                    {
+                        RowNumber = rowNumber,
+                        Email = row.Email,
+                        Error = "Unexpected error occurred"
+                    });
+                }
+            }
+
+            return result;
+        }
+
 
         public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
         {

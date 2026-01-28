@@ -64,6 +64,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         // User level and active status
         public string FarmerLevel { get; set; }
         public bool IsActive { get; set; }
+        public DateTimeOffset DateRegistered { get; set; }
     }
     public class FarmerProfileDto
     {
