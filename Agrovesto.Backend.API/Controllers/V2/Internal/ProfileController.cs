@@ -184,7 +184,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         //remove farmer
         [HttpPost("remove-farmer-from-cooperative")]
-        public async Task<IActionResult> CreateFarmMap([FromQuery] Params args)
+        public async Task<IActionResult> RemoveFarmerFromCooperative([FromQuery] Params args)
         {
             if (!ModelState.IsValid)
             {
@@ -209,8 +209,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     args.organizationCode = OrganizationCode;
                 }
 
-                //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
                 if (string.IsNullOrEmpty(args.UserId))
                 {
