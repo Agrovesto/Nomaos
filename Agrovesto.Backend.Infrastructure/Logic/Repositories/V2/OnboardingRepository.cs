@@ -352,13 +352,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
 
             var token = GenerateJwtToken(claims);
-
+            var time = DateTime.UtcNow.AddDays(1);
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
+                Email=user.Email,
+                Name=user.Name,
+                phone_number=user.PhoneNumber,
+             
                 Token = token,
                 TokenType = TokenType.AccessToken,
-                ExpiresOn = DateTime.UtcNow.AddDays(1),
+                ExpiresOn = time,//DateTime.UtcNow.AddDays(1),
                 Roles = roles.ToList(),
                 Organizations = organizations
             });

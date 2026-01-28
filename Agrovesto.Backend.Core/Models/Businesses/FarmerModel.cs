@@ -104,26 +104,26 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class FarmerModel
     {
         public string BelongToBusinessCode { get; set; }  //which business
-        public string Name { get; set; }
-        public string Location { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? Name { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public string? Ward { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string UserId { get; set; }
         public long Id { get; set; }
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
-        public string OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
+        public string? OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
        // public long BelongToCooperativeId { get; set; }
        // public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
         public string? OrganizationCode { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
-        public string FarmerCategory { get; set; }
+        public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
         public bool IsNinVerified { get; set; } = false;
