@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -187,7 +188,16 @@ builder.Services.AddSwaggerGen(option =>
    // option.OperationFilter<AddCustomHeaderParameter>();
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
 
+    // IMPORTANT for Linux + Nginx
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 // Add logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -214,7 +224,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
-
+app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
