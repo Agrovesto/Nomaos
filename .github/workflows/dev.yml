@@ -38,7 +38,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "✅ PR Build Successful",
+              "text": "✅ PR Build Successful - ${{ github.repository }} by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "header",
@@ -86,7 +86,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "❌ PR Build Failed",
+              "text": "❌ PR Build Failed - ${{ github.repository }} by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "header",
@@ -144,7 +144,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "🚀 Deployment Starting",
+              "text": "🚀 Staging Deployment Starting - ${{ github.repository }} by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "header",
@@ -220,7 +220,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "✅ Deployment Successful",
+              "text": "✅ Staging Deployment Successful - ${{ github.repository }} by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "header",
@@ -276,7 +276,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "❌ Deployment Failed",
+              "text": "❌ Staging Deployment Failed - ${{ github.repository }} by ${{ github.actor }}",
               "blocks": [
                 {
                   "type": "header",
