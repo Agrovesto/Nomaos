@@ -645,9 +645,10 @@ AgentIds = args.AgentIds?
                     Email = createUser.model.Email,
                     PhoneNumber = model.PhoneNumber,
                     BusinessId = business.BusinessId,
-                    CreatedBy = createUser.model.Id
+                    CreatedBy = createUser.model.Id,
+                    
                 });
-
+              
                 var updateProfile = await CreateUserProfile(new ProfileRequestModel {
                     
                     Email = model.Email,
