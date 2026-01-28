@@ -1,34 +1,34 @@
 name: CI/CD Deploy Agrovesto.Backend.API - Production
 on:
-  pull_request:
+  push:
     branches:
       - master
-  push:
+  pull_request:
     branches:
       - master
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   # ------------------------------------------------------------------
   # 1. Build & Test (runs on PRs and pushes)
   # ------------------------------------------------------------------
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4.3.1
-      
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v3
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-      
-      - name: Restore dependencies
+          dotnet-version: 8.0.x
+
+      - name: Restore
         run: dotnet restore
-      
-      - name: Build application
+
+      - name: Build
         run: dotnet build -c Release --no-restore
 
       # Notify on PR
@@ -147,222 +147,38 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
   # ------------------------------------------------------------------
-  # 2. Deploy to Production (only on push to master)
+  # 2. Deploy to Staging (only on push to prod)
   # ------------------------------------------------------------------
-  deploy:
+  deploy-Production:
+    needs: build-and-test
     runs-on: ubuntu-latest
-    needs: build
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     steps:
-      - uses: actions/checkout@v4.3.1
+      - uses: actions/checkout@v4
 
-      # Notify deployment start
-      - name: Notify Slack - Production Deployment Starting
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          payload: |
-            {
-              "text": "🚀 Production Deployment Starting - ${{ github.repository }} by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "🚀 Production Deployment Starting"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Deployed by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\n🔴 Production"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "⏳ Deployment in progress... Monitor carefully"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-  
-      - name: Setup SSH
+      - name: Install rsync 
+        run: sudo apt-get update && sudo apt-get install -y rsync
+
+      - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-  
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}  
+
       - name: Add EC2 host to known_hosts (with retry + timeout)
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           for i in {1..5}; do
-            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_PROD }}"
+            ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts 2>/dev/null && break
             sleep 5
           done
-  
-      - name: Upload files to EC2
+
+      - name: Deploy source code + run deploy script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API/
+          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Agrovesto.Backend.API/
   
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-prod.sh"
-
-      # Notify deployment success
-      - name: Notify Slack - Production Deployment Success
-        if: success()
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          payload: |
-            {
-              "text": "✅ Production Deployment Successful - ${{ github.repository }} by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "✅ Production Deployment Successful"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Deployed by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\n🔴 Production"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "🎉 Production is now live with the latest changes"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      # Notify deployment failure
-      - name: Notify Slack - Production Deployment Failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          payload: |
-            {
-              "text": "🚨 URGENT: Production Deployment Failed - ${{ github.repository }} by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "🚨 Production Deployment Failed"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.ref_name }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Deployed by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Environment:*\n🔴 Production"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-                  }
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Action Required:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "⚠️ CRITICAL: Production deployment failed - immediate rollback or fix required!"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-prod.sh"
