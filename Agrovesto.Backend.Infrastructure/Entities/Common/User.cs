@@ -1,4 +1,5 @@
 ﻿
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
@@ -11,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     public class User : IdentityUser
     {
         public string? Salt { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? Pin { get; set; } 
         public string? PinEncrypt { get; set; }
         public string? Password { get; set; }         
@@ -23,19 +24,53 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public string? BusinessCode { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
+        public UserLevel UserLevel { get; set; }
+        public bool IsPhoneVerified { get; set; } = false;
     }
+    public enum UserLevel
+    {
+        None,//not verified
+        Level1, //phone or email verified 
 
+        Level2, //farmer:picture
+
+        Level3, //farmer:nin/bvn,  cooperatuve: cooperative registration document
+      
+      Level4,//farmer: land mapping, cooperative: cac
+      Level5, //nin/bvn
+    }
     public class UserOrganization
     {
         public string UserId { get; set; }
         public User User { get; set; }
 
         public string OrganizationCode { get; set; }
+    }
+    public class OneTimePassword
+    {
+        public long Id { get; set; }
+
+        public string UserId { get; set; }
+        public User User { get; set; }
+
+        public string CodeHash { get; set; } // NEVER store raw OTP
+        public OtpTarget Target { get; set; } // Email | Phone
+        public string Destination { get; set; }
+
+        public OtpPurpose Purpose { get; set; }
+
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? UsedAt { get; set; }
+
+        public int AttemptCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        public bool IsUsed => UsedAt.HasValue;
     }
 
 }

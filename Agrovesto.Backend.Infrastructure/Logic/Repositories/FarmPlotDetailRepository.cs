@@ -145,25 +145,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
         public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByCooperative(
-            long cooperativeId,
-            string? businessCode = null,
-            string? organizationCode = null)
+     long cooperativeId,
+     string? businessCode = null,
+     string? organizationCode = null)
         {
-            var query = from farm in _context.FarmPlotDetails
-                        join farmer in _context.Farmers
-                            on farm.FarmerId equals farmer.Id
-                        where farmer.BelongToCooperativeId == cooperativeId
-                        select new { farm, farmer };
+            // Join FarmPlotDetails -> Farmers -> FarmerCooperatives
+            var query =
+                from farm in _context.FarmPlotDetails.AsNoTracking()
+                join farmer in _context.Farmers.AsNoTracking()
+                    on farm.FarmerId equals farmer.Id
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on farmer.Id equals fc.FarmerId
+                where fc.CooperativeId == cooperativeId
+                select new { farm, farmer, fc };
 
+            // Apply optional filters
             if (!string.IsNullOrWhiteSpace(businessCode))
-            {
                 query = query.Where(x => x.farm.BelongToBusinessCode == businessCode);
-            }
 
             if (!string.IsNullOrWhiteSpace(organizationCode))
-            {
                 query = query.Where(x => x.farm.OrganizationCode == organizationCode);
-            }
 
             var result = await query
                 .OrderByDescending(x => x.farm.CreatedOn)
@@ -172,33 +173,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return result.Select(x =>
             {
                 var mapped = x.farm.Map();
-                mapped.CooperativeId = x.farmer.BelongToCooperativeId;
+                mapped.CooperativeId = x.fc.CooperativeId; // map cooperative from FarmerCooperative
                 return mapped;
             }).ToList();
         }
 
 
         public async Task<List<FarmPlotDetailsModel>> GetFarmDetailsByBusiness(
-        string? businessCode = null,
-        string? organizationCode = null)
+     string? businessCode = null,
+     string? organizationCode = null)
         {
-            var query = from farm in _context.FarmPlotDetails
-                        join farmer in _context.Farmers
-                            on farm.FarmerId equals farmer.Id
-                        join coop in _context.Cooperatives
-                            on farmer.BelongToCooperativeId equals coop.Id into coopJoin
-                        from cooperative in coopJoin.DefaultIfEmpty()
-                        select new { farm, farmer, cooperative };
+            // Join FarmPlotDetails -> Farmers -> FarmerCooperatives -> Cooperatives
+            var query =
+                from farm in _context.FarmPlotDetails.AsNoTracking()
+                join farmer in _context.Farmers.AsNoTracking()
+                    on farm.FarmerId equals farmer.Id
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on farmer.Id equals fc.FarmerId into fcGroup
+                from farmerCoop in fcGroup.DefaultIfEmpty()
+                join cooperative in _context.Cooperatives.AsNoTracking()
+                    on farmerCoop.CooperativeId equals cooperative.Id into coopGroup
+                from coop in coopGroup.DefaultIfEmpty()
+                select new { farm, farmer, CooperativeId = farmerCoop.CooperativeId, CooperativeName = coop != null ? coop.Name : null };
 
+            // Apply optional filters
             if (!string.IsNullOrWhiteSpace(businessCode))
-            {
                 query = query.Where(x => x.farm.BelongToBusinessCode == businessCode);
-            }
 
             if (!string.IsNullOrWhiteSpace(organizationCode))
-            {
                 query = query.Where(x => x.farm.OrganizationCode == organizationCode);
-            }
 
             var result = await query
                 .OrderByDescending(x => x.farm.CreatedOn)
@@ -207,8 +210,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return result.Select(x =>
             {
                 var mapped = x.farm.Map();
-                mapped.CooperativeId = x.farmer.BelongToCooperativeId;
-                mapped.CooperativeName = x.cooperative?.Name; 
+                mapped.CooperativeId = x.CooperativeId;
+                mapped.CooperativeName = x.CooperativeName;
                 return mapped;
             }).ToList();
         }

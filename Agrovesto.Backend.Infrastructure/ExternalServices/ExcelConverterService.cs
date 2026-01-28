@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using ClosedXML.Excel;
@@ -29,6 +30,31 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
             _cooperativeRepository = cooperativeRepository;
             _farmerRepository = farmerRepository;
         }
+
+        public List<BulkOnboardingExcelRow> ParseExcel(Stream fileStream)
+        {
+            var result = new List<BulkOnboardingExcelRow>();
+
+            using var workbook = new XLWorkbook(fileStream);
+            var worksheet = workbook.Worksheet(1);
+
+            var rows = worksheet.RangeUsed().RowsUsed().Skip(1); // skip header
+
+            foreach (var row in rows)
+            {
+                result.Add(new BulkOnboardingExcelRow
+                {
+                    FirstName = row.Cell(1).GetString(),
+                    LastName = row.Cell(2).GetString(),
+                    Email = row.Cell(3).GetString(),
+                    PhoneNumber = row.Cell(4).GetString(),
+                    Role = row.Cell(5).GetString()
+                });
+            }
+
+            return result;
+        }
+
 
 
         public async Task<(List<UserModel> ValidItems, List<(int Row, string ErrorMessage)> Errors)>
@@ -432,8 +458,8 @@ Items = itemsList
                 worksheet.Cell(row, 5).Value = f.Lga;
                 worksheet.Cell(row, 6).Value = f.Ward;
                 worksheet.Cell(row, 7).Value = f.Location;
-                worksheet.Cell(row, 8).Value = farmer.Cooperative?.Name;
-                worksheet.Cell(row, 9).Value = farmer.Agent?.Name;
+                worksheet.Cell(row, 8).Value = string.Join(',', farmer.Cooperatives.Select(x=>x.Name));
+                worksheet.Cell(row, 9).Value = string.Join(',', farmer.Agents.Select(x=>x.Name));
 
                 //  worksheet.Cells[row, 10].Value = f.SSN;
                 worksheet.Cell(row, 10).Value = f.NIN;

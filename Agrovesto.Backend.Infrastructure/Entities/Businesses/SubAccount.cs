@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? SubAccountName { get; set; }
         public string? WalletCode { get; set; }
         public long BusinessId { get; set; }
-        public string Status { get; set; }
+        public string? Status { get; set; }
         public bool IsMainAccount { get; set; } //is main account is true for business, where as users account under the business is false
         public DateTimeOffset CreatedOn { get; set; } = DateTime.Now;
         public string? CreatedBy { get; set; }
@@ -31,7 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
-        public string SubAccountType { get; set; }
+        public string? SubAccountType { get; set; } //= "User"; //user or business account
         public string? OrganizationCode { get; set; }
         public bool IsNinVerified { get; set; } = false;
     }

@@ -1447,7 +1447,7 @@ namespace Agrovesto.Backend.API.Controllers
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId);
+                var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId.Value);
                 return Ok(new Response<CooperativeModel> ()
                 {
                     Data = result.Data,
@@ -1740,7 +1740,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<FarmerModel>>()
+                return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1784,7 +1784,7 @@ namespace Agrovesto.Backend.API.Controllers
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
 
-            if (query.CooperativeId == 0)
+            if (!query.CooperativeId.HasValue)
             {
                 var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
                 query.CooperativeId = coop.Id;
