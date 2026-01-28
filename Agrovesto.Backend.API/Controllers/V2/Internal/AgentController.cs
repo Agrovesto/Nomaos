@@ -11,7 +11,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/agent")]
     [ApiController]
-    [Authorize]
+  //  [Authorize]
     public class AgentController : BaseController
     {
         private readonly IAgentManager _agentManager;
