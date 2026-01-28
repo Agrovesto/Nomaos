@@ -233,6 +233,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
+        public string phone_number { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
         public List<OrganizationDto> Organizations { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
