@@ -721,7 +721,15 @@ AgentIds = args.AgentIds?
         // Backwards-compatible wrapper that calls repository method
         public async Task<FarmerProfileDto> GetFarmerProfile(string userId)
         {
-            return await GetFarmerProfileAsync(userId);
+            var farmer= await GetFarmerProfileAsync(userId);
+
+            if (farmer !=null &&  farmer.PersonalInformation!=null  && !string.IsNullOrEmpty(farmer.PersonalInformation.FarmerImage))
+            {
+                var image = farmer.PersonalInformation.FarmerImage;
+                farmer.PersonalInformation.FarmerImage = await _faceManager.GetImageUrlAsync(image);
+            }
+
+            return farmer;
         }
         public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId)
         {
