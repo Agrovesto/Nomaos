@@ -133,6 +133,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                     args.Id = coop.Id;
                 }
+                args.OnboardedByUserId = args.UserId;
                 var request = await _onBoardingManager.CreateBusinessUser(model, args);
 
 
