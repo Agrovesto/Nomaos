@@ -18,20 +18,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     public interface IAgentManager
     {
         Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query);
-        Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<MemberShipModel>>> GetMembershipsByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
     }
     public class AgentManager : IAgentManager
     {
 
         private readonly IFarmerRepository _farmerRepository;
-        private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
         private readonly IAgentRepository _agentRepository;
         private readonly ILogger<AgentManager> _log;
         private readonly IFaceManager _faceManager;
         public AgentManager(IFarmerRepository farmerRepository, IAgentRepository agentRepository,
             IFaceManager faceManager,
-            ICooperativeRepository cooperativeRepository,
+            IMembershipRepository cooperativeRepository,
             ILogger<AgentManager> log)
         {
             _agentRepository = agentRepository;
@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _log = log;
             _cooperativeRepository = cooperativeRepository;
         }
-        public async Task<PagedListResponse<List<CooperativeModel>>> GetCooperativesByAgent(string userId,
+        public async Task<PagedListResponse<List<MemberShipModel>>> GetMembershipsByAgent(string userId,
        ListQueryParams query)
         {
             try
@@ -51,14 +51,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var cooperative = await _cooperativeRepository.GetCooperativeByAgent(userId, query);
-                if (cooperative == null) return new PagedListResponse<List<CooperativeModel>>
+                if (cooperative == null) return new PagedListResponse<List<MemberShipModel>>
                 {
                     Succeeded = true,
                     Data = null,
                     Count = 0,
                     Message = "No Record Found"
                 };
-                return new PagedListResponse<List<CooperativeModel>>
+                return new PagedListResponse<List<MemberShipModel>>
                 {
                     Succeeded = true,
                     Data = cooperative,

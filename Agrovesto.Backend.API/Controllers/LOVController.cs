@@ -1,10 +1,13 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -24,11 +27,15 @@ namespace Agrovesto.Backend.API.Controllers
 
         private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly INotificationService _smsService;
+
+        private readonly ISettingsManager _settingsManager;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
             IGoogleDriveService googleDriveService,
             IIdentityVerificationManager verificationManager,
             INigeriaStateImporterService nigeriaStateImporterService,
-             IFlutterwaveService flutterwaveService, IWebHostEnvironment hostingEnvironment, INotificationService smsService)
+             IFlutterwaveService flutterwaveService,
+             IWebHostEnvironment hostingEnvironment, INotificationService smsService,
+             ISettingsManager settingsManager)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
@@ -37,7 +44,89 @@ namespace Agrovesto.Backend.API.Controllers
             _smsService = smsService;
             _googleDriveService = googleDriveService;
             _verificationManager = verificationManager;
+            _settingsManager = settingsManager;
         }
+
+        [HttpGet("membership-types")]
+
+        public async Task<IActionResult> GetUsers([FromQuery] BusinessRegistrationArgs args)
+        {
+            try
+            {
+
+                var type = await _settingsManager.GetMembershipTypes(args);
+                return Ok(new Response<List<MemberShipTypeModel>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("membership-type/{id}")]
+
+        public async Task<IActionResult> GetUsers(long id)
+        {
+            try
+            {
+
+                var type = await _settingsManager.GetMemberShipTypeById(id);
+                return Ok(new Response<MemberShipTypeModel>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+
         [HttpPost("supporting-image")]
         public async Task<IActionResult> UploadImage([FromForm] SupportingDOcument model)
         {

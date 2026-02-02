@@ -20,10 +20,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
       : IExcelConverterService
     {
 
-        private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
         private readonly IFarmerRepository _farmerRepository;
         public ExcelConverterService(
-                                     ICooperativeRepository cooperativeRepository,
+                                     IMembershipRepository cooperativeRepository,
                                      IFarmerRepository farmerRepository
                                      )
         {
@@ -48,7 +48,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                     LastName = row.Cell(2).GetString(),
                     Email = row.Cell(3).GetString(),
                     PhoneNumber = row.Cell(4).GetString(),
-                    Role = row.Cell(5).GetString()
+                    NIN=row.Cell(5).GetString(),
+                    Gender = row.Cell(6).GetString()
                 });
             }
 

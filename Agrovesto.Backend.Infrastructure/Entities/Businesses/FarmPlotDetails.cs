@@ -56,26 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
 
     }
-    public class FarmLandDocument
-    {
-
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        public long Id { get; set; }
-
-        public long FarmPlotDetailsId { get; set; }
-        public virtual FarmPlotDetails FarmPlotDetails { get; set; }
-        public FarmLandDocumentType DocumentType { get; set; }
-        public string DocumentUrl { get; set; }
-        public string? DocumentTitle { get; set; }
-        public string DocumentId { get; set; }
-    }
-    public enum FarmLandDocumentType
-    {
-        LandDocument,
-        LandOwnerShip,
-        LandLease
-    }
+   
     public class FarmFlagAuditTrail
     {
         [Key]

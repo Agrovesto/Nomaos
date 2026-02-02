@@ -22,7 +22,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         // Ownership: Farmer / Cooperative / Community
         public string? OwnershipType { get; set; } = string.Empty;
         public string? FarmerUserId { get; set; }
-        public long CooperativeId { get; set; }
+        public long MembershipId { get; set; }
+        public long AgentId { get; set; }
         public long CommunityId { get; set; }
         public string? MappedBy { get; set; } = string.Empty;
 
@@ -34,30 +35,16 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public string FarmLga { get; set; }
         public string FarmWard { get; set; }
-
-
-        public string? CoordinateTakenBy { get; set; }
-        public string? CoordinateTakenByUserId { get; set; }
-        public double AreaInDegress { get; set; }
-        public double AreaInSqMetre { get; set; }
+        public double TotalAreaInDegress { get; set; }
+        public double TotalAreaInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
-        public DateTimeOffset? FlaggedOn { get; set; } //= DateTimeOffset.Now;
         public string? OrganizationCode { get; set; }
-        public bool IsFarmFlaggedBySystem { get; set; }
-        public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
-        public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
-
-        // Unflagging audit
-        public bool UnflagFarm { get; set; }
-        public string? FarmUnflaggedByUserId { get; set; }
-        public string? FarmUnflaggedByName { get; set; }
-        public DateTimeOffset? UnflaggedOn { get; set; }
         public ICollection<FarmMappingAuditTrail> AuditTrails { get; set; } = new List<FarmMappingAuditTrail>();
 
         public ICollection<FarmCoordinate> Coordinates { get; set; }
         public ICollection<FarmAllocation> Allocations { get; set; } // NEW - track who cultivates this land
         public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
-
+        public bool IsMapped { get; set; } = false;
     }
     public class FarmAllocation
     {
@@ -81,7 +68,27 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public Farm Farm { get; set; } = null;
     }
 
+    public class FarmLandDocument
+    {
 
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public DateTimeOffset UploadedOn { get; set; }
+        public long FarmId { get; set; }
+        public Farm Farm { get; set; }
+        public FarmLandDocumentType DocumentType { get; set; }
+        public string DocumentUrl { get; set; }
+        public string? DocumentTitle { get; set; }
+        public string DocumentId { get; set; }
+        public bool IsVerified { get; set; } = false;
+    }
+    public enum FarmLandDocumentType
+    {
+        LandDocument,
+        LandOwnerShip,
+        LandLease
+    }
     public class FarmMappingAuditTrail
     {
         [Key]
@@ -104,13 +111,29 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 
         public long Id { get; set; }
+        public DateTimeOffset? FlaggedOn { get; set; } //= DateTimeOffset.Now;      
+        public bool IsFarmFlaggedBySystem { get; set; }
+        public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
+        public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
+
+        // Unflagging audit
+        public bool UnflagFarm { get; set; }
+        public string? FarmUnflaggedByUserId { get; set; }
+        public string? FarmUnflaggedByName { get; set; }
+        public DateTimeOffset? UnflaggedOn { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
+        public DateTimeOffset? CapturedOn {  get; set; }
+        public DateTimeOffset? MeasurementDate {  get; set; }
+        public string CapturedBy {  get; set; }
+        public double SizeInHectares { get; set; }
+        public string MeasurementMode { get; set; } // Walking, bike
+        public double SizeInKm { get; set; }
         public long Order { get; set; } // order of the coordinate in the polygon
 
         [ForeignKey(nameof(Farm))]
         public long FarmId { get; set; }
-        [JsonIgnore]
+       // [JsonIgnore]
         public Farm Farm { get; set; } = null;
     }
 

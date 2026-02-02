@@ -202,7 +202,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     {
         Self,
         Farmer,
-        Cooperative,
+        MemberShip,
         Organization,
         IndividualTrader //individual seller
     }
