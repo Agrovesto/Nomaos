@@ -71,7 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 from farmerCoop in fcGroup.DefaultIfEmpty()
 
                     // Join Cooperative table
-                join cooperative in _context.Cooperatives.AsNoTracking()
+                join cooperative in _context.MemberShips.AsNoTracking()
                     on farmerCoop.CooperativeId equals cooperative.Id into coopGroup
                 from coop in coopGroup.DefaultIfEmpty()
 

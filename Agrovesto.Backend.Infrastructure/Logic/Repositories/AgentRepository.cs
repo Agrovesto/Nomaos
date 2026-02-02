@@ -22,6 +22,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<(bool status, AgentModel data)> CreateUpdateAgent(AgentModel data)
+        {
+            try
+            {
+                var existingAgent = await _context.Agents
+                    .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+                if (existingAgent != null)
+                {
+                    // PATCH: update only fields that have values
+                    if (!string.IsNullOrWhiteSpace(data.State))
+                        existingAgent.State = data.State;
+
+                    if (!string.IsNullOrWhiteSpace(data.Lga))
+                        existingAgent.Lga = data.Lga;
+
+                    if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
+                        existingAgent.PhoneNumber = data.PhoneNumber;
+
+                    if (!string.IsNullOrWhiteSpace(data.Email))
+                        existingAgent.Email = data.Email;
+
+                    if (!string.IsNullOrWhiteSpace(data.Location))
+                        existingAgent.Location = data.Location;
+
+                    if (!string.IsNullOrWhiteSpace(data.Name))
+                        existingAgent.Name = data.Name;
+                    if (!string.IsNullOrWhiteSpace(data.Ward))
+                        existingAgent.Ward = data.Ward;
+
+                    _context.Agents.Update(existingAgent);
+                    await _context.SaveChangesAsync();
+
+                    return (true, existingAgent.Map());
+                }
+
+                var entity = data.Map();
+
+                await _context.Agents.AddAsync(entity);
+                await _context.SaveChangesAsync();
+
+                return (true, entity.Map());
+            }
+            catch (BaseException ex)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.OPERATION_FAILED,
+                    ex.Message);
+            }
+            catch (Exception ex)
+            {
+                throw new NotSuccessfulException(
+                    $"Could not save agent details: {ex.Message}");
+            }
+        }
+
         public async Task<(bool status, AgentModel data)> CreateAgent(AgentModel data)
         {
             try

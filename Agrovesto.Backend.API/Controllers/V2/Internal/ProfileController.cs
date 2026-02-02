@@ -19,7 +19,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
         private readonly IOnBoardingManager _onBoardingManager;
 
-        public ProfileController(IHttpContextAccessor httpContextAccessor, IOnBoardingManager onBoardingManager
+        public ProfileController(IHttpContextAccessor httpContextAccessor, 
+            IOnBoardingManager onBoardingManager
             ) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
@@ -346,6 +347,57 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var profile = await _onBoardingManager.GetFarmerProfile(targetUserId);
 
                 return Ok(new Response<FarmerProfileDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = profile
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+
+
+        ///
+        /// 
+        /// ///
+        ////get current logged in user profile to include name, phone number, email, picture, id, level/tier
+         [HttpGet("user-profile")]
+        public async Task<IActionResult> GetUserProfile([FromQuery] string? userId)
+        {
+            try
+            {
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+            
+
+                if (string.IsNullOrEmpty(targetUserId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+                var profile = await _onBoardingManager.GetUserProfileAsync(targetUserId);
+
+                return Ok(new Response<UsersProfileResponse>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,

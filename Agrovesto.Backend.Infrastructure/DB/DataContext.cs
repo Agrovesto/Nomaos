@@ -197,7 +197,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }
         public DbSet<Agent> Agents { get; set; }
-        public DbSet<Cooperative> Cooperatives { get; set; }
+        public DbSet<MemberShip> MemberShips { get; set; }
+        public DbSet<MemberShipType> MemberShipTypes { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
         public DbSet<FarmerOrganization> FarmerOrganizations { get; set; }
         public DbSet<FarmerCooperative> FarmerCooperatives { get; set; }
@@ -243,10 +244,11 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<CooperativeCreditScore> CooperativeCreditScores { get; set; }
         public DbSet<InputFinancingScheme> InputFinancingSchemes { get; set; }
         public DbSet<InputSubscription> InputSubscriptions { get; set; }
-        public DbSet<FarmAllocation> FarmAllocations { get; set; }
+   
         public DbSet<Farm> Farms { get; set; }
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
         public DbSet<FarmLandDocument> FarmLandDocuments { get; set; }
+        public DbSet<FarmAllocation> FarmAllocations { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
 
     }

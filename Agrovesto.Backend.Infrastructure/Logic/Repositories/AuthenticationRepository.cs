@@ -370,7 +370,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             {
                 if (users.Count > 1)
                 {
-                    user = users.Where(u => u.UserType == UserType.Cooperative.ToString()).FirstOrDefault();
+                    user = users.Where(u => u.UserType == UserType.MemberShip.ToString()).FirstOrDefault();
                 }
                 else
                 {

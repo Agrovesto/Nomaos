@@ -47,5 +47,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerImagesModel> GetUserImage(string userId, string businessCode, string? organizationCode);
         Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args, long farmerId);
         Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId);
+        Task<(bool status, string message)> OnFarmerLevelUpdate(string userId, FarmerLevel level);
     }
 }

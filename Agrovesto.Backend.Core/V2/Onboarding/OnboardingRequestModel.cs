@@ -11,13 +11,56 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
+   
+
+
+    public class UsersProfileResponse
+    {
+        public string UserId { get; set; }
+        public string UserType { get; set; }
+
+        // Common
+        public string Email { get; set; }
+        public string Phone { get; set; }
+
+        // Farmer
+        public FarmerProfileDto Farmer { get; set; }
+
+        // Agent
+        public AgentModel Agent { get; set; }
+
+        // Cooperative
+      public MemberShipModel Membership { get; set; }
+    }
+  
+    public class SimpleAgentDto
+    {
+        public long AgentId { get; set; }
+        public string Name { get; set; }
+    }
+    public class SimpleCooperativeDto
+    {
+        public long CooperativeId { get; set; }
+        public string Name { get; set; }
+    }
+    public class UserProfileResponse
+    {
+        public string UserId { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+        public string FullName { get; set; }
+        public string FirstName { get; set; }   
+        public string LastName { get; set; }
+        public string Level { get; set; }
+    }
     public class BulkOnboardingExcelRow
     {
         public string FirstName { get; set; }
         public string LastName { get; set; }
         public string Email { get; set; }
         public string PhoneNumber { get; set; }
-        public string Role { get; set; }
+        public string NIN { get; set; }
+        public string Gender { get; set; }
     }
     public class BulkOnboardingResult
     {
@@ -79,6 +122,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         Login,
         PasswordReset
     }
+    public class CreateMembershipResponseModel
+    {
+        public string UserId { get; set; }
+        public long MembershipId { get; set; }
+        public bool RequiresProfileCompletion { get; set; }
+    }
     public class OnboardingResponseModel
     {
         public string? Id { get; set; }
@@ -127,6 +176,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class ProfileRequestModel 
     {
+        public bool IsLeaderAFarmer { get; set; } = false;
         public string? OnboardedByUserId { get; set; }
         //  public IFormFile? FarmerCapturedImage { get; set; }
         public string? Id { get; set; }
@@ -150,8 +200,11 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         public string? Bvn { get; set; }
         public string? NIN { get; set; }
+        public string? Password { get; set; }
+        public string? Pin { get; set; }
         public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
+        public long? MembershipTypeId { get; set; }
         public string? HighestLevelOfEducation { get; set; }
 
         public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
