@@ -1,7 +1,9 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using PhoneNumbers;
 using System;
@@ -12,17 +14,160 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
-    public class CooperativeRepository : ICooperativeRepository
+    public class MembershipRepository : IMembershipRepository
     {
         private readonly DataContext _context;
 
-        public CooperativeRepository(DataContext context)
+        public MembershipRepository(DataContext context)
         {
             _context = context;
         }
-        public async Task<(bool status, CooperativeModel data)> CreateCooperative(CooperativeModel data)
+        public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
         {
-            var existingCooperative = await _context.Cooperatives
+            var type = await _context.MemberShipTypes
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            if (type == null)
+                return null;
+
+            var response = type.Map();
+            return response;
+        }
+
+
+        public async Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args) 
+        {
+
+            var type = await _context.MemberShipTypes.Where(m=>m.BusinessCode==args.businessCode).ToListAsync();
+            if (type.Count > 0)
+            {
+                return type.Select(x => x.Map()).ToList();
+            }
+            return null;
+        }
+        public async Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args)
+        {
+            try
+            {
+                var existingType = await _context.MemberShipTypes
+                    .FirstOrDefaultAsync(x => x.Id == data.Id);
+
+                if (existingType != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(data.Name))
+                        existingType.Name = data.Name;
+
+                    if (!string.IsNullOrWhiteSpace(data.Description))
+                        existingType.Description = data.Description;
+
+                    existingType.UpdatedOn = DateTimeOffset.Now;
+                    existingType.UpdatedBy = args.UserId;
+                    _context.MemberShipTypes.Update(existingType);
+                    await _context.SaveChangesAsync();
+
+                    return (true, existingType.Map());
+                }
+
+                var entity = data.Map();
+                entity.CreatedBy = args.UserId;
+                entity.BusinessCode = args.businessCode;
+                entity.CreatedOn= DateTimeOffset.Now;
+                await _context.MemberShipTypes.AddAsync(entity);
+                await _context.SaveChangesAsync();
+
+                return (true, entity.Map());
+            }
+            catch (BaseException ex)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.OPERATION_FAILED,
+                    ex.Message);
+            }
+            catch (Exception ex)
+            {
+                throw new NotSuccessfulException(
+                    $"Could not save agent details: {ex.Message}");
+            }
+        }
+
+        public async Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data)
+        {
+            try
+            {
+                var existingCooperative = await _context.MemberShips
+                    .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+                if (existingCooperative != null)
+                {
+                    if (!string.IsNullOrWhiteSpace(data.State))
+                        existingCooperative.State = data.State;
+
+                    if (!string.IsNullOrWhiteSpace(data.Lga))
+                        existingCooperative.Lga = data.Lga;
+
+                    if (!string.IsNullOrWhiteSpace(data.ContactPerson))
+                        existingCooperative.ContactPerson = data.ContactPerson;
+
+                    if (!string.IsNullOrWhiteSpace(data.Email))
+                        existingCooperative.Email = data.Email;
+
+                    if (!string.IsNullOrWhiteSpace(data.Location))
+                        existingCooperative.Location = data.Location;
+
+                    if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
+                        existingCooperative.PhoneNumber = data.PhoneNumber;
+
+                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderFirstName))
+                        existingCooperative.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
+
+                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderGender))
+                        existingCooperative.MembershipLeaderGender = data.MembershipLeaderGender;
+
+                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderMiddleName))
+                        existingCooperative.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
+
+                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
+                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;
+
+                    if (!string.IsNullOrWhiteSpace(data.Name))
+                        existingCooperative.Name = data.Name;
+
+                    if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
+                        existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
+
+                    if (!string.IsNullOrWhiteSpace(data.Ward))
+                        existingCooperative.Ward = data.Ward;
+
+                    _context.MemberShips.Update(existingCooperative);
+                    await _context.SaveChangesAsync();
+
+                    return (true, existingCooperative.Map());
+                }
+
+                var entity = data.Map();
+
+                await _context.MemberShips.AddAsync(entity);
+                await _context.SaveChangesAsync();
+
+                return (true, entity.Map());
+            }
+            catch (BaseException ex)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.OPERATION_FAILED,
+                    ex.Message);
+            }
+            catch (Exception ex)
+            {
+                throw new NotSuccessfulException(
+                    $"Could not save agent details: {ex.Message}");
+            }
+        }
+
+        public async Task<(bool status, MemberShipModel data)> CreateCooperative(MemberShipModel data)
+        {
+            var existingCooperative = await _context.MemberShips
                  .FirstOrDefaultAsync(x => x.UserId == data.UserId);
 
             if (existingCooperative != null)
@@ -38,18 +183,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, entity.Map());
         }
 
-        public async Task<CooperativeModel> GetCooperativeDetailByUserId(string userId)
+        public async Task<MemberShipModel> GetCooperativeDetailByUserId(string userId)
         {
-            var cooperative = await _context.Cooperatives.Where(x => x.UserId == userId).FirstOrDefaultAsync();
+            var cooperative = await _context.MemberShips.Where(x => x.UserId == userId).FirstOrDefaultAsync();
             if (cooperative == null)
             {
                 return null;
             }
             return cooperative.Map();
         }
-        public async Task<CooperativeModel?> GetCooperativeDetailById(long id)
+        public async Task<MemberShipModel?> GetCooperativeDetailById(long id)
         {
-            var cooperative = await _context.Cooperatives
+            var cooperative = await _context.MemberShips
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Id == id);
 
@@ -79,10 +224,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<List<CooperativeModel>> GetCooperatives() //restricted to agrovesto
+        public async Task<List<MemberShipModel>> GetCooperatives() //restricted to agrovesto
         {
 
-            var cooperative = await _context.Cooperatives.ToListAsync();
+            var cooperative = await _context.MemberShips.ToListAsync();
             if (cooperative.Count > 0)
             {
                 return cooperative.Select(x => x.Map()).OrderByDescending(x => x.OnBoardedOn).ToList();
@@ -90,9 +235,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return null;
         }
 
-        public async Task<List<CooperativeModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
+        public async Task<List<MemberShipModel>> GetCooperativesByBusinessCode(string businessCode, ListQueryParams query)
         {
-            var cooperatives = _context.Cooperatives
+            var cooperatives = _context.MemberShips
                 .Where(x => x.BelongToBusinessCode == businessCode)
                 .AsQueryable();
             if (!string.IsNullOrEmpty(query.organizationCode))
@@ -113,10 +258,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-        public async Task<List<CooperativeModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
+        public async Task<List<MemberShipModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
         {
             // Base query: cooperatives assigned to this agent via join table
-            var cooperativesQuery = _context.Cooperatives
+            var cooperativesQuery = _context.MemberShips
              .AsNoTracking()
              .Where(s => s.IsAssignedToAgentId == agentId || s.OnboardedById == agentId);
 
@@ -129,7 +274,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
-                .Select(s => new CooperativeModel
+                .Select(s => new MemberShipModel
                 {
                     Id = s.Id,
                     Name = s.Name,
@@ -142,12 +287,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Email = s.Email,
                     PhoneNumber = s.PhoneNumber,
                     UserId = s.UserId,
+                    IsLeaderAFarmer = s.IsLeaderAFarmer,
+                    Tier=EnumExtensions.GetDisplayName(s.Tier),
+                    MembershipType= s.MemberShipType.Name,
+                    
                     // Count farmers via FarmerCooperatives
                     TotalFarmers = _context.FarmerCooperatives.Count(fc => fc.CooperativeId == s.Id)
                 })
                 .ToListAsync();
 
-            return cooperatives.Any() ? cooperatives : new List<CooperativeModel>();
+            return cooperatives.Any() ? cooperatives : new List<MemberShipModel>();
         }
 
       
@@ -163,9 +312,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return agent.Map();
         }
 
-        public async Task<CooperativeModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
+        public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
         {
-            var cooperative = await _context.Cooperatives.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
+            var cooperative = await _context.MemberShips.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
             if (cooperative == null) return null;
             cooperative.IsAssignedToAgentId = agentId;
             cooperative.HasbeenAssignedAgent = true;
@@ -215,7 +364,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             var agent =
-                await (from c in _context.Cooperatives
+                await (from c in _context.MemberShips
                        join a in _context.Agents
                        on c.IsAssignedToAgentId equals a.UserId
                        where c.Id == cooperativeId

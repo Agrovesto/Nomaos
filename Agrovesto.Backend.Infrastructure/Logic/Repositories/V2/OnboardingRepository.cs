@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -44,9 +45,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
+        //Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model);
         Task OnCreateKYC(KYCDetails kYC);
+        Task<UsersProfileResponse> GetUserProfile(string userId);
+        Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -262,7 +265,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 // For frontend convenience
                 claims.Add(new Claim("Roles", string.Join(",", roles)));
             }
-            claims.Add(new Claim("UserLevel", user.UserLevel.ToString()));
+          //  claims.Add(new Claim("UserLevel", user.UserLevel.ToString()));
 
 
 
@@ -418,7 +421,308 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _userManager.UpdateAsync(user);
         }
-     
+
+        //public async Task<UserProfileResponse> GetUserProfile(string userId)
+        //{
+        //    var user = await _context.Users.Where(x => x.Id == userId).FirstOrDefaultAsync();
+        //    if (user == null)
+        //    {
+        //        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+        //    }
+        //    return new UserProfileResponse
+        //    {
+        //        Email = user.Email,
+        //        FullName = user.Name,
+        //        PhoneNumber = user.PhoneNumber,
+        //        UserId = user.Id,
+        //       // Level = EnumExtensions.GetDisplayName(user.UserLevel)//Enum.GetName(typeof(UserLevel),user.UserLevel)//user.UserLevel.ToString()
+        //    };
+        //}
+
+
+        public async Task<UsersProfileResponse> GetUserProfile(string userId)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+            var response = new UsersProfileResponse
+            {
+                UserId = user.Id,
+                UserType = user.UserType,
+                Email = user.Email,
+                Phone = user.PhoneNumber
+            };
+
+            switch (user.UserType)
+            {
+                case "Farmer":
+                    response.Farmer = await GetFarmerProfile(userId);
+                    break;
+
+                case "Agent":
+                    response.Agent = await GetAgentProfile(userId);
+                    break;
+
+                case "MemberShip":
+                    response.Membership = await GetCooperativeProfile(userId);
+                    break;
+
+                default:
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid user type");
+            }
+
+            return response;
+        }
+
+        private async Task<FarmerProfileDto> GetFarmerProfile(string userId)
+        {
+
+            var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
+            if (farmer == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Farmer profile not found");
+
+
+            // Personal/subaccount info
+            var subAccount = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == userId);
+
+            // User (for level and active status)
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+
+            // Image (latest entry)
+            var image = await _context.FarmerImages
+                .Where(i => i.FarmerUserId == userId)
+                //.OrderByDescending(i => i.)
+                .FirstOrDefaultAsync();
+
+            // Cooperatives
+            var cooperatives = await (
+                from fc in _context.FarmerCooperatives
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where fc.FarmerId == farmer.Id
+                select c
+            ).ToListAsync();
+
+            var profile = new FarmerProfileDto
+            {
+                PersonalInformation = new FarmerPersonalInfoDto
+                {
+                    UserId = farmer.UserId,
+                    Name = farmer.Name,
+                    Gender = farmer.Gender,
+                    DateOfBirth = farmer.DateOfBirth,
+                    PhoneNumber = farmer.PhoneNumber,
+                    Email = user?.Email,
+                    BVN = user?.BVN,
+                    NIN = user?.NIN,
+                    DateRegistered = farmer.OnBoardedOn,
+                    FarmerImage = image?.IMageKey,
+                    FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level), //user != null ? user.UserLevel.ToString() : null,
+                    IsActive = user?.IsActive ?? false,
+                },
+
+                Location = new FarmerProfileLocationDto
+                {
+                    State = farmer.State,
+                    Lga = farmer.Lga,
+                    Ward = farmer.Ward,
+                    Location = farmer.Location,
+                },
+                CooperativeInformation = cooperatives.Select(c => c.Map()).ToList()
+            }; 
+
+           
+            return profile;
+        }
+
+        private async Task<AgentModel> GetAgentProfile(string userId)
+        {
+            return await _context.Agents
+                .Where(a => a.UserId == userId)
+                .Select(a => new AgentModel
+                {
+                    Id = a.Id,
+                    Name = a.Name,
+                    BelongToBusinessCode=a.BelongToBusinessCode,
+                    Email=a.Email,
+                    Lga=a.Lga,
+                    State=a.State,
+                    Location=a.Location,
+                    SupervisorUserId=a.SupervisorUserId,
+                    OnboardedById=a.OnboardedById,
+                    OnBoardedOn=a.OnBoardedOn,
+                    OrganizationCode=a.OrganizationCode,
+                    PhoneNumber=a.PhoneNumber,
+                    Ward=a.Ward,
+                    UserId=userId
+                })
+                .FirstOrDefaultAsync();
+        }
+        private async Task<MemberShipModel> GetCooperativeProfile(string userId)
+        {
+            return await _context.MemberShips
+                .Where(c => c.UserId == userId)
+                .Select(c => new MemberShipModel
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    MemberShipTypeId=c.MemberShipTypeId,
+                    MembershipType=c.MemberShipType.Name,
+                    BelongToBusinessCode=c.BelongToBusinessCode,
+                    ContactPerson=c.ContactPerson,
+                    MembershipLeaderFirstName=c.MembershipLeaderFirstName,
+                    MembershipLeaderGender=c.MembershipLeaderGender,
+                    MembershipLeaderLastName=c.MembershipLeaderLastName,
+                    MembershipLeaderMiddleName=c.MembershipLeaderMiddleName,
+                    OrganizationCode=c.OrganizationCode,
+                    Lga=c.Lga,
+                    Email=c.Email,
+                    HasbeenAssignedAgent=c.HasbeenAssignedAgent,
+                    IsAssignedToAgentId=c.IsAssignedToAgentId,
+                    Location=c.Location,
+                    OnboardedById=c.OnboardedById,
+                    OnBoardedOn=c.OnBoardedOn,
+                    PhoneNumber=c.PhoneNumber,
+                    State=c.State,
+                    Tier= EnumExtensions.GetDisplayName(c.Tier),
+                    UserId=userId,
+                    Ward=c.Ward
+                })
+                .FirstOrDefaultAsync();
+        }
+
+
+        //public async Task<UserProfileResponse> GetUserProfile(string userId)
+        //{
+        //    var user = await _context.Users
+        //        .AsNoTracking()
+        //        .FirstOrDefaultAsync(x => x.Id == userId);
+
+        //    if (user == null)
+        //        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+        //    var response = new UserProfileResponse
+        //    {
+        //        UserId = user.Id,
+        //        UserType = user.UserType,
+        //        Email = user.Email,
+        //        Phone = user.PhoneNumber
+        //    };
+
+        //    switch (user.UserType)
+        //    {
+        //        case UserType.Farmer:
+        //            response.Farmer = await GetFarmerProfile(userId);
+        //            break;
+
+        //        case UserType.Agent:
+        //            response.Agent = await GetAgentProfile(userId);
+        //            break;
+
+        //        case UserType.MemberShip:
+        //            response.Cooperative = await GetCooperativeProfile(userId);
+        //            break;
+
+        //        default:
+        //            throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid user type");
+        //    }
+
+        //    return response;
+        //}
+        //private async Task<FarmerProfileDto> GetFarmerProfile(string userId)
+        //{
+        //    var farmer = await _context.Farmers
+        //        .Where(f => f.UserId == userId)
+        //        .Select(f => new FarmerUserProfileDto
+        //        {
+        //            FarmerId = f.Id,
+        //            FullName = f.FullName,
+
+        //            Agents = f.FarmerAgents
+        //                .Select(fa => new SimpleAgentDto
+        //                {
+        //                    AgentId = fa.Agent.Id,
+        //                    Name = fa.Agent.Name
+        //                })
+        //                .ToList(),
+
+        //            Cooperatives = f.FarmerCooperatives
+        //                .Select(fc => new SimpleCooperativeDto
+        //                {
+        //                    CooperativeId = fc.Cooperative.Id,
+        //                    Name = fc.Cooperative.Name
+        //                })
+        //                .ToList()
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    if (farmer == null)
+        //        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Farmer profile not found");
+
+        //    return farmer;
+        //}
+        //private async Task<AgentProfileDto> GetAgentProfile(string userId)
+        //{
+        //    return await _context.Agents
+        //        .Where(a => a.UserId == userId)
+        //        .Select(a => new AgentProfileDto
+        //        {
+        //            AgentId = a.Id,
+        //            Name = a.Name
+        //        })
+        //        .FirstOrDefaultAsync();
+        //}
+
+
+        public async Task<UserModel> UpdateUserProfileAsync(
+    string userId,
+    ProfileRequestModel model)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+
+            if (user == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "User not found");
+
+
+            var resolvedName =
+         !string.IsNullOrWhiteSpace(model.FullName)
+             ? model.FullName
+             : string.Join(" ",
+                 new[] { model.FirstName, model.MiddleName, model.LastName }
+                     .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            if (!string.IsNullOrWhiteSpace(resolvedName))
+                user.Name = resolvedName;
+
+            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                user.PhoneNumber = model.PhoneNumber;
+
+            if (!string.IsNullOrWhiteSpace(model.Email))
+                user.Email = model.Email;
+
+
+            if (!string.IsNullOrWhiteSpace(model.NIN))
+                user.NIN = model.NIN;
+
+            if (!string.IsNullOrWhiteSpace(model.Bvn))
+                user.BVN = model.Bvn;
+
+            user.ModifiedBy = userId;
+
+            var result = await _userManager.UpdateAsync(user);
+
+            if (!result.Succeeded)
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    result.Errors.First().Description);
+
+            return user.Map();
+        }
 
         public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -511,7 +815,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             entity.Email = model.Email;
             entity.PhoneNumber = model.PhoneNumber;
             entity.Pin = model.Pin;
-            entity.UserLevel = UserLevel.Level1;
+            entity.CreatedOn = DateTimeOffset.Now;
+           // entity.UserLevel = UserLevel.Level1;
             entity.Password = model.Password;
             //model.Map();
             entity.PinEncrypt = string.IsNullOrEmpty(model.Pin) ? null : model.Pin.EncryptTransactionPin(salt);
@@ -610,7 +915,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 if (users.Count > 1)
                 {
-                    user = users.Where(u => u.UserType == UserType.Cooperative.ToString()).FirstOrDefault();
+                    user = users.Where(u => u.UserType == UserType.MemberShip.ToString()).FirstOrDefault();
                 }
                 else
                 {
@@ -918,17 +1223,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             
         }
-        public async Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level)
-        {
-            var user = await _context.Users.Where(x => x.Id == userId).FirstOrDefaultAsync();
-            if (user == null) {
-                return (false, null);
-            }
-            user.UserLevel = level;
-            await _context.SaveChangesAsync();
-
-            return (true, "Level Updated");
-        }
+       
 
         }
 }

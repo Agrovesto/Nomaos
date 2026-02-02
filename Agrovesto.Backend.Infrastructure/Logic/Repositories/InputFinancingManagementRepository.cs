@@ -296,7 +296,7 @@ DateTime? endDate)
             // Fetch all cooperatives linked via FarmerCooperatives
             var cooperatives = await (
                 from fc in _context.FarmerCooperatives.AsNoTracking()
-                join coop in _context.Cooperatives.AsNoTracking()
+                join coop in _context.MemberShips.AsNoTracking()
                     on fc.CooperativeId equals coop.Id
                 where fc.FarmerId == farmer.Id
                 select coop

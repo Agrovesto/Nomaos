@@ -1,4 +1,8 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.V2.Onboarding;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -140,8 +144,8 @@ namespace Agrovesto.Backend.API.Controllers
                 return string.Empty;
             }
         }
-
-
+       
+      
         //public string CurrentUserRole
         //{
         //    get
@@ -188,7 +192,7 @@ namespace Agrovesto.Backend.API.Controllers
         //            if (string.IsNullOrWhiteSpace(token))
         //                return null;
 
-          
+
         //            if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         //                token = token.Substring("Bearer ".Length).Trim();
 

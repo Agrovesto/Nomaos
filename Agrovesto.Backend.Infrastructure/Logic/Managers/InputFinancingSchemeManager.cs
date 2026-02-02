@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IBusinessRepository _businessRepository;
         private readonly ILogger<InputFinancingSchemeManager> _log;
         private readonly IWalletRepository _walletRepo;
-        private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
 
 
         private readonly IGoogleDriveService _fileUploadService;
@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             IBusinessRepository businessRepository,
             IOrganizationConfigurationRepository configRepository, ILogger<InputFinancingSchemeManager> log,
             IWalletRepository walletRepository,
-            ICooperativeRepository cooperativeRepository
+            IMembershipRepository cooperativeRepository
           ,
             IGoogleDriveService fileUploadService
             )
@@ -198,7 +198,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
       
         public async Task<ResponseDto> CreateSubscription(InputSubscriptionRequestDto request, BusinessRegistrationArgs args)
         {
-            CooperativeModel coopRepo = new CooperativeModel();
+            MemberShipModel coopRepo = new MemberShipModel();
             if (request.SubscribedBy == "Cooperative")
             {
                  coopRepo = await _cooperativeRepository.GetCooperativeDetailByUserId(request.SubscriberUserId);

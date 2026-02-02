@@ -55,7 +55,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
-                //if (args.Id == 0 && currentRole == "Cooperative")
+                //if (args.Id == 0 && currentRole == "MemberShip")
                 //{
                 //    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                 //    args.Id = coop.Id;
@@ -128,7 +128,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
-                if (args.Id == 0 && currentRole == "Cooperative")
+                if (args.Id == 0 && currentRole == "MemberShip")
                 {
                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                     args.Id = coop.Id;
@@ -700,6 +700,59 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         //}
 
+        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
+        {
+            var currentRole = CurrentUserRole;
+
+            switch (currentRole)
+            {
+                case "MemberShip":
+                    await EnrichCooperativeAsync(args);
+                    break;
+
+                case "Agent":
+                    await EnrichAgentAsync(args);
+                    break;
+            }
+        }
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            //  if (CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+            //  if(CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
 
         private IActionResult ValidationProblemResponse()
         {
@@ -740,59 +793,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     );
                 }
             }
-        }
-        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
-        {
-            var currentRole = CurrentUserRole;
-
-            switch (currentRole)
-            {
-                case "Cooperative":
-                    await EnrichCooperativeAsync(args);
-                    break;
-
-                case "Agent":
-                    await EnrichAgentAsync(args);
-                    break;
-            }
-        }
-        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
-        {
-          //  if (CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-
-            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-            if (coop == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Cooperative not found for the specified user.");
-
-            args.Id = coop.Id;
-
-            args.CooperativeIds ??= new List<long?>();
-
-            if (!args.CooperativeIds.Contains(coop.Id))
-                args.CooperativeIds.Add(coop.Id);
-        }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
-        {
-          //  if(CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-            
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
-
-            if (agent == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Agent not found for the specified user.");
-
-            args.Id = agent.Id;
-
-            args.AgentIds ??= new List<long?>();
-
-            if (!args.AgentIds.Contains(agent.Id))
-                args.AgentIds.Add(agent.Id);
         }
 
     }

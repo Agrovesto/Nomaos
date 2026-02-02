@@ -7,6 +7,8 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
@@ -1318,7 +1320,7 @@ namespace Agrovesto.Backend.Infrastructure
                 FarmerCategory=entities.FarmerCategory,
                 HighestLevelOfEducation = entities.HighestLevelOfEducation,
                 YearsInAgric = entities.YearsInAgric,
-                
+                Level= EnumExtensions.GetDisplayName(entities.Level)
             };
         }
 
@@ -1350,10 +1352,10 @@ namespace Agrovesto.Backend.Infrastructure
             };
         }
 
-        public static CooperativeModel Map(this Cooperative entities)
+        public static MemberShipModel Map(this MemberShip entities)
         {
             if (entities == null) { return null; }
-            return new CooperativeModel
+            return new MemberShipModel
             {
                 Id = entities.Id,
                 Location = entities.Location,
@@ -1370,18 +1372,22 @@ namespace Agrovesto.Backend.Infrastructure
                 HasbeenAssignedAgent = entities.HasbeenAssignedAgent,
                 Ward = entities.Ward,
                 OrganizationCode = entities.OrganizationCode,
-                CooperativeLeaderMiddleName = entities.CooperativeLeaderMiddleName,
-                CooperativeLeaderFirstName = entities.CooperativeLeaderFirstName,
-                CooperativeLeaderLastName = entities.CooperativeLeaderLastName,
-                CooperativeLeaderGender = entities.CooperativeLeaderGender,
+                MembershipLeaderMiddleName = entities.MembershipLeaderMiddleName,
+                MembershipLeaderFirstName = entities.MembershipLeaderFirstName,
+                MembershipLeaderLastName = entities.MembershipLeaderLastName,
+                MembershipLeaderGender = entities.MembershipLeaderGender,
                 OnboardedById = entities.OnboardedById,
+                IsLeaderAFarmer= entities.IsLeaderAFarmer,
+                MemberShipTypeId = entities.MemberShipTypeId,
+                Tier = EnumExtensions.GetDisplayName(entities.Tier),
+                
             };
         }
 
-        public static Cooperative Map(this CooperativeModel model)
+        public static MemberShip Map(this MemberShipModel model)
         {
             if (model == null) { return null; }
-            return new Cooperative
+            return new MemberShip
             {
                 // Id = model.Id,
                 Location = model.Location,
@@ -1391,12 +1397,12 @@ namespace Agrovesto.Backend.Infrastructure
                 UserId = model.UserId,
                 State = model.State,
                 Lga = model.Lga,
-                BelongToBusinessCode = model.BelongToBusinessCode
-                ,
-                CooperativeLeaderMiddleName= model.CooperativeLeaderMiddleName, 
-                CooperativeLeaderFirstName= model.CooperativeLeaderFirstName,
-                CooperativeLeaderLastName=model.CooperativeLeaderLastName,
-                CooperativeLeaderGender=model.CooperativeLeaderGender,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                IsLeaderAFarmer=model.IsLeaderAFarmer,
+                MembershipLeaderMiddleName= model.MembershipLeaderMiddleName, 
+                MembershipLeaderFirstName= model.MembershipLeaderFirstName,
+                MembershipLeaderLastName=model.MembershipLeaderLastName,
+                MembershipLeaderGender=model.MembershipLeaderGender,
                 IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
@@ -1404,10 +1410,36 @@ namespace Agrovesto.Backend.Infrastructure
                 Ward = model.Ward,
                 OrganizationCode = model.OrganizationCode,
                 OnboardedById= model.OnboardedById,
+                MemberShipTypeId=model.MemberShipTypeId,
+                Tier= model.Tier.ToEnum<Tier>(),
                 
             };
         }
 
+        public static MemberShipTypeModel Map(this MemberShipType entities)
+        {
+            if (entities == null) { return null; }
+            return new MemberShipTypeModel
+            {
+                Id = entities.Id,
+                Name = entities.Name,
+                Description=entities.Description,
+                CreatedBy=entities.CreatedBy
+            };
+        }
+
+        public static MemberShipType Map(this MemberShipTypeModel model)
+        {
+            if (model == null) { return null; }
+            return new MemberShipType
+            {
+                // Id = model.Id,
+                Name = model.Name,
+                Description = model.Description,
+                CreatedBy = model.CreatedBy
+
+            };
+        }
 
         public static AgentModel Map(this Agent entities)
         {

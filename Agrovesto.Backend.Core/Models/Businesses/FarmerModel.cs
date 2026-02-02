@@ -1,16 +1,37 @@
 ﻿using Agrovesto.Backend.Core.Models.Common;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public enum FarmerLevel
+    {
+        [Display(Name = "Level 0")] //not verified
+        Level0,
+
+        [Display(Name = "Level 1")] //phone or email verified 
+        Level1,
+
+        [Display(Name = "Level 2")]//farmer:picture
+        Level2,
+
+        [Display(Name = "Level 3")] //farmer:nin/bvn,  cooperatuve: cooperative registration document
+        Level3,
+
+        [Display(Name = "Level 4")] //farmer: land mapping, cooperative: cac
+        Level4,
+
+        [Display(Name = "Level 5")] //repaid credit
+        Level5
+    }
     public class FarmerDetailDto
     {
         public FarmerModel Farmer { get; set; }
-        public List<CooperativeModel>? Cooperatives { get; set; }
+        public List<MemberShipModel>? Cooperatives { get; set; }
         public List<AgentModel>? Agents { get; set; }
         public FarmerImagesModel? FarmerImage { get; set; }
         public List<FarmPlotDetailsModel>? PlotDetails { get; set; }
@@ -72,7 +93,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
        public FarmerPersonalInfoDto PersonalInformation { get; set; }    
 
         // Cooperatives
-       public List<CooperativeModel> CooperativeInformation { get; set; } = new List<CooperativeModel>();
+       public List<MemberShipModel> CooperativeInformation { get; set; } = new List<MemberShipModel>();
     }
     public class FarmerUpdateModel
     {
@@ -134,7 +155,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public List<long>? AgentIds { get; set; }
         public List<string>? CooperativeNames { get; set; }
         public string? CooperativeName { get; set; }
-
+        public string? Level { get; set; }
 
     }
     public class FarmerValueChainSelectionDto
