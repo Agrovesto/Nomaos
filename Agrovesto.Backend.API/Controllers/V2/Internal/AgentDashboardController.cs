@@ -12,11 +12,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     public class AgentDashboardController : ControllerBase
     {
         private readonly IFarmRepository _farmRepository;
-        private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
 
         public AgentDashboardController(
             IFarmRepository farmRepository,
-            ICooperativeRepository cooperativeRepository)
+            IMembershipRepository cooperativeRepository)
         {
             _farmRepository = farmRepository;
             _cooperativeRepository = cooperativeRepository;

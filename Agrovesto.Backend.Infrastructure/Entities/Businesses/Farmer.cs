@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Core.Models.Businesses;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -57,7 +58,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? FarmerCategory { get; set; }
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
+        public FarmerLevel Level { get; set; }
     }
+   
     public class FarmerCooperative
     {
         [Key]

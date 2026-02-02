@@ -467,81 +467,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("BusinessWorkers");
                 });
 
-            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Cooperative", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("BelongToBusinessCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ContactPerson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CooperativeLeaderFirstName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CooperativeLeaderGender")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CooperativeLeaderLastName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CooperativeLeaderMiddleName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Email")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("HasbeenAssignedAgent")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("IsAssignedToAgentId")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Lga")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Location")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Name")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTimeOffset>("OnBoardedOn")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("OnboardedById")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("OrganizationCode")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("State")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("Tier")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Ward")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Cooperatives");
-                });
-
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.CooperativeCreditScore", b =>
                 {
                     b.Property<long>("Id")
@@ -700,11 +625,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<double>("AreaInDegress")
-                        .HasColumnType("float");
-
-                    b.Property<double>("AreaInSqMetre")
-                        .HasColumnType("float");
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
 
                     b.Property<double>("AreaSize")
                         .HasColumnType("float");
@@ -715,18 +637,6 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<long>("CommunityId")
                         .HasColumnType("bigint");
-
-                    b.Property<long>("CooperativeId")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("CoordinateOverlapWithFarmerIds")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CoordinateTakenBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CoordinateTakenByUserId")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -746,12 +656,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("FarmUnflaggedByName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FarmUnflaggedByUserId")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("FarmWard")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -759,13 +663,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FarmerUserId")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTimeOffset?>("FlaggedOn")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("FlaggedReason")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsFarmFlaggedBySystem")
+                    b.Property<bool>("IsMapped")
                         .HasColumnType("bit");
 
                     b.Property<string>("LocationDescription")
@@ -773,6 +671,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("MappedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("MembershipId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
@@ -783,11 +684,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("OwnershipType")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("UnflagFarm")
-                        .HasColumnType("bit");
+                    b.Property<double>("TotalAreaInDegress")
+                        .HasColumnType("float");
 
-                    b.Property<DateTimeOffset?>("UnflaggedOn")
-                        .HasColumnType("datetimeoffset");
+                    b.Property<double>("TotalAreaInSqMetre")
+                        .HasColumnType("float");
 
                     b.HasKey("Id");
 
@@ -876,8 +777,33 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("CapturedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("CapturedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("CoordinateOverlapWithFarmerIds")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("FarmId")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("FarmUnflaggedByName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FarmUnflaggedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("FlaggedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("FlaggedReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsFarmFlaggedBySystem")
+                        .HasColumnType("bit");
 
                     b.Property<double>("Latitude")
                         .HasColumnType("float");
@@ -885,8 +811,27 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<double>("Longitude")
                         .HasColumnType("float");
 
+                    b.Property<DateTimeOffset?>("MeasurementDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MeasurementMode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("Order")
                         .HasColumnType("bigint");
+
+                    b.Property<double>("SizeInHectares")
+                        .HasColumnType("float");
+
+                    b.Property<double>("SizeInKm")
+                        .HasColumnType("float");
+
+                    b.Property<bool>("UnflagFarm")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset?>("UnflaggedOn")
+                        .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
 
@@ -954,11 +899,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long?>("FarmId")
+                    b.Property<long>("FarmId")
                         .HasColumnType("bigint");
 
-                    b.Property<long>("FarmPlotDetailsId")
+                    b.Property<long?>("FarmPlotDetailsId")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("IsVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("UploadedOn")
+                        .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
 
@@ -1219,6 +1170,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("HighestLevelOfEducation")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("int");
 
                     b.Property<string>("Lga")
                         .HasColumnType("nvarchar(max)");
@@ -2259,6 +2213,126 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsUnique();
 
                     b.ToTable("MandESubActivities");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShip", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ContactPerson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("HasbeenAssignedAgent")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("IsAssignedToAgentId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsLeaderAFarmer")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Lga")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("MemberShipTypeId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("MembershipLeaderFirstName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MembershipLeaderGender")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MembershipLeaderLastName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("MembershipLeaderMiddleName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("OnBoardedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("OnboardedById")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OrganizationCode")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PhoneNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("State")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Tier")
+                        .HasColumnType("int");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Ward")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemberShipTypeId");
+
+                    b.ToTable("MemberShips");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipType", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("UpdatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MemberShipTypes");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", b =>
@@ -3593,9 +3667,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");
 
-                    b.Property<int>("UserLevel")
-                        .HasColumnType("int");
-
                     b.Property<string>("UserName")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
@@ -4024,17 +4095,17 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmLandDocument", b =>
                 {
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Farm", null)
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Farm", "Farm")
                         .WithMany("FarmLandDocuments")
-                        .HasForeignKey("FarmId");
-
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmPlotDetails", "FarmPlotDetails")
-                        .WithMany("FarmLandDocuments")
-                        .HasForeignKey("FarmPlotDetailsId")
+                        .HasForeignKey("FarmId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("FarmPlotDetails");
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmPlotDetails", null)
+                        .WithMany("FarmLandDocuments")
+                        .HasForeignKey("FarmPlotDetailsId");
+
+                    b.Navigation("Farm");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmMappingAuditTrail", b =>
@@ -4136,6 +4207,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.Navigation("MandEDataset");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShip", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipType", "MemberShipType")
+                        .WithMany("MemberShips")
+                        .HasForeignKey("MemberShipTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MemberShipType");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundleItem", b =>
@@ -4443,6 +4525,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("Fields");
 
                     b.Navigation("Records");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipType", b =>
+                {
+                    b.Navigation("MemberShips");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", b =>

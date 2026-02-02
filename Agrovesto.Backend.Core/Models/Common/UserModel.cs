@@ -191,8 +191,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         Business,
         [Description("Farmer")]
         Farmer,
-        [Description("Cooperative")]
-        Cooperative,
+        [Description("MemberShip")]
+        MemberShip,
         [Description("Agent")]
         Agent,
         [Description("Suppliers")]

@@ -46,7 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<Farm>> CooperativeFarmMaps(long CooperativeId)
         {
             return await _context.Farms
-                .Where(c => c.CooperativeId == CooperativeId)
+                .Where(c => c.MembershipId == CooperativeId)
                 .Include(f => f.Coordinates)
                 .Include(f => f.AuditTrails)
                 .ToListAsync();
@@ -56,6 +56,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return await _context.Farms
                 .Include(f => f.Coordinates)
                 .Include(f => f.AuditTrails)
+                .Include(f=>f.FarmLandDocuments)
+                .Include(f=>f.Allocations)
                 .ToListAsync();
         }
         public async Task<List<Farm>> GetAllWithCoordinatesAsync(BusinessRegistrationArgs args)
@@ -63,6 +65,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var query=  _context.Farms
                 .Include(f => f.Coordinates)
                 .Include(f => f.AuditTrails)
+                .Include(f=> f.FarmLandDocuments)
+                .Include(f=> f.Allocations)
                 .AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(args.organizationCode))
@@ -71,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             if (args.CooperativeId >0)
             {
-                query = query.Where(x => x.CooperativeId == args.CooperativeId);
+                query = query.Where(x => x.MembershipId == args.CooperativeId);
             }
             return await query
                 .OrderByDescending(x => x.CreatedAt)

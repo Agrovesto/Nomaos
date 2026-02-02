@@ -1,15 +1,33 @@
-﻿using System;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Common;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-    public class Cooperative
+    public class MemberShipType
     {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string? Description { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public DateTimeOffset? UpdatedOn { get;set; } 
+        public string CreatedBy { get; set; }
+        public string? UpdatedBy { get; set; }
+        public string BusinessCode { get; set; }
+        public ICollection<MemberShip> MemberShips { get; set; }
+    }
+    public class MemberShip
+    {
+        public bool IsLeaderAFarmer { get; set; }
         public string? Name { get; set; }
         public string? Location { get; set; }
         public string? State { get; set; }
@@ -18,10 +36,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
-        public string? CooperativeLeaderFirstName { get; set; }
-        public string? CooperativeLeaderMiddleName { get; set; }
-        public string? CooperativeLeaderLastName { get; set; }
-        public string? CooperativeLeaderGender { get; set; }
+        public string? MembershipLeaderFirstName { get; set; }
+        public string? MembershipLeaderMiddleName { get; set; }
+        public string? MembershipLeaderLastName { get; set; }
+        public string? MembershipLeaderGender { get; set; }
         public string UserId { get; set; }
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -35,6 +53,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
         public Tier Tier { get; set; }
+        public long MemberShipTypeId { get; set; }
+        public MemberShipType MemberShipType { get; set; }
+
     }
     public enum Tier
     {

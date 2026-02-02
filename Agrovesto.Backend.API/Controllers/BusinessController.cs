@@ -797,7 +797,7 @@ namespace Agrovesto.Backend.API.Controllers
                
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 
-                if (args.CooperativeId == 0  && currentRole == "Cooperative")
+                if (args.CooperativeId == 0  && currentRole == "MemberShip")
                 {
                    var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                    args.CooperativeId = coop.Id;
@@ -1448,7 +1448,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId.Value);
-                return Ok(new Response<CooperativeModel> ()
+                return Ok(new Response<MemberShipModel> ()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1488,7 +1488,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
-                return Ok(new PagedListResponse<List<CooperativeModel>>()
+                return Ok(new PagedListResponse<List<MemberShipModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1531,7 +1531,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<CooperativeModel>>()
+                return Ok(new PagedListResponse<List<MemberShipModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1699,7 +1699,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
-                return Ok(new Response<CooperativeModel>()
+                return Ok(new Response<MemberShipModel>()
                 {
                     Data = result,
                     Message = "Retrieved",

@@ -17,8 +17,13 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using CsvHelper;
+using DocumentFormat.OpenXml.Drawing;
+using DocumentFormat.OpenXml.Spreadsheet;
+using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
 using NetTopologySuite.Operation.Valid;
 using Serilog;
 using System;
@@ -50,6 +55,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
         Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
+        Task<UsersProfileResponse> GetUserProfileAsync(string userId);
+        Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -61,7 +68,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IBusinessRepository _businessRepository;
         private readonly IFarmerRepository _farmerRepository;
         private readonly IAgentRepository _agentRepository;
-        private readonly ICooperativeRepository _cooperativeRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
         private readonly IOtpService _otpService;
         private readonly ILogger<OnBoardingManager> _log;
         private readonly IFarmManager _farmManager;
@@ -70,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public OnBoardingManager(IWalletManager walletManager,
             IFaceManager faceManager,
             IIdentityVerificationManager identityVerificationManager,
-            IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, ICooperativeRepository cooperativeRepository,
+            IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
             , IExcelConverterService excelConverterService)
         {
@@ -146,7 +153,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         PhoneNumber = row.PhoneNumber
                     };
 
-                    args.userType = row.Role;
+                    args.userType = row.Gender;
 
                     await CreateBusinessUser(model, args);
 
@@ -347,6 +354,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             }
         }
+       
         public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
         {
             try
@@ -357,16 +365,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                Core.Enums.ExceptionType.BAD_REQUEST,
                                "User Id missing.");
                 }
-                var user = await _onboardingRepository.GetUserById(args.UserId);
-                if (user.model == null)
-                {
-                    throw new BaseException(
-                           Core.Enums.ExceptionType.BAD_REQUEST,
-                           "User not found.");
-                }
-                model.CreatedOn = user.model.CreatedOn;
+                //var user = await _onboardingRepository.GetUserById(args.UserId);
+                //if (user.model == null)
+                //{
+                //    throw new BaseException(
+                //           Core.Enums.ExceptionType.BAD_REQUEST,
+                //           "User not found.");
+                //}
+                var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, model);
+                model.CreatedOn = updateUser.CreatedOn;
                 model.Id = args.UserId;
-                args.userType = !string.IsNullOrEmpty(args.userType) ? args.userType : user.model.UserType;
+                model.Email =!string.IsNullOrEmpty(model.Email) ? model.Email :  updateUser.Email;
+                model.PhoneNumber =!string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber :  updateUser.PhoneNumber;
+
+                args.userType = !string.IsNullOrEmpty(args.userType) ? args.userType : updateUser.UserType;
                 await CreateUserCategory(model, args);
                 //check if user is farmer,
                 //if true, check model for compulsory fields
@@ -377,12 +389,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     ValidateIdentifier(model.Bvn, "BVN");
 
                     if (!string.IsNullOrWhiteSpace(model.NIN))
-                        user.model.NIN = model.NIN;
+                        updateUser.NIN = model.NIN;
 
                     if (!string.IsNullOrWhiteSpace(model.Bvn))
-                        user.model.Bvn = model.Bvn;
+                        updateUser.Bvn = model.Bvn;
 
-                    await _onboardingRepository.OnNINBVNUpdate(user.model);
+                    await _onboardingRepository.OnNINBVNUpdate(updateUser);
                 }
 
                 return (true, "User Profile Created");
@@ -427,9 +439,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     break;
 
-                case UserType.Cooperative:
+                case UserType.MemberShip:
+                   
                     //create first as cooperative
-                     await CreateCooperativeProfileAsync(model, args);                   
+                     await CreateCooperativeProfileAsync(model, args);
                      break;
 
                 case UserType.Farmer:
@@ -467,7 +480,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private async Task CreateAgentProfileAsync(ProfileRequestModel model,  OnBoardingArgs args)
         {
 
-            await _agentRepository.CreateAgent(new AgentModel
+            await _agentRepository.CreateUpdateAgent(new AgentModel
             {
                 BelongToBusinessCode = args.businessCode,
                 State = model.State,
@@ -490,7 +503,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             });
         }
 
-        private async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
+        public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
             if (string.IsNullOrEmpty(model.CooperativeName)) { 
                 throw new BaseException(
@@ -502,18 +515,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 isAssignedagent = true;
             }
-             await _cooperativeRepository.CreateCooperative(new CooperativeModel
+            if (!model.MembershipTypeId.HasValue)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
+
+            await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
              {
                  BelongToBusinessCode = args.businessCode,
+                 IsLeaderAFarmer=model.IsLeaderAFarmer,
                  State = model.State,
                  Lga = model.Lga,
                  ContactPerson = model.FirstName,//string.Empty,
                  Email = model.Email,
                  Location = model.Location,
-                 CooperativeLeaderFirstName=model.FirstName,
-                 CooperativeLeaderGender=model.Gender,
-                 CooperativeLeaderLastName=model.LastName,
-                 CooperativeLeaderMiddleName=model.MiddleName,
+                 MembershipLeaderFirstName=model.FirstName,
+                 MembershipLeaderGender=model.Gender,
+                 MembershipLeaderLastName=model.LastName,
+                 MembershipLeaderMiddleName=model.MiddleName,
+                 MemberShipTypeId= model.MembershipTypeId.Value,
+                 Tier= Tier.Tier1.ToString(),
+
     //             Name = !string.IsNullOrWhiteSpace(model.FullName)
     //? model.FullName
     //: string.Join(" ",
@@ -532,6 +552,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                  OrganizationCode = args.organizationCode
 
              });
+
+            if (model.IsLeaderAFarmer)
+            {
+                await CreateFarmerProfileAsync(model, args);
+            }
+
         }
 
 
@@ -578,6 +604,7 @@ AgentIds = args.AgentIds?
 
             
         }
+        
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args)
         {
             if (!args.CooperativeIds.Any())
@@ -642,16 +669,7 @@ AgentIds = args.AgentIds?
                 try
                 {
                     // ------------------ Wallet / Sub-account ------------------
-                    var subAccount =
-                        await _walletManager.GetSubAccountByUserId(createUser.model.Id)
-                        ?? await _walletManager.CreateSubAccount(new SubAccountModel
-                        {
-                            UserId = createUser.model.Id,
-                            Email = createUser.model.Email,
-                            PhoneNumber = model.PhoneNumber,
-                            BusinessId = business.BusinessId,
-                            CreatedBy = createUser.model.Id,
-                        });
+                    await EnsureWalletExists(createUser.model, business);
 
                     // ------------------ Create Profile ------------------
                     var updateProfile = await CreateUserProfile(new ProfileRequestModel
@@ -670,35 +688,7 @@ AgentIds = args.AgentIds?
                         args.userType);
 
                     // ------------------ OTP Generation ------------------
-                    var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-                        ? OtpTarget.Email
-                        : OtpTarget.Phone;
-
-                    var destination = otpTarget == OtpTarget.Email
-                        ? model.Email
-                        : model.PhoneNumber;
-
-                    await _otpService.InvalidateActiveOtps(
-                        createUser.model.Id,
-                        otpTarget);
-
-                    var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
-                    {
-                        UserId = createUser.model.Id,
-                        Target = otpTarget,
-                        Destination = destination,
-                        Purpose = OtpPurpose.Onboarding,
-                        ExpiryMinutes = 5
-                    });
-
-                    // ------------------ Send OTP ------------------
-                    if (otpTarget == OtpTarget.Email)
-                    {
-                        await _sMSService.SendEmailAsync(
-                            destination,
-                            "Confirm your account",
-                            $"Your verification code is {otp.Code}. It expires in 5 minutes.");
-                    }
+                    await GenerateAndSendOtp(createUser.model);
                 }
                 catch (Exception ex)
                 {
@@ -726,6 +716,53 @@ AgentIds = args.AgentIds?
                 throw new BaseException(
                     Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
                     "An unexpected error occurred. Please try again.");
+            }
+        }
+
+        private async Task EnsureWalletExists(OnboardingRequestModel model, BusinessModel business)
+        {
+            var subAccount =
+                                    await _walletManager.GetSubAccountByUserId(model.Id)
+                                    ?? await _walletManager.CreateSubAccount(new SubAccountModel
+                                    {
+                                        UserId = model.Id,
+                                        Email = model.Email,
+                                        PhoneNumber = model.PhoneNumber,
+                                        BusinessId = business.BusinessId,
+                                        CreatedBy = model.Id,
+                                    });
+        }
+
+        private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        {
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+                ? OtpTarget.Email
+                : OtpTarget.Phone;
+
+            var destination = otpTarget == OtpTarget.Email
+                ? model.Email
+                : model.PhoneNumber;
+
+            await _otpService.InvalidateActiveOtps(
+                model.Id,
+                otpTarget);
+
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            {
+                UserId = model.Id,
+                Target = otpTarget,
+                Destination = destination,
+                Purpose = OtpPurpose.Onboarding,
+                ExpiryMinutes = 5
+            });
+
+            // ------------------ Send OTP ------------------
+            if (otpTarget == OtpTarget.Email)
+            {
+                await _sMSService.SendEmailAsync(
+                    destination,
+                    "Confirm your account",
+                    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
             }
         }
 
@@ -944,7 +981,6 @@ AgentIds = args.AgentIds?
             }
         }
 
-        // Backwards-compatible wrapper that calls repository method
         public async Task<FarmerProfileDto> GetFarmerProfile(string userId)
         {
             var farmer= await GetFarmerProfileAsync(userId);
@@ -957,6 +993,18 @@ AgentIds = args.AgentIds?
 
             return farmer;
         }
+        public async Task<UsersProfileResponse> GetUserProfileAsync(string userId)
+        {
+            var profile = await _onboardingRepository.GetUserProfile(userId);
+            if (profile == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
+
+            return profile;
+        }
+
+
+
+
         public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId)
         {
             try
@@ -1010,7 +1058,7 @@ AgentIds = args.AgentIds?
             kyc.UserId = args.UserId;
             kyc.LoggedOn= DateTimeOffset.UtcNow; 
             await _onboardingRepository.OnCreateKYC(kyc);
-            await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level5);
+            await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level3);
             return true;
         }
         private static string GenerateEmail(string fullName, string domain)
@@ -1123,7 +1171,7 @@ AgentIds = args.AgentIds?
 
                 if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey)) 
                 {
-                    var updateLevel = await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level3);
+                    var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level2);
                 }
                 return saveFace;
             }
@@ -1144,7 +1192,7 @@ AgentIds = args.AgentIds?
 
                 if (updateDetail != null && (updateDetail.Id > 0))
                 {
-                    var updateLevel = await _onboardingRepository.OnUserLevelUpdate(args.UserId, UserLevel.Level4);
+                    var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level4);
                 }
                 return updateDetail;
             }
@@ -1156,6 +1204,193 @@ AgentIds = args.AgentIds?
             // });
             //return saveFace;
         }
+
+        ///
+        ///)
+        ///Critical(must succeed or rollback)
+
+        ///These define identity & access:
+
+        //Validate onboarding
+
+        //Fetch business
+
+        //Register user(Users table)
+
+        //Create membership(uses UserId)
+        ////
+        ///
+        public async Task<CreateMembershipResponseModel> CreateMembershipUser(
+      MemberShipRequestModel model,
+      OnBoardingArgs args)
+        {
+            try
+            {
+                ValidateCriticalInputs(model, args);
+
+                var dateTime = DateTimeOffset.UtcNow;
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                var user = await RegisterMembershipLeaderOrFail(model, args);
+
+                var membership = await CreateMembershipOrFail(
+                    model, args, business, user.model.Id, dateTime);
+
+                model.Id = membership.data.Id;
+                // Everything below is non-critical
+                await RunNonCriticalSteps(
+                    model, args, business, user.model, dateTime);
+
+                return new CreateMembershipResponseModel
+                {
+                    UserId = user.model.Id,
+                    MembershipId = membership.data.Id,
+                    RequiresProfileCompletion = true
+                };
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "CreateMembershipUser failed unexpectedly");
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+        private void ValidateCriticalInputs(MemberShipRequestModel model, OnBoardingArgs args)
+        {
+            ValidateQuickOnboarding(new OnboardingRequestModel
+            {
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber
+            });
+
+            if (string.IsNullOrEmpty(args.businessCode))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
+
+            if (string.IsNullOrEmpty(model.Name))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Cooperative name is required");
+
+            if (model.MemberShipTypeId <= 0)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
+        }
+        private async Task<BusinessModel> GetBusinessOrFail(string businessCode)
+        {
+            return await _businessRepository.GetBusinessByCodeAsync(businessCode)
+                ?? throw new BaseException(ExceptionType.NOTFOUND, "Business does not exist");
+        }
+        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterMembershipLeaderOrFail(
+            MemberShipRequestModel model,
+            OnBoardingArgs args)
+        {
+            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+                new OnboardingRequestModel
+                {
+                    Email = model.Email,
+                    PhoneNumber = model.PhoneNumber,
+                    Password = model.Password,
+                    Pin = model.Pin,
+                    FirstName = model.MembershipLeaderFirstName,
+                    MiddleName = model.MembershipLeaderMiddleName,
+                    LastName = model.MembershipLeaderLastName
+                }, args);
+
+            if (!result.status)
+                throw new BaseException(ExceptionType.BAD_REQUEST, result.message);
+
+            return result;
+        }
+        private async Task<(bool status, MemberShipModel data)> CreateMembershipOrFail(
+    MemberShipRequestModel model,
+    OnBoardingArgs args,
+    BusinessModel business,
+    string userId,
+    DateTimeOffset dateTime)
+        {
+            return await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
+            {
+                UserId = userId,
+                Name = model.Name,
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                State = model.State,
+                Lga = model.Lga,
+                Ward = model.Ward,
+                Location = model.Location,
+                MemberShipTypeId = model.MemberShipTypeId,
+                IsLeaderAFarmer = model.IsLeaderAFarmer,
+                Tier = Tier.Tier1.ToString(),
+                OnBoardedOn = dateTime,
+                BelongToBusinessCode = args.businessCode,
+                OrganizationCode = args.organizationCode,
+                OnboardedById = args.OnboardedByUserId,
+                HasbeenAssignedAgent = args.OnboardedByUserId != null,
+                IsAssignedToAgentId = args.OnboardedByUserId,
+                MembershipLeaderFirstName = model.MembershipLeaderFirstName,
+                MembershipLeaderMiddleName = model.MembershipLeaderMiddleName,
+                MembershipLeaderLastName = model.MembershipLeaderLastName,
+                MembershipLeaderGender = model.MembershipLeaderGender,
+                ContactPerson= $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}"
+            });
+        }
+        private async Task RunNonCriticalSteps(
+    MemberShipRequestModel model,
+    OnBoardingArgs args,
+    BusinessModel business,
+   OnboardingRequestModel user,    
+    DateTimeOffset dateTime)
+        {
+            try
+            {
+                await EnsureWalletExists(user, business);
+                await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, model.Id, dateTime);
+                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+                await GenerateAndSendOtp(user);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex,
+                    $"Non-critical onboarding step failed for user {user.Id}. " +
+                    "User can continue and complete setup later.");
+            }
+        }
+        private async Task CreateFarmerIfLeaderIsFarmer(
+            MemberShipRequestModel model,
+            OnBoardingArgs args,
+            string userId,
+            long membershipId,
+            DateTimeOffset dateTime)
+        {
+            if (!model.IsLeaderAFarmer) return;
+
+            var farmer = new FarmerModel
+            {
+                UserId = userId,
+                Name = $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}",
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                Gender = model.MembershipLeaderGender,
+                State = model.State,
+                Lga = model.Lga,
+                Ward = model.Ward,
+                Location = model.Location,
+                CooperativeIds = new List<long> { membershipId },
+
+                AgentIds = args.AgentIds?.Where(x => x.HasValue).Select(x => x.Value).ToList()
+                             ?? new List<long>(),
+                BelongToBusinessCode = args.businessCode,
+                OrganizationCode = args.organizationCode,
+                OnBoardedOn = dateTime,
+                OnboardedById = args.UserId
+            };
+
+            await _farmerRepository.CreateFarmer(farmer);
+        }
+
     }
 
 }

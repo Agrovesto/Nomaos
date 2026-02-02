@@ -6,6 +6,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Office2010.Excel;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -25,7 +26,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<(bool status, string message)> OnFarmerLevelUpdate(string userId, FarmerLevel level)
+        {
+            var user = await _context.Farmers.Where(x => x.UserId == userId).FirstOrDefaultAsync();
+            if (user == null)
+            {
+                return (false, null);
+            }
+            user.Level = level;
+            await _context.SaveChangesAsync();
 
+            return (true, "Level Updated");
+        }
         #region farmervaluechain
 
         #endregion farmervaluechain
@@ -205,7 +217,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // =========================
             // 2. Validate cooperative
             // =========================
-            var cooperativeExists = await _context.Cooperatives
+            var cooperativeExists = await _context.MemberShips
                 .AnyAsync(c => c.Id == cooperativeId);
 
             if (!cooperativeExists)
@@ -424,7 +436,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var metrics = new BusinessEntitiesMetrics
 
             {
-                TotalCooperative = await _context.Cooperatives.CountAsync(c =>
+                TotalCooperative = await _context.MemberShips.CountAsync(c =>
                  (!string.IsNullOrEmpty(query.organizationCode) && (c.OrganizationCode.Contains(query.organizationCode)))
            && c.BelongToBusinessCode == query.businessCode && c.IsAssignedToAgentId == agentId),
                 TotalFarmer = farmers.Count,
@@ -444,10 +456,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         private async Task<double> CalculateCooperativePercentagePerformanceByAgent(string agentId, int currentMonth, int previousMonth, int currentYear, int previousYear)
         {
-            var totalCooperativesThisMonth = await _context.Cooperatives
+            var totalCooperativesThisMonth = await _context.MemberShips
                 .CountAsync(f => f.IsAssignedToAgentId == agentId && f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
 
-            var totalCooperativesLastMonth = await _context.Cooperatives
+            var totalCooperativesLastMonth = await _context.MemberShips
                 .CountAsync(f => f.IsAssignedToAgentId == agentId && f.OnBoardedOn.Year == previousYear && f.OnBoardedOn.Month == previousMonth);
 
             double percentageChange = totalCooperativesLastMonth == 0
@@ -487,7 +499,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             // Base queries
             var agentsQuery = _context.Agents.Where(a => a.BelongToBusinessCode == businessCode);
-            var cooperativesQuery = _context.Cooperatives.Where(c => c.BelongToBusinessCode == businessCode);
+            var cooperativesQuery = _context.MemberShips.Where(c => c.BelongToBusinessCode == businessCode);
             var farmersQuery = _context.Farmers.Where(f => f.BelongToBusinessCode == businessCode);
             var warehousesQuery = _context.Warehouses.Where(w => w.BelongToBusinessCode == businessCode);
 
@@ -548,7 +560,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         private async Task<double> CalculateCooperativePercentagePerformance(string businessCode, string? organizationCode, int currentMonth, int previousMonth, int currentYear, int previousYear)
         {
-            var cooperativesQuery = _context.Cooperatives.Where(f =>
+            var cooperativesQuery = _context.MemberShips.Where(f =>
                 f.BelongToBusinessCode == businessCode);
 
             if (!string.IsNullOrEmpty(organizationCode))
@@ -876,7 +888,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // =========================
             var cooperativeNames = await (
                 from fc in _context.FarmerCooperatives
-                join c in _context.Cooperatives
+                join c in _context.MemberShips
                     on fc.CooperativeId equals c.Id
                 where fc.FarmerId == farmer.Id
                 select c.Name
@@ -1217,7 +1229,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     on farmer.Id equals fc.FarmerId into fcGroup
                 from farmerCoop in fcGroup.DefaultIfEmpty()
 
-                join coop in _context.Cooperatives.AsNoTracking()
+                join coop in _context.MemberShips.AsNoTracking()
                     on farmerCoop.CooperativeId equals coop.Id into coopGroup
                 from cooperative in coopGroup.DefaultIfEmpty()
 
@@ -1305,7 +1317,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
        on farmer.Id equals fc.FarmerId into fcGroup
                 from fc in fcGroup.DefaultIfEmpty()
 
-                join cooperative in _context.Cooperatives
+                join cooperative in _context.MemberShips
                     on fc.CooperativeId equals cooperative.Id into coopGroup
                 from coop in coopGroup.DefaultIfEmpty()
 
@@ -1616,7 +1628,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // Cooperatives
             var cooperatives = await (
                 from fc in _context.FarmerCooperatives
-                join c in _context.Cooperatives on fc.CooperativeId equals c.Id
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
                 where fc.FarmerId == farmer.Id
                 select c
             ).ToListAsync();
@@ -1635,7 +1647,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     NIN = user?.NIN,
                     DateRegistered = farmer.OnBoardedOn,
                     FarmerImage = image?.IMageKey,
-                    FarmerLevel = user != null ? user.UserLevel.ToString() : null,
+                    FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level), //user != null ? user.UserLevel.ToString() : null,
                     IsActive = user?.IsActive ?? false,
                 },
                 
@@ -1668,7 +1680,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // =========================
             var cooperatives = await (
                 from fc in _context.FarmerCooperatives
-                join c in _context.Cooperatives
+                join c in _context.MemberShips
                     on fc.CooperativeId equals c.Id
                 where fc.FarmerId == farmer.Id
                 select c
@@ -1854,7 +1866,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // ----------------------------------------------------
             var farmerCoops = await (
                 from fc in _context.FarmerCooperatives.AsNoTracking()
-                join c in _context.Cooperatives.AsNoTracking()
+                join c in _context.MemberShips.AsNoTracking()
                     on fc.CooperativeId equals c.Id
                 where farmerIds.Contains(fc.FarmerId)
                 select new
@@ -1980,7 +1992,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                     Cooperatives = cooperativesByFarmer.TryGetValue(f.Id, out var coops)
                         ? coops
-                        : new List<CooperativeModel>(),
+                        : new List<MemberShipModel>(),
 
                     Agents = agentsByFarmer.TryGetValue(f.Id, out var agts)
                         ? agts
