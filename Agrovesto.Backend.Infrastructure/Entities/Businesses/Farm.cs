@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         // Ownership: Farmer / Cooperative / Community
         public string? OwnershipType { get; set; } = string.Empty;
-        public string? FarmerUserId { get; set; }
+        public long FarmerId { get; set; }
         public long MembershipId { get; set; }
         public long AgentId { get; set; }
         public long CommunityId { get; set; }
@@ -45,6 +45,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public ICollection<FarmAllocation> Allocations { get; set; } // NEW - track who cultivates this land
         public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
         public bool IsMapped { get; set; } = false;
+        public MappingStatus MappingStatus { get; set; }
+    }
+    public enum MappingStatus
+    {
+        NotStarted,
+        InProgress,
+        Completed
     }
     public class FarmAllocation
     {

@@ -660,8 +660,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("FarmerUserId")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<long>("FarmerId")
+                        .HasColumnType("bigint");
 
                     b.Property<bool>("IsMapped")
                         .HasColumnType("bit");
@@ -671,6 +671,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("MappedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("MappingStatus")
+                        .HasColumnType("int");
 
                     b.Property<long>("MembershipId")
                         .HasColumnType("bigint");

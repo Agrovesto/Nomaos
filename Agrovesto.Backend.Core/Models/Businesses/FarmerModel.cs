@@ -8,6 +8,26 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class FarmerCooperativeDto
+    {
+        public string FarmerUserId { get; set; }
+        public string FullName { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string MappingStatus { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
+        public int TotalMappedFarms { get; set; }
+    }
+    public class FarmerMembershipDto
+    {
+        public string FarmerUserId { get; set; }
+        public string FullName { get; set; }
+        public string Level { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
+        public long TotalFarms { get; set; }
+        public double LandSize { get; set; }
+    }
+
     public enum FarmerLevel
     {
         [Display(Name = "Level 0")] //not verified

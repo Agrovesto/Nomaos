@@ -22,6 +22,55 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _roleManager = roleManager;
         }
+        [HttpPost("update-role")]
+        public async Task<IActionResult> UpdateRole([FromBody] RoleModel roleModel)
+        {
+            // var isAdmin = User.Claims.ToArray();
+            // if (!isAdmin) throw new BadRequestException("Not Authorized");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                var data = await _roleManager.UpdateRoleAsync(roleModel.RoleId,roleModel);
+                return Ok(new AgrovestoResponse<RoleModel>()
+                {
+                    Message = "",
+                    Result = data.Result,
+
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
 
 
         [HttpPost("create")]

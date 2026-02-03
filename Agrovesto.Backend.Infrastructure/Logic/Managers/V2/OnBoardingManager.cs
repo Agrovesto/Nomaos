@@ -1347,7 +1347,7 @@ AgentIds = args.AgentIds?
             try
             {
                 await EnsureWalletExists(user, business);
-                await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, model.Id, dateTime);
+                await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                 await GenerateAndSendOtp(user);
             }
@@ -1362,7 +1362,6 @@ AgentIds = args.AgentIds?
             MemberShipRequestModel model,
             OnBoardingArgs args,
             string userId,
-            long membershipId,
             DateTimeOffset dateTime)
         {
             if (!model.IsLeaderAFarmer) return;
@@ -1378,7 +1377,7 @@ AgentIds = args.AgentIds?
                 Lga = model.Lga,
                 Ward = model.Ward,
                 Location = model.Location,
-                CooperativeIds = new List<long> { membershipId },
+                CooperativeIds = new List<long> { model.Id },
 
                 AgentIds = args.AgentIds?.Where(x => x.HasValue).Select(x => x.Value).ToList()
                              ?? new List<long>(),

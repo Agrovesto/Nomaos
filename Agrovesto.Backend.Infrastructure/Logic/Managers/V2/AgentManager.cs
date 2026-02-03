@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query);
         Task<PagedListResponse<List<MemberShipModel>>> GetMembershipsByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(ListQueryParams query);
     }
     public class AgentManager : IAgentManager
     {
@@ -126,28 +127,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query)
         {
-            var currentAgentId = query.UserId; // Assume you have helper for JWT
+         
 
-            // 1️⃣ Total cooperatives linked to this agent
-            var cooperatives = await _cooperativeRepository.GetCooperativeByAgent(currentAgentId, query);
+            // Total cooperatives linked to this agent
+            var cooperatives = await _cooperativeRepository.GetCooperativeByAgent(query.UserId, query);
 
-            // 2️⃣ Farmers linked to this agent
-            var farmers = await _farmerRepository.GetFarmersByAgent(currentAgentId, query);
+            //  Farmers linked to this agent
+            var farmers = await _farmerRepository.GetFarmersByAgent(query.UserId, query);
 
-            // 3️⃣ Farms
+            //  Farms
             //var farms = await _farmRepository.GetFarmsByAgentId(currentAgentId);
             //var mappedFarms = farms.Count(f => f.IsMapped);
             //var unmappedFarms = farms.Count(f => !f.IsMapped);
 
-            // 4️⃣ Farmers linked to cooperatives (based on projection)
+            // Farmers linked to cooperatives (based on projection)
             var totalFarmersLinkedToCoops = farmers.Data.Count(f => string.Equals(f.CooperativeStatus, "Linked", StringComparison.OrdinalIgnoreCase));
             var totalFarmersNotLinkedToCoops = farmers.Count - totalFarmersLinkedToCoops;
 
-            // 5️⃣ Total mapped / unmapped farms (based on whether farmer has any farm plots)
+            //  Total mapped / unmapped farms (based on whether farmer has any farm plots)
             var totalMappedFarms = farmers.Data.Count(f => string.Equals(f.MappingStatus, "Mapped", StringComparison.OrdinalIgnoreCase));
             var totalUnmappedFarms = farmers.Count - totalMappedFarms;
 
-            // 6️⃣ Build DTO
             var dto = new AgentDashboardDto
             {
                 TotalCooperatives = cooperatives.Count,
@@ -162,5 +162,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return dto;
         }
+
+        public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(
+
+  ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+
+                var farmers = await _farmerRepository.GetFarmersByCooperativeId(query.CooperativeId, query);
+                if (farmers == null) return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                foreach (var farmer in farmers)
+                {
+                    if (!string.IsNullOrEmpty(farmer.FarmerImage))
+                    {
+                        farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+                    }
+                }
+
+                return new PagedListResponse<List<FarmerModel>>
+                {
+                    Succeeded = true,
+                    Data = farmers,
+                    Count = farmers.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
     }
 }
