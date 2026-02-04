@@ -19,8 +19,13 @@ namespace Agrovesto.Backend.API.Migrations
                 name: "FK_FarmLandDocuments_Farms_FarmId",
                 table: "FarmLandDocuments");
 
-            migrationBuilder.DropTable(
-                name: "Cooperatives");
+            //migrationBuilder.DropTable(
+            //    name: "Cooperatives");
+
+            migrationBuilder.RenameTable(
+    name: "Cooperatives",
+    newName: "MemberShips");
+
 
             migrationBuilder.DropColumn(
                 name: "CoordinateOverlapWithFarmerIds",

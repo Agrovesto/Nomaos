@@ -48,5 +48,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args, long farmerId);
         Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId);
         Task<(bool status, string message)> OnFarmerLevelUpdate(string userId, FarmerLevel level);
+        Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(long cooperativeId, ListQueryParams query);
     }
 }

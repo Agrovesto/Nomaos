@@ -8,6 +8,26 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class FarmerCooperativeDto
+    {
+        public string FarmerUserId { get; set; }
+        public string FullName { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string MappingStatus { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
+        public int TotalMappedFarms { get; set; }
+    }
+    public class FarmerMembershipDto
+    {
+        public string FarmerUserId { get; set; }
+        public string FullName { get; set; }
+        public string Level { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
+        public long TotalFarms { get; set; }
+        public double LandSize { get; set; }
+    }
+
     public enum FarmerLevel
     {
         [Display(Name = "Level 0")] //not verified
@@ -43,6 +63,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class FarmerAgentDto
     {
+        public long Id { get; set; }
         public string FarmerUserId { get; set; }
         public string FullName { get; set; }
         public string State { get; set; }
@@ -93,7 +114,25 @@ namespace Agrovesto.Backend.Core.Models.Businesses
        public FarmerPersonalInfoDto PersonalInformation { get; set; }    
 
         // Cooperatives
-       public List<MemberShipModel> CooperativeInformation { get; set; } = new List<MemberShipModel>();
+       public List<FarmerMembershipModel> CooperativeInformation { get; set; } = new List<FarmerMembershipModel>();
+    }
+    public class FarmerMembershipModel
+    {
+        public bool IsLeaderAFarmer { get; set; }
+        public long MemberShipTypeId { get; set; }
+        public string Name { get; set; }
+        public string? MembershipType { get; set; }
+        public string Location { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string? Ward { get; set; }
+        public string ContactPerson { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+        public string UserId { get; set; }
+        public long Id { get; set; }
+   
+        public string Tier { get; set; }
     }
     public class FarmerUpdateModel
     {

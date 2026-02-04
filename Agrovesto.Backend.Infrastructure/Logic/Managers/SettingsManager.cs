@@ -44,6 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _log = log;
             _cooperativeRepository = cooperativeRepository;
         }
+      
         public async Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args)
         {
             if (string.IsNullOrEmpty(args.businessCode))

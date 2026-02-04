@@ -1,6 +1,8 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -21,6 +23,75 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public MembershipRepository(DataContext context)
         {
             _context = context;
+        }
+
+        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
+        {
+            //  Membership basic info
+            var membership = await _context.MemberShips
+                .Where(c => c.Id == membershipId)
+                .Select(c => new MembershipInfoDto
+                {
+                    MembershipId = c.Id,
+                    Name = c.Name,
+                    MembershipType = c.MemberShipType.Name,
+                    Status = "Active",//c. ? "Active" : "Inactive",
+                    DateCreated = c.OnBoardedOn,
+                    Location = c.State
+                })
+                .FirstOrDefaultAsync();
+
+            if (membership == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+
+            // Farmers under this membership
+            var farmerIds = await _context.FarmerCooperatives
+                .Where(fc => fc.CooperativeId == membershipId)
+                .Select(fc => fc.FarmerId)
+                .Distinct()
+                .ToListAsync();
+
+            var totalFarmers = farmerIds.Count;
+
+            // 3️⃣ Farms under those farmers
+            var farmPlots = await _context.Farms
+                .Where(p => farmerIds.Contains(p.FarmerId))
+                .Select(p => new { p.Id, p.MappingStatus })
+                .ToListAsync();
+
+            var totalFarms = farmPlots.Count;
+
+            var completed = farmPlots.Count(p => p.MappingStatus == MappingStatus.Completed);
+            var inProgress = farmPlots.Count(p => p.MappingStatus == MappingStatus.InProgress);
+            var notStarted = farmPlots.Count(p => p.MappingStatus == MappingStatus.NotStarted);
+
+            var farmsMapped = completed;
+
+            var mappingPercentage = totalFarms == 0
+                ? 0
+                : (int)Math.Round((double)farmsMapped / totalFarms * 100);
+
+            // 4️⃣ Build DTO
+            return new MembershipDashboardDto
+            {
+                Membership = membership,
+
+                Summary = new FarmerSummaryDto
+                {
+                    TotalFarmers = totalFarmers,
+                    TotalFarms = totalFarms,
+                    FarmsMapped = farmsMapped,
+                    MappingProgressPercentage = mappingPercentage
+                },
+
+                MappingProgress = new FarmMappingProgressDto
+                {
+                    TotalFarms = totalFarms,
+                    Completed = completed,
+                    InProgress = inProgress,
+                    NotStarted = notStarted
+                }
+            };
         }
         public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
         {

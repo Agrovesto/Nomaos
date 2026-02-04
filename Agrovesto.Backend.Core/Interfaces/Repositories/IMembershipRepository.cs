@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Payment;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -22,6 +23,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<MemberShipModel> GetCooperativeDetailByUserId(string userId);
         Task<List<MemberShipModel>> GetCooperatives();
         Task<List<MemberShipModel>> GetCooperativesByBusinessCode(string businessCode,ListQueryParams query);
+        Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId);
         Task<MemberShipTypeModel?> GetMemberShipTypeById(long id);
         Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);

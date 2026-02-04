@@ -117,7 +117,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (string.IsNullOrWhiteSpace(model.Email))
                         return null;
 
-                    user = await _userManager.FindByEmailAsync(model.Email);
+                    user = await _userManager.FindByNameAsync(model.Email);
                     break;
 
                 case LoginType.Pin:
@@ -510,6 +510,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 PersonalInformation = new FarmerPersonalInfoDto
                 {
+                    
                     UserId = farmer.UserId,
                     Name = farmer.Name,
                     Gender = farmer.Gender,
@@ -531,7 +532,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Ward = farmer.Ward,
                     Location = farmer.Location,
                 },
-                CooperativeInformation = cooperatives.Select(c => c.Map()).ToList()
+                CooperativeInformation = cooperatives.Select(c => c.ViewMap()).ToList()
             }; 
 
            
