@@ -117,7 +117,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (string.IsNullOrWhiteSpace(model.Email))
                         return null;
 
-                    user = await _userManager.FindByEmailAsync(model.Email);
+                    user = await _userManager.FindByNameAsync(model.Email);
                     break;
 
                 case LoginType.Pin:
