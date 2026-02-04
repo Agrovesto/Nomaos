@@ -1379,8 +1379,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OnboardedById = entities.OnboardedById,
                 IsLeaderAFarmer= entities.IsLeaderAFarmer,
                 MemberShipTypeId = entities.MemberShipTypeId,
-                Tier = EnumExtensions.GetDisplayName(entities.Tier),
-                
+                Tier = EnumExtensions.GetDisplayName(entities.Tier)
             };
         }
 

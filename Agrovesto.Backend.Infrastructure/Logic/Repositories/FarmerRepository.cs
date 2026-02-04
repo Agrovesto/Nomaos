@@ -1739,7 +1739,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var profile = new FarmerProfileDto
             {
-                PersonalInformation= new FarmerPersonalInfoDto
+                PersonalInformation = new FarmerPersonalInfoDto
                 {
                     UserId = farmer.UserId,
                     Name = farmer.Name,
@@ -1754,15 +1754,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level), //user != null ? user.UserLevel.ToString() : null,
                     IsActive = user?.IsActive ?? false,
                 },
-                
-               Location= new FarmerProfileLocationDto
-               {
-                   State = farmer.State,
-                   Lga = farmer.Lga,
-                   Ward = farmer.Ward,
-                   Location = farmer.Location,
-               },
-                CooperativeInformation = cooperatives.Select(c => c.Map()).ToList()
+
+                Location = new FarmerProfileLocationDto
+                {
+                    State = farmer.State,
+                    Lga = farmer.Lga,
+                    Ward = farmer.Ward,
+                    Location = farmer.Location,
+                },
+                CooperativeInformation = cooperatives.Select(c =>
+                new FarmerMembershipModel
+                {
+                    ContactPerson = c.ContactPerson,
+                    Email = c.Email,
+                    Id = c.Id,
+                    IsLeaderAFarmer = c.IsLeaderAFarmer,
+                    Lga = c.Lga,
+                    Location = c.Location,
+                    MembershipType=c.MemberShipType.Name,
+                    MemberShipTypeId=c.MemberShipTypeId,
+                    Name=c.Name,
+                    PhoneNumber=c.PhoneNumber,
+                    State=c.State,
+                    Tier=EnumExtensions.GetDisplayName(c.Tier),
+                    UserId=c.UserId,
+                    Ward=c.Ward,
+                    
+                }
+                ).ToList()
             };
 
             return profile;
