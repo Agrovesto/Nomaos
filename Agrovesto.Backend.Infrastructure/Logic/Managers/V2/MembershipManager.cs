@@ -18,7 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     {
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
         Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query);
-        Task<PagedListResponse<List<FarmerCooperativeDto>>> GetMembershipFarmers(ListQueryParams query);
+        Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query);
     }
     public class MembershipManager : IMembershipManager
     {
@@ -48,7 +48,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _membershipRepository.GetMembershipDashboardAsync(profile.Membership.Id);
         }
-        public async Task<PagedListResponse<List<FarmerCooperativeDto>>> GetMembershipFarmers(ListQueryParams query)
+        public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {
             var profile = await _onboardingRepository.GetUserProfile(query.UserId);
             if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
