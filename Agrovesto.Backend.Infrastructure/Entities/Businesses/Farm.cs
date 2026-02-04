@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NetTopologySuite.Geometries;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -22,36 +23,43 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         // Ownership: Farmer / Cooperative / Community
         public string? OwnershipType { get; set; } = string.Empty;
         public long FarmerId { get; set; }
-        public long MembershipId { get; set; }
-        public long AgentId { get; set; }
-        public long CommunityId { get; set; }
+        //public long MembershipId { get; set; }
+        //public long AgentId { get; set; }
+        //public long CommunityId { get; set; }
         public string? MappedBy { get; set; } = string.Empty;
 
         public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
         public string? CreatedBy { get; set; } = string.Empty;
-        public string FarmLocation { get; set; }
-        public string FarmState { get; set; }
+        public string? FarmLocation { get; set; }
+        public string? FarmState { get; set; }
 
-        public string FarmLga { get; set; }
-        public string FarmWard { get; set; }
+        public string? FarmLga { get; set; }
+        public string? FarmWard { get; set; }
         public double TotalAreaInDegress { get; set; }
         public double TotalAreaInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
         public ICollection<FarmMappingAuditTrail> AuditTrails { get; set; } = new List<FarmMappingAuditTrail>();
 
-        public ICollection<FarmCoordinate> Coordinates { get; set; }
-        public ICollection<FarmAllocation> Allocations { get; set; } // NEW - track who cultivates this land
+        public ICollection<FarmCoordinate> Coordinates { get; set; } = new List<FarmCoordinate>();
+        public ICollection<FarmAllocation> Allocations { get; set; } = new List<FarmAllocation>(); // NEW - track who cultivates this land
         public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
-        public bool IsMapped { get; set; } = false;
-        public MappingStatus MappingStatus { get; set; }
+        public bool IsMappingVerified { get; set; } = false;
+        public bool IsDocumentVerified { get; set; } = false;
+        public bool IsDeleted { get; set; } = false;
+        public bool IsSizeVerified { get; set; } = false;
+        public string? MappingFlagReason { get; set; }
+        public bool IsMappingFlagged { get; set; } = false;
+        public MappingStatus MappingStatus { get; set; } = MappingStatus.NotStarted;
+        public Polygon? FarmPolygon { get; set; } // to get areas in degress, FarmPolygon.Area
+
     }
     public enum MappingStatus
     {
-        NotStarted,
-        InProgress,
-        Completed
+        NotStarted, //no coordinates added
+        InProgress, //coordinates added but not verified
+        Completed // verified
     }
     public class FarmAllocation
     {
@@ -87,7 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public FarmLandDocumentType DocumentType { get; set; }
         public string DocumentUrl { get; set; }
         public string? DocumentTitle { get; set; }
-        public string DocumentId { get; set; }
+        public string? DocumentId { get; set; }
         public bool IsVerified { get; set; } = false;
     }
     public enum FarmLandDocumentType
@@ -119,7 +127,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public long Id { get; set; }
         public DateTimeOffset? FlaggedOn { get; set; } //= DateTimeOffset.Now;      
-        public bool IsFarmFlaggedBySystem { get; set; }
+        public bool IsSystemOverlap { get; set; } // clearer than IsFarmFlaggedBySystem
         public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
         public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
 
@@ -132,7 +140,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double Longitude { get; set; }
         public DateTimeOffset? CapturedOn {  get; set; }
         public DateTimeOffset? MeasurementDate {  get; set; }
-        public string CapturedBy {  get; set; }
+        public string? CapturedBy {  get; set; }
         public double SizeInHectares { get; set; }
         public string MeasurementMode { get; set; } // Walking, bike
         public double SizeInKm { get; set; }

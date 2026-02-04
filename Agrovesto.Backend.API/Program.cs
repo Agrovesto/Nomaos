@@ -1,4 +1,4 @@
-using Agrovesto.Backend.API.Extensions;
+﻿using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
@@ -43,6 +43,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 //              );
 
+//builder.Services.AddDbContext<DataContext>(options =>
+//    options.UseSqlServer(
+//        builder.Configuration.GetConnectionString("DefaultConnection"),
+//        sqlOptions =>
+//        {
+//            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+//            sqlOptions.EnableRetryOnFailure(
+//                maxRetryCount: 5,
+//                maxRetryDelay: TimeSpan.FromSeconds(10),
+//                errorNumbersToAdd: null);
+//            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
+//        },
+//        c=>c.UseNetTopologySuite())
+//    );
+
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -53,9 +68,11 @@ builder.Services.AddDbContext<DataContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-        }));
-
+            sqlOptions.CommandTimeout(60);
+            sqlOptions.UseNetTopologySuite(); // 👈 THIS is where it goes
+        }
+    )
+);
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 

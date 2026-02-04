@@ -1742,6 +1742,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 PersonalInformation= new FarmerPersonalInfoDto
                 {
                     UserId = farmer.UserId,
+                    Id= farmer.Id,
                     Name = farmer.Name,
                     Gender = farmer.Gender,
                     DateOfBirth = farmer.DateOfBirth,

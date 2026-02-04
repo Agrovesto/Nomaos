@@ -76,6 +76,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmManager, FarmManager>();
             services.AddScoped<IAgentManager, AgentManager>();
             services.AddScoped<IMembershipManager, MembershipManager>();
+            services.AddScoped<IFarmMappingManager, FarmMappingManager>();
 
 
 
@@ -91,6 +92,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IOtpService, OtpService>();
             services.AddScoped<IOnBoardingManager, OnBoardingManager>();
             services.AddScoped<IOnboardingRepository, OnboardingRepository>();
+            services.AddScoped<IFarmMappingRepository, FarmMappingRepository>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
            
 
