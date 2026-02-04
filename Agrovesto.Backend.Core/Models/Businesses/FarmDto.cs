@@ -1,5 +1,9 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+using Microsoft.AspNetCore.Http;
+using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,6 +12,68 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     namespace Agrovesto.Application.DTOs.Farms
     {
+        public class FarmMappingArgs
+        {
+            public long farmerId { get; set; }
+            public long agentId { get; set; }
+            public long membershipId { get; set; }
+            public string? userId { get; set; }
+            public string? googleDriveDocumentId { get; set; }
+            public string? performedByUserId { get; set; }
+            public string? performedByName { get; set; }
+            public string? businessCode { get; set; }
+            public string? organizationCode { get; set; }
+            public long farmId { get; set; }
+        }
+        public class FarmLandDocumentDto
+        {
+            public IFormFile Document { get; set; }
+
+            public string? DocumentType { get; set; } // LandDocument,
+            //LandOwnerShip,
+            //LandLease
+            public string? DocumentUrl { get; set; }
+            public string? DocumentTitle { get; set; }
+        }
+       
+
+        public class MapFarmRequest
+        {
+
+            // Ownership: Farmer / Cooperative / Community
+            public string? OwnershipType { get; set; } = string.Empty;
+            public string? FarmName { get; set; } = string.Empty;
+            public string FarmLocation { get; set; }
+            public string FarmState { get; set; }
+            public string FarmLga { get; set; }
+            public string FarmWard { get; set; }
+
+            public string? BelongToBusinessCode { get; set; }
+            public string? OrganizationCode { get; set; }
+            public List<FarmCoordinateDto> Coordinates { get; set; } = new();
+            public List<FarmLandDocumentDto> Documents { get; set; } = new();  
+        }
+
+        public class FarmCoordinateDto
+        {
+            public double Latitude { get; set; }
+            public double Longitude { get; set; }
+            public long Order { get; set; }
+        }
+
+        public class FarmCoordinateRequest
+        {
+            public double Latitude { get; set; }
+            public double Longitude { get; set; }
+            public long Order { get; set; }
+        }
+
+        public class FarmOverlapInfo
+        {
+            public long FarmId { get; set; }
+            public long FarmerId { get; set; }
+        }
+
         public class CreateFarmDto
         {
             public long Id { get; set; }
@@ -48,12 +114,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string LocationDescription { get; set; } = string.Empty;
         public List<FarmCoordinateDto> Coordinates { get; set; } = new();
     }
-    public class FarmCoordinateDto
-    {
-        public double Lat { get; set; }
-        public double Lng { get; set; }
-        public long Order { get; set; }
-    }
+ 
     public class FarmAllocationDto
     {
         public long FarmId { get; set; }
