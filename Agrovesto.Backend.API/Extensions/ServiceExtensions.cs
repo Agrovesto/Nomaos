@@ -75,6 +75,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
             services.AddScoped<IFarmManager, FarmManager>();
             services.AddScoped<IAgentManager, AgentManager>();
+            services.AddScoped<IMembershipManager, MembershipManager>();
 
 
 

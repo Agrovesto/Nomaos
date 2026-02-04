@@ -15,7 +15,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string LocationDescription { get; set; } = string.Empty;
 
             public string OwnershipType { get; set; } = string.Empty; // "Farmer", "Cooperative", "Community"
-            public string? FarmerUserId { get; set; }
+            public long FarmerId { get; set; }
             public long CooperativeId { get; set; } // only populated if OwnerType = "Cooperative"
             public long CommunityId { get; set; }
             public string? CoordinateTakenBy { get; set; }

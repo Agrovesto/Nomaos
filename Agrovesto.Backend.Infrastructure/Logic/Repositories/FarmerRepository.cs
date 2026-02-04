@@ -1125,7 +1125,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .ToDictionaryAsync(g => g.Key, g => g.Count() > 0);
 
             // preload farm mapping existence
-            var mappedLookup = await _context.FarmPlotDetails
+            var mappedLookup = await _context.Farms
                 .Where(p => farmerIds.Contains(p.FarmerId))
                 .GroupBy(p => p.FarmerId)
                 .ToDictionaryAsync(g => g.Key, g => g.Count() > 0);
@@ -1157,6 +1157,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // projection
             var result = page.Select(f => new FarmerAgentDto
             {
+                Id=f.Id,
                 FarmerUserId = f.UserId,
                 FullName = f.Name,
                 State = f.State,
@@ -1177,6 +1178,103 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             };
         }
 
+        public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(
+    long cooperativeId,
+    ListQueryParams query)
+        {
+            query ??= new ListQueryParams();
+            if (query.PageNumber <= 0) query.PageNumber = 1;
+            if (query.PageSize <= 0) query.PageSize = 10;
+
+            // Base query: Farmers already linked to this cooperative
+            var queryable =
+                from f in _context.Farmers
+                join fc in _context.FarmerCooperatives on f.Id equals fc.FarmerId
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where c.Id == cooperativeId
+                select f;
+
+            // Optional filters
+            if (!string.IsNullOrEmpty(query.businessCode))
+                queryable = queryable.Where(f => f.BelongToBusinessCode == query.businessCode);
+
+            if (!string.IsNullOrEmpty(query.organizationCode))
+                queryable =
+                    from f in queryable
+                    join fo in _context.FarmerOrganizations on f.Id equals fo.FarmerId
+                    where fo.OrganizationCode == query.organizationCode
+                    select f;
+
+            if (query.startDate.HasValue)
+                queryable = queryable.Where(f => f.OnBoardedOn >= query.startDate.Value);
+
+            if (query.endDate.HasValue)
+                queryable = queryable.Where(f => f.OnBoardedOn <= query.endDate.Value);
+
+            if (!string.IsNullOrWhiteSpace(query.State))
+                queryable = queryable.Where(f => f.State == query.State);
+
+            if (query.Id > 0)
+                queryable = queryable.Where(f => f.Id == query.Id);
+
+            // materialize filtered farmers
+            var farmers = await queryable
+                .OrderByDescending(f => f.OnBoardedOn)
+                .ToListAsync();
+
+            if (!farmers.Any())
+            {
+                return new PagedListResponse<List<FarmerMembershipDto>>
+                {
+                    Data = new List<FarmerMembershipDto>(),
+                    Count = 0,
+                    PageNumber = query.PageNumber,
+                    PageSize = query.PageSize
+                };
+            }
+
+            var farmerIds = farmers.Select(f => f.Id).ToList();
+
+            // preload mapping existence
+            var mappedLookup = await _context.Farms
+                .Where(p => farmerIds.Contains(p.FarmerId))
+                .GroupBy(p => p.FarmerId)
+                .ToDictionaryAsync(g => g.Key, g => g.Any());
+
+            // apply mapping status filter if provided
+            if (!string.IsNullOrWhiteSpace(query.MappingStatus))
+            {
+                bool wantMapped = query.MappingStatus.Equals("Mapped", StringComparison.OrdinalIgnoreCase);
+                farmers = farmers
+                    .Where(f => mappedLookup.GetValueOrDefault(f.Id, false) == wantMapped)
+                    .ToList();
+            }
+
+            var totalCount = farmers.Count;
+            var totalMapped = farmers.Count(f => mappedLookup.GetValueOrDefault(f.Id, false));
+
+            // paging
+            var skip = (query.PageNumber - 1) * query.PageSize;
+            var page = farmers.Skip(skip).Take(query.PageSize).ToList();
+
+            // projection
+            var result = page.Select(f => new FarmerMembershipDto
+            {
+                FarmerUserId = f.UserId,
+                FullName = f.Name,
+                Level= EnumExtensions.GetDisplayName(f.Level),
+                LandSize= 0,
+                TotalFarms = totalMapped
+            }).ToList();
+
+            return new PagedListResponse<List<FarmerMembershipDto>>
+            {
+                Data = result,
+                Count = totalCount,
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize
+            };
+        }
 
         public async Task<List<FarmerModel>> GetFarmersByCooperativeId(
             long? cooperativeId,
@@ -1254,9 +1352,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // Pagination
             if (query.PageSize > 0)
             {
-                var skip = (query.PageNumber - 1) * query.PageSize;
-                queryResult = queryResult.Skip(skip).Take(query.PageSize);
+                var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+
+                var skip = (pageNumber - 1) * query.PageSize;
+
+                queryResult = queryResult
+                    .Skip(skip)
+                    .Take(query.PageSize);
             }
+
 
             var result = await queryResult.ToListAsync();
 
@@ -1658,7 +1762,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                    Ward = farmer.Ward,
                    Location = farmer.Location,
                },
-                CooperativeInformation = cooperatives.Select(c => c.Map()).ToList()
+                CooperativeInformation = cooperatives.Select(c => c.ViewMap()).ToList()
             };
 
             return profile;

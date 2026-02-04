@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 Name = dto.FarmName,
                 OwnershipType = dto.OwnershipType,
-                FarmerUserId = dto.FarmerUserId,
+                FarmerId = dto.FarmerId,
                 MembershipId = dto.CooperativeId,
                 CommunityId = dto.CommunityId,
                 LocationDescription = dto.FarmLocation,

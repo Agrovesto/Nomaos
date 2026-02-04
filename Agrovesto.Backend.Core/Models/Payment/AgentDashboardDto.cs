@@ -31,5 +31,56 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public double SizeHectares { get; set; }
         public bool IsMapped { get; set; }
     }
+    //public class MembershipDashboardDto
+    //{
+    //    public string Name { get; set; }
+    //    public string MembershipType { get; set; }
+    //    public DateTimeOffset OnboardedOn { get; set; }
+    //    public string Location { get; set; }
+    //    public bool IsActive { get; set; }
+    //    // Top-level summary
+    //    public long TotalFarmers { get; set; }
+    //    public long TotalMappedFarm { get; set; }
+    //    public double MappingProgress { get; set; }
+    //    public long TotalFarms { get; set; }
+
+    //    // Operational overview
+    //    public long MappedFarms { get; set; }
+    //    public long UnmappedFarms { get; set; }
+
+    //}
+ 
+
+    public class MembershipDashboardDto
+    {
+        public MembershipInfoDto Membership { get; set; }
+        public FarmerSummaryDto Summary { get; set; }
+        public FarmMappingProgressDto MappingProgress { get; set; }
+    }
+    public class FarmMappingProgressDto
+    {
+        public int TotalFarms { get; set; }
+        public int Completed { get; set; }
+        public int InProgress { get; set; }
+        public int NotStarted { get; set; }
+    }
+
+    public class FarmerSummaryDto
+    {
+        public int TotalFarmers { get; set; }
+        public int TotalFarms { get; set; }
+        public int FarmsMapped { get; set; }
+        public int MappingProgressPercentage { get; set; }
+    }
+
+    public class MembershipInfoDto
+    {
+        public long MembershipId { get; set; }
+        public string Name { get; set; }
+        public string MembershipType { get; set; }
+        public string Status { get; set; }
+        public DateTimeOffset DateCreated { get; set; }
+        public string Location { get; set; }
+    }
 
 }
