@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using NetTopologySuite.Geometries;
 
 #nullable disable
 
@@ -625,18 +626,12 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<long>("AgentId")
-                        .HasColumnType("bigint");
-
                     b.Property<double>("AreaSize")
                         .HasColumnType("float");
 
                     b.Property<string>("BelongToBusinessCode")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<long>("CommunityId")
-                        .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
@@ -645,25 +640,36 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FarmLga")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FarmLocation")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Polygon>("FarmPolygon")
+                        .HasColumnType("geography");
+
                     b.Property<string>("FarmState")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FarmWard")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<long>("FarmerId")
                         .HasColumnType("bigint");
 
-                    b.Property<bool>("IsMapped")
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDocumentVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsMappingFlagged")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsMappingVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsSizeVerified")
                         .HasColumnType("bit");
 
                     b.Property<string>("LocationDescription")
@@ -672,11 +678,11 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("MappedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("MappingFlagReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("MappingStatus")
                         .HasColumnType("int");
-
-                    b.Property<long>("MembershipId")
-                        .HasColumnType("bigint");
 
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
@@ -781,7 +787,6 @@ namespace Agrovesto.Backend.API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("CapturedBy")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTimeOffset?>("CapturedOn")
@@ -805,7 +810,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FlaggedReason")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("IsFarmFlaggedBySystem")
+                    b.Property<bool>("IsSystemOverlap")
                         .HasColumnType("bit");
 
                     b.Property<double>("Latitude")
@@ -840,7 +845,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("FarmCoordinate");
+                    b.ToTable("FarmCoordinates");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmFlagAuditTrail", b =>
@@ -889,7 +894,6 @@ namespace Agrovesto.Backend.API.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("DocumentId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DocumentTitle")
