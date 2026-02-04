@@ -1262,7 +1262,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 FarmerUserId = f.UserId,
                 FullName = f.Name,
                 Level= EnumExtensions.GetDisplayName(f.Level),
-                LandSize= 
+                LandSize= 0,
                 TotalFarms = totalMapped
             }).ToList();
 
