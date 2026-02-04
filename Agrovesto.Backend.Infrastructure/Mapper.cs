@@ -1351,7 +1351,27 @@ namespace Agrovesto.Backend.Infrastructure
                 YearsInAgric = model.YearsInAgric
             };
         }
-
+        public static FarmerMembershipModel ViewMap(this MemberShip entities)
+        {
+            if (entities == null) { return null; }
+            return new FarmerMembershipModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.ContactPerson,
+                UserId = entities.UserId,
+              
+                State = entities.State,
+                Lga = entities.Lga,
+                ContactPerson = entities.ContactPerson,
+                Ward = entities.Ward,
+                IsLeaderAFarmer = entities.IsLeaderAFarmer,
+                MemberShipTypeId = entities.MemberShipTypeId,
+                Tier = EnumExtensions.GetDisplayName(entities.Tier)
+            };
+        }
         public static MemberShipModel Map(this MemberShip entities)
         {
             if (entities == null) { return null; }

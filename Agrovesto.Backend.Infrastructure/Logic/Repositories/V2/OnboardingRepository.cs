@@ -532,26 +532,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Ward = farmer.Ward,
                     Location = farmer.Location,
                 },
-                CooperativeInformation = cooperatives.Select(c =>
-                new FarmerMembershipModel
-                {
-                    ContactPerson = c.ContactPerson,
-                    Email = c.Email,
-                    Id = c.Id,
-                    IsLeaderAFarmer = c.IsLeaderAFarmer,
-                    Lga = c.Lga,
-                    Location = c.Location,
-                    MembershipType = c.MemberShipType.Name,
-                    MemberShipTypeId = c.MemberShipTypeId,
-                    Name = c.Name,
-                    PhoneNumber = c.PhoneNumber,
-                    State = c.State,
-                    Tier = EnumExtensions.GetDisplayName(c.Tier),
-                    UserId = c.UserId,
-                    Ward = c.Ward,
-
-                }
-                ).ToList()
+                CooperativeInformation = cooperatives.Select(c => c.ViewMap()).ToList()
             }; 
 
            
