@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
 
             // 1️⃣ Compute area
-            var points = dto.Coordinates.Select(c => (c.Lat, c.Lng)).ToList();
+            var points = dto.Coordinates.Select(c => (c.Latitude, c.Longitude)).ToList();
             var area = GeometryHelper.ComputePolygonArea(points);
                 var areaInSqMetres = GeometryHelper.CalculatePolygonAreaSqMeters(points); // Convert hectares to square metres
            var areaInDegrees = GeometryHelper.CalculatePolygonAreaDegrees(points);
@@ -54,8 +54,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 Name = dto.FarmName,
                 OwnershipType = dto.OwnershipType,
                 FarmerId = dto.FarmerId,
-                MembershipId = dto.CooperativeId,
-                CommunityId = dto.CommunityId,
                 LocationDescription = dto.FarmLocation,
                 FarmLocation = dto.FarmLocation,
                 FarmState = dto.FarmState,
@@ -72,8 +70,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 TotalAreaInSqMetre = areaInSqMetres,
                 Coordinates = dto.Coordinates.Select(c => new FarmCoordinate
                 {
-                    Latitude = c.Lat,
-                    Longitude = c.Lng,
+                    Latitude = c.Latitude,
+                    Longitude = c.Longitude,
                     Order = c.Order
                 }).ToList()
             };

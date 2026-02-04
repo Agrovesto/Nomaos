@@ -159,6 +159,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithOne(r => r.MandEDataset)
                 .HasForeignKey(r => r.MandEDatasetId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Farm>()
+                .HasKey(f => f.Id);
+
+            modelBuilder.Entity<Farm>()
+                .Property(f => f.FarmPolygon)
+                .HasColumnType("geography");
+
+            //modelBuilder.Entity<Farm>()
+            //    .HasIndex(f => f.FarmPolygon)
+            //    .HasDatabaseName("IX_Farm_Polygon")
+            //    .IsSpatial();
+
             //for market transaction
             //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
         }
@@ -249,6 +262,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
         public DbSet<FarmLandDocument> FarmLandDocuments { get; set; }
         public DbSet<FarmAllocation> FarmAllocations { get; set; }
+        public DbSet<FarmCoordinate> FarmCoordinates { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
 
     }
