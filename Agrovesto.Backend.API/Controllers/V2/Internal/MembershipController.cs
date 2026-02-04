@@ -90,7 +90,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                 var result = await _membershipManager.GetMembershipFarmers(query);
-                return Ok(new PagedListResponse<List<FarmerCooperativeDto>>()
+                return Ok(new PagedListResponse<List<FarmerMembershipDto>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
