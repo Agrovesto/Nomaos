@@ -63,6 +63,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class FarmerAgentDto
     {
+        public long Id { get; set; }
         public string FarmerUserId { get; set; }
         public string FullName { get; set; }
         public string State { get; set; }

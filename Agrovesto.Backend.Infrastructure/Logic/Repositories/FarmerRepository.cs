@@ -1157,6 +1157,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // projection
             var result = page.Select(f => new FarmerAgentDto
             {
+                Id=f.Id,
                 FarmerUserId = f.UserId,
                 FullName = f.Name,
                 State = f.State,
