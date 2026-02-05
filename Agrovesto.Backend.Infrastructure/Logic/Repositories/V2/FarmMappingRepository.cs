@@ -421,7 +421,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Distinct(new CoordinateEqualityComparer())
                 .ToList();
 
-            if (coordinates.Count < 4)
+            if (coordinates.Count < 3)
                 throw new BaseException(
                     ExceptionType.BAD_REQUEST,
                     "A valid polygon requires at least 3 unique points.");
