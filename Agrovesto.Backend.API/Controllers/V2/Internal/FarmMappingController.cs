@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -34,10 +35,114 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _farmMappingManager = farmMappingManager;
             _businessManager = businessManager;
         }
+        [HttpGet("by-farmer")]
+        public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                if (query.farmerId <= 0)
+                {
+
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "Farmer Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+
+
+                var result = await _farmMappingManager.FetchFarmsByFarmer(query);
+                return Ok(new Response<List<FarmListRespopnseObject>>()
+                {
+                    Data = result,
+                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Succeeded = result != null,
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("details")]
+        public async Task<IActionResult> FetchFarmDetails([FromQuery] FarmMappingArgs query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+             if(query.farmId <= 0)
+                {
+
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "Farm Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+
+
+                var result = await _farmMappingManager.FetchFarmDetails(query);
+                return Ok(new Response<FarmDetailsResponse>()
+                {
+                    Data = result,
+                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Succeeded = result != null,
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
 
         [HttpPost("submit-farm")]
         [AllowAnonymous]
-        public async Task<IActionResult> CreateFarm([FromBody] MapFarmRequest model, [FromQuery] FarmMappingArgs args)
+        public async Task<IActionResult> CreateFarm([FromForm] SubmitFarmRequest model, [FromQuery] FarmMappingArgs args)
         {
 
             if (!ModelState.IsValid)

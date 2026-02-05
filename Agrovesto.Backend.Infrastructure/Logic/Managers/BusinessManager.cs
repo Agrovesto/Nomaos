@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<BusinessManager> _log;
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IFarmPlotDetailRepository _farmPlotDetailRepository;
-        private readonly IFaceManager _faceManager;
+        private readonly IAWSRekognitionManager _faceManager;
         private readonly INotificationService _whisperSMSService;
         private readonly IInputFinancingManagementRepository _inputRepository;
         private readonly ITraderRepository _traderRepository;
@@ -65,7 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             IInputFinancingManagementRepository inputRepository,
             ITraderRepository traderRepository, IExcelConverterService excelConverterService,
 
-                IFaceManager faceManager, ILogger<BusinessManager> log, IMembershipRepository cooperativeRepository)
+                IAWSRekognitionManager faceManager, ILogger<BusinessManager> log, IMembershipRepository cooperativeRepository)
         {
             _businessRepository = businessRepository;
             _authenticationRepository = authenticationRepository;

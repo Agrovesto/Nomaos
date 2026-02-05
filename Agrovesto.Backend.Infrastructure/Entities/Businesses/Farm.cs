@@ -45,6 +45,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public ICollection<FarmCoordinate> Coordinates { get; set; } = new List<FarmCoordinate>();
         public ICollection<FarmAllocation> Allocations { get; set; } = new List<FarmAllocation>(); // NEW - track who cultivates this land
         public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
+        public DateTimeOffset? CapturedOn { get; set; }
+        public DateTimeOffset? MeasurementDate { get; set; }
+        public string? CapturedBy { get; set; }
+        public double SizeInHectares { get; set; }
+        public string MeasurementMode { get; set; } // Walking, bike
+        public double SizeInKm { get; set; }
         public bool IsMappingVerified { get; set; } = false;
         public bool IsDocumentVerified { get; set; } = false;
         public bool IsDeleted { get; set; } = false;
@@ -138,12 +144,6 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset? UnflaggedOn { get; set; }
         public double Latitude { get; set; }
         public double Longitude { get; set; }
-        public DateTimeOffset? CapturedOn {  get; set; }
-        public DateTimeOffset? MeasurementDate {  get; set; }
-        public string? CapturedBy {  get; set; }
-        public double SizeInHectares { get; set; }
-        public string MeasurementMode { get; set; } // Walking, bike
-        public double SizeInKm { get; set; }
         public long Order { get; set; } // order of the coordinate in the polygon
 
         [ForeignKey(nameof(Farm))]
