@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
@@ -27,16 +28,65 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class FarmLandDocumentDto
         {
-            public IFormFile Document { get; set; }
-
+        
             public string? DocumentType { get; set; } // LandDocument,
             //LandOwnerShip,
             //LandLease
             public string? DocumentUrl { get; set; }
             public string? DocumentTitle { get; set; }
+            public string Status { get; set; } // Pending, Approved, Rejected
+            public DateTimeOffset UploadedOn { get; set; }
+                public string UploadedBy { get; set; }
         }
-       
+        public class FarmDetailsResponse
+        {
+            public long FarmId { get; set; }
+            public DateTimeOffset DateAdded { get; set; }
+            public string AddedBy { get; set; }
+            public string MappingStatus { get; set; }
+            public DateTimeOffset CapturedOn { get; set; }
+            public string CapturedBy { get; set; }
+            public string Accuracy { get; set; }
+            public List<FarmLandDocumentDto> Documents { get; set; }
+            public List<FarmCoordinateDto> Coordinates { get; set; }
+            public LandMeasurementDetails MeasurementDetails { get; set; } 
+        }
+        public class LandMeasurementDetails
+        {
+            public double MeasuredArea { get; set; }
+            public double AreaUnit { get; set; } // e.g., hectares, acres
+            public string MeasurementMode { get; set; } // e.g., GPS, Manual
+            public double DistanceCovered { get; set; } // in meters
+            public DateTimeOffset MeasurementDate { get; set; }
+        }
+        public class FarmListRespopnseObject
+        {
+            public long FarmId { get; set; }
+            public double LandSize { get; set; }
+            public string DocumentStatus { get; set; }
+            public string MappingStatus { get; set; }
+            public DateTimeOffset DateAdded { get; set; }
 
+        }
+        public class SubmitFarmRequest
+        {
+         
+            public string OwnershipType { get; set; }
+            public string FarmLocation { get; set; }
+            public string? FarmName { get; set; }
+            public string FarmState { get; set; }
+            public string FarmLga { get; set; }
+            public string FarmWard { get; set; }
+            public double SizeInHectares { get; set; }
+            public string? MeasurementMode { get; set; } // Walking, bike
+            public double SizeInKm { get; set; }
+            // Mapping
+            public string? CoordinatesJson { get; set; }
+
+            // Documents
+            public List<IFormFile>? Documents { get; set; }
+            public List<string>? DocumentTypes { get; set; }
+        }
         public class MapFarmRequest
         {
 
@@ -47,18 +97,26 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string FarmState { get; set; }
             public string FarmLga { get; set; }
             public string FarmWard { get; set; }
-
+            public double AreaSize { get; set; }
             public string? BelongToBusinessCode { get; set; }
             public string? OrganizationCode { get; set; }
+            public double SizeInHectares { get; set; }
+            public string? MeasurementMode { get; set; } // Walking, bike
+            public double SizeInKm { get; set; }
             public List<FarmCoordinateDto> Coordinates { get; set; } = new();
             public List<FarmLandDocumentDto> Documents { get; set; } = new();  
         }
 
         public class FarmCoordinateDto
         {
+            [JsonPropertyName("latitude")]
             public double Latitude { get; set; }
+
+            [JsonPropertyName("longitude")]
             public double Longitude { get; set; }
+
             public long Order { get; set; }
+
         }
 
         public class FarmCoordinateRequest

@@ -60,7 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     }
     public class OnBoardingManager : IOnBoardingManager
     {
-        private readonly IFaceManager _faceManager;
+        private readonly IAWSRekognitionManager _faceManager;
 
         private readonly IWalletManager _walletManager;
         private readonly INotificationService _sMSService;
@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
         public OnBoardingManager(IWalletManager walletManager,
-            IFaceManager faceManager,
+            IAWSRekognitionManager faceManager,
             IIdentityVerificationManager identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository

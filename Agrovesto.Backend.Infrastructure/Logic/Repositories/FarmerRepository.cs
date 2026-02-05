@@ -1747,7 +1747,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Gender = farmer.Gender,
                     DateOfBirth = farmer.DateOfBirth,
                     PhoneNumber = farmer.PhoneNumber,
-                    Email = user?.Email,
+                    Email = farmer?.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
                     DateRegistered = farmer.OnBoardedOn,

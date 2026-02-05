@@ -633,6 +633,12 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CapturedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("CapturedOn")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
@@ -684,6 +690,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<int>("MappingStatus")
                         .HasColumnType("int");
 
+                    b.Property<DateTimeOffset?>("MeasurementDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MeasurementMode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
 
@@ -692,6 +705,12 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("OwnershipType")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<double>("SizeInHectares")
+                        .HasColumnType("float");
+
+                    b.Property<double>("SizeInKm")
+                        .HasColumnType("float");
 
                     b.Property<double>("TotalAreaInDegress")
                         .HasColumnType("float");
@@ -786,12 +805,6 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
-                    b.Property<string>("CapturedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTimeOffset?>("CapturedOn")
-                        .HasColumnType("datetimeoffset");
-
                     b.Property<string>("CoordinateOverlapWithFarmerIds")
                         .HasColumnType("nvarchar(max)");
 
@@ -819,21 +832,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<double>("Longitude")
                         .HasColumnType("float");
 
-                    b.Property<DateTimeOffset?>("MeasurementDate")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("MeasurementMode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<long>("Order")
                         .HasColumnType("bigint");
-
-                    b.Property<double>("SizeInHectares")
-                        .HasColumnType("float");
-
-                    b.Property<double>("SizeInKm")
-                        .HasColumnType("float");
 
                     b.Property<bool>("UnflagFarm")
                         .HasColumnType("bit");

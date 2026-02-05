@@ -25,11 +25,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IFarmerRepository _farmerRepository;
         private readonly IMembershipRepository _membershipRepository;
         private readonly ILogger<AgentManager> _log;
-        private readonly IFaceManager _faceManager;
+        private readonly IAWSRekognitionManager _faceManager;
         private readonly IOnboardingRepository _onboardingRepository;
         public MembershipManager(IFarmerRepository farmerRepository,
             IMembershipRepository membershipRepository,
-            IFaceManager faceManager,
+            IAWSRekognitionManager faceManager,
             ILogger<AgentManager> log, IOnboardingRepository onboardingRepository)
         {
             _farmerRepository = farmerRepository;
