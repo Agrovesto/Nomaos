@@ -63,7 +63,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmPlotDetailsManager, FarmPlotDetailsManager>();
             services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
-            services.AddScoped<IFaceManager, FaceManager>();
+            services.AddScoped<IAWSRekognitionManager, AWSRekgnitionManager>();
             services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
             services.AddScoped<IReportManager, ReportManager>();
             services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();

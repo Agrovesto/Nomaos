@@ -38,11 +38,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ICafeOneWalletService _cafeOneWalletService;
         // private readonly IWalletRepository _walletRepository;
         private readonly INotificationService _whisperSMSService;
-        private readonly IFaceManager _faceManager;
+        private readonly IAWSRekognitionManager _faceManager;
         private readonly IConfiguration _configuration;
         private readonly IWalletManager _walletManager;
         public InputFinancingManagement(IFarmerCreditScoremanager farmerCreditScoremanager,IInputFinancingManagementRepository repository,
-            IFaceManager faceManager, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
+            IAWSRekognitionManager faceManager, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, INotificationService whisperSMSService,
             IFarmerRepository farmerRepository,
             ICafeOneWalletService cafeOneWalletService,
