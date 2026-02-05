@@ -8,10 +8,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Interfaces.Services
 {
-    public interface IFaceManager
+    public interface IAWSRekognitionManager
     {
         Task<ImageComparisonResponse> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args);
+        Task<(byte[] FileBytes, string ContentType, string FileName)> GetFileAsync(string fileKey);
         Task<string> GetImageUrlAsync(string imageKey);
+        Task<string> UploadFileAsync(IFormFile file, string folderName);
         Task<ImageUploadResponse> UploadImage(IFormFile image, string userId, string businessCode, string? organizationCode);
     }
 }
