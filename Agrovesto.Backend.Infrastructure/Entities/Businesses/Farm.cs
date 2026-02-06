@@ -40,6 +40,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double TotalAreaInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? MappingAccuracy { get; set; }
+        public double DistanceCovered { get; set; } // in meters
+        public double PinnedLongitude { get; set; }
+        public double PinnedLatitude { get; set; }
         public ICollection<FarmMappingAuditTrail> AuditTrails { get; set; } = new List<FarmMappingAuditTrail>();
 
         public ICollection<FarmCoordinate> Coordinates { get; set; } = new List<FarmCoordinate>();
