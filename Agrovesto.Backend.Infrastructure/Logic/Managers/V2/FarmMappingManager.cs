@@ -152,10 +152,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     MeasurementDetails = new LandMeasurementDetails
                     {
                         AreaUnit = fetchFarms.AreaSize,
-                        DistanceCovered = fetchFarms.SizeInKm,
+                        DistanceCovered = fetchFarms.DistanceCovered,
                         MeasuredArea = fetchFarms.AreaSize,
                         MeasurementDate = fetchFarms.MeasurementDate.Value,
-                        MeasurementMode = fetchFarms.MeasurementMode
+                        MeasurementMode = fetchFarms.MeasurementMode,
+                        MappingAccuracy = fetchFarms.MappingAccuracy,   
+                        PinnedLatitude = fetchFarms.PinnedLatitude,
+                        PinnedLongitude = fetchFarms.PinnedLongitude,
+                        
                     },
                     Coordinates = fetchFarms.Coordinates.Count > 0 ? fetchFarms.Coordinates.Select(x => new FarmCoordinateDto
                     {
@@ -164,7 +168,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Order=x.Order
 
                     }).ToList() : null,
-                    Accuracy = "High",
+                    Accuracy = fetchFarms.MappingAccuracy,
                     CapturedBy = fetchFarms.CapturedBy,
                     CapturedOn = fetchFarms.CapturedOn.Value,
                 };
@@ -330,6 +334,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 // MapFarmRequest for repo
                 var mapFarmRequest = new MapFarmRequest
                 {
+                    PinnedLatitude = request.PinnedLatitude,    
+                    PinnedLongitude= request.PinnedLongitude,
+                    DistanceCovered=request.DistanceCovered,
+                    MappingAccuracy= request.MappingAccuracy,
                     AreaSize = request.SizeInHectares,
                     OwnershipType = request.OwnershipType,
                     FarmName = request.FarmName,
