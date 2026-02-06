@@ -645,6 +645,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<double>("DistanceCovered")
+                        .HasColumnType("float");
+
                     b.Property<string>("FarmLga")
                         .HasColumnType("nvarchar(max)");
 
@@ -684,6 +687,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("MappedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("MappingAccuracy")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("MappingFlagReason")
                         .HasColumnType("nvarchar(max)");
 
@@ -705,6 +711,12 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("OwnershipType")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<double>("PinnedLatitude")
+                        .HasColumnType("float");
+
+                    b.Property<double>("PinnedLongitude")
+                        .HasColumnType("float");
 
                     b.Property<double>("SizeInHectares")
                         .HasColumnType("float");
