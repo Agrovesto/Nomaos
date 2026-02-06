@@ -53,6 +53,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class LandMeasurementDetails
         {
+            public string? MappingAccuracy { get; set; }
+            public double PinnedLongitude { get; set; }
+            public double PinnedLatitude { get; set; }
             public double MeasuredArea { get; set; }
             public double AreaUnit { get; set; } // e.g., hectares, acres
             public string MeasurementMode { get; set; } // e.g., GPS, Manual
@@ -80,6 +83,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public double SizeInHectares { get; set; }
             public string? MeasurementMode { get; set; } // Walking, bike
             public double SizeInKm { get; set; }
+            public string? MappingAccuracy { get; set; }
+            public double DistanceCovered { get; set; } // in meters
+            public double PinnedLongitude { get; set; }
+            public double PinnedLatitude { get; set; }
             // Mapping
             public string? CoordinatesJson { get; set; }
 
@@ -89,7 +96,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class MapFarmRequest
         {
-
+            public string? MappingAccuracy { get; set; }
+            public double DistanceCovered { get; set; } // in meters
+            public double PinnedLongitude { get; set; }
+            public double PinnedLatitude { get; set; }
             // Ownership: Farmer / Cooperative / Community
             public string? OwnershipType { get; set; } = string.Empty;
             public string? FarmName { get; set; } = string.Empty;

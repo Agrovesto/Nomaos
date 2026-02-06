@@ -707,8 +707,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     var userWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
 
-                    if (userWallet != null)
-                    {
+                    //if (userWallet != null)
+                    //{
                         getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
                         var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
                         //update bundke
@@ -723,9 +723,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                         await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer, business.BusinessName);
                         status = true;
-                    }
+                    //}
 
-                    status = false;
+                    //status = false;
 
                     //return (status, response);
 

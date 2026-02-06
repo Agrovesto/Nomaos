@@ -193,6 +193,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 farm.FarmWard = request.FarmWard;
                 farm.FarmLocation = request.FarmLocation;
                 farm.AreaSize = request.AreaSize;
+                farm.PinnedLongitude = request.PinnedLongitude;
+                farm.PinnedLatitude = request.PinnedLatitude;
+                farm.DistanceCovered = request.DistanceCovered;
+                farm.MappingAccuracy = request.MappingAccuracy;
+              
 
                 await _context.SaveChangesAsync();
                 return farm;
@@ -227,7 +232,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 MappingStatus = MappingStatus.NotStarted,
                 MeasurementMode=request.MeasurementMode,
                 CapturedBy=args.performedByUserId,
-                
+                PinnedLatitude= request.PinnedLatitude,
+                PinnedLongitude= request.PinnedLongitude,
+                MappingAccuracy= request.MappingAccuracy,
+                    DistanceCovered= request.DistanceCovered,
+                    
             };
 
             _context.Farms.Add(farm);
@@ -330,7 +339,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 farm.AreaSize = polygon.Area;
                 farm.SizeInHectares = polygon.Area / 10_000d;
                 farm.SizeInKm = polygon.Area / 1_000_000d;
-
+                farm.PinnedLongitude= request.PinnedLongitude;
+                farm.PinnedLatitude= request.PinnedLatitude;
+                farm.DistanceCovered= request.DistanceCovered;
+                farm.MappingAccuracy= request.MappingAccuracy;
                 farm.IsMappingVerified = false;
                 farm.IsSizeVerified = false;
 
