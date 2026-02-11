@@ -73,8 +73,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class SubmitFarmRequest
         {
-         
-            public string OwnershipType { get; set; }
+
+            public string OwnershipType { get; set; } = "Farmer";
             public string FarmLocation { get; set; }
             public string? FarmName { get; set; }
             public string FarmState { get; set; }

@@ -55,12 +55,25 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class BulkOnboardingExcelRow
     {
+        // Columns A..R
         public string FirstName { get; set; }
+        public string MiddleName { get; set; }
         public string LastName { get; set; }
-        public string Email { get; set; }
-        public string PhoneNumber { get; set; }
-        public string NIN { get; set; }
+        public string DateOfBirth { get; set; }
         public string Gender { get; set; }
+        public string StateOfResidence { get; set; }
+        public string LGA { get; set; }
+        public string Ward { get; set; }
+        public string ResidentialAddress { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Email { get; set; }
+        public string CategoryOfFarmer { get; set; }
+        public string PartOfAgriculture { get; set; }
+        public string ProductTypes { get; set; }
+        public string YearsInAgric { get; set; }
+        public string HighestLevelOfEducation { get; set; }
+        public string BVN { get; set; }
+        public string NIN { get; set; }
     }
     public class BulkOnboardingResult
     {
