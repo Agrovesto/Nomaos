@@ -42,14 +42,27 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
 
             foreach (var row in rows)
             {
+                // Map columns A..R to the BulkOnboardingExcelRow fields
                 result.Add(new BulkOnboardingExcelRow
                 {
-                    FirstName = row.Cell(1).GetString(),
-                    LastName = row.Cell(2).GetString(),
-                    Email = row.Cell(3).GetString(),
-                    PhoneNumber = row.Cell(4).GetString(),
-                    NIN=row.Cell(5).GetString(),
-                    Gender = row.Cell(6).GetString()
+                    FirstName = row.Cell(1).GetString(),                     // A
+                    MiddleName = row.Cell(2).GetString(),                    // B
+                    LastName = row.Cell(3).GetString(),                      // C
+                    DateOfBirth = row.Cell(4).GetString(),                   // D
+                    Gender = row.Cell(5).GetString(),                        // E
+                    StateOfResidence = row.Cell(6).GetString(),             // F
+                    LGA = row.Cell(7).GetString(),                          // G
+                    Ward = row.Cell(8).GetString(),                         // H
+                    ResidentialAddress = row.Cell(9).GetString(),          // I
+                    PhoneNumber = row.Cell(10).GetString(),                // J
+                    Email = row.Cell(11).GetString(),                      // K
+                    CategoryOfFarmer = row.Cell(12).GetString(),           // L
+                    PartOfAgriculture = row.Cell(13).GetString(),          // M
+                    ProductTypes = row.Cell(14).GetString(),               // N
+                    YearsInAgric = row.Cell(15).GetString(),               // O
+                    HighestLevelOfEducation = row.Cell(16).GetString(),    // P
+                    BVN = row.Cell(17).GetString(),                        // Q
+                    NIN = row.Cell(18).GetString()                         // R
                 });
             }
 
