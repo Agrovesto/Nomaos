@@ -54,7 +54,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
-        Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
+        //Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
+        Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
     }
@@ -115,9 +116,81 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     //            job => job.Process(jobArgs));
     //    }
 
-        public async Task<BulkOnboardingResult> BulkOnboardBusinessUsers(
-    Stream excelStream,
-    OnBoardingArgs args)
+    //    public async Task<BulkOnboardingResult> BulkOnboardBusinessUsers(
+    //Stream excelStream,
+    //OnBoardingArgs args)
+    //    {
+    //        if (excelStream == null)
+    //            throw new BaseException(
+    //                Core.Enums.ExceptionType.BAD_REQUEST,
+    //                "Excel file is required.");
+
+    //        var rows = _excelConverterService.ParseExcel(excelStream);
+
+    //        if (!rows.Any())
+    //            throw new BaseException(
+    //                Core.Enums.ExceptionType.BAD_REQUEST,
+    //                "Excel file contains no records.");
+
+    //        var result = new BulkOnboardingResult
+    //        {
+    //            Total = rows.Count
+    //        };
+
+    //        int rowNumber = 1; // header = 1
+
+    //        foreach (var row in rows)
+    //        {
+    //            rowNumber++;
+
+    //            try
+    //            {
+    //                var model = new OnboardingRequestModel
+    //                {
+                        
+    //                    FirstName = row.FirstName,
+    //                    LastName = row.LastName,
+    //                    Email = row.Email,
+    //                    PhoneNumber = row.PhoneNumber
+    //                };
+
+    //                args.userType = row.Gender;
+
+    //                await CreateBusinessUser(model, args);
+
+    //                result.Successful++;
+    //            }
+    //            catch (BaseException ex)
+    //            {
+    //                result.Failed++;
+
+    //                result.Errors.Add(new BulkOnboardingError
+    //                {
+    //                    RowNumber = rowNumber,
+    //                    Email = row.Email,
+    //                    Error = ex.Message
+    //                });
+    //            }
+    //            catch (Exception ex)
+    //            {
+    //                _log.LogError(ex, "Bulk onboarding failed on row {Row}", rowNumber);
+
+    //                result.Failed++;
+
+    //                result.Errors.Add(new BulkOnboardingError
+    //                {
+    //                    RowNumber = rowNumber,
+    //                    Email = row.Email,
+    //                    Error = "Unexpected error occurred"
+    //                });
+    //            }
+    //        }
+
+    //        return result;
+    //    }
+
+        public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args 
+)
         {
             if (excelStream == null)
                 throw new BaseException(
@@ -131,57 +204,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     "Excel file contains no records.");
 
-            var result = new BulkOnboardingResult
-            {
-                Total = rows.Count
-            };
-
-            int rowNumber = 1; // header = 1
+            var result = new BulkOnboardingResult { Total = rows.Count };
+            int rowNumber = 1;
+            //long? agentId = null;
+            //if (!string.IsNullOrWhiteSpace(currentUserId) && string.Equals(currentUserRole, "Agent", StringComparison.OrdinalIgnoreCase))
+            //{
+            //    var agent = await _agentRepository.GetAgentDetailByUserId(currentUserId);
+            //    if (agent != null)
+            //        agentId = agent.Id;
+            //}
 
             foreach (var row in rows)
             {
                 rowNumber++;
-
                 try
                 {
+                    // Each BulkOnboardingExcelRow currently has FirstName, LastName, Email, PhoneNumber, NIN, Gender
+                    // Build a minimal OnboardingRequestModel using any available identifier (phone or email)
+                    if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
+                        throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Either phone number or email is required.");
+
                     var model = new OnboardingRequestModel
                     {
-                        
                         FirstName = row.FirstName,
                         LastName = row.LastName,
                         Email = row.Email,
-                        PhoneNumber = row.PhoneNumber
+                        PhoneNumber = row.PhoneNumber,
                     };
 
-                    args.userType = row.Gender;
+                    // Prepare onboarding args for farmer
+                    var farmerArgs = new OnBoardingArgs
+                    {
+                        businessCode = args.businessCode,
+                        organizationCode = args.organizationCode,
+                        userType = "Farmer",
+                        OnboardedByUserId = args.OnboardedByUserId,
+                        AgentIds =args.AgentIds,// agentId.HasValue ? new List<long?> { agentId.Value } : null,
+                        CooperativeIds = args.CooperativeIds
+                    };
 
-                    await CreateBusinessUser(model, args);
+                    // Register user and create farmer profile using existing flow
+                    await CreateBusinessUser(model, farmerArgs);
+
+                    // If cooperative id provided in args, assign farmer to cooperative
+                    if (args.CooperativeIds?.Any() == true)
+                    {
+                        // Find created user id (CreateBusinessUser sets model.Id)
+                        var createdUserId = model.Id;
+                        if (!string.IsNullOrWhiteSpace(createdUserId))
+                        {
+                            var assignArgs = new AssignmentArgs
+                            {
+                                UserId = createdUserId,
+                                CooperativeIds = args.CooperativeIds,
+                                businessCode = args.businessCode,
+                                organizationCode = args.organizationCode
+                            };
+                            // attempt to assign cooperatives to farmer by calling manager
+                            await AssignFarmerToCooperatives(assignArgs);
+                        }
+                    }
 
                     result.Successful++;
                 }
                 catch (BaseException ex)
                 {
                     result.Failed++;
-
-                    result.Errors.Add(new BulkOnboardingError
-                    {
-                        RowNumber = rowNumber,
-                        Email = row.Email,
-                        Error = ex.Message
-                    });
+                    result.Errors.Add(new BulkOnboardingError { RowNumber = rowNumber, Email = row.Email, Error = ex.Message });
                 }
                 catch (Exception ex)
                 {
-                    _log.LogError(ex, "Bulk onboarding failed on row {Row}", rowNumber);
-
+                    _log.LogError(ex, "Bulk farmer onboarding failed on row {Row}", rowNumber);
                     result.Failed++;
-
-                    result.Errors.Add(new BulkOnboardingError
-                    {
-                        RowNumber = rowNumber,
-                        Email = row.Email,
-                        Error = "Unexpected error occurred"
-                    });
+                    result.Errors.Add(new BulkOnboardingError { RowNumber = rowNumber, Email = row.Email, Error = "Unexpected error occurred" });
                 }
             }
 
@@ -359,12 +454,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             try
             { // fetch user by id
-                if (string.IsNullOrEmpty(args.UserId))
+                var userId = !string.IsNullOrEmpty(args.UserId)
+                    ? args.UserId
+                    : model?.Id;
+
+                if (string.IsNullOrEmpty(userId))
                 {
                     throw new BaseException(
-                               Core.Enums.ExceptionType.BAD_REQUEST,
-                               "User Id missing.");
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "User Id missing.");
                 }
+
+                //if (string.IsNullOrEmpty(args.UserId) || )
+                //{
+                //    throw new BaseException(
+                //               Core.Enums.ExceptionType.BAD_REQUEST,
+                //               "User Id missing.");
+                //}
                 //var user = await _onboardingRepository.GetUserById(args.UserId);
                 //if (user.model == null)
                 //{
@@ -372,9 +478,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 //           Core.Enums.ExceptionType.BAD_REQUEST,
                 //           "User not found.");
                 //}
-                var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, model);
+                var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, model);
                 model.CreatedOn = updateUser.CreatedOn;
-                model.Id = args.UserId;
+                model.Id = updateUser.Id;//args.UserId;
                 model.Email =!string.IsNullOrEmpty(model.Email) ? model.Email :  updateUser.Email;
                 model.PhoneNumber =!string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber :  updateUser.PhoneNumber;
 
@@ -680,6 +786,7 @@ AgentIds = args.AgentIds?
                         MiddleName = model.MiddleName,
                         Id = createUser.model.Id,
                         PhoneNumber = model.PhoneNumber,
+                        OnboardedByUserId=args.OnboardedByUserId
                     }, args);
 
                     // ------------------ Track role & user type ------------------
