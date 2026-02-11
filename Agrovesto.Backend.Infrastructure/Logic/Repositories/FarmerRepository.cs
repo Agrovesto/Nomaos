@@ -1130,6 +1130,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .GroupBy(p => p.FarmerId)
                 .ToDictionaryAsync(g => g.Key, g => g.Count() > 0);
 
+            // preload farm counts and total size (hectares) per farmer
+            var farmStatsLookup = await _context.Farms
+                .Where(p => farmerIds.Contains(p.FarmerId))
+                .GroupBy(p => p.FarmerId)
+                .ToDictionaryAsync(g => g.Key, g => new { Count = g.Count(), TotalSize = g.Sum(x => x.SizeInHectares) });
+
             // apply mapping status filter if provided
             if (!string.IsNullOrWhiteSpace(query.MappingStatus))
             {
@@ -1157,7 +1163,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // projection
             var result = page.Select(f => new FarmerAgentDto
             {
-                Id=f.Id,
+                Id = f.Id,
                 FarmerUserId = f.UserId,
                 FullName = f.Name,
                 State = f.State,
@@ -1166,7 +1172,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 MappingStatus = mappedLookup.GetValueOrDefault(f.Id, false) ? "Mapped" : "Unmapped",
                 DateAdded = f.OnBoardedOn,
                 TotalLinkedFarmers = totalLinked,
-                TotalMappedFarms = totalMapped
+                TotalMappedFarms = totalMapped,
+                // per-farmer farm counts and total size in hectares
+                TotalFarms = farmStatsLookup.GetValueOrDefault(f.Id)?.Count ?? 0,
+                TotalFarmSizeHectares = farmStatsLookup.GetValueOrDefault(f.Id)?.TotalSize ?? 0,
             }).ToList();
 
             return new PagedListResponse<List<FarmerAgentDto>>

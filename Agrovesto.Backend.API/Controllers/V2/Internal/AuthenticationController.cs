@@ -120,20 +120,29 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
+                //if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                //{
+                //    args.organizationCode = OrganizationCode;
+                //}
+                //var currentRole = CurrentUserRole;
 
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                //args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
-                if (args.Id == 0 && currentRole == "MemberShip")
+                //if (args.Id == 0 && currentRole == "MemberShip")
+                //{
+                //    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
+                //    args.Id = coop.Id;
+                //}
+                //args.OnboardedByUserId = args.UserId;
+
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                ResolveUserContext(args);
+                if (CurrentUserId != null && CurrentUserRole != args.userType)
                 {
-                    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-                    args.Id = coop.Id;
+                    await EnrichArgsByRoleAsync(args);
                 }
-                args.OnboardedByUserId = args.UserId;
+
                 var request = await _onBoardingManager.CreateBusinessUser(model, args);
 
 
