@@ -74,6 +74,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         // Total number of farmers (in this agent's set) that are linked to any cooperative
         public int TotalLinkedFarmers { get; set; }
         public int TotalMappedFarms { get; set; }
+        public int TotalFarms { get; set; }
+        public double TotalFarmSizeHectares { get; set; }
     }
 
     public class FarmerUpdateResultDto

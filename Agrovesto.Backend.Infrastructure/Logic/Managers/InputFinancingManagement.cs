@@ -718,7 +718,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         await dbTransaction.CommitAsync();
 
                         response.RepaymentBalance = model.EquityPaymentBalanceDeficit;
-                        response = await GenerateInputSubscriptionInterestPaymentSlip(response, userWallet, createWarehouse.data.ExpectedTotalEquityPrice);
+                        response = await GenerateInputSubscriptionInterestPaymentSlip(response, 
+                           // userWallet, 
+                            createWarehouse.data.ExpectedTotalEquityPrice);
 
 
                         await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer, business.BusinessName);
@@ -757,17 +759,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             var selectedBundle = bundleOfInterest.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefault();
 
-            var receipt = await GenerateInputSubscriptionInterestPaymentSlip(response, userWallet, selectedBundle.ExpectedTotalEquityPrice);
+            var receipt = await GenerateInputSubscriptionInterestPaymentSlip(response,
+              //  userWallet, 
+                selectedBundle.ExpectedTotalEquityPrice);
 
             return response;
         }
         private async Task<BundleSubscriptionInterestResponseModel> GenerateInputSubscriptionInterestPaymentSlip(BundleSubscriptionInterestResponseModel response,
-           SterlingBankWalletModel userWallet,
+          // SterlingBankWalletModel userWallet,
            decimal ExpectedTotalEquityPrice)
         {
-            response.AccountName = userWallet.AccountName;
-            response.AccountNumber = userWallet.AccountNumber;
-            response.BankName = userWallet.BankName;
+            response.AccountName = "Bayo";//userWallet.AccountName;
+            response.AccountNumber = "8000121212";//userWallet.AccountNumber;
+            response.BankName = "Sterling";// userWallet.BankName;
             response.Amount = ExpectedTotalEquityPrice;
             response.RepaymentBalance = response.RepaymentBalance;
 

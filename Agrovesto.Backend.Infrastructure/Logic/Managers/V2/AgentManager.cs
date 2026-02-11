@@ -135,10 +135,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             //  Farmers linked to this agent
             var farmers = await _farmerRepository.GetFarmersByAgent(query.UserId, query);
 
-            //  Farms
-            //var farms = await _farmRepository.GetFarmsByAgentId(currentAgentId);
-            //var mappedFarms = farms.Count(f => f.IsMapped);
-            //var unmappedFarms = farms.Count(f => !f.IsMapped);
+         
 
             // Farmers linked to cooperatives (based on projection)
             var totalFarmersLinkedToCoops = farmers.Data.Count(f => string.Equals(f.CooperativeStatus, "Linked", StringComparison.OrdinalIgnoreCase));
@@ -152,7 +149,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 TotalCooperatives = cooperatives.Count,
                 TotalFarmers = farmers.Count,
-
+                TotalFarmSizeHectares = farmers.Data.Sum(f => f.TotalFarmSizeHectares), // sum of farm sizes for all farmers linked to this agent
+                TotalFarms = farmers.Data.Sum(f => f.TotalFarms),
                 // leave TotalFarmSizeHectares and TotalFarms unchanged unless farm repo is available
                 MappedFarms = totalMappedFarms,
                 UnmappedFarms = totalUnmappedFarms,
