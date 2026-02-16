@@ -75,4 +75,4 @@ deploy-staging:
     - name: Execute deployment script
       run: |
         ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
-          "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
+          "sudo bash /var/www/Agrovesto.Backend.API/staging.sh"
