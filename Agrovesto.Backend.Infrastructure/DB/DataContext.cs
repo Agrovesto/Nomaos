@@ -264,7 +264,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmAllocation> FarmAllocations { get; set; }
         public DbSet<FarmCoordinate> FarmCoordinates { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
-
+        public DbSet<UserWallet> UserWallets { get; set; }
+        public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>
