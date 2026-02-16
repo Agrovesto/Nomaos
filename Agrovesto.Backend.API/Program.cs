@@ -69,7 +69,7 @@ builder.Services.AddDbContext<DataContext>(options =>
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
             sqlOptions.CommandTimeout(60);
-            sqlOptions.UseNetTopologySuite(); // 👈 THIS is where it goes
+            sqlOptions.UseNetTopologySuite(); 
         }
     )
 );

@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
     public interface IWalletServiceFactory
     {
-        IWalletService GetService(WalletProviderType provider);
+        IGenericWalletService GetService(WalletProviderType provider);
     }
     public enum WalletProviderType
     {
