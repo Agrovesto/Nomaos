@@ -17,27 +17,29 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             _serviceProvider = serviceProvider;
         }
 
-        public IWalletService GetService(WalletProviderType provider)
+        public IGenericWalletService GetService(WalletProviderType provider)
         {
-            return providerType switch
+            return provider switch
             {
                 WalletProviderType.Momo =>
                     _serviceProvider.GetRequiredService<MTNMomo>(),
-                WalletProviderType.FCMB =>
-              _serviceProvider.GetRequiredService<FCMBWalletService>(),
+              //  WalletProviderType.FCMB =>
+              //_serviceProvider.GetRequiredService<FCMBWalletService>(),
 
-                WalletProviderType.Sterling =>
-                    _serviceProvider.GetRequiredService<SterlingWalletService>(),
+              //  WalletProviderType.Sterling =>
+              //      _serviceProvider.GetRequiredService<SterlingWalletService>(),
 
-                WalletProviderType.Credo =>
-                    _serviceProvider.GetRequiredService<CredoWalletService>(),
+              //  WalletProviderType.Credo =>
+              //      _serviceProvider.GetRequiredService<FCMBWalletService>(),
 
-                WalletProviderType.CafeOne =>
-                    _serviceProvider.GetRequiredService<CafeOneWalletService>(),
+              //  WalletProviderType.CafeOne =>
+              //      _serviceProvider.GetRequiredService<CafeOneWalletService>(),
 
-                _ => throw new NotSupportedException($"Provider {providerType} not supported")
+                _ => throw new NotSupportedException($"Provider {provider} not supported")
             };
         }
+
+       
     }
 
 }

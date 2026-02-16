@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset? MeasurementDate { get; set; }
         public string? CapturedBy { get; set; }
         public double SizeInHectares { get; set; }
-        public string MeasurementMode { get; set; } // Walking, bike
+        public string? MeasurementMode { get; set; } // Walking, bike
         public double SizeInKm { get; set; }
         public bool IsMappingVerified { get; set; } = false;
         public bool IsDocumentVerified { get; set; } = false;
@@ -103,7 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long FarmId { get; set; }
         public Farm Farm { get; set; }
         public FarmLandDocumentType DocumentType { get; set; }
-        public string DocumentUrl { get; set; }
+        public string? DocumentUrl { get; set; }
         public string? DocumentTitle { get; set; }
         public string? DocumentId { get; set; }
         public bool IsVerified { get; set; } = false;
@@ -120,7 +120,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
 
-        public string Action { get; set; } // e.g. "Flagged", "Unflagged"
+        public string? Action { get; set; } // e.g. "Flagged", "Unflagged"
         public string PerformedByUserId { get; set; }
         public string PerformedByName { get; set; }
         public DateTimeOffset PerformedOn { get; set; } = DateTimeOffset.UtcNow;

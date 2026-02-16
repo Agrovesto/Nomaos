@@ -80,7 +80,6 @@ namespace Agrovesto.Backend.API.Extensions
 
 
 
-            //services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
@@ -88,7 +87,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
-            //services.AddScoped<IWalletService, FCMBWalletService>();
+         
             services.AddScoped<IOtpService, OtpService>();
             services.AddScoped<IOnBoardingManager, OnBoardingManager>();
             services.AddScoped<IOnboardingRepository, OnboardingRepository>();
@@ -106,11 +105,16 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
 
 
+
+            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IWalletService, SterlingWalletService>();
+
             services.AddHttpClient<MTNMomo>();
-            services.AddHttpClient<SterlingWalletService>();
-            services.AddHttpClient<FCMBWalletService>();
-            services.AddHttpClient<CafeOneWalletService>();
-          //  services.AddHttpClient<CredoService>();
+            //services.AddHttpClient<SterlingWalletService>();
+            //services.AddHttpClient<FCMBWalletService>();
+            //services.AddHttpClient<CafeOneWalletService>();
+            //  services.AddHttpClient<CredoService>();
 
             services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
 

@@ -19,33 +19,34 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
-    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
-    //{
-    //    public DataContext CreateDbContext(string[] args)
-    //    {
-    //        var config = new ConfigurationBuilder()
-    //            .SetBasePath(Directory.GetCurrentDirectory())
-    //            .AddJsonFile("appsettings.Development.json")
-    //            .Build();
+    public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    {
+        public DataContext CreateDbContext(string[] args)
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.Development.json")
+                .Build();
 
-    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-    //        optionsBuilder.UseSqlServer(
-    //          config.GetConnectionString("DefaultConnection"),
-    //    sqlOptions =>
-    //    {
-    //        sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-    //        sqlOptions.EnableRetryOnFailure(
-    //            maxRetryCount: 5,
-    //            maxRetryDelay: TimeSpan.FromSeconds(10),
-    //            errorNumbersToAdd: null);
-    //        sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-    //    });
+            var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+            optionsBuilder.UseSqlServer(
+              config.GetConnectionString("DefaultConnection"),
+        sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+            sqlOptions.CommandTimeout(60);
+            sqlOptions.UseNetTopologySuite();
+        });
 
-    //        return new DataContext(optionsBuilder.Options);
-    //    }
-    //}
-   
-    
+            return new DataContext(optionsBuilder.Options);
+        }
+    }
+
+
     public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
