@@ -1,4 +1,4 @@
-9name: CI/CD Deploy Agrovesto.Backend.API
+name: CI/CD Deploy Agrovesto.Backend.API
 on:
   push:
     branches:
