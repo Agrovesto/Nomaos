@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<Farm> GetOrCreateDraftAsync(MapFarmRequest request, FarmMappingArgs args);
         Task<Farm> FetchFarmsAsync(FarmMappingArgs args);
         Task<List<Farm>> FetchAllFarmsByFarmer(FarmMappingArgs args);
+        Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args);
     }
     public class FarmMappingRepository : IFarmMappingRepository
     {
@@ -53,6 +54,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _geometryFactory = NtsGeometryServices.Instance
             .CreateGeometryFactory(srid: 4326);
         }
+        public async Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args)
+        {
+            var farms = await _context.Farms
+                .Where(f => _context.FarmerAgents
+                    .Any(fa => fa.FarmerId == f.FarmerId && fa.AgentId == args.agentId))
+                .Include(f => f.Coordinates)
+                .Include(f => f.FarmLandDocuments)
+                //.Include(f => f.AuditTrails)
+                //.Include(f => f.Allocations)
+                .ToListAsync();
+
+            if (farms == null || farms.Count == 0)
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NO_RECORD_FOUND,
+                    "No farms found for this agent."
+                );
+
+            return farms;
+        }
+
+
         public async Task<List<Farm>> FetchAllFarmsByFarmer(FarmMappingArgs args)
         {
             var farms = await _context.Farms

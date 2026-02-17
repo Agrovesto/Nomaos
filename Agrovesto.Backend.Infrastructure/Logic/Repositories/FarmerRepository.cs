@@ -1269,6 +1269,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // projection
             var result = page.Select(f => new FarmerMembershipDto
             {
+                Id = f.Id,
                 FarmerUserId = f.UserId,
                 FullName = f.Name,
                 Level= EnumExtensions.GetDisplayName(f.Level),
