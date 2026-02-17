@@ -48,11 +48,11 @@ jobs:
             /p:PublishTrimmed=false \
             -o publish
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-release
-          path: publish
+      #- name: Upload artifact
+      #  uses: actions/upload-artifact@v4
+      #  with:
+       #   name: api-release
+        #  path: publish
 
   deploy:
     needs: build-and-test
