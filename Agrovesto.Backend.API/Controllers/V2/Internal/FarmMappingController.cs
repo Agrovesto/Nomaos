@@ -35,6 +35,59 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _farmMappingManager = farmMappingManager;
             _businessManager = businessManager;
         }
+
+        [HttpGet("by-agent")]
+        public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAnAgent([FromQuery] FarmMappingArgs query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                if (query.farmerId <= 0)
+                {
+
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "Farmer Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+
+                query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
+                var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAnAgent(query);
+                return Ok(new Response<List<FarmListRespopnseObject>>()
+                {
+                    Data = result,
+                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Succeeded = result != null,
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("by-farmer")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
