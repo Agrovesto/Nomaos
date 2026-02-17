@@ -1,0 +1,90 @@
+name: CI/CD Deploy Agrovesto.Backend.API
+on:
+  push:
+    branches:
+      - staging
+  pull_request:
+    branches:
+      - staging
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      # ✅ NEW — publish self-contained
+      - name: Publish (self-contained)
+        run: |
+          dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained true \
+            /p:PublishTrimmed=false \
+            -o publish
+
+      # ✅ NEW — upload artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-release
+          path: publish
+
+deploy-staging:
+  needs: build-and-test
+  runs-on: ubuntu-latest
+  if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+
+  steps:
+    - uses: actions/checkout@v4
+
+    # ✅ download compiled artifact
+    - name: Download artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: api-release
+        path: release
+
+    - name: Install rsync
+      run: sudo apt-get update && sudo apt-get install -y rsync
+
+    - name: Setup SSH Agent
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+
+    - name: Add EC2 host
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+
+    # ✅ sync compiled output only
+    - name: Sync release to EC2
+      run: |
+        ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+          "sudo mkdir -p /var/www/Agrovesto.Backend.API/incoming && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+
+        rsync -avz --delete release/ \
+          ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/incoming/
+
+    # ✅ trigger deploy
+    - name: Execute deployment script
+      run: |
+        ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+          "sudo bash /var/www/Agrovesto.Backend.API/staging.sh"
