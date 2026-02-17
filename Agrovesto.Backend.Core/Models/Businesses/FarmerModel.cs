@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class FarmerMembershipDto
     {
+        public long Id { get; set; }
         public string FarmerUserId { get; set; }
         public string FullName { get; set; }
         public string Level { get; set; }
