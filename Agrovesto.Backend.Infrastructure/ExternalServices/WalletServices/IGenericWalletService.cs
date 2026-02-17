@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
 using System;
 using System.Collections.Generic;
@@ -12,19 +13,19 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
     public interface IGenericWalletService
     {
         // Create wallet/account with provider
-        Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request);
+        Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Collect money from user (RequestToPay)
-        Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request);
+        Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Send money to user
-        Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request);
+        Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Check transaction status
-        Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference);
+        Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env);
 
         // Validate user account
-        Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber);
+        Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber, WalletProviderParameterModel[] parameters, string Env);
     }
 
 }

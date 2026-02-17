@@ -121,67 +121,78 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<FarmDetailsResponse> FetchFarmDetails(FarmMappingArgs args)
         {
             try
-            { //get business code
+            {
                 if (string.IsNullOrEmpty(args.businessCode))
                     throw new BaseException(
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "Business code is required.");
 
-                // ------------------ Fetch business ------------------
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new BaseException(
                         Core.Enums.ExceptionType.NOTFOUND,
                         "Business does not exist.");
+
                 var fetchFarms = await _farmRepo.FetchFarmsAsync(args);
                 if (fetchFarms == null) return null;
+
                 var farms = new FarmDetailsResponse
                 {
                     DateAdded = fetchFarms.CreatedAt,
                     MappingStatus = EnumExtensions.GetDisplayName(fetchFarms.MappingStatus),
                     AddedBy = fetchFarms.CreatedBy,
-                    Documents = fetchFarms.FarmLandDocuments.Count > 0 ? fetchFarms.FarmLandDocuments.Select(x => new FarmLandDocumentDto
-                    {
-                        DocumentTitle = x.DocumentTitle,
-                        DocumentType = EnumExtensions.GetDisplayName(x.DocumentType),
-                        DocumentUrl = x.DocumentUrl,
-                        Status = fetchFarms.IsDocumentVerified ? "Verified" : "Not Verified",
-                        UploadedBy = fetchFarms.CreatedBy,
-                        UploadedOn = x.UploadedOn
-                    }).ToList() : null,
+
+                    Documents = fetchFarms.FarmLandDocuments != null && fetchFarms.FarmLandDocuments.Any()
+                        ? fetchFarms.FarmLandDocuments.Select(x => new FarmLandDocumentDto
+                        {
+                            DocumentTitle = x.DocumentTitle,
+                            DocumentType = EnumExtensions.GetDisplayName(x.DocumentType),
+                            DocumentUrl = x.DocumentUrl,
+                            Status = fetchFarms.IsDocumentVerified ? "Verified" : "Not Verified",
+                            UploadedBy = fetchFarms.CreatedBy,
+                            UploadedOn = x.UploadedOn
+                        }).ToList()
+                        : null,
+
                     FarmId = fetchFarms.Id,
+
                     MeasurementDetails = new LandMeasurementDetails
                     {
                         AreaUnit = fetchFarms.AreaSize,
                         DistanceCovered = fetchFarms.DistanceCovered,
                         MeasuredArea = fetchFarms.AreaSize,
-                        MeasurementDate = fetchFarms.MeasurementDate.Value,
+                        MeasurementDate = fetchFarms.MeasurementDate,   
                         MeasurementMode = fetchFarms.MeasurementMode,
-                        MappingAccuracy = fetchFarms.MappingAccuracy,   
+                        MappingAccuracy = fetchFarms.MappingAccuracy,
                         PinnedLatitude = fetchFarms.PinnedLatitude,
                         PinnedLongitude = fetchFarms.PinnedLongitude,
-                        
                     },
-                    Coordinates = fetchFarms.Coordinates.Count > 0 ? fetchFarms.Coordinates.Select(x => new FarmCoordinateDto
-                    {
-                    Latitude=x.Latitude,
-                    Longitude=x.Longitude,
-                    Order=x.Order
 
-                    }).ToList() : null,
+                    Coordinates = fetchFarms.Coordinates != null && fetchFarms.Coordinates.Any()
+                        ? fetchFarms.Coordinates.Select(x => new FarmCoordinateDto
+                        {
+                            Latitude = x.Latitude,
+                            Longitude = x.Longitude,
+                            Order = x.Order
+                        }).ToList()
+                        : null,
+
                     Accuracy = fetchFarms.MappingAccuracy,
                     CapturedBy = fetchFarms.CapturedBy,
-                    CapturedOn = fetchFarms.CapturedOn.Value,
+
+                    CapturedOn = fetchFarms.CapturedOn
                 };
-                if (farms != null && farms.Documents !=null &&  farms.Documents.Count > 0)
+                if (farms.Documents?.Any() == true)
                 {
                     foreach (var doc in farms.Documents)
                     {
-
-                        doc.DocumentUrl =  await _aWSRekognitionManager.GetImageUrlAsync(doc.DocumentUrl);
-
+                        if (!string.IsNullOrEmpty(doc.DocumentUrl))
+                        {
+                            doc.DocumentUrl = await _aWSRekognitionManager
+                                .GetImageUrlAsync(doc.DocumentUrl);
+                        }
                     }
                 }
-               
+
                 return farms;
             }
             catch (BaseException)
@@ -193,119 +204,119 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 _log.LogError(ex, "Create Farm failed unexpectedly");
                 throw new BaseException(
                     ExceptionType.INTERNAL_SERVER_ERROR,
-                   !string.IsNullOrEmpty(ex.Message)? ex.Message:  "Unable to submit farm data");
-}
+                    !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
             }
-       // public async Task<long> SubmitFarmAsync(SubmitFarmRequest request, FarmMappingArgs args)
-       // {
-       //     try
-       //     { //get business code
-       //         if (string.IsNullOrEmpty(args.businessCode))
-       //             throw new BaseException(
-       //                 Core.Enums.ExceptionType.BAD_REQUEST,
-       //                 "Business code is required.");
+        }
+        // public async Task<long> SubmitFarmAsync(SubmitFarmRequest request, FarmMappingArgs args)
+        // {
+        //     try
+        //     { //get business code
+        //         if (string.IsNullOrEmpty(args.businessCode))
+        //             throw new BaseException(
+        //                 Core.Enums.ExceptionType.BAD_REQUEST,
+        //                 "Business code is required.");
 
-       //         // ------------------ Fetch business ------------------
-       //         var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-       //             ?? throw new BaseException(
-       //                 Core.Enums.ExceptionType.NOTFOUND,
-       //                 "Business does not exist.");
-       //         //get loginuser details
-       //         //get farmers details
-       //         var farmerDetails = await _farmerRepository.GetFarmerById(args.farmerId)
-       //             ?? throw new BaseException(
-       //                 Core.Enums.ExceptionType.NOTFOUND,
-       //                 "Farmer does not exist.");
+        //         // ------------------ Fetch business ------------------
+        //         var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+        //             ?? throw new BaseException(
+        //                 Core.Enums.ExceptionType.NOTFOUND,
+        //                 "Business does not exist.");
+        //         //get loginuser details
+        //         //get farmers details
+        //         var farmerDetails = await _farmerRepository.GetFarmerById(args.farmerId)
+        //             ?? throw new BaseException(
+        //                 Core.Enums.ExceptionType.NOTFOUND,
+        //                 "Farmer does not exist.");
 
-       //         var user = await _onboardingRepository.GetUserById(args.performedByUserId);
-       //             if(user.model == null)throw new BaseException(
-       //                 Core.Enums.ExceptionType.NOTFOUND,
-       //                 "User does not exist.");
+        //         var user = await _onboardingRepository.GetUserById(args.performedByUserId);
+        //             if(user.model == null)throw new BaseException(
+        //                 Core.Enums.ExceptionType.NOTFOUND,
+        //                 "User does not exist.");
 
-       //             args.performedByName = $"{user.model.FirstName} {user.model.LastName}";
-       //         // Map if coordinates provided
-       //         var coordinates = string.IsNullOrWhiteSpace(request.CoordinatesJson)
-       //? null
-       //: JsonSerializer.Deserialize<List<FarmCoordinateDto>>(
-       //    request.CoordinatesJson);
+        //             args.performedByName = $"{user.model.FirstName} {user.model.LastName}";
+        //         // Map if coordinates provided
+        //         var coordinates = string.IsNullOrWhiteSpace(request.CoordinatesJson)
+        //? null
+        //: JsonSerializer.Deserialize<List<FarmCoordinateDto>>(
+        //    request.CoordinatesJson);
 
 
-       //         var mapFarmRequest = new MapFarmRequest
-       //         {
-       //             AreaSize = request.SizeInHectares,
-       //             OwnershipType = request.OwnershipType,
-       //             FarmName = request.FarmName,
-       //             FarmLocation = request.FarmLocation,
-       //             FarmState = request.FarmState,
-       //             FarmLga = request.FarmLga,
-       //             FarmWard = request.FarmWard,
-       //             BelongToBusinessCode = args.businessCode,
-       //             SizeInHectares=request.SizeInHectares,
-       //             SizeInKm=request.SizeInKm,
-       //             MeasurementMode=request.MeasurementMode,
-       //             OrganizationCode = args.organizationCode,
-       //             Coordinates = coordinates ?? new List<FarmCoordinateDto>()
-       //         };
+        //         var mapFarmRequest = new MapFarmRequest
+        //         {
+        //             AreaSize = request.SizeInHectares,
+        //             OwnershipType = request.OwnershipType,
+        //             FarmName = request.FarmName,
+        //             FarmLocation = request.FarmLocation,
+        //             FarmState = request.FarmState,
+        //             FarmLga = request.FarmLga,
+        //             FarmWard = request.FarmWard,
+        //             BelongToBusinessCode = args.businessCode,
+        //             SizeInHectares=request.SizeInHectares,
+        //             SizeInKm=request.SizeInKm,
+        //             MeasurementMode=request.MeasurementMode,
+        //             OrganizationCode = args.organizationCode,
+        //             Coordinates = coordinates ?? new List<FarmCoordinateDto>()
+        //         };
 
-       //         //  Create or update farm
-       //         var farm = await _farmRepo.GetOrCreateDraftAsync(mapFarmRequest, args);
+        //         //  Create or update farm
+        //         var farm = await _farmRepo.GetOrCreateDraftAsync(mapFarmRequest, args);
 
-       //         if (coordinates?.Any() == true)
-       //         {
-       //             mapFarmRequest.Coordinates = coordinates;
-       //             await _farmRepo.MapFarmAsync(
-       //                 mapFarmRequest, args);
-       //         }
+        //         if (coordinates?.Any() == true)
+        //         {
+        //             mapFarmRequest.Coordinates = coordinates;
+        //             await _farmRepo.MapFarmAsync(
+        //                 mapFarmRequest, args);
+        //         }
 
-       //         if (request.Documents?.Any() == true)
-       //         {
-       //             if (request.DocumentTypes == null ||
-       //                 request.Documents.Count != request.DocumentTypes.Count)
-       //             {
-       //                 throw new BaseException(
-       //                     ExceptionType.BAD_REQUEST,
-       //                     "Each document must have a corresponding document type.");
-       //             }
+        //         if (request.Documents?.Any() == true)
+        //         {
+        //             if (request.DocumentTypes == null ||
+        //                 request.Documents.Count != request.DocumentTypes.Count)
+        //             {
+        //                 throw new BaseException(
+        //                     ExceptionType.BAD_REQUEST,
+        //                     "Each document must have a corresponding document type.");
+        //             }
 
-       //             for (int i = 0; i < request.Documents.Count; i++)
-       //             {
-       //                 var file = request.Documents[i];
-       //                 var documentType = request.DocumentTypes[i];
+        //             for (int i = 0; i < request.Documents.Count; i++)
+        //             {
+        //                 var file = request.Documents[i];
+        //                 var documentType = request.DocumentTypes[i];
 
-       //                 // Upload file
-       //                 var documentUrl = await _aWSRekognitionManager
-       //                     .UploadFileAsync(file, $"farm-{farm.Id}");
+        //                 // Upload file
+        //                 var documentUrl = await _aWSRekognitionManager
+        //                     .UploadFileAsync(file, $"farm-{farm.Id}");
 
-       //                 var documentDto = new FarmLandDocumentDto
-       //                 {
-       //                     DocumentType = documentType,
-       //                     DocumentUrl = documentUrl,
-       //                     DocumentTitle = file.FileName
-       //                 };
+        //                 var documentDto = new FarmLandDocumentDto
+        //                 {
+        //                     DocumentType = documentType,
+        //                     DocumentUrl = documentUrl,
+        //                     DocumentTitle = file.FileName
+        //                 };
 
-       //                 args.farmId = farm.Id;
-       //                 args.googleDriveDocumentId = documentUrl;
+        //                 args.farmId = farm.Id;
+        //                 args.googleDriveDocumentId = documentUrl;
 
-       //                 await _farmRepo.AttachSingleDocumentsAsync(
-       //                     documentDto,
-       //                     args);
-       //             }
-       //         }
+        //                 await _farmRepo.AttachSingleDocumentsAsync(
+        //                     documentDto,
+        //                     args);
+        //             }
+        //         }
 
-       //         return farm.Id;
-       //     }
-       //     catch (BaseException)
-       //     {
-       //         throw;
-       //     }
-       //     catch (Exception ex)
-       //     {
-       //         _log.LogError(ex, "Create Farm failed unexpectedly");
-       //         throw new BaseException(
-       //             ExceptionType.INTERNAL_SERVER_ERROR,
-       //            !string.IsNullOrEmpty(ex.Message)? ex.Message:  "Unable to submit farm data");
-       //     }
-       // }
+        //         return farm.Id;
+        //     }
+        //     catch (BaseException)
+        //     {
+        //         throw;
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         _log.LogError(ex, "Create Farm failed unexpectedly");
+        //         throw new BaseException(
+        //             ExceptionType.INTERNAL_SERVER_ERROR,
+        //            !string.IsNullOrEmpty(ex.Message)? ex.Message:  "Unable to submit farm data");
+        //     }
+        // }
 
         public async Task<long> SubmitFarmAsync(SubmitFarmRequest request, FarmMappingArgs args)
         {
