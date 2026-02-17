@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public DateTimeOffset DateAdded { get; set; }
             public string AddedBy { get; set; }
             public string MappingStatus { get; set; }
-            public DateTimeOffset CapturedOn { get; set; }
+            public DateTimeOffset? CapturedOn { get; set; }
             public string CapturedBy { get; set; }
             public string Accuracy { get; set; }
             public List<FarmLandDocumentDto> Documents { get; set; }
@@ -60,7 +60,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public double AreaUnit { get; set; } // e.g., hectares, acres
             public string MeasurementMode { get; set; } // e.g., GPS, Manual
             public double DistanceCovered { get; set; } // in meters
-            public DateTimeOffset MeasurementDate { get; set; }
+            public DateTimeOffset? MeasurementDate { get; set; }
         }
         public class FarmListRespopnseObject
         {

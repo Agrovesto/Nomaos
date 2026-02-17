@@ -2,6 +2,9 @@
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
+using Core.Models.Payment;
+using Google.Apis.Drive.v3.Data;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
@@ -10,23 +13,34 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
+using JsonSerializer = System.Text.Json.JsonSerializer;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
-
-
-    public class MTNMomo : IGenericWalletService
+   public interface IMTNMomo 
     {
-        //    private readonly IHttpService _httpService;
-        //    private readonly ILogger<MTNMomo> _log;
-        //    public MTNMomo(ILogger<MTNMomo> log, IHttpService httpService)
-        //    {
+        Task<WalletResponseService<MomoPreApprovalResponse>> GetPreApproval(
+        MomoPreApprovalRequest request,
+        WalletProviderParameterModel[] parameters,
+        string env);
+        Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletResponseService<bool>> RequestDirectDebitApproval(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env);
+    }
 
-        //        _httpService = httpService;
+    public class MTNMomo : IGenericWalletService, IMTNMomo
+    {
+        private readonly IHttpService _httpService;
+        private readonly ILogger<MTNMomo> _log;
+        private readonly IConfiguration _configuration;
+        public MTNMomo(ILogger<MTNMomo> log, IHttpService httpService, IConfiguration configuration)
+        {
 
-        //        _log = log;
-        //    }
+            _httpService = httpService;
+            _configuration = configuration;
+            _log = log;
+        }
         //    private HttpRequestMessage CreateRequest(
         //   HttpMethod method,
         //   string url,
@@ -51,68 +65,66 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         //        return request;
         //    }
 
-        //    public async Task<CafeOneParams> RetrieveParams(WalletProviderParameterModel[] parameters, string Env)
-        //    {
-        //        var response = new CafeOneParams();
+        public async Task<ProviderParams> RetrieveParams(WalletProviderParameterModel[] parameters, string Env)
+        {
+            var response = new ProviderParams();
 
-        //        var _params = parameters.ToDictionary(x => x.Key);
+            var _params = parameters.ToDictionary(x => x.Key);
 
-        //        response.Url = _params["url"].Value;
-        //        response.SecretKey = _params["secretkey"].Value;
-        //        response.PublicKey = _params["publickey"].Value;
-        //        response.OrganizationId = _params["organizationId"].Value;
-        //        response.OwnerId = _params["ownerId"].Value;
-        //        response.Email = _params["email"].Value;
-        //        response.Password = _params["password"].Value;
-        //        response.accountNumber = _params["accountNumber"].Value;
-        //        response.customerTypeId = _params["customerTypeId"].Value;
-        //        response.countryId = _params["countryId"].Value;
-        //        response.currencyId = _params["currencyId"].Value;
-        //        response.currency = _params["currency"].Value;
-        //        response.debitdirection = _params["debitdirection"].Value;
-        //        response.creditdirection = _params["creditdirection"].Value;
-        //        response.productCredit = _params["productCredit"].Value;
-        //        response.productDebit = _params["productDebit"].Value;
-        //        response.payoutUrl = _params["payoutUrl"].Value;
+            response.BaseUrl = _params["BaseUrl"].Value;
+            response.SubscriptionApiKey = _params["ApiKey"].Value;
+            response.SubscriptionKey = _params["SubscriptionKey"].Value;
+            response.UserName = _params["UserName"].Value;
+            response.TargetEnvironment = _params["TargetEnvironment"].Value;
 
 
-        //        return response;
+            return response;
 
-        //    }
+        }
+        private string BasicAuthHeader(string username, string password)
+        {
+            var authString = $"{username}:{password}";
+            var authBytes = Encoding.UTF8.GetBytes(authString);
+            return Convert.ToBase64String(authBytes);
+        }
+        private async Task<MomoAuthResponse> GetProviderToken(ProviderParams @params, string authToken)
+        {
+            var headers = new Dictionary<string, string>
+                {
+                    { "Authorization",  $"Basic {authToken}"},
+                    { "Ocp-Apim-Subscription-Key", @params.SubscriptionKey },
+                    { "X-Target-Environment", @params.TargetEnvironment }
+                };
+            try
+            {
+                //var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
+                var request = await _httpService.Post($"{@params.BaseUrl}/collection/token", null, headers);
+                var readResponse = await request.Content.ReadAsStringAsync();
+                request.EnsureSuccessStatusCode();
 
-        //    private async Task<CafeOneAuthResponse> GetProviderToken(string url, string email, string password, string key)
-        //    {
-        //        var headers = new Dictionary<string, string>
-        //        {
-        //            { "x-api-key",  $"Bearer {key}"}
-        //        };
-        //        var model = new
-        //        {
-        //            email = email,
-        //            password = password
-        //        };
-        //        try
-        //        {
-        //            var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
-        //            var request = await _httpService.Post($"{url}/auth/login", content, headers);
-        //            var readResponse = await request.Content.ReadAsStringAsync();
-        //            request.EnsureSuccessStatusCode();
+                var response = JsonConvert.DeserializeObject<MomoAuthResponse>(readResponse);
 
-        //            var response = JsonConvert.DeserializeObject<Core.Models.Common.CafeOnWalletResponse<CafeOneAuthResponse>>(readResponse);
+                return response;
 
 
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                return null;
+            }
 
-        //            return response.Data;
+        }
 
-
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-        //            return null;
-        //        }
-
-        //    }
+        private static Dictionary<string, string> GenerateHeader(ProviderParams @params, string BearerToken)
+        {
+            return new Dictionary<string, string>
+                {
+                    { "Authorization",  $"Bearer  {BearerToken}"},
+                    { "Ocp-Apim-Subscription-Key", @params.SubscriptionKey },
+                    { "X-Target-Environment", @params.TargetEnvironment }
+                };
+        }
 
         //    public async Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest req)
         //    {
@@ -214,29 +226,329 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 COMMIT
 
          * */
-        public Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request)
+        public async Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env)
         {
-            throw new NotImplementedException();
+            var @params = await RetrieveParams(parameters, env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            try
+            {
+
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", request.Reference);
+
+                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/requesttopay/{request.Reference}", headers);
+                var response = await sendrequest.Content.ReadAsStringAsync();
+
+
+                var momoResponse = JsonSerializer.Deserialize<MomoPaymentStatusResponse>(response,
+         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (momoResponse == null)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Failed("Invalid response from provider");
+
+
+                if (sendrequest.IsSuccessStatusCode)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Success(momoResponse);
+
+                return WalletResponseService<MomoPaymentStatusResponse>.Failed("RequestToPay failed");
+
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+
+
         }
 
-        public Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request)
+        public async Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            var @params = await RetrieveParams(parameters, Env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            var callbackUrl = _configuration["CallbackUrl"];
+            try
+            {
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", request.Reference);
+                headers.Add("X-Callback-Url", callbackUrl);
+
+                var body = new
+                {
+                    amount = request.Amount,
+                    currency = request.Currency,
+                    externalId = request.Reference,
+                    payer = new
+                    {
+                        partyIdType = "MSISDN",
+                        partyId = request.AccountNumber
+                    },          
+                    payerMessage = request.Message,
+                    payeeNote = request.Message,
+
+                };
+                var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+
+                var sendRequest = await _httpService.Post(
+    $"{@params.BaseUrl}/collection/v1_0/requesttopay",
+    content,
+    headers);
+
+                if (sendRequest.IsSuccessStatusCode)
+                {
+                    var paymentResponse = new PaymentResponse
+                    {
+                        Status = sendRequest.StatusCode.ToString(),
+                        Reference = request.Reference
+                    };
+
+                    return WalletResponseService<PaymentResponse>.Success(paymentResponse);
+                }
+
+                else
+                {
+                    var errorMessage = $"Request failed with status code {sendRequest.StatusCode} ({sendRequest.ReasonPhrase})";
+                    return WalletResponseService<PaymentResponse>.Failed(errorMessage, (int)sendRequest.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+
         }
 
-        public Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request)
+        public async Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
+
             throw new NotImplementedException();
+        
+           
         }
 
-        public Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference)
+        public async Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            var @params = await RetrieveParams(parameters, Env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.DisbursementApiKey);
+            var callbackUrl = _configuration["CallbackUrl"];
+            try
+            {
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", request.Reference);
+                headers.Add("X-Callback-Url", callbackUrl);
+
+                var body = new
+                {
+                    amount = request.Amount,
+                    currency = request.Currency,
+                    externalId = request.Reference,
+                    payee = new
+                    {
+                        partyIdType = "MSISDN",
+                        partyId = request.AccountNumber
+                    },
+                    payerMessage = request.Message,
+                    payeeNote = request.Message,
+
+                };
+                var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+
+                var sendRequest = await _httpService.Post(
+    $"{@params.BaseUrl}/disbursement/v1_0/transfer",
+    content,
+    headers);
+
+                if (sendRequest.IsSuccessStatusCode)
+                {
+                    var paymentResponse = new PaymentResponse
+                    {
+                        Status = sendRequest.StatusCode.ToString(),
+                        Reference = request.Reference
+                    };
+
+                    return WalletResponseService<PaymentResponse>.Success(paymentResponse);
+                }
+
+                else
+                {
+                    var errorMessage = $"Request failed with status code {sendRequest.StatusCode} ({sendRequest.ReasonPhrase})";
+                    return WalletResponseService<PaymentResponse>.Failed(errorMessage, (int)sendRequest.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
         }
 
-        public Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber)
+        public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            var @params = await RetrieveParams(parameters, Env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            try
+            {
+
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", reference);
+                var request = await _httpService.Get($"{@params.BaseUrl}/collection/v2_0/payment/{reference}", headers);
+                var response = await request.Content.ReadAsStringAsync();
+
+                var momoResponse = JsonSerializer.Deserialize<MomoPaymentStatusDto>(response,
+          new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (momoResponse == null)
+                    return WalletResponseService<PaymentStatusResponse>.Failed("Invalid response from provider");
+
+
+                var genericResponse = new PaymentStatusResponse
+                {
+                    Status = momoResponse.Status,
+                    Message = GetStatusMessage(momoResponse.Status),
+                    Reference = momoResponse.ReferenceId,
+                    TransactionId = momoResponse.FinancialTransactionId
+                };
+
+                if (request.IsSuccessStatusCode)
+                    return WalletResponseService<PaymentStatusResponse>.Success(genericResponse);
+
+                return WalletResponseService<PaymentStatusResponse>.Failed(genericResponse.Message);
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<PaymentStatusResponse>.Failed(ex.Message, 500);
+            }
+        }
+
+        public async Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber, WalletProviderParameterModel[] parameters, string Env)
+        {
+            var @params = await RetrieveParams(parameters, Env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            try
+            {
+               
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+
+                var request = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/accountholder/msisdn/{accountNumber}/active", headers);
+                var response = await request.Content.ReadAsStringAsync();
+
+
+                if (request.IsSuccessStatusCode)
+                    return WalletResponseService<bool>.Success(true);
+
+                return WalletResponseService<bool>.Failed("User MoMo wallet Account not active");
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<bool>.Failed(ex.Message, 500);
+            }
+        }
+
+        public async Task<WalletResponseService<MomoPreApprovalResponse>> GetPreApproval(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env)
+        {
+            var @params = await RetrieveParams(parameters, env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            try
+            {
+
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+
+                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/preapprovals/msisdn/{request.MSISDN}", headers);
+                var response = await sendrequest.Content.ReadAsStringAsync();
+
+
+                var momoResponse = JsonSerializer.Deserialize<MomoPreApprovalResponse>(response,
+         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (momoResponse == null)
+                    return WalletResponseService<MomoPreApprovalResponse>.Failed("Invalid response from provider");
+
+
+                if (sendrequest.IsSuccessStatusCode)
+                    return WalletResponseService<MomoPreApprovalResponse>.Success(momoResponse);
+
+                return WalletResponseService<MomoPreApprovalResponse>.Failed("PreApproval failed");
+
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+
+
+        }
+        public async Task<WalletResponseService<bool>> RequestDirectDebitApproval(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env)
+        {
+            var @params = await RetrieveParams(parameters, env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            var callbackUrl = _configuration["CallbackUrl"];
+            try
+            {
+                var token = await GetProviderToken(@params, basicAuth);
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", request.Reference);
+                headers.Add("X-Callback-Url", $"{callbackUrl}/mtnmomo");
+
+                var body = new
+                {
+                    payer =  new 
+                    {
+                       partyIdType="MSISDN",
+                       partyId = request.MSISDN
+                    },
+                  payerCurrency= request.Currency,
+                  payerMessage = request.Message,
+                    validityTime = ((int)TimeSpan.FromMinutes(60).TotalSeconds).ToString(),
+
+            };
+                var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
+
+                var sendRequest = await _httpService.Post(
+    $"{@params.BaseUrl}/collection/v2_0/preapproval",
+    content,
+    headers);
+
+                if (sendRequest.IsSuccessStatusCode)
+                {
+                    return WalletResponseService<bool>.Success(true);
+                }
+                else
+                {
+                    var errorMessage = $"Request failed with status code {sendRequest.StatusCode} ({sendRequest.ReasonPhrase})";
+                    return WalletResponseService<bool>.Failed(errorMessage, (int)sendRequest.StatusCode);
+                }
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+        }
+        private string GetStatusMessage(string status)
+        {
+            return status switch
+            {
+                "SUCCESSFUL" => "Transaction successful",
+                "PENDING" => "Transaction pending",
+                "FAILED" => "Transaction failed",
+                _ => "Unknown status"
+            };
         }
     }
 }

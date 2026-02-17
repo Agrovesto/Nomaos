@@ -10,6 +10,16 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class WalletQueryParams
+    {
+        public string? businessCode { get; set; }
+        public string? UserId { get; set; }
+        public string? organizationCode { get; set; }
+        public long Id { get; set; }
+        public string? env { get; set; }
+        public string? WalletProviderCode { get; set; }
+
+    }
     public class TransactionQueryParams
     {
         public int PageNumber { get; set; } = 1;
