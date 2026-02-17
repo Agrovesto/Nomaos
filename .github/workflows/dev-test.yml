@@ -45,7 +45,7 @@ jobs:
           name: api-release
           path: publish
 
-deploy-staging:
+deploy:
   needs: build-and-test
   runs-on: ubuntu-latest
   if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
