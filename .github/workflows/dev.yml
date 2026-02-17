@@ -1,326 +1,326 @@
-name: CI/CD Deploy Agrovesto.Backend.API
-on:
-  push:
-    branches:
-      - staging
-  pull_request:
-    branches:
-      - staging
+# name: CI/CD Deploy Agrovesto.Backend.API
+# on:
+#   push:
+#     branches:
+#       - staging
+#   pull_request:
+#     branches:
+#       - staging
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}
+#   cancel-in-progress: true
 
-jobs:
-  # ------------------------------------------------------------------
-  # 1. Build & Test (runs on PRs and pushes)
-  # ------------------------------------------------------------------
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+# jobs:
+#   # ------------------------------------------------------------------
+#   # 1. Build & Test (runs on PRs and pushes)
+#   # ------------------------------------------------------------------
+#   build-and-test:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v4
 
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
+#       - name: Setup .NET 8
+#         uses: actions/setup-dotnet@v4
+#         with:
+#           dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore
+#       - name: Restore
+#         run: dotnet restore
 
-      - name: Build
-        run: dotnet build -c Release --no-restore
+#       - name: Build
+#         run: dotnet build -c Release --no-restore
 
-      # # Notify on PR
-      # - name: Notify Slack - PR Build Success
-      #   if: github.event_name == 'pull_request' && success()
-      #   uses: slackapi/slack-github-action@v1.26.0
-      #   with:
-      #     payload: |
-      #       {
-      #         "text": "✅ PR Build Successful",
-      #         "blocks": [
-      #           {
-      #             "type": "header",
-      #             "text": {
-      #               "type": "plain_text",
-      #               "text": "✅ Pull Request Build Successful"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "fields": [
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Repository:*\n${{ github.repository }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Branch:*\n${{ github.head_ref }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Author:*\n${{ github.actor }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
-      #               }
-      #             ]
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Commit:*\n${{ github.event.pull_request.title }}"
-      #             }
-      #           }
-      #         ]
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#       # # Notify on PR
+#       # - name: Notify Slack - PR Build Success
+#       #   if: github.event_name == 'pull_request' && success()
+#       #   uses: slackapi/slack-github-action@v1.26.0
+#       #   with:
+#       #     payload: |
+#       #       {
+#       #         "text": "✅ PR Build Successful",
+#       #         "blocks": [
+#       #           {
+#       #             "type": "header",
+#       #             "text": {
+#       #               "type": "plain_text",
+#       #               "text": "✅ Pull Request Build Successful"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "fields": [
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Repository:*\n${{ github.repository }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Branch:*\n${{ github.head_ref }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Author:*\n${{ github.actor }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
+#       #               }
+#       #             ]
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Commit:*\n${{ github.event.pull_request.title }}"
+#       #             }
+#       #           }
+#       #         ]
+#       #       }
+#       #   env:
+#       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      # - name: Notify Slack - PR Build Failure
-      #   if: github.event_name == 'pull_request' && failure()
-      #   uses: slackapi/slack-github-action@v1.26.0
-      #   with:
-      #     payload: |
-      #       {
-      #         "text": "❌ PR Build Failed",
-      #         "blocks": [
-      #           {
-      #             "type": "header",
-      #             "text": {
-      #               "type": "plain_text",
-      #               "text": "❌ Pull Request Build Failed"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "fields": [
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Repository:*\n${{ github.repository }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Branch:*\n${{ github.head_ref }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Author:*\n${{ github.actor }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
-      #               }
-      #             ]
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Action:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
-      #             }
-      #           }
-      #         ]
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#       # - name: Notify Slack - PR Build Failure
+#       #   if: github.event_name == 'pull_request' && failure()
+#       #   uses: slackapi/slack-github-action@v1.26.0
+#       #   with:
+#       #     payload: |
+#       #       {
+#       #         "text": "❌ PR Build Failed",
+#       #         "blocks": [
+#       #           {
+#       #             "type": "header",
+#       #             "text": {
+#       #               "type": "plain_text",
+#       #               "text": "❌ Pull Request Build Failed"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "fields": [
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Repository:*\n${{ github.repository }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Branch:*\n${{ github.head_ref }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Author:*\n${{ github.actor }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
+#       #               }
+#       #             ]
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Action:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
+#       #             }
+#       #           }
+#       #         ]
+#       #       }
+#       #   env:
+#       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-  # ------------------------------------------------------------------
-  # 2. Deploy to Staging (only on push to staging)
-  # ------------------------------------------------------------------
-  deploy-staging:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-    steps:
-      - uses: actions/checkout@v4
+#   # ------------------------------------------------------------------
+#   # 2. Deploy to Staging (only on push to staging)
+#   # ------------------------------------------------------------------
+#   deploy-staging:
+#     needs: build-and-test
+#     runs-on: ubuntu-latest
+#     if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+#     steps:
+#       - uses: actions/checkout@v4
 
-      # # Notify deployment start
-      # - name: Notify Slack - Deployment Starting
-      #   uses: slackapi/slack-github-action@v1.26.0
-      #   with:
-      #     payload: |
-      #       {
-      #         "text": "🚀 Deployment Starting",
-      #         "blocks": [
-      #           {
-      #             "type": "header",
-      #             "text": {
-      #               "type": "plain_text",
-      #               "text": "🚀 Staging Deployment Starting"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "fields": [
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Repository:*\n${{ github.repository }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Branch:*\n${{ github.ref_name }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Deployed by:*\n${{ github.actor }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Environment:*\nStaging"
-      #               }
-      #             ]
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-      #             }
-      #           }
-      #         ]
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#       # # Notify deployment start
+#       # - name: Notify Slack - Deployment Starting
+#       #   uses: slackapi/slack-github-action@v1.26.0
+#       #   with:
+#       #     payload: |
+#       #       {
+#       #         "text": "🚀 Deployment Starting",
+#       #         "blocks": [
+#       #           {
+#       #             "type": "header",
+#       #             "text": {
+#       #               "type": "plain_text",
+#       #               "text": "🚀 Staging Deployment Starting"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "fields": [
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Repository:*\n${{ github.repository }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Branch:*\n${{ github.ref_name }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Deployed by:*\n${{ github.actor }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Environment:*\nStaging"
+#       #               }
+#       #             ]
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
+#       #             }
+#       #           }
+#       #         ]
+#       #       }
+#       #   env:
+#       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      - name: Install rsync (sometimes missing)
-        run: sudo apt-get update && sudo apt-get install -y rsync
+#       - name: Install rsync (sometimes missing)
+#         run: sudo apt-get update && sudo apt-get install -y rsync
 
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+#       - name: Setup SSH Agent
+#         uses: webfactory/ssh-agent@v0.9.0
+#         with:
+#           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
 
-      - name: Add EC2 host to known_hosts (with retry + timeout)
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          for i in {1..5}; do
-            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
-            sleep 5
-          done
+#       - name: Add EC2 host to known_hosts (with retry + timeout)
+#         run: |
+#           mkdir -p ~/.ssh
+#           chmod 700 ~/.ssh
+#           for i in {1..5}; do
+#             echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
+#             ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
+#             sleep 5
+#           done
 
-      - name: Deploy source code + run deploy script
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
+#       - name: Deploy source code + run deploy script
+#         run: |
+#           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+#           rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
   
-      - name: Execute deployment script
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
+#       - name: Execute deployment script
+#         run: |
+#           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
 
-      # # Notify deployment success
-      # - name: Notify Slack - Deployment Success
-      #   if: success()
-      #   uses: slackapi/slack-github-action@v1.26.0
-      #   with:
-      #     payload: |
-      #       {
-      #         "text": "✅ Deployment Successful",
-      #         "blocks": [
-      #           {
-      #             "type": "header",
-      #             "text": {
-      #               "type": "plain_text",
-      #               "text": "✅ Staging Deployment Successful"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "fields": [
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Repository:*\n${{ github.repository }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Branch:*\n${{ github.ref_name }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Deployed by:*\n${{ github.actor }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Environment:*\nStaging"
-      #               }
-      #             ]
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>"
-      #             }
-      #           }
-      #         ]
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#       # # Notify deployment success
+#       # - name: Notify Slack - Deployment Success
+#       #   if: success()
+#       #   uses: slackapi/slack-github-action@v1.26.0
+#       #   with:
+#       #     payload: |
+#       #       {
+#       #         "text": "✅ Deployment Successful",
+#       #         "blocks": [
+#       #           {
+#       #             "type": "header",
+#       #             "text": {
+#       #               "type": "plain_text",
+#       #               "text": "✅ Staging Deployment Successful"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "fields": [
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Repository:*\n${{ github.repository }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Branch:*\n${{ github.ref_name }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Deployed by:*\n${{ github.actor }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Environment:*\nStaging"
+#       #               }
+#       #             ]
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Workflow:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Workflow Run>"
+#       #             }
+#       #           }
+#       #         ]
+#       #       }
+#       #   env:
+#       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      # # Notify deployment failure
-      # - name: Notify Slack - Deployment Failure
-      #   if: failure()
-      #   uses: slackapi/slack-github-action@v1.26.0
-      #   with:
-      #     payload: |
-      #       {
-      #         "text": "❌ Deployment Failed",
-      #         "blocks": [
-      #           {
-      #             "type": "header",
-      #             "text": {
-      #               "type": "plain_text",
-      #               "text": "❌ Staging Deployment Failed"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "fields": [
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Repository:*\n${{ github.repository }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Branch:*\n${{ github.ref_name }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Deployed by:*\n${{ github.actor }}"
-      #               },
-      #               {
-      #                 "type": "mrkdwn",
-      #                 "text": "*Environment:*\nStaging"
-      #               }
-      #             ]
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
-      #             }
-      #           },
-      #           {
-      #             "type": "section",
-      #             "text": {
-      #               "type": "mrkdwn",
-      #               "text": "*Action Required:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
-      #             }
-      #           }
-      #         ]
-      #       }
-      #   env:
-      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+#       # # Notify deployment failure
+#       # - name: Notify Slack - Deployment Failure
+#       #   if: failure()
+#       #   uses: slackapi/slack-github-action@v1.26.0
+#       #   with:
+#       #     payload: |
+#       #       {
+#       #         "text": "❌ Deployment Failed",
+#       #         "blocks": [
+#       #           {
+#       #             "type": "header",
+#       #             "text": {
+#       #               "type": "plain_text",
+#       #               "text": "❌ Staging Deployment Failed"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "fields": [
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Repository:*\n${{ github.repository }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Branch:*\n${{ github.ref_name }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Deployed by:*\n${{ github.actor }}"
+#       #               },
+#       #               {
+#       #                 "type": "mrkdwn",
+#       #                 "text": "*Environment:*\nStaging"
+#       #               }
+#       #             ]
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Commit:*\n<${{ github.event.head_commit.url }}|${{ github.event.head_commit.message }}>"
+#       #             }
+#       #           },
+#       #           {
+#       #             "type": "section",
+#       #             "text": {
+#       #               "type": "mrkdwn",
+#       #               "text": "*Action Required:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
+#       #             }
+#       #           }
+#       #         ]
+#       #       }
+#       #   env:
+#       #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
