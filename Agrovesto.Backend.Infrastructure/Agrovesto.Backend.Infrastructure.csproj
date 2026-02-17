@@ -14,7 +14,6 @@
     <Folder Include="V2\Core\Billing\" />
     <Folder Include="V2\Core\Audit\" />
     <Folder Include="V2\Core\Tenancy\" />
-    <Folder Include="V2\Internal\" />
     <Folder Include="V2\Public\MandE\" />
     <Folder Include="V2\Public\Financing\" />
     <Folder Include="V2\Public\KYC\" />

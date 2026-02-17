@@ -21,8 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return provider switch
             {
-                WalletProviderType.Momo =>
-                    _serviceProvider.GetRequiredService<MTNMomo>(),
+                WalletProviderType.Momo => _serviceProvider.GetRequiredService<MTNMomo>(),
               //  WalletProviderType.FCMB =>
               //_serviceProvider.GetRequiredService<FCMBWalletService>(),
 
