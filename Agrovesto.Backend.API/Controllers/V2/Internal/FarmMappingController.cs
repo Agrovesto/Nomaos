@@ -57,7 +57,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
 
 
-
+                query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
                 var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAnAgent(query);
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
