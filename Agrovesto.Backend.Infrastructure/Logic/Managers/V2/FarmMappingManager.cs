@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IFarmMappingManager
     {
+        Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args);
         Task<FarmDetailsResponse> FetchFarmDetails(FarmMappingArgs args);
         Task<List<FarmListRespopnseObject>> FetchFarmsByFarmer(FarmMappingArgs args);
 
@@ -41,11 +42,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IBusinessRepository _businessRepository;
         private readonly IFarmerRepository _farmerRepository;
         private readonly IOnboardingRepository _onboardingRepository;
+        private readonly IAgentRepository _agentRepository;
         public FarmMappingManager(IFarmMappingRepository farmMappingRepository,
             IAWSRekognitionManager aWSRekognitionManager, 
             IBusinessRepository businessRepository, 
             IFarmerRepository farmerRepository,
             IOnboardingRepository onboardingRepository,
+                IAgentRepository agentRepository,
             ILogger<FarmMappingManager> log)
         {
             _farmRepo = farmMappingRepository;
@@ -54,6 +57,76 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _farmerRepository = farmerRepository;
             _onboardingRepository = onboardingRepository;
             _log = log;
+            _agentRepository = agentRepository;
+        }
+        public async Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args)
+        {
+            try
+            { //get business code
+                if (string.IsNullOrEmpty(args.businessCode))
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Business code is required.");
+
+                // ------------------ Fetch business ------------------
+                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                    ?? throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Business does not exist.");
+
+                var agentId = await _agentRepository.GetAgentDetailByUserId(args.userId) 
+                    ?? throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Agent details not found.");
+
+                args.agentId = agentId.Id;
+                var fetchFarms = await _farmRepo.FetchAllFarmsByFarmersBelongingToAnAgent(args);
+                if(fetchFarms == null)
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Farm does not exist.");
+                var farms = fetchFarms.Select(fetchFarm =>
+                {
+                    string verificationStatus;
+
+                    if (fetchFarm.FarmLandDocuments == null || !fetchFarm.FarmLandDocuments.Any())
+                    {
+                        verificationStatus = "Not Uploaded";
+                    }
+                    else if (!fetchFarm.IsDocumentVerified)
+                    {
+                        verificationStatus = "Partial";
+                    }
+                    else
+                    {
+                        verificationStatus = "Completed";
+                    }
+
+                    return new FarmListRespopnseObject
+                    {
+                        DateAdded = fetchFarm.CreatedAt,
+                        MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
+                        DocumentStatus = verificationStatus,
+                        LandSize = fetchFarm.AreaSize,
+                        FarmId = fetchFarm.Id,
+                    };
+                }).ToList();
+
+
+
+                return farms;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Create Farm failed unexpectedly");
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                   !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
+            }
         }
         public async Task<List<FarmListRespopnseObject>> FetchFarmsByFarmer(FarmMappingArgs args)
         {
