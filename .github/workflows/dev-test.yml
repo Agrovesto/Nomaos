@@ -13,8 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
 
     steps:
       - name: Checkout
@@ -39,32 +40,15 @@ jobs:
       - name: Build
         run: dotnet build -c Release --no-restore
 
-      - name: Publish (self-contained)
+      # 🔥 RECOMMENDED: framework-dependent (smaller + faster)
+      - name: Publish
         run: |
           dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
             -c Release \
             -r linux-x64 \
-            --self-contained true \
+            --self-contained false \
             /p:PublishTrimmed=false \
             -o publish
-
-      #- name: Upload artifact
-      #  uses: actions/upload-artifact@v4
-      #  with:
-       #   name: api-release
-        #  path: publish
-
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
-
-    steps:
- #     - name: Download artifact
-    #    uses: actions/download-artifact@v4
-   #     with:
-       #  # name: api-release
-      #    path: release
 
       - name: Install rsync
         run: |
@@ -82,18 +66,18 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
 
+      - name: Prepare remote directory
+        run: |
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "sudo mkdir -p /var/www/Agrovesto.Backend.API/incoming && \
+             sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
+
       - name: Sync release to EC2
         run: |
-          set -e
-
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "sudo mkdir -p /var/www/Agrovesto.Backend.API/incoming && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-
-          rsync -az --delete --omit-dir-times --no-perms release/ \
+          rsync -az --delete --omit-dir-times --no-perms publish/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/incoming/
 
       - name: Execute deployment script
         run: |
-          set -e
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "sudo bash /var/www/Agrovesto.Backend.API/staging.sh"
