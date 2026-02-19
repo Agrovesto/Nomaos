@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -27,14 +28,17 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly IBusinessRepository _businessRepository;
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IWalletProviderRepository _providerRepo;
+        private readonly IUserWalletRepository _userWalletRepository;
         public NomaOSWalletService(IBusinessRepository businessRepository, 
             IOnboardingRepository onboardingRepository,
+            IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory)
         {
             _factory = factory;
             _providerRepo = providerRepo;
             _businessRepository = businessRepository;
             _onboardingRepository = onboardingRepository;
+            _userWalletRepository = userWalletRepository;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env)
         {
@@ -49,45 +53,69 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
         public async Task<(bool status, string message)> CreateWallet(WalletQueryParams args)
         {
+            /**
+             * 
+             * 1. Validate Business
+2. Validate User
+3. Get Provider Service (Factory)
+4. Provider validates account
+5. If success → Create wallet
+6. Return unified response
+
+             **/
             try
             {
-                // 1. Validate business
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
                 if (business == null)
                     return (false, $"Business with code {args.businessCode} does not exist");
 
-                // 2. Validate user
                 var getUserCred = await _onboardingRepository.GetUserProfile(args.UserId);
                 if (getUserCred == null)
                     return (false, "User not found");
 
                 var userModel = getUserCred;
 
+                var providerType = args.WalletProviderCode.ToEnum<WalletProviderType>();
+                var providerService = _factory.GetService(providerType);
+
                 var providerParams = await RetrieveParams(args.WalletProviderCode, args.env);
-                var provderEnum = args.WalletProviderCode.ToEnum<WalletProviderType>();
+               
 
-                var service = _factory.GetService(provderEnum);
+                var validationResponse = await providerService.ValidateAccountAsync(userModel.Phone, providerParams, args.env);
 
-                //for momo wallet
-                var validateOrCreateWallet = await service.ValidateAccountAsync(userModel.Phone, providerParams, args.env);
-                
-                if (validateOrCreateWallet !=null && validateOrCreateWallet.Data)
+                if (validationResponse == null || !validationResponse.IsSucess)
                 {
-                    //call userwallet repository to check if wallet exists for user and provider, if exist, update it, if not create
-                    return (true, "Wallet already exists");
-
+                    return (false, validationResponse?.Message ?? "Account validation failed");
                 }
-                return (false, "Wallet does not exist and creation process is not implemented yet");
-                // 6. Process wallet creation based on provider
-                //return provderEnum switch
-                //{
-                //    WalletProviderType.Momo:
-                //    await service.RequestDirectDebitApproval(request, parameters, env);
 
-                //    Providers.FCMBWallet => await HandleFcmbWalletCreation(userModel.UserId, args, walletRequest, providerParams),
-                //    Providers.SterlingWallet => (false, "SterlingWallet provider not implemented yet"),
-                //    _ => await HandleFcmbWalletCreation(userModel.UserId, args, walletRequest, providerParams) // fallback
-                //};
+                var walletNumber = validationResponse.Data?.WalletNumber;
+
+                if (string.IsNullOrEmpty(walletNumber))
+                    return (false, "Provider did not return a valid wallet number");
+
+                var wallet = new UserWalletModel
+                {
+                    UserId = args.UserId,
+                    WalletBalance = 0,
+                    IsDefault = args.IsDefault,
+                    WalletNumber = walletNumber,
+                    Currency = providerParams
+                .FirstOrDefault(x => x.Key == "Currency")?.Value ?? "NGN",
+                    WalletProviderId = providerParams
+                .Select(x => x.ProviderId)
+                .FirstOrDefault()
+                };
+
+                  await _userWalletRepository.CreateUserWallet(wallet, new UserWalletParams
+                    {
+                        businessCode=args.businessCode,
+                        Env= args.env,
+                        UserId= args.UserId,
+                    });
+
+
+
+                return (true, "Wallet created successfully");
             }
             catch (Exception ex)
             {
@@ -127,5 +155,6 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
             return $"{firstName}.{lastName}@{domain}";
         }
+
     }
 }
