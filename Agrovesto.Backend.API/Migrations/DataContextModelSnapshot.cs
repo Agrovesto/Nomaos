@@ -3759,6 +3759,10 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("AddedOn")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("BelongToBusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -3867,6 +3871,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("TransactionReference")
+                        .IsUnique();
 
                     b.HasIndex("UserWalletId");
 
