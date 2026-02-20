@@ -25,7 +25,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env);
 
         // Validate user account
-        Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<AccountValidationResponse>> ValidateAccountAsync(string accountNumber, WalletProviderParameterModel[] parameters, string Env);
     }
 
 }

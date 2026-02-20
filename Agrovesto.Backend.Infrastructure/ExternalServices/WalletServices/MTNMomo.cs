@@ -429,28 +429,60 @@ COMMIT
             }
         }
 
-        public async Task<WalletResponseService<bool>> ValidateAccountAsync(string accountNumber, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<AccountValidationResponse>>
+            ValidateAccountAsync(
+                string accountNumber,
+                WalletProviderParameterModel[] parameters,
+                string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+
             try
             {
-               
                 var token = await GetProviderToken(@params, basicAuth);
                 var headers = GenerateHeader(@params, token.AccessToken);
 
-                var request = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/accountholder/msisdn/{accountNumber}/active", headers);
-                var response = await request.Content.ReadAsStringAsync();
+                var httpResponse = await _httpService.Get(
+                    $"{@params.BaseUrl}/collection/v1_0/accountholder/msisdn/{accountNumber}/active",
+                    headers);
 
+                if (httpResponse.IsSuccessStatusCode)
+                {
+                    return WalletResponseService<AccountValidationResponse>.Success(
+                        new AccountValidationResponse
+                        {
+                            AccountName = null,
+                            WalletNumber = accountNumber
+                        },
+                        "Account is active"
+                    );
+                }
 
-                if (request.IsSuccessStatusCode)
-                    return WalletResponseService<bool>.Success(true);
+                if (httpResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    return WalletResponseService<AccountValidationResponse>.Failed(
+                        "Wallet account not found or not active",
+                        404);
+                }
 
-                return WalletResponseService<bool>.Failed("User MoMo wallet Account not active");
+                var errorContent = await httpResponse.Content.ReadAsStringAsync();
+
+                return WalletResponseService<AccountValidationResponse>.Failed(
+                    $"Provider error: {httpResponse.StatusCode} - {errorContent}",
+                    (int)httpResponse.StatusCode);
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<AccountValidationResponse>.Failed(
+                    "Unable to reach MTN MoMo service: " + ex.Message,
+                    503);
             }
             catch (Exception ex)
             {
-                return WalletResponseService<bool>.Failed(ex.Message, 500);
+                return WalletResponseService<AccountValidationResponse>.Failed(
+                    ex.Message,
+                    500);
             }
         }
 

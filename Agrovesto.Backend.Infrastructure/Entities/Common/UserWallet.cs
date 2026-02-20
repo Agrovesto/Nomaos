@@ -31,9 +31,12 @@ public bool IsDefault { get; set; } = false;
         [Timestamp]
         public byte[] RowVersion { get; set; }
         public ICollection<UserWalletTransactions> UserWalletTransactions { get; set; } = new HashSet<UserWalletTransactions>();
-        public bool IsDeleted { get; set; }
+        public bool IsDeleted { get; set; } = false;
+        public string BelongToBusinessCode { get; set; }
 
     }
+    
+    [Index(nameof(TransactionReference), IsUnique = true)]
     public class UserWalletTransactions
     {
         [Key]
@@ -54,6 +57,7 @@ public bool IsDefault { get; set; } = false;
         public WalletTransactionStatus WalletTransactionStatus {  get; set; }
         [Required]
         [MaxLength(50)]
+
         public string TransactionReference { get; set; } // unique transaction reference
         public decimal BalanceBefore { get; set; }
         public decimal BalanceAfter { get; set; }
