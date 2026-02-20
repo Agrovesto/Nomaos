@@ -6,9 +6,16 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
+    public class AccountValidationResponse
+    {
+        public string WalletNumber { get; set; }
+        public string AccountName { get; set; } // optional
+    }
+
     public class WalletResponseService<T>
     {
         public int StatusCode { get; set; }
+        public bool IsSucess { get; set; } 
         public string Status { get; set; } // Success, Failed, Pending
         public string Message { get; set; }
         public T Data { get; set; }
@@ -17,10 +24,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
+                IsSucess = true,
                 StatusCode = code,
                 Status = "Success",
                 Message = message,
                 Data = data
+
             };
         }
 
@@ -28,6 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
+                IsSucess= true,
                 StatusCode = code,
                 Status = "Pending",
                 Message = message,
@@ -39,6 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
+                IsSucess = false,
                 StatusCode = code,
                 Status = "Failed",
                 Message = message,

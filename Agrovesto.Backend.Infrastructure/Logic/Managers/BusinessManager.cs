@@ -1252,7 +1252,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                   ?? throw new Exception("Business does not exist");
 
                     args.UserId ??= business.UserId;
-                    var cooperative = await _cooperativeRepository.GetCooperativeDetailByUserId(args.UserId) ?? throw new Exception("Could not find user");
+                    var cooperative = await _cooperativeRepository.GetMembershipDetailByUserId(args.UserId) ?? throw new Exception("Could not find user");
                     var changeRole = await _authenticationRepository.ChangeUserRole(args.UserId, args.RoleName);
                     changeRole.model.Lga = cooperative.Lga;
                     changeRole.model.State = cooperative.State;
@@ -2064,7 +2064,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<MemberShipModel> GetCooperativeDetailByUserId(string userId)
         {
 
-            return await _cooperativeRepository.GetCooperativeDetailByUserId(userId);
+            return await _cooperativeRepository.GetMembershipDetailByUserId(userId);
         }
         public async Task<AgentModel> GetAgentDetailByUserId(string userId)
         {
@@ -2079,7 +2079,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                var cooperative = await _cooperativeRepository.GetCooperativeDetailByUserId(userId);
+                var cooperative = await _cooperativeRepository.GetMembershipDetailByUserId(userId);
 
                 if (cooperative == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 

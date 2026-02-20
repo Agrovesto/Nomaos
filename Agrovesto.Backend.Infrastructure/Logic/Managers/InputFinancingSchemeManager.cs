@@ -201,7 +201,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             MemberShipModel coopRepo = new MemberShipModel();
             if (request.SubscribedBy == "Cooperative")
             {
-                 coopRepo = await _cooperativeRepository.GetCooperativeDetailByUserId(request.SubscriberUserId);
+                 coopRepo = await _cooperativeRepository.GetMembershipDetailByUserId(request.SubscriberUserId);
                 if (coopRepo == null)
                     return ResponseDto.Failure("Cooperative Detail not found");
 

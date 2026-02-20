@@ -18,7 +18,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string? env { get; set; }
         public string? WalletProviderCode { get; set; }
-
+        public bool IsDefault { get; set; }
     }
     public class TransactionQueryParams
     {
