@@ -258,8 +258,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 {
                     foreach (var doc in farms.Documents)
                     {
-                        if (!string.IsNullOrEmpty(doc.DocumentUrl))
+                        if (!string.IsNullOrWhiteSpace(doc.DocumentUrl))
                         {
+                            //const string prefix = "farm-";
+
+                            //var actualDocumentId = doc.DocumentUrl.StartsWith(prefix)
+                            //    ? doc.DocumentUrl.Substring(prefix.Length)
+                            //    : doc.DocumentUrl;
+
                             doc.DocumentUrl = await _aWSRekognitionManager
                                 .GetImageUrlAsync(doc.DocumentUrl);
                         }
