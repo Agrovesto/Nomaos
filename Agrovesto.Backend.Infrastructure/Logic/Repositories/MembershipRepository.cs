@@ -254,7 +254,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return (true, entity.Map());
         }
 
-        public async Task<MemberShipModel> GetCooperativeDetailByUserId(string userId)
+        public async Task<MemberShipModel> GetMembershipDetailByUserId(string userId)
         {
             var cooperative = await _context.MemberShips.Where(x => x.UserId == userId).FirstOrDefaultAsync();
             if (cooperative == null)
