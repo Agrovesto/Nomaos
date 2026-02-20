@@ -46,16 +46,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 var currentRole = CurrentUserRole;
-                if (query.farmerId <= 0)
-                {
-
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "Farmer Id is required.",
-                        Succeeded = false
-                    });
-                }
-
+              
 
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
                 var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAnAgent(query);
