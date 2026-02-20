@@ -101,41 +101,98 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return farm;
         }
         public async Task AttachSingleDocumentsAsync(
-
-      FarmLandDocumentDto document,
-       FarmMappingArgs args)
+    FarmLandDocumentDto document,
+    FarmMappingArgs args)
         {
             var farmExists = await _context.Farms
                 .AnyAsync(f => f.Id == args.farmId);
 
             if (!farmExists)
-                throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Farm not found.");
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NO_RECORD_FOUND,
+                    "Farm not found.");
 
-            var entities = new FarmLandDocument
+            var documentTypeEnum = document.DocumentType.ToEnum<FarmLandDocumentType>();
+
+            var existingDocument = await _context.FarmLandDocuments
+                .FirstOrDefaultAsync(d =>
+                    d.FarmId == args.farmId &&
+                    d.DocumentType == documentTypeEnum);
+
+            if (existingDocument != null)
             {
-                FarmId = args.farmId,
-                DocumentType = document.DocumentType.ToEnum<FarmLandDocumentType>(),
-                DocumentId = args.googleDriveDocumentId,
-                DocumentUrl = document.DocumentUrl,
-                DocumentTitle = document.DocumentTitle,
-                UploadedOn = DateTimeOffset.UtcNow,
-                IsVerified = false,
+                existingDocument.DocumentId = document.DocumentUrl;
+                existingDocument.DocumentUrl = document.DocumentUrl;
+                existingDocument.DocumentTitle = document.DocumentTitle;
+                existingDocument.UploadedOn = DateTimeOffset.UtcNow;
+                existingDocument.IsVerified = false;
 
-            };
+                _context.FarmLandDocuments.Update(existingDocument);
+            }
+            else
+            {
+                var entity = new FarmLandDocument
+                {
+                    FarmId = args.farmId,
+                    DocumentType = documentTypeEnum,
+                    DocumentId = document.DocumentUrl,
+                    DocumentUrl = document.DocumentUrl,
+                    DocumentTitle = document.DocumentTitle,
+                    UploadedOn = DateTimeOffset.UtcNow,
+                    IsVerified = false
+                };
 
-            await _context.FarmLandDocuments.AddAsync(entities);
+                await _context.FarmLandDocuments.AddAsync(entity);
+            }
+
             _context.FarmMappingAuditTrails.Add(
-       new FarmMappingAuditTrail
-       {
-           FarmId = args.farmId,
-           Action = "DocumentUploaded",
-           PerformedByUserId = args.performedByUserId,
-           PerformedByName = args.performedByName,
-           Remarks = $"{document.DocumentType} uploaded"
-       });
+                new FarmMappingAuditTrail
+                {
+                    FarmId = args.farmId,
+                    Action = existingDocument != null ? "DocumentUpdated" : "DocumentUploaded",
+                    PerformedByUserId = args.performedByUserId,
+                    PerformedByName = args.performedByName,
+                    Remarks = $"{document.DocumentType} {(existingDocument != null ? "updated" : "uploaded")}"
+                });
 
             await _context.SaveChangesAsync();
         }
+        //  public async Task AttachSingleDocumentsAsync(
+
+        //FarmLandDocumentDto document,
+        // FarmMappingArgs args)
+        //  {
+        //      var farmExists = await _context.Farms
+        //          .AnyAsync(f => f.Id == args.farmId);
+
+        //      if (!farmExists)
+        //          throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Farm not found.");
+
+        //      var entities = new FarmLandDocument
+        //      {
+        //          FarmId = args.farmId,
+        //          DocumentType = document.DocumentType.ToEnum<FarmLandDocumentType>(),
+        //          DocumentId = document.DocumentUrl,
+        //          DocumentUrl = document.DocumentUrl,
+        //          DocumentTitle = document.DocumentTitle,
+        //          UploadedOn = DateTimeOffset.UtcNow,
+        //          IsVerified = false,
+
+        //      };
+
+        //      await _context.FarmLandDocuments.AddAsync(entities);
+        //      _context.FarmMappingAuditTrails.Add(
+        // new FarmMappingAuditTrail
+        // {
+        //     FarmId = args.farmId,
+        //     Action = "DocumentUploaded",
+        //     PerformedByUserId = args.performedByUserId,
+        //     PerformedByName = args.performedByName,
+        //     Remarks = $"{document.DocumentType} uploaded"
+        // });
+
+        //      await _context.SaveChangesAsync();
+        //  }
 
         public async Task AttachDocumentsAsync(
       
