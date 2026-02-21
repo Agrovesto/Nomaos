@@ -141,7 +141,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-                ResolveUserContext(args);
+               // ResolveUserContext(args);
                 if (CurrentUserId != null && CurrentUserRole != args.userType)
                 {
                     await EnrichArgsByRoleAsync(args);

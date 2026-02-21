@@ -467,7 +467,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         var documentType = request.DocumentTypes[i];
 
                         // Upload to S3
-                        var documentUrl = await _aWSRekognitionManager.UploadFileAsync(file, $"farm-{farm.Id}");
+                        var documentUrl = await _aWSRekognitionManager.UploadFileAsync(file, $"farm-{farm.Id}-{documentType}");
 
                         var documentDto = new FarmLandDocumentDto
                         {

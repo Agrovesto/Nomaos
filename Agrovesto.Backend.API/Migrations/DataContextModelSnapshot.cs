@@ -3760,17 +3760,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("BelongToBusinessCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDefault")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsDeleted")
@@ -3784,7 +3782,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("UserId")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal>("WalletBalance")
                         .HasColumnType("decimal(18,2)");
@@ -3807,6 +3806,47 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("UserWallets");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletContext", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContextReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ContextType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("UserWalletId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserWalletId");
+
+                    b.HasIndex("UserId", "ContextType", "ContextReferenceId")
+                        .IsUnique()
+                        .HasFilter("[ContextReferenceId] IS NOT NULL");
+
+                    b.ToTable("UserWalletContexts");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletTransactions", b =>
                 {
                     b.Property<long>("Id")
@@ -3822,26 +3862,28 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("ChargedTo")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("ChargedToId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal>("CommissionFee")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Currency")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(3)
+                        .HasColumnType("nvarchar(3)");
 
                     b.Property<string>("ProviderReference")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("ProviderStatus")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<decimal>("TransactionAmount")
                         .HasColumnType("decimal(18,2)");
@@ -3850,8 +3892,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("TransactionDescription")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal>("TransactionFee")
                         .HasColumnType("decimal(18,2)");
@@ -3864,11 +3906,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("UserWalletId")
                         .HasColumnType("bigint");
 
-                    b.Property<int>("WalletTransactionStatus")
-                        .HasColumnType("int");
+                    b.Property<string>("WalletTransactionStatus")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("WalletTransactionType")
-                        .HasColumnType("int");
+                    b.Property<string>("WalletTransactionType")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -3878,57 +3922,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("UserWalletId");
 
                     b.ToTable("UserWalletTransactions");
-                });
-
-            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Wallet", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("AccountName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("AccountNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("BankName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTimeOffset>("CreatedOn")
-                        .HasColumnType("datetimeoffset");
-
-                    b.Property<string>("OrganizationCode")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PhoneNumber")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("WalletBalance")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("WalletCode")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("WalletProviderCode")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Wallets");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>
@@ -3988,47 +3981,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("WalletProviderProviderId");
 
                     b.ToTable("WalletProviderParameters");
-                });
-
-            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletTransaction", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("BalanceAfter")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Reference")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("TransactionType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<long>("WalletId")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("WalletTransactions");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Ward", b =>
@@ -4548,18 +4500,29 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", "WalletProvider")
                         .WithMany()
                         .HasForeignKey("WalletProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("WalletProvider");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletContext", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", "UserWallet")
+                        .WithMany("WalletContexts")
+                        .HasForeignKey("UserWalletId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("UserWallet");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletTransactions", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", "UserWallet")
-                        .WithMany("UserWalletTransactions")
+                        .WithMany("Transactions")
                         .HasForeignKey("UserWalletId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("UserWallet");
@@ -4767,7 +4730,9 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", b =>
                 {
-                    b.Navigation("UserWalletTransactions");
+                    b.Navigation("Transactions");
+
+                    b.Navigation("WalletContexts");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>
