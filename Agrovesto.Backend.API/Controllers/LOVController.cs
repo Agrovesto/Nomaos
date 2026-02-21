@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
@@ -24,7 +25,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IFlutterwaveService _flutterwaveService;
         private readonly IGoogleDriveService _googleDriveService;
         private readonly IIdentityVerificationManager _verificationManager;
-
+        private readonly IWalletProviderManager _walletProvider;
         private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly INotificationService _smsService;
 
@@ -35,7 +36,7 @@ namespace Agrovesto.Backend.API.Controllers
             INigeriaStateImporterService nigeriaStateImporterService,
              IFlutterwaveService flutterwaveService,
              IWebHostEnvironment hostingEnvironment, INotificationService smsService,
-             ISettingsManager settingsManager)
+             ISettingsManager settingsManager, IWalletProviderManager walletProvider)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
@@ -45,6 +46,7 @@ namespace Agrovesto.Backend.API.Controllers
             _googleDriveService = googleDriveService;
             _verificationManager = verificationManager;
             _settingsManager = settingsManager;
+            _walletProvider = walletProvider;
         }
 
         [HttpGet("membership-types")]
@@ -292,6 +294,39 @@ namespace Agrovesto.Backend.API.Controllers
                 Data = request != null ? request : null
             });
         }
+
+
+        [HttpGet("wallet/provider")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetAllWallets()
+        {
+            var result = await _walletProvider.GetAll();
+            return Ok(new Response<WalletProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+        [HttpGet("wallet/provider/{id}")]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
+
+        public async Task<IActionResult> GetById(long id)
+        {
+            var result = await _walletProvider.Get(id);
+            return Ok(new Response<WalletProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
         //[AllowAnonymous]
         //[HttpGet("banks")]
         //[ProducesResponseType(typeof(Response<object>), 200)]
@@ -313,45 +348,45 @@ namespace Agrovesto.Backend.API.Controllers
 
         //}
 
-/**
-        [AllowAnonymous]
-        [HttpGet("states")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(400)]
-        [ProducesResponseType(422)]
-        [ProducesResponseType(500)]
-        public async Task<IActionResult> States()
-        {
+        /**
+                [AllowAnonymous]
+                [HttpGet("states")]
+                [ProducesResponseType(200)]
+                [ProducesResponseType(400)]
+                [ProducesResponseType(422)]
+                [ProducesResponseType(500)]
+                public async Task<IActionResult> States()
+                {
 
-            var request = State_CityService.GetStates().GetAwaiter().GetResult();
-            return Ok(new Response<List<States>>()
-            {
-                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
-                Succeeded = request != null,
-                Message = request == null ? "Failed" : "Success",
-                Data = request.Count > 0 ? request : null
-            });
-        }
-        [AllowAnonymous]
-        [HttpGet("cities/{code}")]
-        [ProducesResponseType(200)]
-        [ProducesResponseType(400)]
-        [ProducesResponseType(422)]
-        [ProducesResponseType(500)]
-        public async Task<IActionResult> Cities(string code)
-        {
+                    var request = State_CityService.GetStates().GetAwaiter().GetResult();
+                    return Ok(new Response<List<States>>()
+                    {
+                        Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                        Succeeded = request != null,
+                        Message = request == null ? "Failed" : "Success",
+                        Data = request.Count > 0 ? request : null
+                    });
+                }
+                [AllowAnonymous]
+                [HttpGet("cities/{code}")]
+                [ProducesResponseType(200)]
+                [ProducesResponseType(400)]
+                [ProducesResponseType(422)]
+                [ProducesResponseType(500)]
+                public async Task<IActionResult> Cities(string code)
+                {
 
-            var request = State_CityService.GetCities(code).GetAwaiter().GetResult();
-            return Ok(new Response<List<Cities>>()
-            {
-                Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
-                Succeeded = request != null,
-                Message = request == null ? "Failed" : "Success",
-                Data = request.Count > 0 ? request : null
-            });
-        }
+                    var request = State_CityService.GetCities(code).GetAwaiter().GetResult();
+                    return Ok(new Response<List<Cities>>()
+                    {
+                        Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
+                        Succeeded = request != null,
+                        Message = request == null ? "Failed" : "Success",
+                        Data = request.Count > 0 ? request : null
+                    });
+                }
 
-        **/
+                **/
         //[AllowAnonymous]
         //[HttpGet("userTypes")]
         //[ProducesResponseType(200)]

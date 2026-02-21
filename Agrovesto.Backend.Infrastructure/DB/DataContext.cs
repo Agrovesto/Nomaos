@@ -58,6 +58,82 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<UserWallet>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.WalletProviderId })
+                      .IsUnique();
+
+                entity.Property(x => x.Currency)
+                      .HasMaxLength(3)
+                      .IsRequired();
+
+                entity.Property(x => x.WalletNumber)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(x => x.BelongToBusinessCode)
+                      .HasMaxLength(50);
+
+                entity.HasOne(x => x.WalletProvider)
+                      .WithMany()
+                      .HasForeignKey(x => x.WalletProviderId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<UserWalletContext>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.ContextType, x.ContextReferenceId })
+                      .IsUnique();
+
+                entity.Property(x => x.ContextReferenceId)
+                      .HasMaxLength(100);
+
+                entity.HasOne(x => x.UserWallet)
+                      .WithMany(x => x.WalletContexts)
+                      .HasForeignKey(x => x.UserWalletId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(x => x.ContextType)
+                      .HasConversion<string>();
+            });
+            modelBuilder.Entity<UserWalletTransactions>(entity =>
+            {
+                entity.HasIndex(x => x.TransactionReference)
+                      .IsUnique();
+
+                entity.Property(x => x.TransactionReference)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(x => x.Currency)
+                      .HasMaxLength(3)
+                      .IsRequired();
+
+                entity.Property(x => x.ProviderReference)
+                      .HasMaxLength(100);
+
+                entity.Property(x => x.ProviderStatus)
+                      .HasMaxLength(50);
+
+                entity.Property(x => x.TransactionDescription)
+                      .HasMaxLength(500);
+
+                entity.Property(x => x.ChargedTo)
+                      .HasMaxLength(100);
+
+                entity.Property(x => x.ChargedToId)
+                      .HasMaxLength(100);
+
+                entity.HasOne(x => x.UserWallet)
+                      .WithMany(x => x.Transactions)
+                      .HasForeignKey(x => x.UserWalletId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Property(x => x.WalletTransactionType)
+                      .HasConversion<string>();
+
+                entity.Property(x => x.WalletTransactionStatus)
+                      .HasConversion<string>();
+            });
             modelBuilder.Entity<UserOrganization>()
                 .HasKey(uo => new
                 {
@@ -244,8 +320,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
         public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
-       public DbSet<Wallet> Wallets { get; set; }
-       public DbSet<WalletTransaction> WalletTransactions { get; set; }
+
 
 
         public DbSet<OrganizationBundlePlans> OrganizationBundlePlans { get; set; }
@@ -267,6 +342,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<KYCDetails> KYCDetails { get; set; }
         public DbSet<UserWallet> UserWallets { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
+        public DbSet<UserWalletContext> UserWalletContexts { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>
