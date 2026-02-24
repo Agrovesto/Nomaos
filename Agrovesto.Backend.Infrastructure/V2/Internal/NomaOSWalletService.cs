@@ -25,6 +25,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
     {
         // Define methods that the NomaOSWalletService should implement
         Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
+        Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class NomaOSWalletService : INomaOSWalletService
     {
