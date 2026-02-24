@@ -25,6 +25,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string? businessCode { get; set; }
             public string? organizationCode { get; set; }
             public long farmId { get; set; }
+            public bool ContinueDraft { get; set; } = false;
         }
         public class FarmLandDocumentDto
         {

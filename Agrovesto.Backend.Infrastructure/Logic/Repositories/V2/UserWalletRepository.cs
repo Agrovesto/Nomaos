@@ -1,4 +1,6 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -17,6 +19,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         // Define methods that the UserWalletRepository should implement
         Task<bool> CloseUserWallet(long walletId, string closedByUserId, string reason = "User requested wallet closure");
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
+        Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
+        Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -26,121 +30,153 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context = context;
 
         }
-        public async Task<List<UserWalletModel>> GetUserWallletsByUserId(UserWalletParams args)
+        public  async Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId)
         {
-           var query = await _context.UserWallets
-                .Where(uw => uw.UserId == args.UserId 
-                && uw.BelongToBusinessCode == args.businessCode)
-                .Select(uw => new UserWalletModel
+            return await _context.UserWallets
+                .Where(w =>
+                    w.UserId == args.UserId &&
+                    w.WalletProviderId == providerId &&
+                    !w.IsDeleted &&
+                    w.WalletContexts.Any(c =>
+                        c.ContextType == contextType &&
+                        c.ContextReferenceId == contextReferenceId))
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args)
+        {
+            var wallets = await _context.UserWallets
+                .Where(uw =>
+                    uw.UserId == args.UserId &&
+                    uw.BelongToBusinessCode == args.businessCode &&
+                    !uw.IsDeleted)
+                .Select(uw => new UserWalletResponseModel
                 {
                     Id = uw.Id,
                     UserId = uw.UserId,
                     WalletProviderId = uw.WalletProviderId,
+                    ProviderName = uw.WalletProvider.Name,
+                    WalletNumber = uw.WalletNumber,
                     WalletBalance = uw.WalletBalance,
                     Currency = uw.Currency,
-                    IsDefault = uw.IsDefault,
-                    IsActive= uw.IsActive,
-                    WalletNumber= uw.WalletNumber,
-                    ProviderName= uw.WalletProvider.Name
+                    IsActive = uw.IsActive,
+                    BelongToBusinessCode = uw.BelongToBusinessCode,
+
+                    Contexts = uw.WalletContexts
+                        .Select(c => new UserWalletContextModel
+                        {
+                            ContextType = c.ContextType.ToString(),
+                            ContextReferenceId = c.ContextReferenceId,
+                            IsDefault = c.IsDefault
+                        })
+                        .ToList()
                 })
                 .ToListAsync();
-            return query;
+
+            return wallets;
         }
         public async Task<UserWalletModel> CreateUserWallet(
-        UserWalletModel request,
-        UserWalletParams args)
+       UserWalletModel request,
+       UserWalletParams args)
         {
-            var exists = await _context.UserWallets.AnyAsync(x =>
-        x.UserId == request.UserId &&
-        x.WalletProviderId == request.WalletProviderId &&
-        !x.IsDeleted);
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            if (exists)
-                throw new Exception("Wallet already exists for the same provider");
-
-            using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
+            return await strategy.ExecuteAsync(async () =>
             {
-                if (request.IsDefault)
-                {
-                    var existingDefaults = await _context.UserWallets
-                        .Where(x => x.UserId == request.UserId &&
-                                    x.IsDefault &&
-                                    !x.IsDeleted)
-                        .ToListAsync();
+                var exists = await _context.UserWallets.AnyAsync(x =>
+                    x.UserId == request.UserId &&
+                    x.WalletProviderId == request.WalletProviderId &&
+                    !x.IsDeleted);
 
-                    foreach (var wallet in existingDefaults)
+                if (exists)
+                    throw new Exception("Wallet already exists for the same provider");
+
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var userWallet = new UserWallet
                     {
-                        wallet.IsDefault = false;
-                    }
-
-                    await _context.SaveChangesAsync();
-                }
-
-                var userWallet = new UserWallet
-                {
-                    AddedOn = DateTimeOffset.UtcNow,
-                    UserId = request.UserId,
-                    WalletProviderId = request.WalletProviderId,
-                    WalletBalance = request.WalletBalance,
-                    Currency = request.Currency ?? "NGN",
-                    IsDefault = request.IsDefault,
-                    IsActive = true,
-                    WalletNumber = request.WalletNumber,
-                    BelongToBusinessCode = args.businessCode,
-                    IsDeleted = false
-                };
-
-                _context.UserWallets.Add(userWallet);
-                await _context.SaveChangesAsync();
-       
-                if (request.WalletBalance > 0)
-                {
-                    var walletTransaction = new UserWalletTransactions
-                    {
-                        UserWalletId = userWallet.Id,
-                        WalletTransactionType = WalletTransactionType.Credit,
-                        TransactionAmount = request.WalletBalance,
-                        BalanceBefore = 0,
-                        BalanceAfter = request.WalletBalance,
-                        TransactionDate = DateTimeOffset.UtcNow,
-                        WalletTransactionStatus = WalletTransactionStatus.Successful,
-                        TransactionReference = Guid.NewGuid().ToString(),
-                        Currency = userWallet.Currency,
-                        TransactionDescription = "Opening balance",
-                        ProviderStatus = "SYSTEM",
-                        
+                        AddedOn = DateTimeOffset.UtcNow,
+                        UserId = request.UserId,
+                        WalletProviderId = request.WalletProviderId,
+                        WalletBalance = request.WalletBalance,
+                        Currency = request.Currency ?? "NGN",
+                        IsActive = true,
+                        WalletNumber = request.WalletNumber,
+                        BelongToBusinessCode = args.businessCode,
+                        IsDeleted = false
                     };
 
-                    _context.UserWalletTransactions.Add(walletTransaction);
+                    _context.UserWallets.Add(userWallet);
                     await _context.SaveChangesAsync();
+
+                    // Handle default for context
+                    if (request.SetAsDefaultForContext)
+                    {
+                        var existingDefaults = await _context.UserWalletContexts
+                            .Where(x =>
+                                x.UserId == request.UserId &&
+                                x.ContextType == request.ContextType.ToEnum<WalletContextType>() &&
+                                x.ContextReferenceId == request.ContextReferenceId &&
+                                x.IsDefault)
+                            .ToListAsync();
+
+                        foreach (var context in existingDefaults)
+                        {
+                            context.IsDefault = false;
+                        }
+
+                        await _context.SaveChangesAsync();
+                    }
+
+                    // Create context mapping
+                    var walletContext = new UserWalletContext
+                    {
+                        UserId = request.UserId,
+                        UserWalletId = userWallet.Id,
+                        ContextType = request.ContextType.ToEnum<WalletContextType>(),
+                        ContextReferenceId = request.ContextReferenceId,
+                        IsDefault = request.SetAsDefaultForContext
+                    };
+
+                    _context.UserWalletContexts.Add(walletContext);
+                    await _context.SaveChangesAsync();
+
+                    // Opening balance transaction
+                    if (request.WalletBalance > 0)
+                    {
+                        var walletTransaction = new UserWalletTransactions
+                        {
+                            UserWalletId = userWallet.Id,
+                            WalletTransactionType = WalletTransactionType.Credit,
+                            TransactionAmount = request.WalletBalance,
+                            BalanceBefore = 0,
+                            BalanceAfter = request.WalletBalance,
+                            TransactionDate = DateTimeOffset.UtcNow,
+                            WalletTransactionStatus = WalletTransactionStatus.Successful,
+                            TransactionReference = Guid.NewGuid().ToString(),
+                            Currency = userWallet.Currency,
+                            TransactionDescription = "Opening balance",
+                            ProviderStatus = "SYSTEM",
+                        };
+
+                        _context.UserWalletTransactions.Add(walletTransaction);
+                        await _context.SaveChangesAsync();
+                    }
+
+                    await dbTransaction.CommitAsync();
+
+                    request.Id = userWallet.Id;
+                    return request;
                 }
-
-                await dbTransaction.CommitAsync();
-
-                request.Id = userWallet.Id;
-                return request;
-            }
-            catch (DbUpdateException ex)
-            {
-                await dbTransaction.RollbackAsync();
-
-                // Handle unique constraint (UserId + WalletProviderId)
-                if (ex.InnerException?.Message.Contains("IX_UserWallets_UserId_WalletProviderId") == true)
+                catch
                 {
-                    throw new Exception("Wallet already exists for this provider.");
+                    await dbTransaction.RollbackAsync();
+                    throw;
                 }
-
-                throw new Exception("An error occurred while creating the wallet.");
-            }
-            catch (Exception)
-            {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
+            });
         }
-
         public async Task<bool> CloseUserWallet(
     long walletId,
     string closedByUserId,

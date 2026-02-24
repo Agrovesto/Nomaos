@@ -16,6 +16,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -106,19 +107,23 @@ namespace Agrovesto.Backend.API.Extensions
 
 
 
-            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
-            services.AddScoped<IWalletService, FCMBWalletService>();
-            services.AddScoped<IWalletService, SterlingWalletService>();
-
-            services.AddHttpClient<MTNMomo>();
             //services.AddHttpClient<SterlingWalletService>();
             //services.AddHttpClient<FCMBWalletService>();
             //services.AddHttpClient<CafeOneWalletService>();
             //  services.AddHttpClient<CredoService>();
+            services.AddScoped<IUserWalletRepository, UserWalletRepository>();
+            services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
 
             services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
 
 
+            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IWalletService, SterlingWalletService>();
+            services.AddScoped<MTNMomo>();
+            services.AddScoped<IMTNMomo, MTNMomo>();
+
+            services.AddScoped<IGenericWalletService, MTNMomo>();
         }
     }
 }
