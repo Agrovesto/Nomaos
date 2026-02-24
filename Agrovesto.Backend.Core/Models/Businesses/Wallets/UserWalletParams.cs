@@ -11,6 +11,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
     public class UserWalletParams
     {
         public string businessCode { get; set; }
+        public string? organizationCode { get; set; }
         public string UserId { get; set; }
         public string Env { get; set; }
     }

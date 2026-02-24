@@ -249,51 +249,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return farm;
         }
         public async Task<Farm> GetOrCreateDraftAsync(
-     MapFarmRequest request,
-     FarmMappingArgs args)
+            MapFarmRequest request,
+            FarmMappingArgs args)
         {
-            Farm farm;
-
             if (args.farmId > 0)
             {
-                farm = await _context.Farms.FirstOrDefaultAsync(f =>
-                    f.Id == args.farmId &&
-                    f.FarmerId == args.farmerId);
+                var existingFarm = await _context.Farms
+                    .FirstOrDefaultAsync(f =>
+                        f.Id == args.farmId &&
+                        f.FarmerId == args.farmerId);
 
-                if (farm == null)
+                if (existingFarm == null)
                     throw new BaseException(
                         ExceptionType.NO_RECORD_FOUND,
                         "Farm not found or access denied.");
 
-                farm.Name = request.FarmName;
-                farm.OwnershipType = request.OwnershipType;
-                farm.FarmState = request.FarmState;
-                farm.FarmLga = request.FarmLga;
-                farm.FarmWard = request.FarmWard;
-                farm.FarmLocation = request.FarmLocation;
-                farm.AreaSize = request.AreaSize;
-                farm.PinnedLongitude = request.PinnedLongitude;
-                farm.PinnedLatitude = request.PinnedLatitude;
-                farm.DistanceCovered = request.DistanceCovered;
-                farm.MappingAccuracy = request.MappingAccuracy;
-              
+                UpdateFarmFields(existingFarm, request);
 
                 await _context.SaveChangesAsync();
-                return farm;
+                return existingFarm;
             }
 
-            farm = await _context.Farms
-                .Where(f =>
-                    f.FarmerId == args.farmerId &&
-                    f.MappingStatus == MappingStatus.NotStarted)
-                .OrderByDescending(f => f.CreatedAt)
-                .FirstOrDefaultAsync();
+            if (args.ContinueDraft)
+            {
+                var draftFarm = await _context.Farms
+                    .Where(f =>
+                        f.FarmerId == args.farmerId &&
+                        f.MappingStatus == MappingStatus.NotStarted)
+                    .OrderByDescending(f => f.CreatedAt)
+                    .FirstOrDefaultAsync();
 
-            if (farm != null)
-                return farm;
+                if (draftFarm != null)
+                    return draftFarm;
+            }
 
-          
-            farm = new Farm
+            var newFarm = new Farm
             {
                 Name = request.FarmName,
                 FarmerId = args.farmerId,
@@ -308,22 +298,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 OrganizationCode = args.organizationCode,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = args.performedByUserId,
+                CapturedBy = args.performedByUserId,
                 MappingStatus = MappingStatus.NotStarted,
-                MeasurementMode=request.MeasurementMode,
-                CapturedBy=args.performedByUserId,
-                PinnedLatitude= request.PinnedLatitude,
-                PinnedLongitude= request.PinnedLongitude,
-                MappingAccuracy= request.MappingAccuracy,
-                    DistanceCovered= request.DistanceCovered,
-                    
+                MeasurementMode = request.MeasurementMode,
+                PinnedLatitude = request.PinnedLatitude,
+                PinnedLongitude = request.PinnedLongitude,
+                MappingAccuracy = request.MappingAccuracy,
+                DistanceCovered = request.DistanceCovered
             };
 
-            _context.Farms.Add(farm);
+            _context.Farms.Add(newFarm);
             await _context.SaveChangesAsync();
 
-            return farm;
+            return newFarm;
         }
-
+        private void UpdateFarmFields(Farm farm, MapFarmRequest request)
+        {
+            farm.Name = request.FarmName;
+            farm.OwnershipType = request.OwnershipType;
+            farm.FarmState = request.FarmState;
+            farm.FarmLga = request.FarmLga;
+            farm.FarmWard = request.FarmWard;
+            farm.FarmLocation = request.FarmLocation;
+            farm.LocationDescription = request.FarmLocation;
+            farm.AreaSize = request.AreaSize;
+            farm.PinnedLongitude = request.PinnedLongitude;
+            farm.PinnedLatitude = request.PinnedLatitude;
+            farm.DistanceCovered = request.DistanceCovered;
+            farm.MappingAccuracy = request.MappingAccuracy;
+            farm.MeasurementMode = request.MeasurementMode;
+        }
         public async Task<Farm> GetOrCreateAsync(
         MapFarmRequest request,
         FarmMappingArgs args)
