@@ -273,9 +273,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 return null;
 
             // Fetch wallet sequentially (safe)
-            var wallet = await _context.Wallets
-                .AsNoTracking()
-                .FirstOrDefaultAsync(w => w.UserId == cooperative.UserId);
+            //var wallet = await _context.Wallets
+            //    .AsNoTracking()
+            //    .FirstOrDefaultAsync(w => w.UserId == cooperative.UserId);
 
             // Fetch farmers belonging to this cooperative via FarmerCooperatives
             var farmers = await (
@@ -288,7 +288,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             // Map results
             var response = cooperative.Map();
-            response.Wallet = wallet?.Map();
+            //response.Wallet = wallet?.Map();
             response.Farmers = farmers?.Select(f => f.Map()).ToList() ?? new List<FarmerModel>();
 
             return response;

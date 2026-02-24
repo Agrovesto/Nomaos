@@ -137,7 +137,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                     }
 
                 }
-                string fileKey = $"{keyPrefix}{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+               // string fileKey = $"{keyPrefix}{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+                string fileKey = $"{folderName}{Path.GetExtension(file.FileName)}";
 
                 using (var memoryStream = new MemoryStream(fileBytes))
                 {
