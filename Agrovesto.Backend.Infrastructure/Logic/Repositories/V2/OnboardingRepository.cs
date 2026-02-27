@@ -399,7 +399,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 from fc in _context.FarmerCooperatives
                 join c in _context.MemberShips on fc.CooperativeId equals c.Id
                 where fc.FarmerId == farmer.Id
-                select c
+                select new FarmerMembershipProfileDto
+                {
+                    CooperativeId = c.Id,
+                    CooperativeName = c.Name,
+                    OnboardedBy = fc.OnboardedByUserId,
+                    DateAdded = c.OnBoardedOn,
+                    FullName = $"{c.MembershipLeaderFirstName} {c.MembershipLeaderMiddleName} {c.MembershipLeaderLastName}"
+                }
             ).ToListAsync();
 
             var profile = new FarmerProfileDto
@@ -428,7 +435,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Ward = farmer.Ward,
                     Location = farmer.Location,
                 },
-                CooperativeInformation = cooperatives.Select(c => c.ViewMap()).ToList()
+                CooperativeInformation = cooperatives
             }; 
 
            

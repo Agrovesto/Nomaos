@@ -2148,7 +2148,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<PagedListResponse<List<MemberShipModel>>> GetCooperativesByAgent(string userId,
+        public async Task<PagedListResponse<List<MemberShipResponseModel>>> GetCooperativesByAgent(string userId,
        ListQueryParams query)
         {
             try
@@ -2159,14 +2159,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var cooperative = await _cooperativeRepository.GetCooperativeByAgent(userId, query);
-                if (cooperative == null) return new PagedListResponse<List<MemberShipModel>>
+                if (cooperative == null) return new PagedListResponse<List<MemberShipResponseModel>>
                 {
                     Succeeded = true,
                     Data = null,
                     Count = 0,
                     Message = "No Record Found"
                 };
-                return new PagedListResponse<List<MemberShipModel>>
+                return new PagedListResponse<List<MemberShipResponseModel>>
                 {
                     Succeeded = true,
                     Data = cooperative,

@@ -20,12 +20,81 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private readonly IMembershipManager _membershipManager;
         private readonly IBusinessManager _businessManager;
+        private readonly IOnBoardingManager _onBoardingManager;
         public MembershipController(IHttpContextAccessor httpContextAccessor,
+            IOnBoardingManager onBoardingManager,
             IMembershipManager membershipManager, IBusinessManager businessManager) : base(httpContextAccessor)
         {
+            _onBoardingManager=onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
         }
+        [HttpPost("bulk-onboard")]
+        public async Task<IActionResult> BulkOnboard(
+IFormFile file,
+[FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                args.userType = "Farmer";
+                await EnrichCooperativeAsync(args);
+
+                if (file == null || file.Length == 0)
+                    return BadRequest("Excel file is required.");
+
+
+                using var stream = file.OpenReadStream();
+                var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
         {
@@ -191,6 +260,51 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+
+        [HttpGet("farmer-details")]
+        public async Task<IActionResult> GetFarmerDetails([FromQuery] string? userId)
+        {
+            try
+            { 
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+
+                var profile = await _onBoardingManager.GetFarmerProfile(userId);
+
+                return Ok(new Response<FarmerProfileDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = profile
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&

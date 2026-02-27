@@ -46,6 +46,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string MappingStatus { get; set; }
         public DateTimeOffset DateAdded { get; set; }
         public int TotalMappedFarms { get; set; }
+        public long CooperativeId { get; set; }        // Id of the cooperative
+        public string CooperativeName { get; set; }    // Name of the cooperative
+        public DateTimeOffset DateJoined { get; set; } // Date the farmer joined this cooperative
+        public string OnboardedBy { get; set; }
     }
     public class FarmerMembershipDto
     {
@@ -59,6 +63,32 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public DateTimeOffset DateAdded { get; set; }
         public long TotalFarms { get; set; }
         public double LandSize { get; set; }
+        public long CooperativeId { get; set; }        // Id of the cooperative
+        public string CooperativeName { get; set; }    // Name of the cooperative
+        public DateTimeOffset DateJoined { get; set; } // Date the farmer joined this cooperative
+        public string OnboardedBy { get; set; }
+ 
+        public bool IsLeaderAFarmer { get; set; }
+        public long MemberShipTypeId { get; set; }
+        public string Name { get; set; }
+        public string? MembershipType { get; set; }
+        public string Location { get; set; }
+        public string? Ward { get; set; }
+        public string ContactPerson { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+        public string UserId { get; set; }
+
+        public string Tier { get; set; }
+    }
+    public class FarmerMembershipProfileDto
+    {
+        public string FullName { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
+        public long CooperativeId { get; set; }        // Id of the cooperative
+        public string CooperativeName { get; set; }    // Name of the cooperative
+        public string OnboardedBy { get; set; }
+
     }
 
     public enum FarmerLevel
@@ -144,16 +174,73 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool IsActive { get; set; }
         public DateTimeOffset DateRegistered { get; set; }
     }
+    public class FarmerTransactionDto
+    {
+        public long TransactionId { get; set; }
+        public decimal Amount { get; set; }
+        public decimal BalanceAfter { get; set; }
+        public string TransactionType { get; set; } // e.g., Deposit, Withdrawal
+        public DateTimeOffset Timestamp { get; set; }
+        public string Description { get; set; }
+    }
     public class FarmerProfileDto
     {
        public FarmerProfileLocationDto Location { get; set; }
        public FarmerPersonalInfoDto PersonalInformation { get; set; }    
+       public List<FarmerFarmDto> Farms { get; set; }    
+       public FarmerWalletDto Wallet { get; set; }    
+       public List<FarmerActivityLogDto> ActivityLogs { get; set; }    
 
         // Cooperatives
-       public List<FarmerMembershipModel> CooperativeInformation { get; set; } = new List<FarmerMembershipModel>();
+       public List<FarmerMembershipProfileDto> CooperativeInformation { get; set; } = new List<FarmerMembershipProfileDto>();
+    }
+    public class FarmerWalletDto
+    {
+        public decimal OutStandingInputDebt { get; set; }
+        public decimal NextDuePaymentAmount { get; set; }
+        public DateTimeOffset NextDuePaymentDate { get; set; }
+        public decimal TotalWalletBalance { get; set; }
+        public List<FarmerTransactionDto> Transactions { get; set; } = new List<FarmerTransactionDto>();
+        public List<FarmerInputObligationDto> InputObligations { get; set; } = new List<FarmerInputObligationDto>();
+    }
+    public class FarmerInputObligationDto
+    {
+        public long Id { get; set; }
+        public string InputReference { get; set; }
+        public decimal TotalCost { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal RemainigBalance { get; set; }
+
+        public double RepaymentProgress { get; set; } // e.g., Deposit, Withdrawal
+        
+
+    }
+    public class FarmerActivityLogDto
+    {
+        public DateTimeOffset Timestamp { get; set; }
+        public string Description { get; set; }
+        public string ActivityName { get; set; }
+        public string ActivityType { get; set; } // e.g., FarmUpdate, WalletTransaction, ProfileUpdate
+    }
+    public class FarmerFarmDto
+    {
+        public long FarmId { get; set; }
+        public string FarmName { get; set; }
+        public string Location { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public double LandSize { get; set; } // in hectares or acres
+        public string MappingStatus { get; set; }
+        public string DocumentStatus { get; set; }
     }
     public class FarmerMembershipModel
     {
+        public long TotalFarms { get; set; }
+        public double LandSize { get; set; }
+        public long CooperativeId { get; set; }        // Id of the cooperative
+        public string CooperativeName { get; set; }    // Name of the cooperative
+        public DateTimeOffset DateJoined { get; set; } // Date the farmer joined this cooperative
+        public string OnboardedBy { get; set; }
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
         public string Name { get; set; }
