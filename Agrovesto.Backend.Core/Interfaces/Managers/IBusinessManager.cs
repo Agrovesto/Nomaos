@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
     {
         Task<PagedListResponse<List<MemberShipModel>>> GetCooperativesByAgent(string userId,
        ListQueryParams query);
-        Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
+      //  Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
         Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args);
         Task<SubAccountModel> CreateBusinessUser(UserModel model, BusinessRegistrationArgs args);
         Task<BusinessWorkerModel> CreateBusinessWorkerAsync(BusinessWorkerModel bWorker, BusinessRegistrationArgs args);

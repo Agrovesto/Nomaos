@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using Agrovesto.Backend.Core.Models.Market;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -1388,7 +1389,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 ContactPerson = entities.ContactPerson,
-                IsAssignedToAgentId = entities.IsAssignedToAgentId,
+              //  IsAssignedToAgentId = entities.IsAssignedToAgentId,
                 HasbeenAssignedAgent = entities.HasbeenAssignedAgent,
                 Ward = entities.Ward,
                 OrganizationCode = entities.OrganizationCode,
@@ -1422,7 +1423,7 @@ namespace Agrovesto.Backend.Infrastructure
                 MembershipLeaderFirstName= model.MembershipLeaderFirstName,
                 MembershipLeaderLastName=model.MembershipLeaderLastName,
                 MembershipLeaderGender=model.MembershipLeaderGender,
-                IsAssignedToAgentId = model.IsAssignedToAgentId,
+               // IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
                 HasbeenAssignedAgent = model.HasbeenAssignedAgent,
@@ -1692,6 +1693,64 @@ namespace Agrovesto.Backend.Infrastructure
 
         #endregion walletProvider
         #region Business
+
+        public static OrganizationResponseModel ViewOnboardMap(this Organization entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new OrganizationResponseModel
+            {
+                Id = entity.OrganizationId,
+                CACNumber = entity.CACNumber,
+                CompanyAddress = entity.CompanyAddress,
+                CompanyName = entity.CompanyName,
+                CompanyType = entity.CompanyType?.ToString(),
+                ContactEmail = entity.ContactEmail,
+                FirstName = entity.FirstName,
+                LastName = entity.LastName,
+                // StateId = model.StateId,
+                // LgaId = modentityel.LgaId,
+                //FullName = $"{model.FirstName} {model.LastName}",
+                OnboardedOn = entity.OnboardedOn,
+                CompanyEmail = entity.OrganizationEmail,
+                RoleInOrganization = entity.RoleInOrganization,
+                OrganizationPhone = entity.OrganizationPhone,
+                PhoneNumber = entity.PhoneNumber,
+                OrganizationCode = entity.OrganizationCode,
+                UserId = entity.UserId
+            };
+        }
+
+        public static Organization OnboardMap(this OrganizationOnboardingModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new Organization
+            {
+              CACNumber=model.CACNumber,
+              CompanyAddress=model.CompanyAddress,
+              CompanyName=model.CompanyName,
+              CompanyType= model.CompanyType?.ToString(),
+              ContactEmail=model.CompanyEmail,
+              FirstName=model.FirstName,
+              LastName=model.LastName,
+              StateId=model.StateId,
+              LgaId=model.LgaId,
+              FullName= $"{model.FirstName} {model.LastName}" ,
+              OnboardedOn= DateTimeOffset.Now,
+              OrganizationEmail=model.CompanyEmail,
+              RoleInOrganization=model.RoleInOrganization.ToString(),
+              OrganizationPhone=model.OrganizationPhone,
+              PhoneNumber= model.PhoneNumber,
+              
+            };
+        }
         public static Organization Map(this OrganizationModel model)
         {
             if(model == null)
@@ -1702,13 +1761,13 @@ namespace Agrovesto.Backend.Infrastructure
             return new Organization
             {
                 BusinessCode = model.BusinessCode,
-                ContacPerson = model.ContacPerson,
+                FullName = model.ContacPerson,
                 ContactEmail = model.ContactEmail,
                 OrganizationCode = model.OrganizationCode,
-                Location = model.Location,
+                CompanyAddress = model.Location,
                 OrganizationEmail = model.OrganizationEmail,
-                OrganizationName = model.OrganizationName,
-                Contact=model.Contact
+                CompanyName = model.OrganizationName,
+                PhoneNumber=model.Contact
             };
         }
         public static OrganizationModel Map(this Organization entity)
@@ -1720,14 +1779,14 @@ namespace Agrovesto.Backend.Infrastructure
             return new OrganizationModel
             {
                 BusinessCode = entity.BusinessCode,
-                ContacPerson = entity.ContacPerson,
+                ContacPerson = entity.FullName,
                 ContactEmail = entity.ContactEmail,
                 OrganizationCode = entity.OrganizationCode,
-                Location = entity.Location,
+                Location = entity.CompanyAddress,
                 OrganizationEmail = entity.OrganizationEmail,
-                OrganizationName = entity.OrganizationName,
+                OrganizationName = entity.CompanyName,
                 OrganizaionId   = entity.OrganizationId,
-                Contact=entity.Contact
+                Contact=entity.PhoneNumber
             };
         }
         public static Business Map(this BusinessModel model)

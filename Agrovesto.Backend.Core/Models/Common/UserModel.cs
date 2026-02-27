@@ -207,7 +207,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         Trader,
 
         [Description("Organization")]
-        Organization
+        Organization,
+        [Description("ServiceProvider")]
+        ServiceProvider
     }
     public class LoginModel
     {

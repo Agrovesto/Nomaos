@@ -1207,31 +1207,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
-        {
-            var assignAgentToCooperative = new MemberShipModel();
-            var strategy = _context.Database.CreateExecutionStrategy();
+        //public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
+        //{
+        //    var assignAgentToCooperative = new MemberShipModel();
+        //    var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+        //    await strategy.ExecuteAsync(async () =>
+        //    {
+        //        await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
-                try
-                {
-                    assignAgentToCooperative = await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
+        //        try
+        //        {
+        //            assignAgentToCooperative = await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
 
-                    var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-                }
-                catch (Exception ex)
-                {
-                    await dbTransaction.RollbackAsync();
-                    throw new Exception($"{ex.Message}", ex);
-                }
-            });
-            return assignAgentToCooperative;
-        }
+        //            var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
+        //            await _context.SaveChangesAsync();
+        //            await dbTransaction.CommitAsync();
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            await dbTransaction.RollbackAsync();
+        //            throw new Exception($"{ex.Message}", ex);
+        //        }
+        //    });
+        //    return assignAgentToCooperative;
+        //}
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             return await _cooperativeRepository.ViewAgentAssignedToCooperative(cooperativeId);

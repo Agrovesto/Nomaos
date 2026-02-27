@@ -237,7 +237,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 BelongToBusinessCode = args.businessCode,
                 OrganizationCode = args.organizationCode,
                 LocationDescription = request.FarmLocation,
-                AreaSize = request.AreaSize,
+                FarmSize = request.AreaSize,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = args.performedByUserId,
                 MappingStatus = MappingStatus.NotStarted
@@ -293,7 +293,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 FarmWard = request.FarmWard,
                 FarmLocation = request.FarmLocation,
                 LocationDescription = request.FarmLocation,
-                AreaSize = request.AreaSize,
+                FarmSize = request.AreaSize,
                 BelongToBusinessCode = args.businessCode,
                 OrganizationCode = args.organizationCode,
                 CreatedAt = DateTimeOffset.UtcNow,
@@ -321,7 +321,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             farm.FarmWard = request.FarmWard;
             farm.FarmLocation = request.FarmLocation;
             farm.LocationDescription = request.FarmLocation;
-            farm.AreaSize = request.AreaSize;
+            farm.FarmSize = request.AreaSize;
             farm.PinnedLongitude = request.PinnedLongitude;
             farm.PinnedLatitude = request.PinnedLatitude;
             farm.DistanceCovered = request.DistanceCovered;
@@ -355,7 +355,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 LocationDescription = request.FarmLocation,
                // AgentId=args.agentId,
                 CreatedAt= DateTimeOffset.UtcNow,
-                AreaSize=request.AreaSize,
+                FarmSize=request.AreaSize,
                 CreatedBy = args.performedByUserId,
                 MappingStatus = MappingStatus.NotStarted
             };
@@ -419,7 +419,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 farm.MeasurementMode = request.MeasurementMode;
 
                 // Area calculations (geography uses meters²)
-                farm.AreaSize = polygon.Area;
+                farm.FarmSize = polygon.Area;
                 farm.SizeInHectares = polygon.Area / 10_000d;
                 farm.SizeInKm = polygon.Area / 1_000_000d;
                 farm.PinnedLongitude= request.PinnedLongitude;

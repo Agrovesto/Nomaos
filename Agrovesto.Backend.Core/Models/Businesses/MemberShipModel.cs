@@ -65,5 +65,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public WalletModel Wallet { get; set; }
         public string? OnboardedById { get; set; }
         public string Tier { get; set; }
+
+        public List<long> AgentIds { get; set; } //= new List<AgentModel>();
     }
 }
