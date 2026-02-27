@@ -18,7 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     public interface IAgentManager
     {
         Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query);
-        Task<PagedListResponse<List<MemberShipModel>>> GetMembershipsByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<MemberShipResponseModel>>> GetMembershipsByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(ListQueryParams query);
     }
@@ -41,7 +41,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _log = log;
             _cooperativeRepository = cooperativeRepository;
         }
-        public async Task<PagedListResponse<List<MemberShipModel>>> GetMembershipsByAgent(string userId,
+        public async Task<PagedListResponse<List<MemberShipResponseModel>>> GetMembershipsByAgent(string userId,
        ListQueryParams query)
         {
             try
@@ -52,14 +52,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 var cooperative = await _cooperativeRepository.GetCooperativeByAgent(userId, query);
-                if (cooperative == null) return new PagedListResponse<List<MemberShipModel>>
+                if (cooperative == null) return new PagedListResponse<List<MemberShipResponseModel>>
                 {
                     Succeeded = true,
                     Data = null,
                     Count = 0,
                     Message = "No Record Found"
                 };
-                return new PagedListResponse<List<MemberShipModel>>
+                return new PagedListResponse<List<MemberShipResponseModel>>
                 {
                     Succeeded = true,
                     Data = cooperative,

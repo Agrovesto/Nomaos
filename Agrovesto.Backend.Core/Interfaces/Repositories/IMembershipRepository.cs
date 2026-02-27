@@ -19,7 +19,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<(bool status, MemberShipModel data)> CreateCooperative(MemberShipModel data);
         Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data);
         Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args);
-        Task<List<MemberShipModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query);
+        Task<List<MemberShipResponseModel>> GetCooperativeByAgent(string AgentId, ListQueryParams query);
         Task<MemberShipModel> GetCooperativeDetailById(long Id);
         Task<MemberShipModel> GetMembershipDetailByUserId(string userId);
         Task<List<MemberShipModel>> GetCooperatives();

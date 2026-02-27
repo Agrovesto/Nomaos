@@ -1352,6 +1352,7 @@ namespace Agrovesto.Backend.Infrastructure
                 YearsInAgric = model.YearsInAgric
             };
         }
+      
         public static FarmerMembershipModel ViewMap(this MemberShip entities)
         {
             if (entities == null) { return null; }
