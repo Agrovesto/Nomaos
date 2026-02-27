@@ -107,7 +107,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         DateAdded = fetchFarm.CreatedAt,
                         MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
                         DocumentStatus = verificationStatus,
-                        LandSize = fetchFarm.AreaSize,
+                        LandSize = fetchFarm.FarmSize,
                         FarmId = fetchFarm.Id,
                     };
                 }).ToList();
@@ -169,7 +169,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         DateAdded = fetchFarm.CreatedAt,
                         MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
                         DocumentStatus = verificationStatus,
-                        LandSize = fetchFarm.AreaSize,
+                        LandSize = fetchFarm.FarmSize,
                         FarmId = fetchFarm.Id,
                     };
                 }).ToList();
@@ -230,9 +230,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     MeasurementDetails = new LandMeasurementDetails
                     {
-                        AreaUnit = fetchFarms.AreaSize,
+                        AreaUnit = fetchFarms.FarmSize,
                         DistanceCovered = fetchFarms.DistanceCovered,
-                        MeasuredArea = fetchFarms.AreaSize,
+                        MeasuredArea = fetchFarms.FarmSize,
                         MeasurementDate = fetchFarms.MeasurementDate,   
                         MeasurementMode = fetchFarms.MeasurementMode,
                         MappingAccuracy = fetchFarms.MappingAccuracy,

@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Onboarding
@@ -150,6 +151,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
+        public string? LogDescription { get; set; }
+        public string? ActivityName { get; set; }
         public string? Id { get; set; }
         public string? PhoneNumber { get; set; }
         public string? LastName { get; set; }
@@ -236,10 +239,18 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool DisableOtp { get; set; }
         public bool IsDryRun { get; set; }
     }
-
+    public enum OnboardingTypes
+    {
+        Farmer,
+        MemberShip,
+        Agent,
+        Organization,
+        ServiceProvider
+    }
     public class OnBoardingArgs
     {
         public long Id { get; set; }
+        
         public string userType { get; set; }
         public string? UserId { get; set; }
         public string? OnboardedByUserId { get; set; }

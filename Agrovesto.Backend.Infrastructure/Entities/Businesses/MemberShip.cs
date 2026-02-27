@@ -48,14 +48,28 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string BelongToBusinessCode { get; set; }  //which business
 
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
-        public string? IsAssignedToAgentId { get; set; }
+       // public string? IsAssignedToAgentId { get; set; }
         public bool HasbeenAssignedAgent { get; set; }
         public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
         public Tier Tier { get; set; }
         public long MemberShipTypeId { get; set; }
         public MemberShipType MemberShipType { get; set; }
+        public bool IsActive { get; set; } = true;
 
+    }
+    public class MemberShipAgent
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long AgentId { get; set; }
+        public long MemberShipId { get; set; }
+
+        public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
+        public string? OnboardedByUserId { get; set; }
     }
     public enum Tier
     {

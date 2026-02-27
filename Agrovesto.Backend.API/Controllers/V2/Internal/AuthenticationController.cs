@@ -124,21 +124,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                //if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                //{
-                //    args.organizationCode = OrganizationCode;
-                //}
-                //var currentRole = CurrentUserRole;
-
-                //args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-                //if (args.Id == 0 && currentRole == "MemberShip")
-                //{
-                //    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-                //    args.Id = coop.Id;
-                //}
-                //args.OnboardedByUserId = args.UserId;
-
+               
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
                // ResolveUserContext(args);
@@ -312,6 +298,47 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var result = await _onBoardingManager.CreateUserProfile(model, args);
 
                 return Ok(new Response<(bool status, string message)>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("create-organization-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateOrganization(
+    [FromBody] OrganizationOnboardingModel model,
+    [FromQuery] OrganizationOnboardingArgs args)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            try
+            {
+                args.onboardedByUserId = CurrentUserId;
+             
+                var result = await _onBoardingManager.CreateOrganization(model, args);
+
+                return Ok(new Response<OrganizationResponseModel>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
