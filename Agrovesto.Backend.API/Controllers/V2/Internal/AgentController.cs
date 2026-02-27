@@ -42,7 +42,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _agentManager.GetMembershipsByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<MemberShipModel>>()
+                return Ok(new PagedListResponse<List<MemberShipResponseModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,

@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
 {
     public interface IBusinessManager
     {
-        Task<PagedListResponse<List<MemberShipModel>>> GetCooperativesByAgent(string userId,
+        Task<PagedListResponse<List<MemberShipResponseModel>>> GetCooperativesByAgent(string userId,
        ListQueryParams query);
       //  Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
         Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args);
