@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -346,6 +347,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 var existingCooperative = await _context.MemberShips
                     .FirstOrDefaultAsync(x => x.UserId == data.UserId);
 
+                var isModified = false;
                 if (existingCooperative != null)
                 {
                     if (!string.IsNullOrWhiteSpace(data.State))
@@ -386,7 +388,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                     if (!string.IsNullOrWhiteSpace(data.Ward))
                         existingCooperative.Ward = data.Ward;
-
+                    if (data.AgentIds != null)
+                    {
+                        var existingAgents = _context.MemberShipAgents
+                            .Where(fa => fa.MemberShipId == existingCooperative.Id);
+                        _context.MemberShipAgents.RemoveRange(existingAgents);
+                        foreach (var agentId in data.AgentIds.Distinct())
+                        {
+                            await _context.MemberShipAgents.AddAsync(new MemberShipAgent
+                            {
+                                MemberShipId = existingCooperative.Id,
+                                AgentId = agentId,
+                                AssignedOn = DateTimeOffset.Now
+                                
+                            });
+                        }
+                        isModified = true;
+                    }
                     _context.MemberShips.Update(existingCooperative);
                     await _context.SaveChangesAsync();
 
@@ -506,7 +524,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return null;
         }
-        public async Task<List<MemberShipModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
+        public async Task<List<MemberShipResponseModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
         {
             // Base query: cooperatives assigned to this agent via join table
             var cooperativesQuery = from f in _context.MemberShips
@@ -529,7 +547,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
-                .Select(s => new MemberShipModel
+                .Select(s => new MemberShipResponseModel
                 {
                     Id = s.Id,
                     Name = s.Name,
@@ -545,13 +563,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     IsLeaderAFarmer = s.IsLeaderAFarmer,
                     Tier=EnumExtensions.GetDisplayName(s.Tier),
                     MembershipType= s.MemberShipType.Name,
-                    
+                    MembershipLeaderFirstName=s.MembershipLeaderLastName,
+                    MembershipLeaderGender=s.MembershipLeaderGender ,
+                    MembershipLeaderLastName=s.MembershipLeaderLastName,
+                    MembershipLeaderMiddleName=s.MembershipLeaderMiddleName,
+                    Ward=s.Ward,
+                    MemberShipTypeId=s.MemberShipTypeId,
                     // Count farmers via FarmerCooperatives
                     TotalFarmers = _context.FarmerCooperatives.Count(fc => fc.CooperativeId == s.Id)
                 })
                 .ToListAsync();
 
-            return cooperatives.Any() ? cooperatives : new List<MemberShipModel>();
+            return cooperatives.Any() ? cooperatives : new List<MemberShipResponseModel>();
         }
 
       

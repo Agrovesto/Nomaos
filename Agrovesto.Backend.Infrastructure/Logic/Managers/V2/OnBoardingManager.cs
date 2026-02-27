@@ -1323,6 +1323,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 IsLeaderAFarmer = model.IsLeaderAFarmer,
                 Tier = Tier.Tier1.ToString(),
                 OnBoardedOn = dateTime,
+                AgentIds = args.AgentIds?
+  .Where(x => x.HasValue)
+  .Select(x => x.Value)
+  .ToList() ?? new List<long>(),
                 BelongToBusinessCode = args.businessCode,
                 OrganizationCode = args.organizationCode,
                 OnboardedById = args.OnboardedByUserId,
