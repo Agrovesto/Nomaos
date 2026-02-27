@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -24,63 +25,164 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<MemberShipModel> AssignMembershipToAgents(AssignmentArgs args, long membershipId)
+        {
+            if (args.AgentIds == null || !args.AgentIds.Any())
+                return null;
+
+            // Check if the farmer exists
+            var memberShip = await _context.MemberShips
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            if (memberShip == null)
+                return null;
+
+            // Get existing assignments for this farmer
+            var existingAssignments = await _context.MemberShipAgents
+                .Where(fa => fa.MemberShipId == membershipId && args.AgentIds.Contains(fa.AgentId))
+                .Select(fa => fa.AgentId)
+                .ToListAsync();
+
+            // Filter out agents that are already assigned
+
+            var newAgentIds = args.AgentIds
+    .Where(x => x.HasValue)
+    .Select(x => x.Value)
+    .Except(existingAssignments)
+    .ToList();
+
+            // Create new assignments
+            if (newAgentIds.Any())
+            {
+                var newAssignments = newAgentIds.Select(agentId => new MemberShipAgent
+                {
+                    MemberShipId = membershipId,
+                    AgentId = agentId,
+                    AssignedOn = DateTimeOffset.UtcNow,
+                    
+                }).ToList();
+
+                await _context.MemberShipAgents.AddRangeAsync(newAssignments);
+                await _context.SaveChangesAsync();
+            }
+
+            // Reload the farmer with updated data
+            var updatedMembership = await _context.MemberShips
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            return updatedMembership.Map();
+        }
+
 
         public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
         {
-            //  Membership basic info
+            // 1️⃣ Membership Info + Status
             var membership = await _context.MemberShips
-                .Where(c => c.Id == membershipId)
-                .Select(c => new MembershipInfoDto
+                .Where(m => m.Id == membershipId)
+                .Select(m => new MembershipInfoDto
                 {
-                    MembershipId = c.Id,
-                    Name = c.Name,
-                    MembershipType = c.MemberShipType.Name,
-                    Status = "Active",//c. ? "Active" : "Inactive",
-                    DateCreated = c.OnBoardedOn,
-                    Location = c.State
+                    UserId=m.UserId,
+                    MembershipId = m.Id,
+                    Name = m.Name,
+                    MembershipType = m.MemberShipType.Name,
+                    Status = m.IsActive ? "Active" : "Inactive",
+                    DateCreated = m.OnBoardedOn,
+                    Location = m.Location
                 })
                 .FirstOrDefaultAsync();
 
             if (membership == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
 
-            // Farmers under this membership
-            var farmerIds = await _context.FarmerCooperatives
+            // 2️⃣ Farmer IDs Linked to Membership
+            var farmerQuery = _context.FarmerCooperatives
                 .Where(fc => fc.CooperativeId == membershipId)
                 .Select(fc => fc.FarmerId)
-                .Distinct()
+                .Distinct();
+
+            var totalFarmers = await farmerQuery.CountAsync();
+
+            // 3️⃣ Agent Overview
+            var membershipQuery = _context.MemberShipAgents
+               .Where(fc => fc.MemberShipId == membershipId)
+               .Select(fc => fc.AgentId)
+               .Distinct();
+
+            var totalAgents = await membershipQuery.CountAsync();
+
+            // 4️⃣ Farm Overview
+            var farmQuery = _context.Farms
+                .Where(f => farmerQuery.Contains(f.FarmerId));
+
+            var totalFarms = await farmQuery.CountAsync();
+
+            var farmSizeTotal = await farmQuery
+                .SumAsync(f => (double?)f.FarmSizeInSqMetre) ?? 0;
+
+            // 5️⃣ Mapping Progress
+            var mappingStats = await farmQuery
+                .GroupBy(f => f.MappingStatus)
+                .Select(g => new
+                {
+                    Status = g.Key,
+                    Count = g.Count()
+                })
                 .ToListAsync();
 
-            var totalFarmers = farmerIds.Count;
+            var completed = mappingStats
+                .FirstOrDefault(x => x.Status == MappingStatus.Completed)?.Count ?? 0;
 
-            // 3️⃣ Farms under those farmers
-            var farmPlots = await _context.Farms
-                .Where(p => farmerIds.Contains(p.FarmerId))
-                .Select(p => new { p.Id, p.MappingStatus })
-                .ToListAsync();
+            var inProgress = mappingStats
+                .FirstOrDefault(x => x.Status == MappingStatus.InProgress)?.Count ?? 0;
 
-            var totalFarms = farmPlots.Count;
-
-            var completed = farmPlots.Count(p => p.MappingStatus == MappingStatus.Completed);
-            var inProgress = farmPlots.Count(p => p.MappingStatus == MappingStatus.InProgress);
-            var notStarted = farmPlots.Count(p => p.MappingStatus == MappingStatus.NotStarted);
-
-            var farmsMapped = completed;
+            var notStarted = mappingStats
+                .FirstOrDefault(x => x.Status == MappingStatus.NotStarted)?.Count ?? 0;
 
             var mappingPercentage = totalFarms == 0
                 ? 0
-                : (int)Math.Round((double)farmsMapped / totalFarms * 100);
+                : (int)Math.Round((double)completed / totalFarms * 100);
 
-            // 4️⃣ Build DTO
+            var farmerLinkChart = await _context.FarmerCooperatives
+                .Where(fc => fc.CooperativeId == membershipId)
+                .GroupBy(fc => new
+                {
+                    fc.JoinedOn.Year,
+                    fc.JoinedOn.Month
+                })
+                .Select(g => new MonthlyFarmerLinkDto
+                {
+                    Year = g.Key.Year,
+                    Month = g.Key.Month,
+                    FarmerCount = g.Count()
+                })
+                .OrderBy(x => x.Year)
+                .ThenBy(x => x.Month)
+                .ToListAsync();
+
+            var recentActivities = await _context.ActivityLogs
+                .Where(a => a.PerformedByUserId == membership.UserId)
+                .OrderByDescending(a => a.CreatedOn)
+                .Take(5)
+                .Select(a => new ActivityDto
+                {
+                    Description = a.ActivityName,
+                    PerformedBy = a.PerformedByUserId,
+                    Date = a.CreatedOn
+                })
+                .ToListAsync();
+
             return new MembershipDashboardDto
             {
                 Membership = membership,
 
-                Summary = new FarmerSummaryDto
+                Summary = new MemberSummaryDto
                 {
+                    TotalAgents = totalAgents,
                     TotalFarmers = totalFarmers,
                     TotalFarms = totalFarms,
-                    FarmsMapped = farmsMapped,
+                    TotalFarmSize = farmSizeTotal,
+                    FarmsMapped = completed,
                     MappingProgressPercentage = mappingPercentage
                 },
 
@@ -90,9 +192,84 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Completed = completed,
                     InProgress = inProgress,
                     NotStarted = notStarted
-                }
+                },
+
+                FarmerLinkHistogram = farmerLinkChart,
+
+                RecentActivities = recentActivities,
+
+                CanAddFarmer = membership.Status == "Active"
             };
         }
+        /** public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
+         {
+             //  Membership basic info
+             var membership = await _context.MemberShips
+                 .Where(c => c.Id == membershipId)
+                 .Select(c => new MembershipInfoDto
+                 {
+                     MembershipId = c.Id,
+                     Name = c.Name,
+                     MembershipType = c.MemberShipType.Name,
+                     Status = "Active",//c. ? "Active" : "Inactive",
+                     DateCreated = c.OnBoardedOn,
+                     Location = c.State
+                 })
+                 .FirstOrDefaultAsync();
+
+             if (membership == null)
+                 throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+
+             // Farmers under this membership
+             var farmerIds = await _context.FarmerCooperatives
+                 .Where(fc => fc.CooperativeId == membershipId)
+                 .Select(fc => fc.FarmerId)
+                 .Distinct()
+                 .ToListAsync();
+
+             var totalFarmers = farmerIds.Count;
+
+             // 3️⃣ Farms under those farmers
+             var farmPlots = await _context.Farms
+                 .Where(p => farmerIds.Contains(p.FarmerId))
+                 .Select(p => new { p.Id, p.MappingStatus })
+                 .ToListAsync();
+
+             var totalFarms = farmPlots.Count;
+
+             var completed = farmPlots.Count(p => p.MappingStatus == MappingStatus.Completed);
+             var inProgress = farmPlots.Count(p => p.MappingStatus == MappingStatus.InProgress);
+             var notStarted = farmPlots.Count(p => p.MappingStatus == MappingStatus.NotStarted);
+
+             var farmsMapped = completed;
+
+             var mappingPercentage = totalFarms == 0
+                 ? 0
+                 : (int)Math.Round((double)farmsMapped / totalFarms * 100);
+
+             // 4️⃣ Build DTO
+             return new MembershipDashboardDto
+             {
+                 Membership = membership,
+
+                 Summary = new FarmerSummaryDto
+                 {
+                     TotalFarmers = totalFarmers,
+                     TotalFarms = totalFarms,
+                     FarmsMapped = farmsMapped,
+                     MappingProgressPercentage = mappingPercentage
+                 },
+
+                 MappingProgress = new FarmMappingProgressDto
+                 {
+                     TotalFarms = totalFarms,
+                     Completed = completed,
+                     InProgress = inProgress,
+                     NotStarted = notStarted
+                 }
+             };
+         }
+       **/
         public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
         {
             var type = await _context.MemberShipTypes
@@ -204,8 +381,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!string.IsNullOrWhiteSpace(data.Name))
                         existingCooperative.Name = data.Name;
 
-                    if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
-                        existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
+                    //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
+                    //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
 
                     if (!string.IsNullOrWhiteSpace(data.Ward))
                         existingCooperative.Ward = data.Ward;
@@ -332,9 +509,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<List<MemberShipModel>> GetCooperativeByAgent(string agentId, ListQueryParams query)
         {
             // Base query: cooperatives assigned to this agent via join table
-            var cooperativesQuery = _context.MemberShips
-             .AsNoTracking()
-             .Where(s => s.IsAssignedToAgentId == agentId || s.OnboardedById == agentId);
+            var cooperativesQuery = from f in _context.MemberShips
+                            join fa in _context.MemberShipAgents on f.Id equals fa.MemberShipId
+                            join a in _context.Agents on fa.AgentId equals a.Id
+                            where a.UserId == agentId
+                            select f;
+            //var cooperativesQuery = _context.MemberShips
+            // .AsNoTracking()
+            // .Where(s =>
+            //// s.IsAssignedToAgentId == agentId || 
+            // s.OnboardedById == agentId);
 
 
             // Filter by organization code
@@ -383,16 +567,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return agent.Map();
         }
 
-        public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
-        {
-            var cooperative = await _context.MemberShips.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
-            if (cooperative == null) return null;
-            cooperative.IsAssignedToAgentId = agentId;
-            cooperative.HasbeenAssignedAgent = true;
-            await _context.SaveChangesAsync();
+        //public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
+        //{
+        //    //var cooperative = await _context.MemberShips.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
+        //    //if (cooperative == null) return null;
+        //    //cooperative.IsAssignedToAgentId = agentId;
+        //    //cooperative.HasbeenAssignedAgent = true;
 
-            return cooperative.Map();
-        }
+        //    var memberShip = await _context.MemberShips
+        //        .AsNoTracking()
+        //        .FirstOrDefaultAsync(f => f.Id == cooperativeId);
+
+        //    if (memberShip == null)
+        //        return null;
+
+        //    // Get existing assignments for this farmer
+        //    var existingAssignments = await _context.MemberShipAgents
+        //        .Where(fa => fa.MemberShipId == cooperativeId && fa.AgentId==agentId)
+        //        .Select(fa => fa.AgentId)
+        //        .ToListAsync();
+
+        //    // Filter out agents that are already assigned
+
+        
+
+        //    // Create new assignments
+        //    if (newAgentIds.Any())
+        //    {
+        //        var newAssignments = newAgentIds.Select(agentId => new MemberShipAgent
+        //        {
+        //            MemberShipId = cooperativeId,
+        //            AgentId = agentId,
+        //            AssignedOn = DateTimeOffset.UtcNow,
+
+        //        }).ToList();
+
+        //        await _context.MemberShipAgents.AddRangeAsync(newAssignments);
+        //        await _context.SaveChangesAsync();
+        //    }
+
+        //    // Reload the farmer with updated data
+        //    var updatedMembership = await _context.MemberShips
+        //        .FirstOrDefaultAsync(f => f.Id == membershipId);
+        //    await _context.SaveChangesAsync();
+
+        //    return cooperative.Map();
+        //}
         public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
         {
             var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
@@ -434,16 +654,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
-            var agent =
-                await (from c in _context.MemberShips
-                       join a in _context.Agents
-                       on c.IsAssignedToAgentId equals a.UserId
-                       where c.Id == cooperativeId
-                       select a).FirstOrDefaultAsync();
+            var agent = await (
+        from ms in _context.MemberShips
+        join msa in _context.MemberShipAgents
+            on ms.Id equals msa.MemberShipId
+        join a in _context.Agents
+            on msa.AgentId equals a.Id
+        where ms.Id == cooperativeId
+        select a
+    ).AsNoTracking()
+     .FirstOrDefaultAsync();
 
-            if (agent != null) { return agent.Map(); }
-            return null;
-            
+            return agent?.Map();
+
         }
 
         public async Task<List<AgentModel>> AgentsBySupervisor(string supervisorId, ListQueryParams query)

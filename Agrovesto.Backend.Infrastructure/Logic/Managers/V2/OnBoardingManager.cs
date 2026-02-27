@@ -9,6 +9,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
@@ -22,6 +23,8 @@ using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using NetTopologySuite.Operation.Valid;
@@ -58,11 +61,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
+        Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
         private readonly IAWSRekognitionManager _faceManager;
-
+        private readonly IConfiguration _configuration;
+        private readonly INotificationService _notificationService;
+        private readonly DataContext _context;
         private readonly IWalletManager _walletManager;
         private readonly INotificationService _sMSService;
         private readonly IOnboardingRepository _onboardingRepository;
@@ -76,6 +82,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
         public OnBoardingManager(IWalletManager walletManager,
+            IConfiguration configuration,
+            DataContext context,
+            INotificationService notificationService,
             IAWSRekognitionManager faceManager,
             IIdentityVerificationManager identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
@@ -95,101 +104,179 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _farmManager = farmManager;
             _identityVerificationManager = identityVerificationManager;
             _excelConverterService = excelConverterService;
+            _context= context;
+            _notificationService = notificationService;
+            _configuration = configuration;
         }
-    //    public string EnqueueBulkOnboarding(
-    //Stream excelStream,
-    //OnBoardingArgs args,
-    //bool disableOtp,
-    //bool isDryRun)
-    //    {
-    //        var rows = _excelConverterService.ParseExcel(excelStream);
 
-    //        var jobArgs = new BulkOnboardingJobArgs
-    //        {
-    //            businessCode = args.businessCode,
-    //            Rows = rows,
-    //            DisableOtp = disableOtp,
-    //            IsDryRun = isDryRun
-    //        };
+        public async Task<OrganizationResponseModel> CreateOrganization(
+     OrganizationOnboardingModel model,
+     OrganizationOnboardingArgs args)
+        {
+            OrganizationOnboardingValidation(model, args);
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-    //        return BackgroundJob.Enqueue<IBulkOnboardingJob>(
-    //            job => job.Process(jobArgs));
-    //    }
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-    //    public async Task<BulkOnboardingResult> BulkOnboardBusinessUsers(
-    //Stream excelStream,
-    //OnBoardingArgs args)
-    //    {
-    //        if (excelStream == null)
-    //            throw new BaseException(
-    //                Core.Enums.ExceptionType.BAD_REQUEST,
-    //                "Excel file is required.");
+                try
+                {
+                    var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
+                        args.userId,
+                        new ProfileRequestModel
+                        {
+                            FirstName = model.FirstName?.Trim(),
+                            LastName = model.LastName?.Trim(),
+                            PhoneNumber = model.PhoneNumber?.Trim(),
+                            Email = model.ContactEmail?.Trim()
+                        });
 
-    //        var rows = _excelConverterService.ParseExcel(excelStream);
+                    args.userType ??= updatedUser.UserType;
 
-    //        if (!rows.Any())
-    //            throw new BaseException(
-    //                Core.Enums.ExceptionType.BAD_REQUEST,
-    //                "Excel file contains no records.");
+                    var parentBusiness =
+                        await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
 
-    //        var result = new BulkOnboardingResult
-    //        {
-    //            Total = rows.Count
-    //        };
+                    if (parentBusiness == null)
+                        throw new BaseException(
+                            Core.Enums.ExceptionType.NOTFOUND,
+                            "Parent business not found or deactivated.");
 
-    //        int rowNumber = 1; // header = 1
+                    var orgEmail = string.IsNullOrWhiteSpace(model.CompanyEmail)
+                        ? model.ContactEmail
+                        : model.CompanyEmail;
 
-    //        foreach (var row in rows)
-    //        {
-    //            rowNumber++;
+                    var existingOrg =
+                        await _businessRepository.GetOrganizationAsync(orgEmail);
 
-    //            try
-    //            {
-    //                var model = new OnboardingRequestModel
-    //                {
-                        
-    //                    FirstName = row.FirstName,
-    //                    LastName = row.LastName,
-    //                    Email = row.Email,
-    //                    PhoneNumber = row.PhoneNumber
-    //                };
+                    if (existingOrg != null)
+                        throw new BaseException(
+                            Core.Enums.ExceptionType.ALREADY_EXIST,
+                            $"Organization with email '{orgEmail}' already exists.");
 
-    //                args.userType = row.Gender;
+                    model.OrganizationCode = await GenerateOrganizationCodeAsync(model.CompanyName);
 
-    //                await CreateBusinessUser(model, args);
+                    var newOrganization =
+                        await _businessRepository.CreateOrganizationV2(model, args);
 
-    //                result.Successful++;
-    //            }
-    //            catch (BaseException ex)
-    //            {
-    //                result.Failed++;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
 
-    //                result.Errors.Add(new BulkOnboardingError
-    //                {
-    //                    RowNumber = rowNumber,
-    //                    Email = row.Email,
-    //                    Error = ex.Message
-    //                });
-    //            }
-    //            catch (Exception ex)
-    //            {
-    //                _log.LogError(ex, "Bulk onboarding failed on row {Row}", rowNumber);
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            if (args.env == Env.Live.ToString())
+                            {
+                                await SendOnboardingNotificationsAsync(newOrganization, args.userId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _log.LogError(ex, "Notification failed");
+                        }
+                    });
 
-    //                result.Failed++;
+                    return newOrganization;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
 
-    //                result.Errors.Add(new BulkOnboardingError
-    //                {
-    //                    RowNumber = rowNumber,
-    //                    Email = row.Email,
-    //                    Error = "Unexpected error occurred"
-    //                });
-    //            }
-    //        }
+        private static void OrganizationOnboardingValidation(OrganizationOnboardingModel model, OrganizationOnboardingArgs args)
+        {
+            if (model == null)
+                throw new ArgumentNullException(nameof(model));
 
-    //        return result;
-    //    }
+            if (args == null)
+                throw new ArgumentNullException(nameof(args));
 
-        public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args 
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Business Code is required.");
+
+
+            if (string.IsNullOrWhiteSpace(args.env))
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Environment is required.");
+
+
+            if (string.IsNullOrWhiteSpace(args.userId))
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "User Id is required.");
+        }
+
+        private async Task<string> GenerateOrganizationCodeAsync(string companyName)
+        {
+            var cleanedName = companyName?
+                .Replace(" ", string.Empty)
+                .ToUpperInvariant() ?? "ORG";
+
+            var prefix = cleanedName.Length > 3
+                ? cleanedName[..3]
+                : cleanedName;
+
+            var uniqueSegment = Guid.NewGuid()
+                .ToString("N")
+                .Substring(0, 4)
+                .ToUpperInvariant();
+
+            return $"{prefix}{DateTimeOffset.UtcNow:MM}{uniqueSegment}";
+        }
+        private async Task SendOnboardingNotificationsAsync(
+    OrganizationResponseModel organization,
+    string userId)
+        {
+            var accountOfficer = await _onboardingRepository.GetUserById(userId);
+
+            var mailRequest = new WelcomeMailBody
+            {
+                To = organization.ContactEmail,
+                ToName = organization.CompanyName,
+                Subject = $"Welcome Onboard {organization.CompanyName}",
+                AccountOfficer = accountOfficer.model.FirstName,
+                Email = accountOfficer.model.Email,
+                PhoneNumber = accountOfficer.model.PhoneNumber
+            };
+
+            await SendGridService.DynamicBusinessOnboarding(mailRequest);
+            await SendOnboardingSMSM(
+                organization.CompanyName,
+                organization.PhoneNumber);
+        }
+        private async Task SendOnboardingSMSM(string businessName, string phoneNumber)
+        {
+            var phone = _configuration["Official:Phone"];
+            var messageBody = $"A new business {businessName} has been added to your merchant on NomaOS Platform." +
+                         $"You can always reach out to the business using {phoneNumber} ";
+
+            var sms = await _notificationService.HandleWhisperSMS(new WhisperSMSModel
+            {
+                campaign_name = "Onboarding",
+                contacts = new List<string> { $"0{phone}" },
+                message = messageBody,
+            });
+            var sms1 = await _notificationService.HandleAfricasTalkingSMS(new WhisperSMSModel
+            {
+                campaign_name = "Onboarding",
+                contacts = new List<string> { $"+234{phone}" },
+                message = messageBody,
+            });
+            var sms2 = await _notificationService.HandleTermiiSMS(new TermiiSmsRequest
+            {
+                to = $"+234{phone}",
+                sms = messageBody
+            });
+        }
+
+        public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args
 )
         {
             if (excelStream == null)
@@ -206,21 +293,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             var result = new BulkOnboardingResult { Total = rows.Count };
             int rowNumber = 1;
-            //long? agentId = null;
-            //if (!string.IsNullOrWhiteSpace(currentUserId) && string.Equals(currentUserRole, "Agent", StringComparison.OrdinalIgnoreCase))
-            //{
-            //    var agent = await _agentRepository.GetAgentDetailByUserId(currentUserId);
-            //    if (agent != null)
-            //        agentId = agent.Id;
-            //}
+
 
             foreach (var row in rows)
             {
                 rowNumber++;
                 try
                 {
-                    // Each BulkOnboardingExcelRow currently has FirstName, LastName, Email, PhoneNumber, NIN, Gender
-                    // Build a minimal OnboardingRequestModel using any available identifier (phone or email)
                     if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
                         throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Either phone number or email is required.");
 
@@ -239,7 +318,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         organizationCode = args.organizationCode,
                         userType = "Farmer",
                         OnboardedByUserId = args.OnboardedByUserId,
-                        AgentIds =args.AgentIds,// agentId.HasValue ? new List<long?> { agentId.Value } : null,
+                        AgentIds = args.AgentIds,// agentId.HasValue ? new List<long?> { agentId.Value } : null,
                         CooperativeIds = args.CooperativeIds
                     };
 
@@ -364,8 +443,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
         LoginModel model,
         string businessCode
-            //,
-            // string header
             )
         {
             ValidateLoginModel(model);
@@ -373,71 +450,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
-    {
-        var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
-        var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
-
-        // ---- Must choose ONE method ----
-        if (!hasEmail && !hasPhone)
         {
-            throw new BaseException(
-                Core.Enums.ExceptionType.BAD_REQUEST,
-                "Either email or phone number must be provided.");
-        }
+            var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
+            var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
 
-        //if (hasEmail && hasPhone)
-        //{
-        //    throw new BaseException(
-        //        Core.Enums.ExceptionType.BAD_REQUEST,
-        //        "Use either email or phone number, not both.");
-        //}
-
-        // ================= EMAIL + PASSWORD =================
-        if (hasEmail)
-        {
-            // Email format
-            var emailValidator = new EmailAddressAttribute();
-            if (!emailValidator.IsValid(model.Email))
+            if (!hasEmail && !hasPhone)
             {
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Invalid email address format.");
+                    "Either email or phone number must be provided.");
             }
-
-            //if (string.IsNullOrWhiteSpace(model.Password))
-            //{
-            //    throw new BaseException(
-            //        Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Password is required when using email.");
-            //}
-
-            //if (model.Password.Length < 4)
-            //{
-            //    throw new BaseException(
-            //        Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Password must be alphanumeric and at least 8 characters long.");
-            //}
-        }
-
-        // ================= PHONE + PIN =================
-        if (hasPhone)
-        {
-            // Must be exactly 11 digits
-            if (!Regex.IsMatch(model.PhoneNumber!, @"^\d{11}$"))
+            if (hasEmail)
             {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Phone number must be exactly 11 digits and numeric only.");
+                var emailValidator = new EmailAddressAttribute();
+                if (!emailValidator.IsValid(model.Email))
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Invalid email address format.");
+                }
             }
+            if (hasPhone)
+            {
+                if (!Regex.IsMatch(model.PhoneNumber!, @"^\d{11}$"))
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Phone number must be exactly 11 digits and numeric only.");
+                }
 
-            //if (string.IsNullOrWhiteSpace(model.Pin))
-            //{
-            //    throw new BaseException(
-            //        Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "PIN is required when using phone number.");
-            //}
-
-               
                 if (!string.IsNullOrWhiteSpace(model.Pin)
     && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
                 {
@@ -449,11 +490,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             }
         }
-       
+
         public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
         {
             try
-            { // fetch user by id
+            {
                 var userId = !string.IsNullOrEmpty(args.UserId)
                     ? args.UserId
                     : model?.Id;
@@ -464,31 +505,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "User Id missing.");
                 }
-
-                //if (string.IsNullOrEmpty(args.UserId) || )
-                //{
-                //    throw new BaseException(
-                //               Core.Enums.ExceptionType.BAD_REQUEST,
-                //               "User Id missing.");
-                //}
-                //var user = await _onboardingRepository.GetUserById(args.UserId);
-                //if (user.model == null)
-                //{
-                //    throw new BaseException(
-                //           Core.Enums.ExceptionType.BAD_REQUEST,
-                //           "User not found.");
-                //}
                 var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, model);
                 model.CreatedOn = updateUser.CreatedOn;
                 model.Id = updateUser.Id;//args.UserId;
-                model.Email =!string.IsNullOrEmpty(model.Email) ? model.Email :  updateUser.Email;
-                model.PhoneNumber =!string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber :  updateUser.PhoneNumber;
+                model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : updateUser.Email;
+                model.PhoneNumber = !string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber : updateUser.PhoneNumber;
 
                 args.userType = !string.IsNullOrEmpty(args.userType) ? args.userType : updateUser.UserType;
                 await CreateUserCategory(model, args);
-                //check if user is farmer,
-                //if true, check model for compulsory fields
-                //create user as farmer
                 if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
                 {
                     ValidateIdentifier(model.NIN, "NIN");
@@ -506,7 +530,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return (true, "User Profile Created");
             }
 
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, $"An error occurred {ex.Message}");
             }
 
@@ -529,61 +554,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 );
         }
 
-        private async Task CreateUserCategory(ProfileRequestModel model, OnBoardingArgs args )
+        private async Task CreateUserCategory(ProfileRequestModel model, OnBoardingArgs args)
         {
-            
-                var accountType = args.userType.ToEnum<UserType>();
-            
+
+            var accountType = args.userType.ToEnum<UserType>();
+
             switch (accountType)
             {
                 case UserType.Trader:
                     //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
-                //    await CreateTraderProfile(model, args);
+                    //    await CreateTraderProfile(model, args);
                     break;
                 case UserType.Agent:
-                    await CreateAgentProfileAsync(model,args);
+                    await CreateAgentProfileAsync(model, args);
 
                     break;
 
                 case UserType.MemberShip:
-                   
+
                     //create first as cooperative
-                     await CreateCooperativeProfileAsync(model, args);
-                     break;
+                    await CreateCooperativeProfileAsync(model, args);
+                    break;
 
                 case UserType.Farmer:
-                    
+
                     await CreateFarmerProfileAsync(model, args);
                     break;
                 case UserType.Organization:
                     break;
-                    case UserType.Processors:
+                case UserType.Processors:
                     break;
-                    case UserType.Suppliers: 
+                case UserType.Suppliers:
                     break;
             }
 
         }
-        //private async Task CreateTraderProfile(UserModel model, BusinessModel business, string userId)
-        //{
-        //    var trader = new TraderModel
-        //    {
-        //        BelongToBusinessCode = business.BusinessCode,
-        //        State = model.State,
-        //        Lga = model.Lga,
-        //        Email = model.Email,
-        //        Location = model.Location,
-        //        Name = model.Name,
-        //        OnBoardedOn = DateTimeOffset.UtcNow,
-        //        PhoneNumber = model.PhoneNumber,
-        //        UserId = userId,
 
-        //    };
 
-        //    await _traderRepository.CreateTrader(trader);
-        //}
-
-        private async Task CreateAgentProfileAsync(ProfileRequestModel model,  OnBoardingArgs args)
+        private async Task CreateAgentProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
 
             await _agentRepository.CreateUpdateAgent(new AgentModel
@@ -593,25 +601,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Lga = model.Lga,
                 Email = model.Email,
                 Location = model.Location,
-                // Name = model.FullName,
                 Name = !string.IsNullOrWhiteSpace(model.FullName)
     ? model.FullName
     : string.Join(" ",
         new[] { model.FirstName, model.MiddleName, model.LastName }
             .Where(x => !string.IsNullOrWhiteSpace(x))),
 
-                OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
+                OnBoardedOn = model.CreatedOn,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 Ward = model.Ward,
-                OnboardedById=args.OnboardedByUserId,
+                OnboardedById = args.OnboardedByUserId,
                 OrganizationCode = args.organizationCode
             });
         }
 
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
-            if (string.IsNullOrEmpty(model.CooperativeName)) { 
+            if (string.IsNullOrEmpty(model.CooperativeName))
+            {
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     "Cooperative Name is required.");
@@ -625,39 +633,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
 
             await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
-             {
-                 BelongToBusinessCode = args.businessCode,
-                 IsLeaderAFarmer=model.IsLeaderAFarmer,
-                 State = model.State,
-                 Lga = model.Lga,
-                 ContactPerson = model.FirstName,//string.Empty,
-                 Email = model.Email,
-                 Location = model.Location,
-                 MembershipLeaderFirstName=model.FirstName,
-                 MembershipLeaderGender=model.Gender,
-                 MembershipLeaderLastName=model.LastName,
-                 MembershipLeaderMiddleName=model.MiddleName,
-                 MemberShipTypeId= model.MembershipTypeId.Value,
-                 Tier= Tier.Tier1.ToString(),
+            {
+                BelongToBusinessCode = args.businessCode,
+                IsLeaderAFarmer = model.IsLeaderAFarmer,
+                State = model.State,
+                Lga = model.Lga,
+                ContactPerson = model.FirstName,
+                Email = model.Email,
+                Location = model.Location,
+                MembershipLeaderFirstName = model.FirstName,
+                MembershipLeaderGender = model.Gender,
+                MembershipLeaderLastName = model.LastName,
+                MembershipLeaderMiddleName = model.MiddleName,
+                MemberShipTypeId = model.MembershipTypeId.Value,
+                Tier = Tier.Tier1.ToString(),
 
-    //             Name = !string.IsNullOrWhiteSpace(model.FullName)
-    //? model.FullName
-    //: string.Join(" ",
-    //    new[] { model.FirstName, model.MiddleName, model.LastName }
-    //        .Where(x => !string.IsNullOrWhiteSpace(x))),
-    
-                  Name= model.CooperativeName,
-                 OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
-                 PhoneNumber = model.PhoneNumber,
-                 UserId = model.Id,
-                 OnboardedById=args.OnboardedByUserId,
 
-                 IsAssignedToAgentId = args.OnboardedByUserId,
-                 HasbeenAssignedAgent = isAssignedagent,
-                 Ward = model.Ward,
-                 OrganizationCode = args.organizationCode
+                Name = model.CooperativeName,
+                OnBoardedOn = model.CreatedOn,
+                PhoneNumber = model.PhoneNumber,
+                UserId = model.Id,
+                OnboardedById = args.OnboardedByUserId,
 
-             });
+                IsAssignedToAgentId = args.OnboardedByUserId,
+                HasbeenAssignedAgent = isAssignedagent,
+                Ward = model.Ward,
+                OrganizationCode = args.organizationCode
+
+            });
 
             if (model.IsLeaderAFarmer)
             {
@@ -679,38 +682,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Lga = model.Lga,
                 Location = model.Location,
                 Name = !string.IsNullOrEmpty(model.FullName) ? model.FullName : $"{model.FirstName} {model.MiddleName} {model.LastName}",
-                OnBoardedOn = model.CreatedOn,//DateTimeOffset.UtcNow,
+                OnBoardedOn = model.CreatedOn,
                 PhoneNumber = model.PhoneNumber,
                 UserId = model.Id,
                 DateOfBirth = model.DateOfBirth,
-               CooperativeIds = args.CooperativeIds?
+                CooperativeIds = args.CooperativeIds?
     .Where(x => x.HasValue)
     .Select(x => x.Value)
     .ToList() ?? new List<long>(),
 
-AgentIds = args.AgentIds?
+                AgentIds = args.AgentIds?
     .Where(x => x.HasValue)
     .Select(x => x.Value)
     .ToList() ?? new List<long>(),
 
-                //BelongToCooperativeId = args.Id,
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
                 FarmerCategory = model.FarmerCategory,
                 SelectedItems = model.ValueChainDto,
                 YearsInAgric = model.YearsInAgric,
-                
-                OnboardedById=model.OnboardedByUserId,
+
+                OnboardedById = model.OnboardedByUserId,
                 HighestLevelOfEducation = model.HighestLevelOfEducation
-                // ValueChainItems= model.ValueChainSelections
             };
-           
-            
+
+
             var farer = await _farmerRepository.CreateFarmer(farmer);
 
-            
+
         }
-        
+
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args)
         {
             if (!args.CooperativeIds.Any())
@@ -731,17 +732,19 @@ AgentIds = args.AgentIds?
         }
         public async Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args)
         {
-            if (!args.AgentIds.Any()) { 
+            if (!args.AgentIds.Any())
+            {
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     "No Agent selected.");
             }
-            if(args.Id < 0)
+            if (args.Id < 0)
             {
-                                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Farmer Id is required.");
-            };
+                throw new BaseException(
+    Core.Enums.ExceptionType.BAD_REQUEST,
+    "Farmer Id is required.");
+            }
+            ;
 
             return await _farmerRepository.AssignFarmerToAgents(args, args.Id);
         }
@@ -750,6 +753,7 @@ AgentIds = args.AgentIds?
         {
             try
             {
+                ValidateUserType(args);
                 ValidateQuickOnboarding(model);
 
                 if (string.IsNullOrEmpty(args.businessCode))
@@ -786,7 +790,7 @@ AgentIds = args.AgentIds?
                         MiddleName = model.MiddleName,
                         Id = createUser.model.Id,
                         PhoneNumber = model.PhoneNumber,
-                        OnboardedByUserId=args.OnboardedByUserId
+                        OnboardedByUserId = args.OnboardedByUserId
                     }, args);
 
                     // ------------------ Track role & user type ------------------
@@ -823,6 +827,28 @@ AgentIds = args.AgentIds?
                 throw new BaseException(
                     Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
                     "An unexpected error occurred. Please try again.");
+            }
+        }
+        //private static void ValidateUserType(OnBoardingArgs args)
+        //{
+        //    if (args.userType != "Farmer" &&
+        //        args.userType != "MemberShip" &&
+        //        args.userType != "Agent" &&
+        //        args.userType != "Organization" &&
+        //        args.userType != "ServiceProvider")
+        //    {
+        //        throw new BaseException(
+        //            Core.Enums.ExceptionType.BAD_REQUEST,
+        //            "Invalid User Type.");
+        //    }
+        //}
+        private static void ValidateUserType(OnBoardingArgs args)
+        {
+            if (!Enum.TryParse<UserType>(args.userType, true, out _))
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Invalid User Type.");
             }
         }
 
@@ -873,122 +899,9 @@ AgentIds = args.AgentIds?
             }
         }
 
-        /**public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
-        {
-            try { 
-            ValidateQuickOnboarding(model);
-
-            if (string.IsNullOrEmpty(args.businessCode))
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Business code is required.");
-
-            // ------------------ Fetch business ------------------
-            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                ?? throw new BaseException(
-                    Core.Enums.ExceptionType.NOTFOUND,
-                    "Business does not exist.");
-
-            // ------------------ Register or attach user ------------------
-            var createUser = await _onboardingRepository.RegisterUser(model, args);
-
-            if (!createUser.status)
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    createUser.message);
-
-            // ------------------ Wallet / Sub-account ------------------
-            var subAccount =
-                await _walletManager.GetSubAccountByUserId(createUser.model.Id)
-                ?? await _walletManager.CreateSubAccount(new SubAccountModel
-                {
-                    UserId = createUser.model.Id,
-                    Email = createUser.model.Email,
-                    PhoneNumber = model.PhoneNumber,
-                    BusinessId = business.BusinessId,
-                    CreatedBy = createUser.model.Id,
-                    
-                });
-              
-                var updateProfile = await CreateUserProfile(new ProfileRequestModel {
-                    
-                    Email = model.Email,
-                   FirstName= model.FirstName,
-                   LastName= model.LastName,
-                   MiddleName=model.MiddleName,
-               Id= createUser.model.Id,
-               PhoneNumber= model.PhoneNumber,
-                }, args);
-            // ------------------ Track role & user type ------------------
-            await _onboardingRepository.TrackUserRoleAssignment(
-                createUser.model.Id,
-                args.userType);
-
-            // ------------------ OTP Generation ------------------
-            var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-                ? OtpTarget.Email
-                : OtpTarget.Phone;
-
-            var destination = otpTarget == OtpTarget.Email
-                ? model.Email
-                : model.PhoneNumber;
-
-            // Invalidate any existing OTPs first
-            await _otpService.InvalidateActiveOtps(
-                createUser.model.Id,
-                otpTarget);
-
-            // Generate OTP
-            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
-            {
-                UserId = createUser.model.Id,
-                Target = otpTarget,
-                Destination = destination,
-                Purpose = OtpPurpose.Onboarding,
-                ExpiryMinutes = 5
-            });
-
-            // ------------------ Send OTP ------------------
-            if (otpTarget == OtpTarget.Email)
-            {
-                await _sMSService.SendEmailAsync(
-                    destination,
-                    "Confirm your account",
-                    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
-            }
-            //else
-            //{
-            //    await _sMSService.SendSmsAsync(
-            //        destination,
-            //        $"Your verification code is {otp.Code}. Expires in 5 minutes.");
-            //}
-            model.Id = createUser.model.Id;
-            return new OnboardingResponseModel { 
-                Id = model.Id,
-                Email = model.Email,
-                PhoneNumber = model.PhoneNumber,
-            };
-            }
-            catch (BaseException)
-            {
-                // Let known business errors bubble up untouched
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "User Registration failed unexpectedly");
-
-                throw new BaseException(
-                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
-                    "An unexpected error occurred. Please try again.");
-            }
-
-        }
-        
-        **/
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
         {
-            var isValid= await _otpService.VerifyOtpAsync(
+            var isValid = await _otpService.VerifyOtpAsync(
                 request.UserId,
                 request.Code,
                 OtpPurpose.Onboarding);
@@ -1019,7 +932,6 @@ AgentIds = args.AgentIds?
             try
             {
                 var otp = await ResendOtpAsync(model.UserId, model.OtpTarget, OtpPurpose.Onboarding);
-                // ------------------ Send OTP ------------------
                 if (model.OtpTarget == OtpTarget.Email)
                 {
                     await _sMSService.SendEmailAsync(
@@ -1034,7 +946,7 @@ AgentIds = args.AgentIds?
                         $"Your verification code is {otp.Code}. Expires in 5 minutes.");
                 }
             }
-           catch(Exception ex)
+            catch (Exception ex)
             {
                 throw new BaseException(exceptionType: Core.Enums.ExceptionType.BAD_REQUEST, ex.Message);
             }
@@ -1044,7 +956,7 @@ AgentIds = args.AgentIds?
             var user = await _onboardingRepository.GetUserById(userId);
             await _otpService.InvalidateActiveOtps(userId, target);
             var destination = "";
-            if(target== OtpTarget.Email)
+            if (target == OtpTarget.Email)
             {
                 destination = user.model.Email;
             }
@@ -1052,11 +964,11 @@ AgentIds = args.AgentIds?
             {
                 destination = user.model.PhoneNumber;
             }
-           var otp= await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
                 UserId = userId,
                 Target = target,
-                Destination=destination,
+                Destination = destination,
                 Purpose = purpose,
                 ExpiryMinutes = 5
             });
@@ -1090,9 +1002,9 @@ AgentIds = args.AgentIds?
 
         public async Task<FarmerProfileDto> GetFarmerProfile(string userId)
         {
-            var farmer= await GetFarmerProfileAsync(userId);
+            var farmer = await GetFarmerProfileAsync(userId);
 
-            if (farmer !=null &&  farmer.PersonalInformation!=null  && !string.IsNullOrEmpty(farmer.PersonalInformation.FarmerImage))
+            if (farmer != null && farmer.PersonalInformation != null && !string.IsNullOrEmpty(farmer.PersonalInformation.FarmerImage))
             {
                 var image = farmer.PersonalInformation.FarmerImage;
                 farmer.PersonalInformation.FarmerImage = await _faceManager.GetImageUrlAsync(image);
@@ -1163,7 +1075,7 @@ AgentIds = args.AgentIds?
             var kyc = verifyNin.nin_data.ToEntity();
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
-            kyc.LoggedOn= DateTimeOffset.UtcNow; 
+            kyc.LoggedOn = DateTimeOffset.UtcNow;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level3);
             return true;
@@ -1272,11 +1184,11 @@ AgentIds = args.AgentIds?
         public async Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args)
         {
             var saveFace = new ImageUploadResponse();
-                try
+            try
             {
                 saveFace = await _faceManager.UploadImage(model.File, args.UserId, args.businessCode, args.organizationCode);
 
-                if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey)) 
+                if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey))
                 {
                     var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level2);
                 }
@@ -1284,15 +1196,12 @@ AgentIds = args.AgentIds?
             }
             catch (Exception ex)
             {
-                //await dbTransaction.RollbackAsync();
                 throw new Exception($"{ex.Message}", ex);
             }
-            // });
-            //return saveFace;
         }
         public async Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args)
         {
-           
+
             try
             {
                 var updateDetail = await _farmManager.CreateFarmAsync(model, args);
@@ -1305,28 +1214,11 @@ AgentIds = args.AgentIds?
             }
             catch (Exception ex)
             {
-                //await dbTransaction.RollbackAsync();
                 throw new Exception($"{ex.Message}", ex);
             }
-            // });
-            //return saveFace;
         }
 
-        ///
-        ///)
-        ///Critical(must succeed or rollback)
 
-        ///These define identity & access:
-
-        //Validate onboarding
-
-        //Fetch business
-
-        //Register user(Users table)
-
-        //Create membership(uses UserId)
-        ////
-        ///
         public async Task<CreateMembershipResponseModel> CreateMembershipUser(
       MemberShipRequestModel model,
       OnBoardingArgs args)
@@ -1345,7 +1237,6 @@ AgentIds = args.AgentIds?
                     model, args, business, user.model.Id, dateTime);
 
                 model.Id = membership.data.Id;
-                // Everything below is non-critical
                 await RunNonCriticalSteps(
                     model, args, business, user.model, dateTime);
 
@@ -1441,14 +1332,14 @@ AgentIds = args.AgentIds?
                 MembershipLeaderMiddleName = model.MembershipLeaderMiddleName,
                 MembershipLeaderLastName = model.MembershipLeaderLastName,
                 MembershipLeaderGender = model.MembershipLeaderGender,
-                ContactPerson= $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}"
+                ContactPerson = $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}"
             });
         }
         private async Task RunNonCriticalSteps(
     MemberShipRequestModel model,
     OnBoardingArgs args,
     BusinessModel business,
-   OnboardingRequestModel user,    
+   OnboardingRequestModel user,
     DateTimeOffset dateTime)
         {
             try

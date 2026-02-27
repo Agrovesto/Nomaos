@@ -17,7 +17,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public long Id { get; set; }
         public string? Name { get; set; } = string.Empty;
-        public double AreaSize { get; set; }
+        public double FarmSize { get; set; }
         public string? LocationDescription { get; set; } = string.Empty;
 
         // Ownership: Farmer / Cooperative / Community
@@ -36,8 +36,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public string? FarmLga { get; set; }
         public string? FarmWard { get; set; }
-        public double TotalAreaInDegress { get; set; }
-        public double TotalAreaInSqMetre { get; set; }
+        public double FarmSizeInDegress { get; set; }
+        public double FarmSizeInSqMetre { get; set; }
         public string BelongToBusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
         public string? MappingAccuracy { get; set; }
@@ -61,6 +61,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool IsSizeVerified { get; set; } = false;
         public string? MappingFlagReason { get; set; }
         public bool IsMappingFlagged { get; set; } = false;
+        public string? FarmSizeType { get; set; } //Sqm, //Kilometre //hectare, acre
         public MappingStatus MappingStatus { get; set; } = MappingStatus.NotStarted;
         public Polygon? FarmPolygon { get; set; } // to get areas in degress, FarmPolygon.Area
 

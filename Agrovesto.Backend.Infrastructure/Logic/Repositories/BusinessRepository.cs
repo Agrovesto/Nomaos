@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -26,10 +27,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             return await _context.Set<Organization>().CountAsync();
         }
+        public async Task<OrganizationResponseModel> CreateOrganizationV2(OrganizationOnboardingModel orgModel, OrganizationOnboardingArgs args)
+        {
+            var orgExist = await _context.BusinessOrganizations
+              .FirstOrDefaultAsync(x => x.OrganizationCode == orgModel.OrganizationCode
+              && x.CompanyName == orgModel.CompanyName
+              );
+
+            if (orgExist != null)
+            {
+                return orgExist.ViewOnboardMap();
+            }
+            Organization org = orgModel.OnboardMap();
+            org.UserId = args.userId;
+            org.OrganizationCode = orgModel.OrganizationCode;
+            org.BusinessCode=args.businessCode;
+            
+
+            _context.Set<Organization>().Add(org);
+            var response= org.ViewOnboardMap();
+            //response.State = org.State.State;
+            //response.Lga = org.LGA.Name;
+            return response;
+        }
+
         public async Task<OrganizationModel> CreateOrganization(OrganizationModel orgModel)
         {
             var orgExist = await _context.BusinessOrganizations
-              .FirstOrDefaultAsync(x => x.OrganizationCode == orgModel.OrganizationCode && x.OrganizationName == orgModel.OrganizationName);
+              .FirstOrDefaultAsync(x => x.OrganizationCode == orgModel.OrganizationCode && x.CompanyName == orgModel.OrganizationName);
 
             if (orgExist != null)
             {
@@ -105,13 +130,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     return new OrganizationModel
                     {
                         OrganizaionId = org.OrganizationId,
-                        OrganizationName = org.OrganizationName,
+                        OrganizationName = org.CompanyName,
                         BusinessCode = org.BusinessCode,
                         OrganizationCode = org.OrganizationCode,
-                        ContacPerson = org.ContacPerson,
-                        Contact = org.Contact,
+                        ContacPerson = org.FullName,
+                        Contact = org.PhoneNumber,
                         ContactEmail = org.ContactEmail,
-                        Location = org.Location,
+                        Location = org.CompanyAddress,
                         OrganizationEmail = org.OrganizationEmail,
 
                         // Pulled from Users table
