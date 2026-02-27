@@ -104,6 +104,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandEActivityManager, MandEActivityManager>();
             services.AddScoped<IMandEServiceRepository, MandEServiceRepositories>();
             services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
+            services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
 
 
 

@@ -1,10 +1,15 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
@@ -14,10 +19,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
 
         private readonly IMembershipManager _membershipManager;
+        private readonly IBusinessManager _businessManager;
         public MembershipController(IHttpContextAccessor httpContextAccessor,
-            IMembershipManager membershipManager) : base(httpContextAccessor)
+            IMembershipManager membershipManager, IBusinessManager businessManager) : base(httpContextAccessor)
         {
             _membershipManager = membershipManager;
+            _businessManager = businessManager;
         }
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
@@ -28,7 +35,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                if (string.IsNullOrEmpty(query.UserId))
+                
+                if (CurrentUserRole != "MemberShip" && string.IsNullOrEmpty(query.UserId))
                 {
                     return BadRequest(new Response<Dictionary<string, string>>()
                     {
@@ -41,6 +49,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                     });
                 }
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _membershipManager.GetMembershipDashboardAsync(query);
                 return Ok(new Response<MembershipDashboardDto>()
                 {
@@ -74,6 +83,67 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        [HttpPost("create-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+               
+                    await EnrichCooperativeAsync(args);
+             
+
+                var request = await _membershipManager.CreateFarmerAsync(model, args);
+
+
+                return Ok(new Response<CreateMembershipResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = request != null ? "Successful" : "Failed",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
 
         [HttpGet("farmers")]
         public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
@@ -120,6 +190,32 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
 
+        }
+        private void NormalizeOrganizationCode(OnBoardingArgs args)
+        {
+            if (!string.IsNullOrEmpty(OrganizationCode) &&
+                string.IsNullOrEmpty(args.organizationCode))
+            {
+                args.organizationCode = OrganizationCode;
+            }
+        }
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
         }
 
     }

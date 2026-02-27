@@ -125,7 +125,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 // 🔹 Fetch organization details (name + code)
                 var organizations = await _context.BusinessOrganizations
                     .Where(o => userOrganizations.Contains(o.OrganizationCode))
-                    .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.OrganizationName })
+                    .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.CompanyName })
                     .ToListAsync();
 
                 // 🔹 Convert to claim-safe JSON

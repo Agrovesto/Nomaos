@@ -1678,56 +1678,56 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        [HttpPost("assign-agent")]
-        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
-        {
-            if (!ModelState.IsValid)
-            {
+        //[HttpPost("assign-agent")]
+        //public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
+        //{
+        //    if (!ModelState.IsValid)
+        //    {
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-            try
-            {
-                var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
-                return Ok(new Response<MemberShipModel>()
-                {
-                    Data = result,
-                    Message = "Retrieved",
-                    Succeeded = true,
+        //        return BadRequest(new Response<Dictionary<string, string>>()
+        //        {
+        //            Message = "Validation failed.",
+        //            Succeeded = false,
+        //            Data = ModelState
+        //                .Where(ms => ms.Value.Errors.Any())
+        //                .ToDictionary(
+        //                    ms => ms.Key,
+        //                    ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+        //                )
+        //        });
+        //    }
+        //    try
+        //    {
+        //        var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
+        //        return Ok(new Response<MemberShipModel>()
+        //        {
+        //            Data = result,
+        //            Message = "Retrieved",
+        //            Succeeded = true,
 
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
+        //            Code = Core.CoreUtils.Constants.ResponseCodes.Success
+        //        });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.Message,
+        //            Succeeded = false,
+        //        });
+        //    }
 
 
-        }
+        //}
        
         [HttpGet("farmers-byagent")]
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)

@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,7 +13,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     public interface IMembershipRepository
     {
         Task<List<AgentModel>> AgentsBySupervisor(string supervisorId, ListQueryParams query);
-        Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
+       // Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId);
         Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId);
         Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId);
         Task<(bool status, MemberShipModel data)> CreateCooperative(MemberShipModel data);
@@ -27,5 +28,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<MemberShipTypeModel?> GetMemberShipTypeById(long id);
         Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
+        Task<MemberShipModel> AssignMembershipToAgents(AssignmentArgs args, long membershipId);
     }
 }

@@ -65,9 +65,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 OrganizationCode = args.organizationCode,
                 CreatedBy = getUserCred.model.Name,
                 MappedBy = getUserCred.model.Name,
-                AreaSize = area,
-                TotalAreaInDegress = areaInDegrees,
-                TotalAreaInSqMetre = areaInSqMetres,
+                FarmSize = area,
+                FarmSizeInDegress = areaInDegrees,
+                FarmSizeInSqMetre = areaInSqMetres,
                 Coordinates = dto.Coordinates.Select(c => new FarmCoordinate
                 {
                     Latitude = c.Latitude,

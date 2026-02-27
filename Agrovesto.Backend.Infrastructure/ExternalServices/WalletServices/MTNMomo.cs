@@ -77,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 };
             try
             {
-                var request = await _httpService.Post($"{@params.BaseUrl}/collection/token", null, headers);
+                var request = await _httpService.Post($"{@params.BaseUrl}/collection/token/", null, headers);
                 var readResponse = await request.Content.ReadAsStringAsync();
                 //request.EnsureSuccessStatusCode();
 
@@ -89,11 +89,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             catch (Exception ex)
             {
                 string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return new MomoAuthResponse
-                {
-                    AccessToken = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSMjU2In0.eyJjbGllbnRJZCI6ImZjZDJhYTgyLWMyNDYtNDc3OS1iMzI2LTJlYTdkMzgwMDg2NiIsImV4cGlyZXMiOiIyMDI2LTAyLTIxVDE1OjQ2OjIwLjY1NDA3NzM5MyIsInNlc3Npb25JZCI6IjFhOGViOTNlLTU4ODEtNDhkOS1iOTAxLWJhYmY5NThhMWYzZSJ9.YqB1X9_HYGHtmo3RMfXuMUKKZQ4quKYtDTUntsRY3GuhXLXqS3voLPSW2MFSQ2z4UzKXxQUKZ0gu9aE24stERYh1sP5aPqm47g5tMQ2yZ1qGY7vQHYdb9XVyeEJ6crSjR8TFmR3kubqJ0R6h3gSMxKmLHruisfPldRx41v68oVGAZ6NSBwkAwbMRF0Ig_C8vK-WXuYDvPbOakRpMlkStjmPixrUSNrEh6_rHLfZsqLK_lfDxGaxcsGXm-dHx8UznKdsiBZQNK73hX3udW_1ykGoZnP2gomfb8SvJkcMVvsrvHbU18GDyN0xuYSVDkSU82u3jsmDh0_VgTb88q5hZ9w",
-
-                };
+                return null;
             }
 
         }
