@@ -425,7 +425,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         [HttpPost("verify-bvn")]
-        public async Task<IActionResult> VerifyBVN([FromBody] KYCVerificationDto model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> VerifyBVN([FromBody] KYCVerificationDto model, [FromQuery] VerificationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -485,7 +485,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("verify-nin")]
-        public async Task<IActionResult> VerifyNIN([FromBody] KYCVerificationDto model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> VerifyNIN([FromBody] KYCVerificationDto model, [FromQuery] VerificationArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -543,7 +543,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("request-otp")]
         [Authorize]
-        public async Task<IActionResult> RequestEmailOrPhoneVerification([FromQuery]OnBoardingArgs args, [FromBody]KYCVerificationDto model)
+        public async Task<IActionResult> RequestEmailOrPhoneVerification([FromQuery] VerificationArgs args, [FromBody]KYCVerificationDto model)
         {
 
             if (!ModelState.IsValid)

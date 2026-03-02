@@ -55,15 +55,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
-        Task<bool> VerifyNIN(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
+        Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
         //Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
-        Task<bool> VerifyBvn(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
-        Task<string> RequestEmailOrPhoneVerification(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
+        Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
+        Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -1039,7 +1039,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        public async Task<string> RequestEmailOrPhoneVerification(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
+        public async Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
         {
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
@@ -1048,7 +1048,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.NOTFOUND,
                     "User not found.");
             }
-            if (model.Env == Env.Live.ToString())
+            if (args.Env == Env.Live.ToString())
             {
                 await GenerateAndSendOtp(user.model.ToEntity());
                 return "";
@@ -1112,7 +1112,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        public async Task<bool> VerifyNIN(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
+        public async Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
         {
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
@@ -1132,7 +1132,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             ValidateIdentifier(number, "NIN");
             NINDataVerificationResponse<NINData, Verification> verifyNin = null;
-            if (model.Env == Env.Live.ToString())
+            if (args.Env == Env.Live.ToString())
             {
                 verifyNin = await _identityVerificationManager.VerifyNIN(new NINDataModel
                 {
@@ -1224,7 +1224,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             };
         }
 
-        public async Task<bool> VerifyBvn(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
+        public async Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
         {
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
@@ -1242,7 +1242,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             ValidateIdentifier(number, "BVN");
             BVNVerificationResponse<BVN_data, Verification> verifyBvn = null;
-            if(model.Env == Env.Live.ToString())
+            if(args.Env == Env.Live.ToString())
             {
                 verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
                 {
