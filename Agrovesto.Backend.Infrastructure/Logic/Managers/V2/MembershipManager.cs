@@ -197,7 +197,7 @@ DateTimeOffset dateTime)
                 FarmerCategory = model.FarmerCategory,
                 SelectedItems = model.ValueChainDto,
                 YearsInAgric = model.YearsInAgric,
-                Level= FarmerLevel.Level0.ToString(),
+                Level= FarmerLevel.Level1.ToString(),
                 OnboardedById = model.OnboardedByUserId,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
                 

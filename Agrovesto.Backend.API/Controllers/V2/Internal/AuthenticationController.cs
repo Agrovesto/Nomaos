@@ -222,7 +222,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("resend-otp")]
         [AllowAnonymous]
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model)
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)
@@ -243,7 +243,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                await _onBoardingManager.ResendOnboardingOtp(model);
+                await _onBoardingManager.ResendOnboardingOtp(model, args);
 
 
                 return Ok(new Response<string>()

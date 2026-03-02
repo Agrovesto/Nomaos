@@ -897,8 +897,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 Email = entity.Email,
                 PhoneNumber = entity.PhoneNumber,
-                Pin = model.Pin,
-                Password = model.Password,
+                //Pin = model.Pin,
+                //Password = model.Password,
                 Id= entity.Id
             }, true, "User successfully registered and linked to role/organization if applicable.");
         }
@@ -1243,6 +1243,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task OnCreateKYC(KYCDetails kYC)
         {
+
             await _context.KYCDetails.AddAsync(kYC);
             await _context.SaveChangesAsync();
 

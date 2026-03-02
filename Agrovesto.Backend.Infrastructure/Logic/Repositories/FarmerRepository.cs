@@ -881,19 +881,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<FarmerModel> GetFarmerByUserId(string userId)
         {
-            // =========================
-            // 1. Farmer
-            // =========================
-            var farmer = await _context.Farmers
+              var farmer = await _context.Farmers
                 .FirstOrDefaultAsync(x => x.UserId == userId);
 
             if (farmer == null)
                 throw new Exception("No record found");
 
-            // =========================
-            // 2. Cooperatives (many)
-            // =========================
-            var cooperativeNames = await (
+              var cooperativeNames = await (
                 from fc in _context.FarmerCooperatives
                 join c in _context.MemberShips
                     on fc.CooperativeId equals c.Id
@@ -901,23 +895,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 select c.Name
             ).ToListAsync();
 
-            // =========================
-            // 3. Farmer Image
-            // =========================
-            var farmerImage = await _context.FarmerImages
+               var farmerImage = await _context.FarmerImages
                 .Where(img => img.FarmerUserId == farmer.UserId)
                 .Select(img => img.IMageKey)
                 .FirstOrDefaultAsync();
 
-            // =========================
-            // 4. Map Farmer
-            // =========================
-            var mappedFarmer = farmer.Map();
+                 var mappedFarmer = farmer.Map();
 
-            // If your FarmerModel supports multiple cooperatives
             mappedFarmer.CooperativeNames = cooperativeNames;
 
-            // Optional: keep backward compatibility
             mappedFarmer.CooperativeName = cooperativeNames.FirstOrDefault();
 
             mappedFarmer.FarmerImage = farmerImage;
@@ -1745,36 +1731,48 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return farmer.Map();
         }
-        public async Task<FarmerProfileDto> GetFarmerProfileAsync(string userId)
+        public async Task<FarmerProfileDto?> GetFarmerProfileAsync(string userId)
         {
-            if (string.IsNullOrWhiteSpace(userId)) return null;
+            if (string.IsNullOrWhiteSpace(userId))
+                return null;
 
-            var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
-            if (farmer == null) return null;
+            var farmer = await _context.Farmers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.UserId == userId);
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (farmer == null)
+                return null;
 
-            var image = await _context.FarmerImages
-                .Where(i => i.FarmerUserId == userId)
-                .FirstOrDefaultAsync();
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userId);
 
-            var cooperativeInfo = await (
-                from fc in _context.FarmerCooperatives
-                join c in _context.MemberShips on fc.CooperativeId equals c.Id
-                where fc.FarmerId == farmer.Id
-                select new FarmerMembershipProfileDto
-                {
-                    CooperativeId = c.Id,
-                    CooperativeName = c.Name,
-                    OnboardedBy = fc.OnboardedByUserId,
-                    DateAdded=c.OnBoardedOn,
-                    FullName=$"{c.MembershipLeaderFirstName} {c.MembershipLeaderMiddleName} {c.MembershipLeaderLastName}"
-                }
-            ).ToListAsync();
+            var farmerId = farmer.Id;
+
 
             var farms = await _context.Farms
-                .Where(f => f.FarmerId == farmer.Id)
-                .Select(f => new FarmerFarmDto
+                .AsNoTracking()
+                .Where(f => f.FarmerId == farmerId)
+                .ToListAsync();
+
+            var coordinates = await _context.FarmCoordinates
+                .AsNoTracking()
+                .Where(c => farms.Select(f => f.Id).Contains(c.FarmId))
+                .ToListAsync();
+
+            var documents = await _context.FarmLandDocuments
+                .AsNoTracking()
+                .Where(d => farms.Select(f => f.Id).Contains(d.FarmId))
+                .ToListAsync();
+
+            var farmDtos = farms.Select(f =>
+            {
+                var latestDoc = documents
+                    .Where(d => d.FarmId == f.Id)
+                    .OrderByDescending(d => d.UploadedOn)
+                    .FirstOrDefault();
+
+                return new FarmerFarmDto
                 {
                     FarmId = f.Id,
                     FarmName = f.Name,
@@ -1782,35 +1780,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     State = f.FarmState,
                     Lga = f.FarmLga,
                     LandSize = f.FarmSize,
-                    MappingStatus = _context.FarmCoordinates.Any(m => m.FarmId == f.Id) ? "Mapped" : "Unmapped",
-                    DocumentStatus = _context.FarmLandDocuments
-    .Where(d => d.FarmId == f.Id)
-    .OrderByDescending(d => d.UploadedOn)
-    .Select(d => d.IsVerified ? "Verified" : "Pending")
-    .FirstOrDefault() ?? "Pending"
-                })
-                .ToListAsync();
-            var userWallet = await _context.UserWallets
-                .Where(w => w.UserId == userId)
-                .FirstOrDefaultAsync();
+                    MappingStatus = coordinates.Any(c => c.FarmId == f.Id)
+                        ? "Mapped"
+                        : "Unmapped",
+                    DocumentStatus = latestDoc == null
+                        ? "Pending"
+                        : latestDoc.IsVerified ? "Verified" : "Pending"
+                };
+            }).ToList();
 
-            var walletTransactions = userWallet != null
-                ? await _context.UserWalletTransactions
-                    .Where(t => t.UserWalletId == userWallet.Id)
+            var wallet = await _context.UserWallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == userId);
+
+            var transactions = wallet == null
+                ? new List<FarmerTransactionDto>()
+                : await _context.UserWalletTransactions
+                    .AsNoTracking()
+                    .Where(t => t.UserWalletId == wallet.Id)
                     .OrderByDescending(t => t.TransactionDate)
                     .Select(t => new FarmerTransactionDto
                     {
                         TransactionId = t.Id,
                         Amount = t.TransactionAmount,
-                        BalanceAfter=t.BalanceAfter,
+                        BalanceAfter = t.BalanceAfter,
                         TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
                         Timestamp = t.TransactionDate,
                         Description = t.TransactionDescription
                     })
-                    .ToListAsync()
-                : new List<FarmerTransactionDto>();
+                    .ToListAsync();
 
-            var activityLogs = await _context.ActivityLogs
+            var activities = await _context.ActivityLogs
+                .AsNoTracking()
                 .Where(a => a.PerformedByUserId == userId)
                 .OrderByDescending(a => a.CreatedOn)
                 .Select(a => new FarmerActivityLogDto
@@ -1822,7 +1823,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 })
                 .ToListAsync();
 
-            var profile = new FarmerProfileDto
+            return new FarmerProfileDto
             {
                 PersonalInformation = new FarmerPersonalInfoDto
                 {
@@ -1835,8 +1836,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Email = farmer.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
-                    DateRegistered = cooperativeInfo.Min(c => c.DateAdded), 
-                    FarmerImage = image?.IMageKey,
+                    DateRegistered = farmer.OnBoardedOn,
                     FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level),
                     IsActive = user?.IsActive ?? false,
                 },
@@ -1849,20 +1849,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     Location = farmer.Location,
                 },
 
-                CooperativeInformation = cooperativeInfo,
-                Farms = farms,
+                Farms = farmDtos,
 
                 Wallet = new FarmerWalletDto
                 {
-                    TotalWalletBalance = userWallet?.WalletBalance ?? 0,
-                    Transactions = walletTransactions
+                    TotalWalletBalance = wallet?.WalletBalance ?? 0,
+                    Transactions = transactions
                 },
 
-                ActivityLogs = activityLogs
+                ActivityLogs = activities
             };
-
-            return profile;
-        } /** 
+        }
+        /** 
         public async Task<FarmerProfileDto> GetFarmerProfileAsync(string userId)
         {
             if (string.IsNullOrWhiteSpace(userId)) return null;

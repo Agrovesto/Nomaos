@@ -93,23 +93,23 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public enum FarmerLevel
     {
-        [Display(Name = "Level 0")] //not verified
-        Level0,
-
-        [Display(Name = "Level 1")] //phone or email verified 
+        [Display(Name = "Level 1")] //not verified
         Level1,
 
-        [Display(Name = "Level 2")]//farmer:picture
+        [Display(Name = "Level 2")] //phone or email verified 
         Level2,
 
-        [Display(Name = "Level 3")] //farmer:nin/bvn,  cooperatuve: cooperative registration document
+        [Display(Name = "Level 3")] //farmer:picture
         Level3,
 
-        [Display(Name = "Level 4")] //farmer: land mapping, cooperative: cac
+        [Display(Name = "Level 4")]//farmer:nin/bvn,  c
         Level4,
 
-        [Display(Name = "Level 5")] //repaid credit
-        Level5
+        [Display(Name = "Level 5")] //farmer: land mapping, document
+        Level5,
+
+        [Display(Name = "Level 6")] //repaid credit
+        Level6
     }
     public class FarmerDetailDto
     {
