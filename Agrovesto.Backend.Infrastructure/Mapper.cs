@@ -19,6 +19,18 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+
+        public static OnboardingRequestModel ToEntity(this UserModel model)
+        {
+            if (model == null) return null;
+            return new OnboardingRequestModel
+            {
+              Id= model.Id,
+              PhoneNumber= model.PhoneNumber,
+              Email=model.Email,
+            };
+        }
+
         public static KYCDetails ToEntity(this NINData model)
         {
             if (model == null) return null;
@@ -43,7 +55,32 @@ namespace Agrovesto.Backend.Infrastructure
               //  VerifiedBy = model.VerifiedBy
             };
         }
-
+        public static KYCDetails ToEntity(this BVN_data model)
+        {
+            if (model == null) return null;
+            return new KYCDetails
+            {
+                // Id = model.Id,
+              
+                Surname = model.lastName,
+                Birthdate = model.dateOfBirth,
+                Birthlga = model.lgaOfOrigin,
+                Birthstate=model.stateOfOrigin,
+                
+                // Birthstate = model.sta,
+                Firstname = model.firstName,
+                Gender = model.gender,
+                //LoggedOn = model.LoggedOn,
+                //Maidenname = model.,
+                Middlename = model.middleName,
+                Nin = model.nin,
+                Phonenumber = model.phoneNumber1,
+            
+                Residentialaddress = model.residentialAddress,
+                //    UserId = model.UserId,
+                //  VerifiedBy = model.VerifiedBy
+            };
+        }
 
         public static Dictionary<string, decimal> SafeDeserializeContributions(string json)
         {
