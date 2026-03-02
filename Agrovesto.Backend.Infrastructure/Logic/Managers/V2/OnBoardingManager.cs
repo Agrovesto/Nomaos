@@ -52,16 +52,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
         Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
-        Task ResendOnboardingOtp(ResendOtpRequest model);
+        Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
-        Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId);
+        Task<bool> VerifyNIN(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
         //Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
+        Task<bool> VerifyBvn(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
+        Task<string> RequestEmailOrPhoneVerification(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -104,7 +106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _farmManager = farmManager;
             _identityVerificationManager = identityVerificationManager;
             _excelConverterService = excelConverterService;
-            _context= context;
+            _context = context;
             _notificationService = notificationService;
             _configuration = configuration;
         }
@@ -751,6 +753,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
+            string message = "";
+            string env = !string.IsNullOrEmpty(args.Env)
+              ? args.Env
+              : _configuration["Official:Env"] ?? string.Empty;
             try
             {
                 ValidateUserType(args);
@@ -799,7 +805,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         args.userType);
 
                     // ------------------ OTP Generation ------------------
-                    await GenerateAndSendOtp(createUser.model);
+                    if(env == Env.Live.ToString())
+                    {
+
+                        await GenerateAndSendOtp(createUser.model);
+                    }
+                    else
+                    {
+                        message = await DummyGenerateAndSendOtp(createUser.model);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -814,7 +828,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Id = model.Id,
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber,
-                    Message = "User created successfully. Some post-registration steps may need manual completion."
+                    Message = $"User created successfully. Some post-registration steps may need manual completion {message}."
                 };
             }
             catch (BaseException)
@@ -829,19 +843,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "An unexpected error occurred. Please try again.");
             }
         }
-        //private static void ValidateUserType(OnBoardingArgs args)
-        //{
-        //    if (args.userType != "Farmer" &&
-        //        args.userType != "MemberShip" &&
-        //        args.userType != "Agent" &&
-        //        args.userType != "Organization" &&
-        //        args.userType != "ServiceProvider")
-        //    {
-        //        throw new BaseException(
-        //            Core.Enums.ExceptionType.BAD_REQUEST,
-        //            "Invalid User Type.");
-        //    }
-        //}
         private static void ValidateUserType(OnBoardingArgs args)
         {
             if (!Enum.TryParse<UserType>(args.userType, true, out _))
@@ -897,6 +898,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Confirm your account",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes.");
             }
+            else
+            {
+                await _sMSService.SendSmsAsync(
+                        otp.Destination,
+                        $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+            }
         }
 
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
@@ -927,24 +934,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             await _onboardingRepository.ConfirmUserEmailOrPassword(userId);
         }
-        public async Task ResendOnboardingOtp(ResendOtpRequest model)
+        public async Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args)
         {
             try
             {
                 var otp = await ResendOtpAsync(model.UserId, model.OtpTarget, OtpPurpose.Onboarding);
-                if (model.OtpTarget == OtpTarget.Email)
+                string env = !string.IsNullOrEmpty(args.Env)
+           ? args.Env
+           : _configuration["Official:Env"] ?? string.Empty;
+
+                if (env == Env.Live.ToString())
                 {
-                    await _sMSService.SendEmailAsync(
-                        otp.Destination,
-                        "Confirm your account",
-                        $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    if (model.OtpTarget == OtpTarget.Email)
+                    {
+                        await _sMSService.SendEmailAsync(
+                            otp.Destination,
+                            "Confirm your account",
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    }
+                    else
+                    {
+                        await _sMSService.SendSmsAsync(
+                            otp.Destination,
+                            $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+                    }
+                    return "";
                 }
-                else
-                {
-                    await _sMSService.SendSmsAsync(
-                        otp.Destination,
-                        $"Your verification code is {otp.Code}. Expires in 5 minutes.");
-                }
+                else { return otp.Code; }
+               
             }
             catch (Exception ex)
             {
@@ -1022,6 +1039,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
+        public async Task<string> RequestEmailOrPhoneVerification(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
+        {
+            var user = await _onboardingRepository.GetUserById(args.UserId);
+            if (user.model == null)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "User not found.");
+            }
+            if (model.Env == Env.Live.ToString())
+            {
+                await GenerateAndSendOtp(user.model.ToEntity());
+                return "";
+            }
+            else { return await DummyGenerateAndSendOtp(user.model.ToEntity()); }
+       
+        }
+        private async Task<string> DummyGenerateAndSendOtp(OnboardingRequestModel model)
+        {
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+                ? OtpTarget.Email
+                : OtpTarget.Phone;
+
+            var destination = otpTarget == OtpTarget.Email
+                ? model.Email
+                : model.PhoneNumber;
+
+            await _otpService.InvalidateActiveOtps(
+                model.Id,
+                otpTarget);
+
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            {
+                UserId = model.Id,
+                Target = otpTarget,
+                Destination = destination,
+                Purpose = OtpPurpose.Onboarding,
+                ExpiryMinutes = 5
+            });
+
+            return otp.Code;
+       
+        }
 
 
         public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId)
@@ -1052,7 +1112,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        public async Task<bool> VerifyNIN(OnBoardingArgs args, string nin, string CurrentUserId)
+        public async Task<bool> VerifyNIN(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
         {
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
@@ -1061,25 +1121,200 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.NOTFOUND,
                     "User not found.");
             }
-            var verifyNin = await _identityVerificationManager.VerifyNIN(new NINDataModel
+
+            var number = !string.IsNullOrEmpty(model.Number) ? model.Number : user.model.NIN;
+
+            if (string.IsNullOrEmpty(number))
             {
-                number = nin
-            });
+                throw new BaseException(
+                   Core.Enums.ExceptionType.NOTFOUND,
+                   "No number supplied.");
+            }
+            ValidateIdentifier(number, "NIN");
+            NINDataVerificationResponse<NINData, Verification> verifyNin = null;
+            if (model.Env == Env.Live.ToString())
+            {
+                verifyNin = await _identityVerificationManager.VerifyNIN(new NINDataModel
+                {
+                    number = number
+                });
+            }
+            else
+            {
+                verifyNin = UseDummyNINEnvironment(number = number);
+            }
+
             if (!verifyNin.status)
             {
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     verifyNin.detail);
             }
-            user.model.NIN = nin;
+            user.model.NIN = number;
             var kyc = verifyNin.nin_data.ToEntity();
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
             await _onboardingRepository.OnCreateKYC(kyc);
-            await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level3);
+            await _onboardingRepository.OnNINBVNUpdate(new UserModel
+            {
+                Id = args.UserId,
+                NIN = number,
+            });
+            await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level4);
             return true;
         }
+
+        private NINDataVerificationResponse<NINData, Verification>? UseDummyNINEnvironment(string v)
+        {
+            var nindata = new NINData
+            {
+                birthcountry = "Nigeria",
+                birthdate = "1995-06-15",
+                birthlga = "Ikeja",
+                centralID = "CEN123456789",
+                educationallevel = "Bachelor's Degree",
+                email = "john.doe@example.com",
+                middlename = "Michael",
+                emplymentstatus = "Employed",
+                firstname = "John",
+                gender = "Male",
+                heigth = "175cm",
+                maritalstatus = "Single",
+                nin = v,
+                nok_address1 = "12 Palm Street",
+                nok_address2 = "Apartment 3B",
+                nok_firstname = "Mary",
+                nok_lga = "Surulere",
+                nok_middlename = "Anne",
+                nok_postalcode = "100001",
+                nok_state = "Lagos",
+                nok_surname = "Doe",
+                nok_town = "Lagos",
+                nspokenlang = "English",
+                ospokenlang = "Yoruba",
+                pfirstname = "Robert",
+                photo = "base64-photo-string",
+                pmiddlename = "James",
+                profession = "Software Engineer",
+                psurname = "Doe",
+                religion = "Religion",
+                residence_address = "45 Allen Avenue",
+                residence_Town = "Ikeja",
+                residence_lga = "Ikeja",
+                residence_state = "Lagos",
+                residencestatus = "Permanent",
+                self_origin_lga = "Oshodi-Isolo",
+                self_origin_place = "Isolo",
+                self_origin_state = "Lagos",
+                signature = "base64-signature-string",
+                surname = "Doe",
+                telephoneno = "08031234567",
+                title = "Mr"
+            
+            };
+
+            return new NINDataVerificationResponse<NINData, Verification>
+            {
+                nin_data = nindata,
+                response_code = "OK",
+                detail =null,
+                status = true,
+                verification = new Verification()
+            };
+        }
+
+        public async Task<bool> VerifyBvn(OnBoardingArgs args, KYCVerificationDto model, string CurrentUserId)
+        {
+            var user = await _onboardingRepository.GetUserById(args.UserId);
+            if (user.model == null)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "User not found.");
+            }
+            var number = !string.IsNullOrEmpty(model.Number) ? model.Number : user.model.Bvn;
+            if (string.IsNullOrEmpty(number))
+            {
+                throw new BaseException(
+                   Core.Enums.ExceptionType.NOTFOUND,
+                   "No number supplied.");
+            }
+            ValidateIdentifier(number, "BVN");
+            BVNVerificationResponse<BVN_data, Verification> verifyBvn = null;
+            if(model.Env == Env.Live.ToString())
+            {
+                verifyBvn = await _identityVerificationManager.VerifyBvn(new BVNDataModel
+                {
+                    number = number
+                });
+            }
+            else
+            {
+                verifyBvn = UseDummyBVNVerification(number);
+            }
+         
+            if (!verifyBvn.status)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    verifyBvn.detail);
+            }
+            user.model.NIN = number;
+            var kyc = verifyBvn.data.ToEntity();
+            kyc.VerifiedBy = CurrentUserId;
+            kyc.UserId = args.UserId;
+            kyc.LoggedOn = DateTimeOffset.UtcNow;
+            await _onboardingRepository.OnCreateKYC(kyc);
+            await _onboardingRepository.OnNINBVNUpdate(new UserModel
+            {
+                Id = args.UserId,
+                Bvn = number,
+            });
+            await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level4);
+            return true;
+        }
+
+        private BVNVerificationResponse<BVN_data, Verification>? UseDummyBVNVerification(string number)
+        {
+            var bvnData = new BVN_data
+            {
+                firstName = "Adebayo",
+                lastName = "Olawale",
+                middleName = "Samuel",
+                dateOfBirth = "1988-03-22",
+                phoneNumber1 = "08034567891",
+                phoneNumber2 = "07012345678",
+                registrationDate = "2015-09-14",
+                enrollmentBank = "First Bank of Nigeria",
+                enrollmentBranch = "Ikeja Branch",
+                email = "adebayo.olawale@example.com",
+                gender = "Male",
+                levelOfAccount = "Level 3",
+                lgaOfOrigin = "Abeokuta South",
+                lgaOfResidence = "Ikeja",
+                maritalStatus = "Married",
+                nin = "23456789012",
+                nameOnCard = "ADEBAYO OLAWALE S",
+                nationality = "Nigerian",
+                residentialAddress = "23 Toyin Street, Ikeja",
+                stateOfOrigin = "Ogun",
+                stateOfResidence = "Lagos",
+                title = "Mr",
+                watchListed = "No",
+                bvn = "22113344556",
+                base64Image = "base64-image-string"
+            };
+            return new BVNVerificationResponse<BVN_data, Verification>
+            {
+                data = bvnData,
+                response_code = "OK",
+                detail = null,
+                status = true,
+                verification = new Verification()
+            };
+        }
+
         private static string GenerateEmail(string fullName, string domain)
         {
             if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(domain))
@@ -1186,11 +1421,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var saveFace = new ImageUploadResponse();
             try
             {
+                var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId)
+                  ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Farmer does not exist.");
+
+
+                if (farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level2))
+                {
+                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! Finish Level 2 to continue to Level 3");
+                }
+
                 saveFace = await _faceManager.UploadImage(model.File, args.UserId, args.businessCode, args.organizationCode);
 
                 if (saveFace != null && !string.IsNullOrEmpty(saveFace.ImageKey))
                 {
-                    var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level2);
+                    var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level3);
                 }
                 return saveFace;
             }

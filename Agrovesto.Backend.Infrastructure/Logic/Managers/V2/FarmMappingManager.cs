@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
@@ -418,6 +419,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User does not exist.");
                 args.performedByName = $"{user.model.FirstName} {user.model.LastName}";
 
+
+                if(farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level4))
+                {
+                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! Finish Level 4 to continue to Level 5");
+                }
                 // Parse coordinates (JSON or raw text)
                 var coordinates = ParseCoordinates(request.CoordinatesJson);
 
@@ -481,6 +487,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                         await _farmRepo.AttachSingleDocumentsAsync(documentDto, args);
                     }
+                }
+
+
+                if (farm != null)
+                {
+                    var updateLevel = await _farmerRepository.OnFarmerLevelUpdate(farmer.UserId, FarmerLevel.Level5);
                 }
 
                 return farm.Id;
