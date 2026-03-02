@@ -250,13 +250,19 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public class KYCVerificationDto
     {
         public string Number { get; set; }
+      
+    }
+    public class VerificationArgs
+    {
+        public string? UserId { get; set; }
         [Required]
         public string Env { get; set; }
+        public string businessCode { get; set; }
     }
     public class OnBoardingArgs
     {
         public long Id { get; set; }
-        public string? Env { get; set; }
+    public string? Env { get; set; }
         public string userType { get; set; }
         public string? UserId { get; set; }
         public string? OnboardedByUserId { get; set; }
