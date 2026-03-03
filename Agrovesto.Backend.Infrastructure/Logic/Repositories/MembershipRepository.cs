@@ -350,6 +350,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 var isModified = false;
                 if (existingCooperative != null)
                 {
+                    if (data.IsLeaderAFarmer)
+                    {
+                        existingCooperative.IsLeaderAFarmer = data.IsLeaderAFarmer;
+                    }
+                    if (!string.IsNullOrWhiteSpace(data.Name))
+                        existingCooperative.Name = data.Name;
+
+                    if (!string.IsNullOrWhiteSpace(data.Location))
+                        existingCooperative.Location = data.Location;
+
                     if (!string.IsNullOrWhiteSpace(data.State))
                         existingCooperative.State = data.State;
 
@@ -359,11 +369,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!string.IsNullOrWhiteSpace(data.ContactPerson))
                         existingCooperative.ContactPerson = data.ContactPerson;
 
-                    if (!string.IsNullOrWhiteSpace(data.Email))
-                        existingCooperative.Email = data.Email;
 
-                    if (!string.IsNullOrWhiteSpace(data.Location))
-                        existingCooperative.Location = data.Location;
+                    if (!string.IsNullOrWhiteSpace(data.Ward))
+                        existingCooperative.Ward = data.Ward;
+
+                    if (!string.IsNullOrWhiteSpace(data.Email))
+                        existingCooperative.Email = data.Email;        
 
                     if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
                         existingCooperative.PhoneNumber = data.PhoneNumber;
@@ -378,16 +389,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         existingCooperative.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
-                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;
+                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;              
 
-                    if (!string.IsNullOrWhiteSpace(data.Name))
-                        existingCooperative.Name = data.Name;
 
+                    if(data.MemberShipTypeId !=0)
+                    {
+                        existingCooperative.MemberShipTypeId = data.MemberShipTypeId;
+                    }
+                   
                     //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
                     //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
 
-                    if (!string.IsNullOrWhiteSpace(data.Ward))
-                        existingCooperative.Ward = data.Ward;
                     if (data.AgentIds != null)
                     {
                         var existingAgents = _context.MemberShipAgents
@@ -404,6 +416,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             });
                         }
                         isModified = true;
+                        existingCooperative.HasbeenAssignedAgent = true;
                     }
                     _context.MemberShips.Update(existingCooperative);
                     await _context.SaveChangesAsync();
