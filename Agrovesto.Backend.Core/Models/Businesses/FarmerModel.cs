@@ -81,6 +81,33 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public string Tier { get; set; }
     }
+
+    public class FarmerMembershipSummaryDto
+    {
+        public long MembershipId { get; set; }
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string Status { get; set; }
+    }
+    public class FarmerMembershipOverviewDto
+    {
+        public long MembershipId { get; set; }
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string Status { get; set; }
+        public string Location { get; set; }
+        public DateTimeOffset DateCreated { get; set; }
+        public long NumberOfFarmers { get; set; }
+        public long TotalFarmCount { get; set; }
+        public long TotalMappedFarms { get; set; }
+    }
+    public class FarmerFinancialSummaryDto
+    {
+        public decimal TotalWalletBalance { get; set; }
+        public decimal OutstandingInputDebt { get; set; }
+        public decimal NextRepaymentAmount { get; set; }  // e.g., next scheduled repayment
+        public DateTime? NextRepaymentDate { get; set; }  // optional
+    }
     public class FarmerMembershipProfileDto
     {
         public string FullName { get; set; }

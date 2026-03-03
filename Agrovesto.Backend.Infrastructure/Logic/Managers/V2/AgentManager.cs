@@ -127,38 +127,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query)
         {
-         
 
-            // Total cooperatives linked to this agent
-            var cooperatives = await _cooperativeRepository.GetCooperativeByAgent(query.UserId, query);
-
-            //  Farmers linked to this agent
-            var farmers = await _farmerRepository.GetFarmersByAgent(query.UserId, query);
-
-         
-
-            // Farmers linked to cooperatives (based on projection)
-            var totalFarmersLinkedToCoops = farmers.Data.Count(f => string.Equals(f.CooperativeStatus, "Linked", StringComparison.OrdinalIgnoreCase));
-            var totalFarmersNotLinkedToCoops = farmers.Count - totalFarmersLinkedToCoops;
-
-            //  Total mapped / unmapped farms (based on whether farmer has any farm plots)
-            var totalMappedFarms = farmers.Data.Count(f => string.Equals(f.MappingStatus, "Mapped", StringComparison.OrdinalIgnoreCase));
-            var totalUnmappedFarms = farmers.Count - totalMappedFarms;
-
-            var dto = new AgentDashboardDto
-            {
-                TotalCooperatives = cooperatives.Count,
-                TotalFarmers = farmers.Count,
-                TotalFarmSizeHectares = farmers.Data.Sum(f => f.TotalFarmSizeHectares), // sum of farm sizes for all farmers linked to this agent
-                TotalFarms = farmers.Data.Sum(f => f.TotalFarms),
-                // leave TotalFarmSizeHectares and TotalFarms unchanged unless farm repo is available
-                MappedFarms = totalMappedFarms,
-                UnmappedFarms = totalUnmappedFarms,
-                FarmersLinkedToCooperatives = totalFarmersLinkedToCoops,
-                FarmersNotLinkedToCooperatives = totalFarmersNotLinkedToCoops
-            };
-
-            return dto;
+            var request = await _farmerRepository.GetAgentDashboardData(query.UserId);
+            
+            return request;
         }
 
         public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(

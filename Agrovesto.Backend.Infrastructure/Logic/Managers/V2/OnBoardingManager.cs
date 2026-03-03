@@ -1422,7 +1422,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 if (farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level2))
                 {
-                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! Finish Level 2 to continue to Level 3");
+                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! " +
+                        "Complete your phonenumber or email Verification to continue to submit photo");
                 }
 
                 saveFace = await _faceManager.UploadImage(model.File, args.UserId, args.businessCode, args.organizationCode);
