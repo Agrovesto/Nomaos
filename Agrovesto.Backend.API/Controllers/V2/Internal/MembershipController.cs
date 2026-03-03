@@ -304,6 +304,66 @@ IFormFile file,
             }
         }
 
+        [HttpPost("update-membership-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+
+                model.Id = args.UserId;
+                 await _onBoardingManager.CreateCooperativeProfileAsync(model, args);
+
+
+                return Ok(new Response<CreateMembershipResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = null
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
 
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
