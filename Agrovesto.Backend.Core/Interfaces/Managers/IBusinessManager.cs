@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Core.Models.Payment;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,5 +52,9 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<BulkUploadFarmersResponse> NewBulkUploadFarmersAsync(FarmerUploadModel request, BusinessRegistrationArgs args,
         IProgress<BulkUploadProgress> progress = null);
         Task<AgentModel> GetAgentDetailByUserId(string userId);
+        Task<FarmerModel> GetFarmerByUserId(string userId);
+        Task<FarmerDashboardDto> GetFarmerDashboard(ListQueryParams query);
+        Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(ListQueryParams query);
+        Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams query);
     }
 }

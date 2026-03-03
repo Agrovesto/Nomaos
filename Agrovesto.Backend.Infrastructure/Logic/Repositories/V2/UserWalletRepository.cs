@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> CloseUserWallet(long walletId, string closedByUserId, string reason = "User requested wallet closure");
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
+        Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
         Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class UserWalletRepository : IUserWalletRepository
@@ -29,6 +30,51 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
 
+        }
+        public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
+        {
+            var userId = args.UserId;
+
+            var totalWalletBalance = await _context.UserWallets
+                .Where(w => w.UserId == userId &&
+                            w.BelongToBusinessCode == args.businessCode &&
+                            !w.IsDeleted)
+                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+
+            var inputStats = await _context.InputTransactions
+                .Where(t => t.Farmer.UserId == userId)
+                .GroupBy(t => 1)
+                .Select(g => new
+                {
+                    TotalDisbursement = g
+                        .Where(x => x.TransactionType == InputTransactionType.Disbursement)
+                        .Sum(x => (decimal?)x.Amount) ?? 0m,
+
+                    TotalRepayment = g
+                        .Where(x => x.TransactionType == InputTransactionType.Repayment)
+                        .Sum(x => (decimal?)x.Amount) ?? 0m
+                })
+                .FirstOrDefaultAsync();
+
+            var totalDisbursement = inputStats?.TotalDisbursement ?? 0m;
+            var totalRepayment = inputStats?.TotalRepayment ?? 0m;
+            var outstandingDebt = totalDisbursement - totalRepayment;
+
+            var nextRepayment = await _context.InputTransactions
+                .Where(t => t.Farmer.UserId == userId &&
+                            t.TransactionType == InputTransactionType.Repayment &&
+                            t.TransactionDate > DateTime.UtcNow)
+                .OrderBy(t => t.TransactionDate)
+                .Select(t => new { t.Amount, t.TransactionDate })
+                .FirstOrDefaultAsync();
+
+            return new FarmerFinancialSummaryDto
+            {
+                TotalWalletBalance = totalWalletBalance,
+                OutstandingInputDebt = outstandingDebt,
+                NextRepaymentAmount = nextRepayment?.Amount ?? 0m,
+                NextRepaymentDate = nextRepayment?.TransactionDate
+            };
         }
         public  async Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId)
         {

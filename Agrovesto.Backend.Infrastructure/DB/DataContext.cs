@@ -345,6 +345,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<UserWallet> UserWallets { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
+        public DbSet<InputTransaction> InputTransactions { get; set; }
+        public DbSet<InputAllocation> InputAllocations { get; set; }
+        public DbSet<Input> Inputs { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>
