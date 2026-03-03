@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -83,6 +84,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _traderRepository = traderRepository;
             _excelConverterService = excelConverterService;
 
+        }
+        public async Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(ListQueryParams query)
+        {
+            return await _farmerRepository.GetFarmerMembershipDetails(query.UserId);
+        }
+        public async Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams query)
+        {
+            return await _farmerRepository.GetMembershipsByFarmer(query);
+        }
+        public async Task<FarmerDashboardDto> GetFarmerDashboard(ListQueryParams query)
+        {
+            return await _farmerRepository.GetFarmerDashboard(query.UserId);
         }
         private async Task<List<UserModel>> ParseFarmerFileAsync(Stream fileContent, BusinessRegistrationArgs args)
         {
@@ -2378,6 +2391,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
             // });
             //return saveFace;
+        }
+
+        public async Task<FarmerModel> GetFarmerByUserId(string userId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+               
+
+                return getFarmer;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching  farmer details", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
         }
 
 

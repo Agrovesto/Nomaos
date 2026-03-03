@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
 using System.Collections.Generic;
@@ -49,5 +50,10 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId);
         Task<(bool status, string message)> OnFarmerLevelUpdate(string userId, FarmerLevel level);
         Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(long cooperativeId, ListQueryParams query);
+        Task<(int totalFarms, double totalSize)> GetAgentFarmStats(string agentUserId);
+        Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId);
+        Task<FarmerDashboardDto> GetFarmerDashboard(string farmerUserId);
+        Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams args);
+        Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string membershipId);
     }
 }

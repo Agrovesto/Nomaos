@@ -129,44 +129,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
             }
         }
+
         public async Task<List<FarmListRespopnseObject>> FetchFarmsByFarmer(FarmMappingArgs args)
         {
             try
-            { //get business code
+            {
                 if (string.IsNullOrEmpty(args.businessCode))
                     throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        ExceptionType.BAD_REQUEST,
                         "Business code is required.");
 
-                // ------------------ Fetch business ------------------
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new BaseException(
-                        Core.Enums.ExceptionType.NOTFOUND,
+                        ExceptionType.NOTFOUND,
                         "Business does not exist.");
-                var fetchFarms = await _farmRepo.FetchAllFarmsByFarmer(args);
-                if(fetchFarms == null)
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.NOTFOUND,
-                        "Farm does not exist.");
-                var farms = fetchFarms.Select(fetchFarm =>
-                {
-                    string verificationStatus;
 
-                    if (fetchFarm.FarmLandDocuments == null || !fetchFarm.FarmLandDocuments.Any())
-                    {
-                        verificationStatus = "Not Uploaded";
-                    }
-                    else if (!fetchFarm.IsDocumentVerified)
-                    {
-                        verificationStatus = "Partial";
-                    }
-                    else
-                    {
-                        verificationStatus = "Completed";
-                    }
+                var farms = await _farmRepo.FetchAllFarmsByFarmer(args);
+
+                if (!farms.Any())
+                    throw new BaseException(
+                        ExceptionType.NO_RECORD_FOUND,
+                        "Farm not found.");
+
+                return farms.Select(fetchFarm =>
+                {
+                    string verificationStatus =
+                        !fetchFarm.FarmLandDocuments.Any()
+                            ? "Not Uploaded"
+                            : !fetchFarm.IsDocumentVerified
+                                ? "Partial"
+                                : "Completed";
 
                     return new FarmListRespopnseObject
                     {
+                        FarmLocation = fetchFarm.FarmLocation,
+                        FarmLga = fetchFarm.FarmLga,
+                        FarmState = fetchFarm.FarmState,
+                        FarmWard = fetchFarm.FarmWard,
+                        FarmName = fetchFarm.Name,
                         DateAdded = fetchFarm.CreatedAt,
                         MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
                         DocumentStatus = verificationStatus,
@@ -174,10 +174,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         FarmId = fetchFarm.Id,
                     };
                 }).ToList();
-
-
-
-                return farms;
             }
             catch (BaseException)
             {
@@ -185,12 +181,83 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             catch (Exception ex)
             {
-                _log.LogError(ex, "Create Farm failed unexpectedly");
+                _log.LogError(ex, "Fetch Farm failed unexpectedly");
+
                 throw new BaseException(
                     ExceptionType.INTERNAL_SERVER_ERROR,
-                   !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
+                    !string.IsNullOrEmpty(ex.Message)
+                        ? ex.Message
+                        : "Unable to fetch farm data");
             }
         }
+
+        //public async Task<List<FarmListRespopnseObject>> FetchFarmsByFarmer(FarmMappingArgs args)
+        //{
+        //    try
+        //    { //get business code
+        //        if (string.IsNullOrEmpty(args.businessCode))
+        //            throw new BaseException(
+        //                Core.Enums.ExceptionType.BAD_REQUEST,
+        //                "Business code is required.");
+
+        //        // ------------------ Fetch business ------------------
+        //        var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+        //            ?? throw new BaseException(
+        //                Core.Enums.ExceptionType.NOTFOUND,
+        //                "Business does not exist.");
+        //        var fetchFarms = await _farmRepo.FetchAllFarmsByFarmer(args);
+        //        if(fetchFarms == null)
+        //            throw new BaseException(
+        //                Core.Enums.ExceptionType.NOTFOUND,
+        //                "Farm does not exist.");
+        //        var farms = fetchFarms.Select(fetchFarm =>
+        //        {
+        //            string verificationStatus;
+
+        //            if (fetchFarm.FarmLandDocuments == null || !fetchFarm.FarmLandDocuments.Any())
+        //            {
+        //                verificationStatus = "Not Uploaded";
+        //            }
+        //            else if (!fetchFarm.IsDocumentVerified)
+        //            {
+        //                verificationStatus = "Partial";
+        //            }
+        //            else
+        //            {
+        //                verificationStatus = "Completed";
+        //            }
+
+        //            return new FarmListRespopnseObject
+        //            {
+        //                FarmLocation= fetchFarm.FarmLocation,
+        //                FarmLga=fetchFarm.FarmLga,
+        //                FarmState=fetchFarm.FarmState,
+        //                FarmWard=fetchFarm.FarmWard,
+        //                FarmName= fetchFarm.Name,
+        //                DateAdded = fetchFarm.CreatedAt,
+        //                MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
+        //                DocumentStatus = verificationStatus,
+        //                LandSize = fetchFarm.FarmSize,
+        //                FarmId = fetchFarm.Id,
+        //            };
+        //        }).ToList();
+
+
+
+        //        return farms;
+        //    }
+        //    catch (BaseException)
+        //    {
+        //        throw;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _log.LogError(ex, "Create Farm failed unexpectedly");
+        //        throw new BaseException(
+        //            ExceptionType.INTERNAL_SERVER_ERROR,
+        //           !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
+        //    }
+        //}
 
         public async Task<FarmDetailsResponse> FetchFarmDetails(FarmMappingArgs args)
         {
@@ -405,29 +472,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (string.IsNullOrEmpty(args.businessCode))
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Business code is required.");
 
-                // Fetch business
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Business does not exist.");
 
-                // Fetch farmer
                 var farmer = await _farmerRepository.GetFarmerById(args.farmerId)
                     ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Farmer does not exist.");
 
-                // Fetch user
                 var user = await _onboardingRepository.GetUserById(args.performedByUserId);
                 if (user.model == null)
                     throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "User does not exist.");
                 args.performedByName = $"{user.model.FirstName} {user.model.LastName}";
 
 
-                if(farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level4))
+                if (farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level4))
                 {
-                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! Finish Level 4 to continue to Level 5");
+                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! " +
+                        "Complete your nin/bvn Verification to continue to Add Farm");
                 }
-                // Parse coordinates (JSON or raw text)
+
                 var coordinates = ParseCoordinates(request.CoordinatesJson);
 
-                // MapFarmRequest for repo
                 var mapFarmRequest = new MapFarmRequest
                 {
                     PinnedLatitude = request.PinnedLatitude,    
@@ -449,11 +513,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Coordinates = coordinates
                 };
 
-                // Create or update farm
                 var farm = await _farmRepo.GetOrCreateDraftAsync(mapFarmRequest, args);
                 if (args.farmId <= 0)
                     args.farmId = farm.Id;
-                // Map coordinates if provided
                 if (coordinates?.Any() == true)
                 {
                     mapFarmRequest.Coordinates = coordinates;
@@ -461,7 +523,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     await _farmRepo.MapFarmAsync(mapFarmRequest, args);
                 }
 
-                // Handle documents
                 if (request.Documents?.Any() == true)
                 {
                     if (request.DocumentTypes == null || request.Documents.Count != request.DocumentTypes.Count)

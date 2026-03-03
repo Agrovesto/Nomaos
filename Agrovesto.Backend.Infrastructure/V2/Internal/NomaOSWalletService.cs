@@ -25,6 +25,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
     {
         // Define methods that the NomaOSWalletService should implement
         Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
+        Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
         Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class NomaOSWalletService : INomaOSWalletService
@@ -52,6 +53,28 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             WalletProviderParameterModel[] parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
             return parameters;
 
+        }
+        public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
+        {
+            try
+            {
+                    var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+                    if(business == null)throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
+
+                
+                var summary = await _userWalletRepository.GetUserFinancialSummary(args);
+                return summary;
+            }
+            catch (BaseException ex)
+            {
+              //  _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
         }
         public async Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args)
         {
