@@ -88,7 +88,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
+                if (CurrentUserId != null && CurrentUserRole == "Farmer")
+                {
+                    await EnrichFarmerAsync(query);
+                }
                 if (query.farmerId <= 0)
                 {
 
@@ -208,7 +211,19 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.performedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-                
+                if (CurrentUserId != null && CurrentUserRole == "Farmer")
+                {
+                    await EnrichFarmerAsync(args);
+                }
+                if (args.farmerId <= 0)
+                {
+
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "Farmer Id is required.",
+                        Succeeded = false
+                    });
+                }
 
                 var request = await _farmMappingManager.SubmitFarmAsync(model, args);
 
@@ -325,5 +340,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+      
+         private async Task EnrichFarmerAsync(FarmMappingArgs args)
+        {
+            //  if(CurrentUserRole != args.userType) return;
+            if (args.farmerId != 0) return;
+
+            var farmer = await _businessManager.GetFarmerByUserId(CurrentUserId);
+
+            if (farmer == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Farmer not found for the specified user.");
+
+            args.farmerId = farmer.Id;
+        }
     }
 }

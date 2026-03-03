@@ -26,6 +26,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string? organizationCode { get; set; }
             public long farmId { get; set; }
             public bool ContinueDraft { get; set; } = false;
+            public string? MappingStatus { get; set; } 
+            public string? DocumentStatus { get; set; }
         }
         public class FarmLandDocumentDto
         {
@@ -65,6 +67,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         }
         public class FarmListRespopnseObject
         {
+            public string FarmState { get; set; }
+            public string FarmLga { get; set; }
+            public string FarmWard { get; set; }
+            public string FarmName { get; set; }
+            public string FarmLocation { get; set; }
+            
             public long FarmId { get; set; }
             public double LandSize { get; set; }
             public string DocumentStatus { get; set; }

@@ -31,24 +31,18 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public double SizeHectares { get; set; }
         public bool IsMapped { get; set; }
     }
-    //public class MembershipDashboardDto
-    //{
-    //    public string Name { get; set; }
-    //    public string MembershipType { get; set; }
-    //    public DateTimeOffset OnboardedOn { get; set; }
-    //    public string Location { get; set; }
-    //    public bool IsActive { get; set; }
-    //    // Top-level summary
-    //    public long TotalFarmers { get; set; }
-    //    public long TotalMappedFarm { get; set; }
-    //    public double MappingProgress { get; set; }
-    //    public long TotalFarms { get; set; }
+    public class FarmerDashboardDto
+    {
+        public long TotalFarms { get; set; }
+        public decimal TotalWalletBalance { get; set; }
+        public decimal TotalInputReceived { get; set; }
+        public decimal OutstandingInputDebt { get; set; }
 
-    //    // Operational overview
-    //    public long MappedFarms { get; set; }
-    //    public long UnmappedFarms { get; set; }
-
-    //}
+        // Operational Overview
+        public long NotMapped { get; set; }
+        public long InProgressFarms { get; set; }
+        public long CompletedFarms { get; set; }
+    }
     public class ActivityDto
     {
         public string Description { get; set; }
