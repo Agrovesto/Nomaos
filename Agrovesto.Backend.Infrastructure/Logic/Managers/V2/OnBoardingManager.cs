@@ -64,6 +64,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
+        Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -365,6 +366,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
+
         public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
         {
             if (string.IsNullOrWhiteSpace(userId) || update == null)
@@ -620,19 +622,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
-            if (string.IsNullOrEmpty(model.CooperativeName))
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Cooperative Name is required.");
-            }
+            //if (string.IsNullOrEmpty(model.CooperativeName))
+            //{
+            //    throw new BaseException(
+            //        Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Cooperative Name is required.");
+            //}
             var isAssignedagent = false;
             if (args.OnboardedByUserId != null)
             {
                 isAssignedagent = true;
             }
-            if (!model.MembershipTypeId.HasValue)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
+     //       if (!model.MembershipTypeId.HasValue)
+              //  throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
 
             await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
             {
@@ -647,7 +649,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderGender = model.Gender,
                 MembershipLeaderLastName = model.LastName,
                 MembershipLeaderMiddleName = model.MiddleName,
-                MemberShipTypeId = model.MembershipTypeId.Value,
+                MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
                 Tier = Tier.Tier1.ToString(),
 
 
@@ -767,13 +769,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "Business code is required.");
 
-                // ------------------ Fetch business ------------------
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
                     ?? throw new BaseException(
                         Core.Enums.ExceptionType.NOTFOUND,
                         "Business does not exist.");
 
-                // ------------------ Register or attach user ------------------
                 var createUser = await _onboardingRepository.RegisterUser(model, args);
 
                 if (!createUser.status)
@@ -781,13 +781,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         createUser.message);
 
-                // Everything after this point is “best effort”
                 try
                 {
-                    // ------------------ Wallet / Sub-account ------------------
                     await EnsureWalletExists(createUser.model, business);
 
-                    // ------------------ Create Profile ------------------
                     var updateProfile = await CreateUserProfile(new ProfileRequestModel
                     {
                         Email = model.Email,
@@ -799,12 +796,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         OnboardedByUserId = args.OnboardedByUserId
                     }, args);
 
-                    // ------------------ Track role & user type ------------------
                     await _onboardingRepository.TrackUserRoleAssignment(
                         createUser.model.Id,
                         args.userType);
 
-                    // ------------------ OTP Generation ------------------
                     if(env == Env.Live.ToString())
                     {
 
