@@ -53,6 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WalletProviderModel[]> GetAll()
         {
             WalletProvider[] entities = await _context.Set<WalletProvider>()
+                .Where(x=>x.Status == ProviderStatus.Active.ToString())
                // .Include(x=>x.WalletProviderParameters)
                 .OrderBy(x => x.Name).ToArrayAsync();
 

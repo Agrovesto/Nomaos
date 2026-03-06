@@ -25,6 +25,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     public interface IMembershipManager
     {
         Task<CreateMembershipResponseModel> CreateFarmerAsync(CreateFarmerRequest model, OnBoardingArgs args);
+        Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
+        Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query);
 
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
         Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query);
@@ -369,10 +371,26 @@ OnboardingRequestModel user,
             if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
 
             if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
-            // Farmers linked to this agent
+            // Farmers linked to this membership
             return await _farmerRepository.GetFarmersByMembership(profile.Id, query);
 
         }
-       
+        public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query)
+        {
+            var profile = await _membershipRepository.GetMembershipDetailByUserId(query.UserId);
+            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
+
+            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
+            // Agents linked to this membership
+            return await _membershipRepository.GetAgentsByMembership(profile.Id, query);
+
+        }
+        public async Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args) 
+        { 
+        
+            // Agents linked to this membership
+            return await _membershipRepository.GetAgentOverview(args);
+
+        }
     }
 }

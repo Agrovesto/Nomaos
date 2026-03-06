@@ -1029,9 +1029,9 @@ Operational Overview (e.g., farms in progress, completed, or active)
                 .GroupBy(f => 1)
                 .Select(g => new
                 {
-                    NotStarted = g.Count(x => x.MappingStatus == MappingStatus.NotStarted),
-                    InProgress = g.Count(x => x.MappingStatus == MappingStatus.InProgress),
-                    Completed = g.Count(x => x.MappingStatus == MappingStatus.Completed)
+                    NotStarted = g.Count(x => x.MappingStatus == MappingStatus.UnMapped),
+                    InProgress = g.Count(x => x.MappingStatus == MappingStatus.Mapped),
+                    Completed = g.Count(x => x.MappingStatus == MappingStatus.Verified)
                 })
                 .FirstOrDefaultAsync();
 
@@ -1283,7 +1283,7 @@ Operational Overview (e.g., farms in progress, completed, or active)
                 select new
                 {
                     TotalFarms = g.Count(),
-                    TotalMappedFarms = g.Count(x => x.MappingStatus == MappingStatus.InProgress || x.MappingStatus == MappingStatus.Completed) // adjust if mapping logic differs
+                    TotalMappedFarms = g.Count(x => x.MappingStatus == MappingStatus.Mapped || x.MappingStatus == MappingStatus.Verified) // adjust if mapping logic differs
                 }
             ).FirstOrDefaultAsync();
 
@@ -1392,7 +1392,8 @@ Operational Overview (e.g., farms in progress, completed, or active)
             }
 
             if (!string.IsNullOrWhiteSpace(query.State))
-                baseQuery = baseQuery.Where(f => f.State == query.State);
+               baseQuery = baseQuery.Where(f => f.State == query.State);
+                //baseQuery = baseQuery.Where(f => f.State.Contains(query.State));
 
             if (query.Id > 0)
                 baseQuery = baseQuery.Where(f => f.Id == query.Id);

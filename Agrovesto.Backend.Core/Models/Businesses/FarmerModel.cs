@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public long Id { get; set; }
         public string? OnboardedByUserId { get; set; }
-     
+
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? FirstName { get; set; }
@@ -67,7 +67,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string CooperativeName { get; set; }    // Name of the cooperative
         public DateTimeOffset DateJoined { get; set; } // Date the farmer joined this cooperative
         public string OnboardedBy { get; set; }
- 
+
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
         public string Name { get; set; }
@@ -80,6 +80,41 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string UserId { get; set; }
 
         public string Tier { get; set; }
+    }
+    public class AgentOverviewDto
+    {
+        public long AgentId { get; set; }
+        public string Status { get; set; }
+        public DateTimeOffset DateRegistered { get; set; }
+        public string FullName { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Email { get; set; }
+        public string AgentUserId { get; set; }
+        public string CommunityName { get; set; }
+        public string State { get; set; }
+        public long TotalMemberships { get; set; }
+        public long TotalFarmers { get; set; }
+        public double TotalFarmSize { get; set; }
+        public long Farms { get; set; }
+     //   public List<AgentFarmDto> Farms { get; set; } = new();
+    }
+    public class AgentFarmDto
+    {
+        public long FarmId { get; set; }
+        public string FarmName { get; set; }
+        public double FarmSize { get; set; }
+        public string Location { get; set; }
+    }
+    public class AgentMembershipDto
+    {   public long Id { get; set; }                    // Agent ID
+        public string AgentUserId { get; set; }           // Linked User ID
+        public string AgentName { get; set; }           // Agent Name
+        public string PhoneNumber { get; set; }         // Phone Number
+        public int TotalAssignedFarmers { get; set; }   // Number of farmers assigned
+        public string Status { get; set; }              // Active / Inactive
+        public DateTimeOffset DateAdded { get; set; }         // OnBoardedOn
+        public string State { get; set; }               // Agent State
+        public string Lga { get; set; }                 // Agent LGA
     }
 
     public class FarmerMembershipSummaryDto
@@ -212,14 +247,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class FarmerProfileDto
     {
-       public FarmerProfileLocationDto Location { get; set; }
-       public FarmerPersonalInfoDto PersonalInformation { get; set; }    
-       public List<FarmerFarmDto> Farms { get; set; }    
-       public FarmerWalletDto Wallet { get; set; }    
-       public List<FarmerActivityLogDto> ActivityLogs { get; set; }    
+        public FarmerProfileLocationDto Location { get; set; }
+        public FarmerPersonalInfoDto PersonalInformation { get; set; }
+        public List<FarmerFarmDto> Farms { get; set; }
+        public FarmerWalletDto Wallet { get; set; }
+        public List<FarmerActivityLogDto> ActivityLogs { get; set; }
 
         // Cooperatives
-       public List<FarmerMembershipProfileDto> CooperativeInformation { get; set; } = new List<FarmerMembershipProfileDto>();
+        public List<FarmerMembershipProfileDto> CooperativeInformation { get; set; } = new List<FarmerMembershipProfileDto>();
     }
     public class FarmerWalletDto
     {
@@ -239,7 +274,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal RemainigBalance { get; set; }
 
         public double RepaymentProgress { get; set; } // e.g., Deposit, Withdrawal
-        
+
 
     }
     public class FarmerActivityLogDto
@@ -281,7 +316,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string PhoneNumber { get; set; }
         public string UserId { get; set; }
         public long Id { get; set; }
-   
+
         public string Tier { get; set; }
     }
     public class FarmerUpdateModel
@@ -327,8 +362,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
         public string? OnboardedByUserId { get; set; } //if individual farmers register, automatically assign them to Agrovesto
-       // public long BelongToCooperativeId { get; set; }
-       // public string? CooperativeName { get; set; }
+                                                       // public long BelongToCooperativeId { get; set; }
+                                                       // public string? CooperativeName { get; set; }
         public string? FarmerImage { get; set; }
         public string? OrganizationCode { get; set; }
         public string? NIN { get; set; }
