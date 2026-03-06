@@ -24,6 +24,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Email { get; set; }
         public string Phone { get; set; }
 
+
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
 

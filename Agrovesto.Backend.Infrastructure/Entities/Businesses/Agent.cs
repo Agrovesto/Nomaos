@@ -28,6 +28,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? SupervisorUserId { get; set; }
         public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
+        public bool IsActive { get; set; } = true;
 
     }
 }

@@ -62,15 +62,15 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? MappingFlagReason { get; set; }
         public bool IsMappingFlagged { get; set; } = false;
         public string? FarmSizeType { get; set; } //Sqm, //Kilometre //hectare, acre
-        public MappingStatus MappingStatus { get; set; } = MappingStatus.NotStarted;
+        public MappingStatus MappingStatus { get; set; } = MappingStatus.UnMapped;
         public Polygon? FarmPolygon { get; set; } // to get areas in degress, FarmPolygon.Area
 
     }
     public enum MappingStatus
     {
-        NotStarted, //no coordinates added
-        InProgress, //coordinates added but not verified
-        Completed // verified
+        UnMapped, //no coordinates added
+        Mapped, //coordinates added but not verified
+        Verified // verified
     }
     public class FarmAllocation
     {

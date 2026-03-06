@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -380,5 +381,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
         }
 
+
+        private bool ValidateTransactionPin(User user, string plainPin)
+        {
+            var salt = Convert.FromBase64String(user.Salt);
+            var hashedPin = plainPin.HashSecret(salt);
+
+            return user.PinEncrypt == hashedPin;
+        }
     }
 }
