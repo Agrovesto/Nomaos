@@ -749,7 +749,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     Core.Enums.ExceptionType.BAD_REQUEST,
     "Farmer Id is required.");
             }
-            ;
+            
 
             return await _farmerRepository.AssignFarmerToAgents(args, args.Id);
         }
@@ -818,13 +818,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 }
 
                 model.Id = createUser.model.Id;
-
+                
                 return new OnboardingResponseModel
                 {
                     Id = model.Id,
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber,
-                    Message = $"User created successfully. Some post-registration steps may need manual completion {message}."
+                    Message = !string.IsNullOrEmpty(createUser.message) ? createUser.message : $"User created successfully. Some post-registration steps may need manual completion {message}."
                 };
             }
             catch (BaseException)
@@ -1687,7 +1687,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    
                 });
 
-                var assignMembership = await _cooperativeRepository.AssignMemberShipToAgent(registerUser.model.Id, args.Id);
+               
+                var coopId = new List<long>();
+                coopId.Add(args.Id);
+
+                var assignMembership = await _cooperativeRepository.AssignMemberShipToAgent(registerUser.model.Id, coopId);
 
                 await EnsureWalletExists(registerUser.model, business);
 

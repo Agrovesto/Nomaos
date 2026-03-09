@@ -121,6 +121,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public string? OrganizationCode { get; set; }
             public double SizeInHectares { get; set; }
             public string? MeasurementMode { get; set; } // Walking, bike
+            public string? FarmSizeType { get; set; } // Walking, bike
             public double SizeInKm { get; set; }
             public List<FarmCoordinateDto> Coordinates { get; set; } = new();
             public List<FarmLandDocumentDto> Documents { get; set; } = new();  
