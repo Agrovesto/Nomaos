@@ -261,6 +261,54 @@ IFormFile file,
 
         }
 
+        [HttpGet("agents")]
+        public async Task<IActionResult> GetAgentsByMembership([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+
+                var result = await _membershipManager.GetAgentsByMembership(query);
+                return Ok(new PagedListResponse<List<AgentMembershipDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        
         [HttpGet("farmer-details")]
         public async Task<IActionResult> GetFarmerDetails([FromQuery] string? userId)
         {
@@ -302,6 +350,66 @@ IFormFile file,
                     Succeeded = false,
                 });
             }
+        }
+        
+        [HttpGet("agent-details")]
+        public async Task<IActionResult> AgentDetails([FromQuery] ListQueryParams args)
+        {
+            try
+            { 
+
+                if (string.IsNullOrEmpty(args.UserId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+                GetAgentIdFromUserIdAsync(args);
+
+                var profile = await _membershipManager.GetAgentOverview(args);
+
+                return Ok(new Response<AgentOverviewDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = profile
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+        private async Task GetAgentIdFromUserIdAsync(ListQueryParams args)
+        {
+            //  if(CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+         
         }
 
         [HttpPost("update-membership-profile")]

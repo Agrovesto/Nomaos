@@ -149,7 +149,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (!farms.Any())
                     throw new BaseException(
                         ExceptionType.NO_RECORD_FOUND,
-                        "Farm not found.");
+                        "No farms found for this farmer.");
 
                 return farms.Select(fetchFarm =>
                 {
@@ -484,11 +484,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 args.performedByName = $"{user.model.FirstName} {user.model.LastName}";
 
 
-                if (farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level4))
-                {
-                    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! " +
-                        "Complete your nin/bvn Verification to continue to Add Farm");
-                }
+                //if (farmer.Level != EnumExtensions.GetDisplayName(FarmerLevel.Level4))
+                //{
+                //    throw new BaseException(ExceptionType.ACCESS_DENIED, "You’re almost there! " +
+                //        "Complete your nin/bvn Verification to continue to Add Farm");
+                //}
 
                 var coordinates = ParseCoordinates(request.CoordinatesJson);
 

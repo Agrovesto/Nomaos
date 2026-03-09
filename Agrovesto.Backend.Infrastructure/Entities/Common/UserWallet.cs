@@ -42,6 +42,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [MaxLength(3)]
         public string Currency { get; set; } = "NGN";
 
+        [MaxLength(6)]
+        public string TransactionPin { get; set; } = "0000";
+        public string Txn { get; set; } = "0000";
+
         public bool IsActive { get; set; } = true;
 
         public DateTimeOffset AddedOn { get; set; } = DateTimeOffset.UtcNow;

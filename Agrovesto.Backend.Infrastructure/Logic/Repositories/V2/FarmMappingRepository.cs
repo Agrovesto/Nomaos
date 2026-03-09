@@ -281,7 +281,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 FarmSize = request.AreaSize,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = args.performedByUserId,
-                MappingStatus = MappingStatus.NotStarted
+                MappingStatus = MappingStatus.UnMapped
             };
 
             _context.Farms.Add(farm);
@@ -316,7 +316,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 var draftFarm = await _context.Farms
                     .Where(f =>
                         f.FarmerId == args.farmerId &&
-                        f.MappingStatus == MappingStatus.NotStarted)
+                        f.MappingStatus == MappingStatus.UnMapped)
                     .OrderByDescending(f => f.CreatedAt)
                     .FirstOrDefaultAsync();
 
@@ -340,7 +340,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = args.performedByUserId,
                 CapturedBy = args.performedByUserId,
-                MappingStatus = MappingStatus.NotStarted,
+                MappingStatus = MappingStatus.UnMapped,
                 MeasurementMode = request.MeasurementMode,
                 PinnedLatitude = request.PinnedLatitude,
                 PinnedLongitude = request.PinnedLongitude,
@@ -398,7 +398,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CreatedAt= DateTimeOffset.UtcNow,
                 FarmSize=request.AreaSize,
                 CreatedBy = args.performedByUserId,
-                MappingStatus = MappingStatus.NotStarted
+                MappingStatus = MappingStatus.UnMapped
             };
 
             await _context.AddAsync(farm);
@@ -452,7 +452,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 // 5️⃣ Update farm mapping info
                 farm.FarmPolygon = polygon;
-                farm.MappingStatus = MappingStatus.InProgress;
+                farm.MappingStatus = MappingStatus.Mapped;
                 farm.CapturedBy = args.performedByUserId;
                 farm.CapturedOn = DateTimeOffset.UtcNow;
                 farm.MappedBy = args.performedByUserId;
