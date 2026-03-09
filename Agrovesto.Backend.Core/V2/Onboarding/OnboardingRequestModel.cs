@@ -292,6 +292,9 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public class AssignmentArgs
     {
         public long Id { get; set; }
+
+        public string? farmerUserId { get; set; }
+        public string? agentUserId { get; set; }
         public string? UserId { get; set; }
         public string? OnboardedByUserId { get; set; }
         public string businessCode { get; set; }

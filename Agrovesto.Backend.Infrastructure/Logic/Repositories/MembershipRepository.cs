@@ -574,8 +574,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args)
         {
-            if (args.Id <= 0)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid Agent Id");
+        
 
             var agent = await _context.Agents
                 .Where(a => a.Id == args.Id && a.BelongToBusinessCode == args.businessCode)
@@ -819,45 +818,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             // Return mapped farmers
             return farmers.Select(f => f.Map()).ToList();
         }
-        public async Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, long membershipId)
+        public async Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, List<long> membershipIds)
         {
-            var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
-            // Get all cooperatives in this agent via MemberShipAgent
-            var memberships = await (
-                from m in _context.MemberShips.AsNoTracking()
-                join ma in _context.MemberShipAgents.AsNoTracking()
-                    on m.Id equals ma.MemberShipId
-                where ma.MemberShipId == membershipId
-                select m
-            ).ToListAsync();
+            var agent = await _context.Agents
+                .FirstOrDefaultAsync(a => a.UserId == agentUserId);
 
-            if (!memberships.Any())
-                return new List<MemberShipModel>();
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent not found");
 
-            foreach (var membership in memberships)
-            {
-                // Check if the assignment already exists
-                var alreadyAssigned = await _context.MemberShipAgents
-                    .AnyAsync(fa => fa.MemberShipId == membership.Id && fa.AgentId == agent.Id);
+            var existingAssignments = await _context.MemberShipAgents
+                .Where(ma => ma.AgentId == agent.Id && membershipIds.Contains(ma.MemberShipId))
+                .Select(ma => ma.MemberShipId)
+                .ToListAsync();
 
-                if (!alreadyAssigned)
+            var newAssignments = membershipIds
+                .Where(id => !existingAssignments.Contains(id))
+                .Select(id => new MemberShipAgent
                 {
-                    // Assign agent
-                    await _context.MemberShipAgents.AddAsync(new MemberShipAgent
-                    {
-                        MemberShipId = membership.Id,
-                        AgentId = agent.Id,
-                        AssignedOn = DateTimeOffset.UtcNow
-                    });
-                }
+                    MemberShipId = id,
+                    AgentId = agent.Id,
+                    AssignedOn = DateTimeOffset.UtcNow
+                }).ToList();
+
+            if (newAssignments.Any())
+            {
+                await _context.MemberShipAgents.AddRangeAsync(newAssignments);
+                await _context.SaveChangesAsync();
             }
 
-            await _context.SaveChangesAsync();
+            var memberships = await _context.MemberShips
+                .Where(m => membershipIds.Contains(m.Id))
+                .ToListAsync();
 
-            // Return mapped farmers
-            return memberships.Select(f => f.Map()).ToList();
+            return memberships.Select(m => m.Map()).ToList();
         }
-
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             var agent = await (
