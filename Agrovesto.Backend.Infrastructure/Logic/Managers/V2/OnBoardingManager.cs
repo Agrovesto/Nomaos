@@ -65,6 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
+        Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -1631,6 +1632,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             await _farmerRepository.CreateFarmer(farmer);
         }
+
+
+
+        public async Task<CreateAgentResponseModel> CreateAgentUser(
+ ProfileRequestModel model,
+ OnBoardingArgs args)
+        {
+            try
+            {
+                ValidateQuickOnboarding(new OnboardingRequestModel
+                {
+                    Email = model.Email,
+                    PhoneNumber = model.PhoneNumber
+                });
+                if (string.IsNullOrEmpty(args.businessCode))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
+
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                (OnboardingRequestModel model, bool status, string message) registerUser = await _onboardingRepository.RegisterUser(
+               new OnboardingRequestModel
+               {
+                   Email = model.Email,
+                   PhoneNumber = model.PhoneNumber,
+                   Password = model.Password,
+                   Pin = model.Pin,
+                   FirstName = model.FirstName,
+                   MiddleName = model.MiddleName,
+                   LastName = model.LastName
+               }, args);
+
+
+              var agent=  await _agentRepository.CreateUpdateAgent(new AgentModel
+                {
+                    BelongToBusinessCode = args.businessCode,
+                    State = model.State,
+                    Lga = model.Lga,
+                    Email = model.Email,
+                    Location = model.Location,
+                    Name = !string.IsNullOrWhiteSpace(model.FullName)
+        ? model.FullName
+        : string.Join(" ",
+            new[] { model.FirstName, model.MiddleName, model.LastName }
+                .Where(x => !string.IsNullOrWhiteSpace(x))),
+
+                    OnBoardedOn =DateTimeOffset.Now,
+                    PhoneNumber = model.PhoneNumber,
+                    UserId = registerUser.model.Id,
+                    Ward = model.Ward,
+                    OnboardedById = args.OnboardedByUserId,
+                    OrganizationCode = args.organizationCode,
+                   
+                });
+
+                var assignMembership = await _cooperativeRepository.AssignMemberShipToAgent(registerUser.model.Id, args.Id);
+
+                await EnsureWalletExists(registerUser.model, business);
+
+                await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
+
+             //   await GenerateAndSendOtp(registerUser.model);
+              
+
+                return new CreateAgentResponseModel
+                {
+                    UserId = args.UserId,
+                    AgentId = agent.data.Id,
+                    AgentUserId= registerUser.model.Id,
+                    RequiresProfileCompletion = true
+                };
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "CreateMembershipUser failed unexpectedly");
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+    
 
     }
 

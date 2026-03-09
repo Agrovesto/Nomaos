@@ -137,6 +137,13 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         Login,
         PasswordReset
     }
+    public class CreateAgentResponseModel
+    {
+        public string UserId { get; set; }
+        public string AgentUserId { get; set; }
+        public long AgentId { get; set; }
+        public bool RequiresProfileCompletion { get; set; }
+    }
     public class CreateMembershipResponseModel
     {
         public string UserId { get; set; }

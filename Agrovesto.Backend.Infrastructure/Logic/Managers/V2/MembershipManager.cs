@@ -27,6 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<CreateMembershipResponseModel> CreateFarmerAsync(CreateFarmerRequest model, OnBoardingArgs args);
         Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query);
+        Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
 
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
         Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query);
@@ -43,12 +44,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IAWSRekognitionManager _faceManager;
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IBusinessRepository _businessRepository;
+        private readonly IAgentRepository _agentRepository;
 
         private readonly IWalletManager _walletManager;
         public MembershipManager(IFarmerRepository farmerRepository,
             IActivityLogRepository activityLogRepository,
             IMembershipRepository membershipRepository,
             IBusinessRepository businessRepository,
+            AgentRepository agentRepository,
             IOtpService otpService,
             IWalletManager walletManager,
             INotificationService notificationService,
@@ -64,6 +67,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _onboardingRepository = onboardingRepository;
             _membershipRepository = membershipRepository;
             _sMSService = notificationService;
+            _agentRepository = agentRepository;
         }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
@@ -391,6 +395,47 @@ OnboardingRequestModel user,
             // Agents linked to this membership
             return await _membershipRepository.GetAgentOverview(args);
 
+        }
+
+        public async Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId,
+
+  ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
+
+                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+
+                var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
+                if (farmers == null) return new PagedListResponse<List<FarmerAgentDto>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+
+
+                return new PagedListResponse<List<FarmerAgentDto>>
+                {
+                    Succeeded = true,
+                    Data = farmers.Data,
+                    Count = farmers.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
         }
     }
 }
