@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             IActivityLogRepository activityLogRepository,
             IMembershipRepository membershipRepository,
             IBusinessRepository businessRepository,
-            AgentRepository agentRepository,
+            IAgentRepository agentRepository,
             IOtpService otpService,
             IWalletManager walletManager,
             INotificationService notificationService,
