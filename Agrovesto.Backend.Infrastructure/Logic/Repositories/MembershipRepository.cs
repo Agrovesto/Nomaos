@@ -375,7 +375,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         existingCooperative.Ward = data.Ward;
 
                     if (!string.IsNullOrWhiteSpace(data.Email))
-                        existingCooperative.Email = data.Email;        
+                        existingCooperative.Email = data.Email;
 
                     if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
                         existingCooperative.PhoneNumber = data.PhoneNumber;
@@ -390,35 +390,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         existingCooperative.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
-                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;              
+                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;
 
 
-                    if(data.MemberShipTypeId !=0)
+                    if (data.MemberShipTypeId != 0)
                     {
                         existingCooperative.MemberShipTypeId = data.MemberShipTypeId;
                     }
-                   
+
                     //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
                     //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
 
-                    if (data.AgentIds != null)
-                    {
-                        var existingAgents = _context.MemberShipAgents
-                            .Where(fa => fa.MemberShipId == existingCooperative.Id);
-                        _context.MemberShipAgents.RemoveRange(existingAgents);
-                        foreach (var agentId in data.AgentIds.Distinct())
-                        {
-                            await _context.MemberShipAgents.AddAsync(new MemberShipAgent
-                            {
-                                MemberShipId = existingCooperative.Id,
-                                AgentId = agentId,
-                                AssignedOn = DateTimeOffset.Now
-                                
-                            });
-                        }
-                        isModified = true;
-                        existingCooperative.HasbeenAssignedAgent = true;
-                    }
+                    isModified = await AssignAgentToMembership(data, existingCooperative, isModified);
                     _context.MemberShips.Update(existingCooperative);
                     await _context.SaveChangesAsync();
 
@@ -443,6 +426,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 throw new NotSuccessfulException(
                     $"Could not save agent details: {ex.Message}");
             }
+        }
+
+        private async Task<bool> AssignAgentToMembership(MemberShipModel data, MemberShip existingCooperative, bool isModified)
+        {
+            if (data.AgentIds != null)
+            {
+                var existingAgents = _context.MemberShipAgents
+                    .Where(fa => fa.MemberShipId == existingCooperative.Id);
+                _context.MemberShipAgents.RemoveRange(existingAgents);
+                foreach (var agentId in data.AgentIds.Distinct())
+                {
+                    await _context.MemberShipAgents.AddAsync(new MemberShipAgent
+                    {
+                        MemberShipId = existingCooperative.Id,
+                        AgentId = agentId,
+                        AssignedOn = DateTimeOffset.Now
+
+                    });
+                }
+                isModified = true;
+                existingCooperative.HasbeenAssignedAgent = true;
+            }
+
+            return isModified;
         }
 
         public async Task<(bool status, MemberShipModel data)> CreateCooperative(MemberShipModel data)
@@ -774,53 +781,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return agent.Map();
         }
 
-        //public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
-        //{
-        //    //var cooperative = await _context.MemberShips.Where(c => c.Id == cooperativeId).FirstOrDefaultAsync();
-        //    //if (cooperative == null) return null;
-        //    //cooperative.IsAssignedToAgentId = agentId;
-        //    //cooperative.HasbeenAssignedAgent = true;
-
-        //    var memberShip = await _context.MemberShips
-        //        .AsNoTracking()
-        //        .FirstOrDefaultAsync(f => f.Id == cooperativeId);
-
-        //    if (memberShip == null)
-        //        return null;
-
-        //    // Get existing assignments for this farmer
-        //    var existingAssignments = await _context.MemberShipAgents
-        //        .Where(fa => fa.MemberShipId == cooperativeId && fa.AgentId==agentId)
-        //        .Select(fa => fa.AgentId)
-        //        .ToListAsync();
-
-        //    // Filter out agents that are already assigned
-
-        
-
-        //    // Create new assignments
-        //    if (newAgentIds.Any())
-        //    {
-        //        var newAssignments = newAgentIds.Select(agentId => new MemberShipAgent
-        //        {
-        //            MemberShipId = cooperativeId,
-        //            AgentId = agentId,
-        //            AssignedOn = DateTimeOffset.UtcNow,
-
-        //        }).ToList();
-
-        //        await _context.MemberShipAgents.AddRangeAsync(newAssignments);
-        //        await _context.SaveChangesAsync();
-        //    }
-
-        //    // Reload the farmer with updated data
-        //    var updatedMembership = await _context.MemberShips
-        //        .FirstOrDefaultAsync(f => f.Id == membershipId);
-        //    await _context.SaveChangesAsync();
-
-        //    return cooperative.Map();
-        //}
-        public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
+         public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
         {
             var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
             // Get all farmers in this cooperative via FarmerCooperatives
@@ -857,6 +818,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             // Return mapped farmers
             return farmers.Select(f => f.Map()).ToList();
+        }
+        public async Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, long membershipId)
+        {
+            var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
+            // Get all cooperatives in this agent via MemberShipAgent
+            var memberships = await (
+                from m in _context.MemberShips.AsNoTracking()
+                join ma in _context.MemberShipAgents.AsNoTracking()
+                    on m.Id equals ma.MemberShipId
+                where ma.MemberShipId == membershipId
+                select m
+            ).ToListAsync();
+
+            if (!memberships.Any())
+                return new List<MemberShipModel>();
+
+            foreach (var membership in memberships)
+            {
+                // Check if the assignment already exists
+                var alreadyAssigned = await _context.MemberShipAgents
+                    .AnyAsync(fa => fa.MemberShipId == membership.Id && fa.AgentId == agent.Id);
+
+                if (!alreadyAssigned)
+                {
+                    // Assign agent
+                    await _context.MemberShipAgents.AddAsync(new MemberShipAgent
+                    {
+                        MemberShipId = membership.Id,
+                        AgentId = agent.Id,
+                        AssignedOn = DateTimeOffset.UtcNow
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Return mapped farmers
+            return memberships.Select(f => f.Map()).ToList();
         }
 
         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
