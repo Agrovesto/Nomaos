@@ -645,75 +645,208 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.Map();
         }
-        /**
+
+        public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(
+    OnboardingRequestModel model, OnBoardingArgs args)
+        {
+            ValidateUserType(args.userType);
+
+            ValidateUserInput(model);
+
+            var role = await GetRoleAsync(args.userType);
+
+            var existingUser = await FindExistingUserAsync(model);
+
             if (existingUser != null)
             {
-                // --- 3. Check if user already has this role + same user type ---
-                bool duplicateRole = await _context.UserRoles
-    .Where(ur => ur.UserId == existingUser.Id && ur.RoleId == roleEntity.Id)
-    .AnyAsync() && existingUser.UserType == args.userType;
-
-                if (duplicateRole)
-                {
-                    _log.LogInformation($"User {existingUser.Id} already exists with role {roleEntity.Name} and user type {args.userType}.");
-
-                    // Return true and the existing user details
-                    return (new OnboardingRequestModel
-                    {
-                        Email = existingUser.Email,
-                        PhoneNumber = existingUser.PhoneNumber,
-                        Id = existingUser.Id
-                    }, true, "User already exists; using existing user details.");
-                }
-                //bool duplicateRole = await _context.UserRoles
-                //    .Where(ur => ur.UserId == existingUser.Id && ur.RoleId == roleEntity.Id)
-                //    .AnyAsync() && existingUser.UserType == args.userType;
-
-                //if (duplicateRole)
-                //    return (model, false, "User already exists with the same role and user type.");
-
-                // --- 4. Assign new role if not already assigned ---
-                if (!await _userManager.IsInRoleAsync(existingUser, roleEntity.Name))
-                {
-                    var roleResult = await _userManager.AddToRoleAsync(existingUser, roleEntity.Name);
-                    if (!roleResult.Succeeded)
-                    {
-                        var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
-                        return (model, false, $"Could not assign role: {errors}");
-                    }
-                }
-
-                // --- 5. Link user to organization if applicable ---
-                if (!string.IsNullOrEmpty(args.organizationCode))
-                {
-                    if (!_context.UserOrganizations.Local.Any(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode))
-                    {
-                        _context.UserOrganizations.Add(new UserOrganization
-                        {
-                            UserId = existingUser.Id,
-                            OrganizationCode = args.organizationCode
-                        });
-                        _log.LogInformation($"Existing user {model.PhoneNumber} added to organization {args.organizationCode}.");
-                    }
-                }
-                else
-                {
-                    _log.LogInformation($"Existing user {model.PhoneNumber} is a direct business user (no organization).");
-                }
-
-                return ( new OnboardingRequestModel
-                {
-                    Email = existingUser.Email,
-                    PhoneNumber = existingUser.PhoneNumber,
-                    Pin = model.Pin,
-                    Password = model.Password,
-                    Id= existingUser.Id
-                }, true, "User already exists; added to role and/or organization if applicable.");
+                return await HandleExistingUser(existingUser, model, args, role);
             }
-         **/
-        public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args)
+
+            return await CreateNewUser(model, args, role);
+        }
+        private void ValidateUserType(string userType)
         {
-            // --- 1. Generate salt for PIN encryption ---
+            switch (userType)
+            {
+                case "Farmer":
+                case "Agent":
+                case "MemberShip":
+                case "Organization":
+                    return;
+
+                default:
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "Invalid user type");
+            }
+        }
+        private void ValidateUserInput(OnboardingRequestModel model)
+        {
+            if (string.IsNullOrWhiteSpace(model.Email) &&
+                string.IsNullOrWhiteSpace(model.PhoneNumber))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "Either email or phone number must be provided.");
+            }
+        }
+        private async Task<IdentityRole> GetRoleAsync(string roleName)
+        {
+            var role = await _roleManager.FindByNameAsync(roleName);
+
+            if (role == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Specified role does not exist.");
+
+            return role;
+        }
+
+        private async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
+        {
+            if (!string.IsNullOrWhiteSpace(model.Email))
+                return await _userManager.FindByNameAsync(model.Email);
+
+            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                return await _context.Users
+                    .FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+
+            return null;
+        }
+        private async Task<(OnboardingRequestModel, bool, string)> HandleExistingUser(
+    User user,
+    OnboardingRequestModel model,
+    OnBoardingArgs args,
+    IdentityRole role)
+        {
+            bool hasRole = await _context.UserRoles
+                .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id);
+
+            if (!hasRole)
+            {
+                var result = await _userManager.AddToRoleAsync(user, role.Name);
+
+                if (!result.Succeeded)
+                {
+                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    return (model, false, errors);
+                }
+            }
+
+            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
+
+            return (
+                MapUserResponse(user, model),
+                true,
+                "User already exists; linked to role/organization if needed."
+            );
+        }
+        private async Task<(OnboardingRequestModel, bool, string)> CreateNewUser(
+    OnboardingRequestModel model,
+    OnBoardingArgs args,
+    IdentityRole role)
+        {
+            var salt = EncryptionUtil.GetSalt();
+
+            var user = BuildUserEntity(model, args, salt);
+
+            IdentityResult createUser = string.IsNullOrEmpty(model.Password)
+                ? await _userManager.CreateAsync(user)
+                : await _userManager.CreateAsync(user, model.Password);
+
+            if (!createUser.Succeeded)
+            {
+                var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
+                return (model, false, errors);
+            }
+
+            await _userManager.AddToRoleAsync(user, role.Name);
+
+            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
+
+            return (
+                MapUserResponse(user, model),
+                true,
+                "User successfully registered."
+            );
+        }
+        private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
+        {
+            return new User
+            {
+                Id = GenerateUserId(args),
+                UserName = model.Email ?? model.PhoneNumber,
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                Pin = model.Pin,
+                PinEncrypt = string.IsNullOrEmpty(model.Pin)
+                    ? null
+                    : model.Pin.EncryptTransactionPin(salt),
+                Salt = Convert.ToBase64String(salt),
+                Password = model.Password,
+                CreatedOn = DateTimeOffset.Now,
+                IsActive = true,
+                UserType = args.userType,
+                BusinessCode = args.businessCode
+            };
+        }
+        private string GenerateUserId(OnBoardingArgs args)
+        {
+            var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
+            var randomDigits = new Random().Next(100, 999);
+
+            if (!string.IsNullOrEmpty(args.businessCode))
+                return $"{args.businessCode}{datePart}{randomDigits}";
+
+            if (!string.IsNullOrEmpty(args.organizationCode))
+                return $"{args.organizationCode}{datePart}{randomDigits}";
+
+            return Guid.NewGuid().ToString();
+        }
+        private async Task LinkUserToOrganizationIfNeeded(string userId, string organizationCode)
+        {
+            if (string.IsNullOrEmpty(organizationCode))
+                return;
+
+            bool exists = await _context.UserOrganizations
+                .AnyAsync(x => x.UserId == userId && x.OrganizationCode == organizationCode);
+
+            if (!exists)
+            {
+                _context.UserOrganizations.Add(new UserOrganization
+                {
+                    UserId = userId,
+                    OrganizationCode = organizationCode
+                });
+            }
+        }
+
+        private OnboardingRequestModel MapUserResponse(User user, OnboardingRequestModel model)
+        {
+            return new OnboardingRequestModel
+            {
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                Id = user.Id
+            };
+        }
+      /**  public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args)
+        {
+            switch (args.userType)
+            {
+                case "Farmer":
+                    break;
+
+                case "Agent":
+                    break;
+
+                case "MemberShip":
+                    break;
+                case "Organization":
+                    break;
+
+                default:
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid user type");
+            }
+
             byte[] salt = EncryptionUtil.GetSalt();
             //Salt = Convert.ToBase64String(salt);
 
@@ -902,7 +1035,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Id= entity.Id
             }, true, "User successfully registered and linked to role/organization if applicable.");
         }
-
+        **/
         public async Task AddUserToOrganizationAsync(User user, string organizationCode, string phoneNumber)
         {
             if (string.IsNullOrEmpty(organizationCode))

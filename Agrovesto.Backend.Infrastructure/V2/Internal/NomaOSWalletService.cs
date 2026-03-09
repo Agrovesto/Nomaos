@@ -139,6 +139,9 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ? args.UserId
                     : args.organizationCode;
 
+                //4. check if supplied details is different from what the system has
+               
+
                 // 4. Check for existing wallet with same provider + context
                 var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
@@ -29,5 +30,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
         Task<MemberShipModel> AssignMembershipToAgents(AssignmentArgs args, long membershipId);
+        Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(long membershipId, ListQueryParams query);
+        Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
     }
 }

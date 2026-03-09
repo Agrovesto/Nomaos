@@ -334,6 +334,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var httpResponse = await _httpService.Get(
                     $"{@params.BaseUrl}/collection/v1_0/accountholder/msisdn/{normalized}/active",
                     headers);
+                httpResponse.StatusCode = System.Net.HttpStatusCode.NotFound;
 
                 if (httpResponse.IsSuccessStatusCode)
                 {
