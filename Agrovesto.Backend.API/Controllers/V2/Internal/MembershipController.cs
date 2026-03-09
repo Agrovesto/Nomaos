@@ -366,7 +366,7 @@ IFormFile file,
                         Succeeded = false
                     });
                 }
-                GetAgentIdFromUserIdAsync(args);
+               await GetAgentIdFromUserIdAsync(args);
 
                 var profile = await _membershipManager.GetAgentOverview(args);
 
@@ -584,6 +584,50 @@ IFormFile file,
 
 
         }
+        [AllowAnonymous]
+        [HttpPut("assign-agent-to-farmer")]
+        public async Task<IActionResult> AssignFarmerToAgents([FromQuery] AssignmentArgs args)
+        {
+
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                await EnrichAgentAsync(args);
+                await EnrichFarmerAsync(args);
+                var request = await _onBoardingManager.AssignFarmerToAgents(args);
+
+
+                return Ok(new Response<FarmerModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
 
 
         private void NormalizeOrganizationCode(OnBoardingArgs args)
@@ -612,6 +656,37 @@ IFormFile file,
             if (!args.CooperativeIds.Contains(coop.Id))
                 args.CooperativeIds.Add(coop.Id);
         }
+        private async Task EnrichAgentAsync(AssignmentArgs args)
+        {
+            if (args.Id != 0) return;
 
+            var agent = await _businessManager.GetAgentDetailByUserId(args.agentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
+
+        private async Task EnrichFarmerAsync(AssignmentArgs args)
+        {
+            if (args.Id != 0) return;
+
+            var farmer = await _businessManager.GetFarmerByUserId(args.farmerUserId);
+
+            if (farmer == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = farmer.Id;
+
+        }
     }
 }

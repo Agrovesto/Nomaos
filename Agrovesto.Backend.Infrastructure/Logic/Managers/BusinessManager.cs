@@ -85,6 +85,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _excelConverterService = excelConverterService;
 
         }
+        public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(ListQueryParams query)
+        {
+            var profile = await _farmerRepository.GetFarmerByUserId(query.UserId);
+            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Farmer Record not found"); }
+
+            // Agents linked to this farmer
+            return await _farmerRepository.GetAgentsByFarmer(profile.Id, query);
+
+        }
         public async Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(ListQueryParams query)
         {
             return await _farmerRepository.GetFarmerMembershipDetails(query.UserId);

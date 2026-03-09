@@ -55,5 +55,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerDashboardDto> GetFarmerDashboard(string farmerUserId);
         Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams args);
         Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string membershipId);
+        Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(long farmerId, ListQueryParams query);
     }
 }

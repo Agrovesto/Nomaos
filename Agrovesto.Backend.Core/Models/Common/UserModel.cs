@@ -260,7 +260,8 @@ namespace Agrovesto.Backend.Core.Models.Common
     public enum LoginType
     {
         Password,
-        Pin
+        Pin,
+        Otp
     }
 
     public class PreparedUser

@@ -166,14 +166,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     user.Email ??
     user.PhoneNumber ??
     user.Id;
+          //  bool requiresCredentialSetup = !HasPassword(user) && !HasPin(user);
 
             claims.Add(new Claim(ClaimTypes.Name, principalName));
 
+          //  claims.Add(new Claim("RequiresCredentialSetup", requiresCredentialSetup.ToString()))
             if (!string.IsNullOrWhiteSpace(user.Email))
                 claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
 
             if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
                 claims.Add(new Claim("PhoneNumber", user.PhoneNumber));
+
+
 
             claims.Add(new Claim(
     "DisplayName",
@@ -289,7 +293,56 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Organizations = organizations
             });
         }
+        private bool HasPassword(User user)
+        {
+            return !string.IsNullOrWhiteSpace(user.PasswordHash);
+        }
+        //public async Task<string> GenerateOtp(string userId)
+        //{
+        //    var code = new Random().Next(100000, 999999).ToString();
 
+        //    var otp = new UserOtp
+        //    {
+        //        UserId = userId,
+        //        Code = code,
+        //        CreatedOn = DateTime.UtcNow,
+        //        ExpiresAt = DateTime.UtcNow.AddMinutes(5),
+        //        IsUsed = false
+        //    };
+
+        //    _context.UserOtps.Add(otp);
+
+        //    await _context.SaveChangesAsync();
+
+        //    return code;
+        //}
+        //public async Task<bool> ValidateOtp(string userId, string otp)
+        //{
+        //    var record = await _context.UserOtps
+        //        .Where(x =>
+        //            x.UserId == userId &&
+        //            x.Code == otp &&
+        //            !x.IsUsed)
+        //        .OrderByDescending(x => x.CreatedOn)
+        //        .FirstOrDefaultAsync();
+
+        //    if (record == null)
+        //        return false;
+
+        //    if (record.ExpiresAt < DateTime.UtcNow)
+        //        return false;
+
+        //    record.IsUsed = true;
+
+        //    await _context.SaveChangesAsync();
+
+        //    return true;
+        //}
+       
+        private bool HasPin(User user)
+        {
+            return !string.IsNullOrWhiteSpace(user.PinEncrypt);
+        }
         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
       User user,
       LoginModel model)
@@ -297,14 +350,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
+                    if (!HasPassword(user))
+                        return (false, "Password login is not enabled for this account");
+
                     if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
 
                 case LoginType.Pin:
+                    if (!HasPin(user))
+                        return (false, "PIN login is not enabled for this account");
+
                     if (!ValidateUserPin(user, model.Pin))
                         return (false, "Invalid phone number or PIN");
                     break;
+                //case LoginType.Otp:
+
+                //    var otpValid = await _otpService.ValidateOtp(user.Id, model.Otp);
+
+                //    if (!otpValid)
+                //        return (false, "Invalid or expired OTP");
+
+                //    break;
+
+                default:
+                    return (false, "Invalid login method");
             }
 
             return (true, "OK");
@@ -618,20 +688,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                  new[] { model.FirstName, model.MiddleName, model.LastName }
                      .Where(x => !string.IsNullOrWhiteSpace(x)));
 
-            if (!string.IsNullOrWhiteSpace(resolvedName))
-                user.Name = resolvedName;
+                if (!string.IsNullOrWhiteSpace(resolvedName) && string.IsNullOrEmpty(user.Name))
+                    user.Name = resolvedName;
+        
 
-            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
-                user.PhoneNumber = model.PhoneNumber;
+            if (!string.IsNullOrEmpty(model.PhoneNumber) && string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                    user.PhoneNumber = model.PhoneNumber;
+            }
+       
 
-            if (!string.IsNullOrWhiteSpace(model.Email) &&  string.IsNullOrEmpty( user.Email))
+            if (!string.IsNullOrWhiteSpace(model.Email) && string.IsNullOrEmpty( user.Email))
                 user.Email = model.Email;
 
 
-            if (!string.IsNullOrWhiteSpace(model.NIN))
+            if (!string.IsNullOrWhiteSpace(model.NIN) && string.IsNullOrEmpty(user.NIN))
                 user.NIN = model.NIN;
 
-            if (!string.IsNullOrWhiteSpace(model.Bvn))
+            if (!string.IsNullOrWhiteSpace(model.Bvn) && string.IsNullOrEmpty(user.BVN))
                 user.BVN = model.Bvn;
 
             user.ModifiedBy = userId;
@@ -736,7 +810,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (
                 MapUserResponse(user, model),
                 true,
-                "User already exists; linked to role/organization if needed."
+                "User already exists"
             );
         }
         private async Task<(OnboardingRequestModel, bool, string)> CreateNewUser(
@@ -765,7 +839,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (
                 MapUserResponse(user, model),
                 true,
-                "User successfully registered."
+                "Registration Successful."
             );
         }
         private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
