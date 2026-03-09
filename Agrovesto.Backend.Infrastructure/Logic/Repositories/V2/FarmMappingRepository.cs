@@ -99,12 +99,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                             !f.FarmLandDocuments.Any());
                         break;
 
-                    case "partial":
+                    case "uploaded":
                         query = query.Where(f =>
                             f.FarmLandDocuments.Any() && !f.IsDocumentVerified);
                         break;
 
-                    case "completed":
+                    case "verified":
                         query = query.Where(f =>
                             f.FarmLandDocuments.Any() && f.IsDocumentVerified);
                         break;
@@ -281,7 +281,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 FarmSize = request.AreaSize,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedBy = args.performedByUserId,
-                MappingStatus = MappingStatus.UnMapped
+                MappingStatus = MappingStatus.UnMapped,
+                FarmSizeType=request.FarmSizeType
             };
 
             _context.Farms.Add(farm);
@@ -345,7 +346,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 PinnedLatitude = request.PinnedLatitude,
                 PinnedLongitude = request.PinnedLongitude,
                 MappingAccuracy = request.MappingAccuracy,
-                DistanceCovered = request.DistanceCovered
+                DistanceCovered = request.DistanceCovered,
+                FarmSizeType=request.FarmSizeType
             };
 
             _context.Farms.Add(newFarm);

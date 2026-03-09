@@ -157,8 +157,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         !fetchFarm.FarmLandDocuments.Any()
                             ? "Not Uploaded"
                             : !fetchFarm.IsDocumentVerified
-                                ? "Partial"
-                                : "Completed";
+                                ? "Uploaded"
+                                : "Verified";
 
                     return new FarmListRespopnseObject
                     {
