@@ -473,6 +473,119 @@ IFormFile file,
 
         }
 
+        [HttpPost("create-agent")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                NormalizeOrganizationCode(args);
+                //  ResolveUserContext(args);
+                await EnrichCooperativeAsync(args);
+
+
+                var request = await _onBoardingManager.CreateAgentUser(model, args);
+
+
+                return Ok(new Response<CreateAgentResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = request != null ? "Successful" : "Failed",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpGet("agent-farmers")]
+        public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(query.UserId))
+                {
+                    return BadRequest(new Response<string>
+                    {
+                        Message = "User Id is required.",
+                        Succeeded = false
+                    });
+                }
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
+                var result = await _membershipManager.GetFarmersByAgent(query.UserId, query);
+                return Ok(new PagedListResponse<List<FarmerAgentDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
