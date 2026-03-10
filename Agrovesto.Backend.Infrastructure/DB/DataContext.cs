@@ -343,6 +343,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmCoordinate> FarmCoordinates { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
         public DbSet<UserWallet> UserWallets { get; set; }
+        public DbSet<WalletSecurity> WalletSecurities { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
         public DbSet<InputTransaction> InputTransactions { get; set; }
