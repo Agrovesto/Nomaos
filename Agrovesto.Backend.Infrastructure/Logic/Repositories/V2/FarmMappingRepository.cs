@@ -43,6 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<Farm> FetchFarmsAsync(FarmMappingArgs args);
         Task<List<Farm>> FetchAllFarmsByFarmer(FarmMappingArgs args);
         Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args);
+        Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAMembership(FarmMappingArgs args);
     }
     public class FarmMappingRepository : IFarmMappingRepository
     {
@@ -54,6 +55,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _geometryFactory = NtsGeometryServices.Instance
             .CreateGeometryFactory(srid: 4326);
         }
+
+        public async Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAMembership(FarmMappingArgs args)
+        {
+            var farms = await _context.Farms
+                .Where(f => _context.FarmerCooperatives
+                    .Any(fa => fa.FarmerId == f.FarmerId && fa.CooperativeId == args.membershipId))
+                .Include(f => f.Coordinates)
+                .Include(f => f.FarmLandDocuments)
+                //.Include(f => f.AuditTrails)
+                //.Include(f => f.Allocations)
+                .ToListAsync();
+
+            if (farms == null || farms.Count == 0)
+                return null;
+                //throw new BaseException(
+                //    Core.Enums.ExceptionType.NO_RECORD_FOUND,
+                //    "No farms found for this agent."
+                //);
+
+            return farms;
+        }
+
         public async Task<List<Farm>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args)
         {
             var farms = await _context.Farms
@@ -66,10 +89,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .ToListAsync();
 
             if (farms == null || farms.Count == 0)
-                throw new BaseException(
-                    Core.Enums.ExceptionType.NO_RECORD_FOUND,
-                    "No farms found for this agent."
-                );
+                return null;
+                //throw new BaseException(
+                //    Core.Enums.ExceptionType.NO_RECORD_FOUND,
+                //    "No farms found for this agent."
+                //);
 
             return farms;
         }

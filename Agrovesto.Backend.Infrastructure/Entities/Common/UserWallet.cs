@@ -42,10 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [MaxLength(3)]
         public string Currency { get; set; } = "NGN";
 
-        [MaxLength(6)]
-        public string TransactionPin { get; set; } = "0000";
-        public string Txn { get; set; } = "0000";
-
+       
         public bool IsActive { get; set; } = true;
 
         public DateTimeOffset AddedOn { get; set; } = DateTimeOffset.UtcNow;
@@ -68,6 +65,28 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 
         public ICollection<UserWalletContext> WalletContexts { get; set; }
             = new HashSet<UserWalletContext>();
+    }
+
+    public class WalletSecurity
+    {
+        [Key]
+        public long Id { get; set; }
+
+        public long UserWalletId { get; set; }
+
+        public UserWallet UserWallet { get; set; }
+
+        [MaxLength(200)]
+        public string TransactionPinHash { get; set; }
+        public string Txn { get; set; } 
+
+        public int PinFailedAttempts { get; set; } = 0;
+
+        public DateTimeOffset? PinLockedUntil { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
+
+        public DateTimeOffset? LastPinChangeDate { get; set; }
     }
     public enum WalletContextType
     {

@@ -7,11 +7,13 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
+using Org.BouncyCastle.Crypto.Generators;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BCrypt.Net;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -122,6 +124,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return wallets;
         }
+
+        public async Task ValidateTransactionPin(long walletId, string inputPin)
+        {
+            var security = await _context.WalletSecurities
+                .FirstOrDefaultAsync(x => x.UserWalletId == walletId);
+
+            if (security == null)
+                throw new Exception("Wallet security record not found");
+
+            if (security.PinLockedUntil != null &&
+                security.PinLockedUntil > DateTimeOffset.UtcNow)
+            {
+                throw new Exception("Wallet is locked due to multiple invalid PIN attempts");
+            }
+
+            var valid = BCrypt.Net.BCrypt.Verify(inputPin, security.TransactionPinHash);
+
+            if (!valid)
+            {
+                security.PinFailedAttempts++;
+
+                if (security.PinFailedAttempts >= 5)
+                {
+                    security.PinLockedUntil = DateTimeOffset.UtcNow.AddMinutes(10);
+                    security.PinFailedAttempts = 0;
+                }
+
+                await _context.SaveChangesAsync();
+
+                throw new Exception("Invalid transaction PIN");
+            }
+
+            security.PinFailedAttempts = 0;
+            security.PinLockedUntil = null;
+
+            await _context.SaveChangesAsync();
+        }
         public async Task<UserWalletModel> CreateUserWallet(
        UserWalletModel request,
        UserWalletParams args)
@@ -152,12 +191,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         IsActive = true,
                         WalletNumber = request.WalletNumber,
                         BelongToBusinessCode = args.businessCode,
-                        IsDeleted = false
-                    };
+                        IsDeleted = false,
+                         };
 
                     _context.UserWallets.Add(userWallet);
                     await _context.SaveChangesAsync();
+                    var walletSecurity = new WalletSecurity
+                    {
+                        UserWalletId = userWallet.Id,
+                        Txn= request.TransactionPin,
+                        TransactionPinHash = BCrypt.Net.BCrypt.HashPassword(request.TransactionPin)
+                    };
 
+                    _context.WalletSecurities.Add(walletSecurity);
+                    await _context.SaveChangesAsync();
                     // Handle default for context
                     if (request.SetAsDefaultForContext)
                     {
