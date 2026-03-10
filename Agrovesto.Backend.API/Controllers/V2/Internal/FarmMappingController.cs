@@ -35,6 +35,52 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _farmMappingManager = farmMappingManager;
             _businessManager = businessManager;
         }
+        [HttpGet("by-membership")]
+        public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAMembership([FromQuery] FarmMappingArgs query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+
+
+                query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
+                if(string.IsNullOrEmpty(query.userId))
+                {
+                    throw new BaseException(ExceptionType.ACCESS_DENIED, "Access Denied");
+                }
+                var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAMembership(query);
+                return Ok(new Response<List<FarmListRespopnseObject>>()
+                {
+                    Data = result,
+                    Message = result != null ? "Successful" : "No Record Found",
+                    Succeeded = result != null,
+                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
         [HttpGet("by-agent")]
         public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAnAgent([FromQuery] FarmMappingArgs query)
@@ -53,7 +99,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Message = result != null ? "Successful" : "No Record Found",
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -108,7 +154,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Message = result != null ? "Successful" : "No Record Found",
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });

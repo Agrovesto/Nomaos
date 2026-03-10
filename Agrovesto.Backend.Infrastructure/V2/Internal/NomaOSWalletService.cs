@@ -101,6 +101,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
         public async Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args)
         {
+            if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                throw new Exception("Transaction PIN is required");
             /*
                 Flow:
                 1. Validate Business (optional)
@@ -183,7 +185,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     BelongToBusinessCode = businessCode,
                     ContextType = contextType.ToString(),
                     ContextReferenceId = contextReferenceId,
-                    SetAsDefaultForContext = request.IsDefault
+                    SetAsDefaultForContext = request.IsDefault,
+                    TransactionPin=request.TransactionPin
                 };
 
                 // 8. Call repository to create wallet and context
