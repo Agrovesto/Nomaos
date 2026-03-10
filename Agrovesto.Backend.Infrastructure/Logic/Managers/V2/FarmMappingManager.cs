@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IFarmMappingManager
     {
+        Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAMembership(FarmMappingArgs args);
         Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args);
         Task<FarmDetailsResponse> FetchFarmDetails(FarmMappingArgs args);
         Task<List<FarmListRespopnseObject>> FetchFarmsByFarmer(FarmMappingArgs args);
@@ -42,12 +43,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IAWSRekognitionManager _aWSRekognitionManager;
         private readonly IBusinessRepository _businessRepository;
         private readonly IFarmerRepository _farmerRepository;
+        private readonly IMembershipRepository _membershipRepository;
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IAgentRepository _agentRepository;
         public FarmMappingManager(IFarmMappingRepository farmMappingRepository,
             IAWSRekognitionManager aWSRekognitionManager, 
             IBusinessRepository businessRepository, 
             IFarmerRepository farmerRepository,
+            IMembershipRepository membershipRepository,
             IOnboardingRepository onboardingRepository,
                 IAgentRepository agentRepository,
             ILogger<FarmMappingManager> log)
@@ -58,8 +61,81 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _farmerRepository = farmerRepository;
             _onboardingRepository = onboardingRepository;
             _log = log;
+            _membershipRepository = membershipRepository;   
             _agentRepository = agentRepository;
         }
+
+        public async Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAMembership(FarmMappingArgs args)
+        {
+            try
+            { //get business code
+                if (string.IsNullOrEmpty(args.businessCode))
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Business code is required.");
+
+                // ------------------ Fetch business ------------------
+                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                    ?? throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Business does not exist.");
+
+                var agentId = await _membershipRepository.GetMembershipDetailByUserId(args.userId)
+                    ?? throw new BaseException(
+                        Core.Enums.ExceptionType.NOTFOUND,
+                        "Membership details not found.");
+
+                args.agentId = agentId.Id;
+                var fetchFarms = await _farmRepo.FetchAllFarmsByFarmersBelongingToAMembership(args);
+                if (fetchFarms == null)
+                    return null;
+                //throw new BaseException(
+                //    Core.Enums.ExceptionType.NOTFOUND,
+                //    "Farm does not exist.");
+                var farms = fetchFarms.Select(fetchFarm =>
+                {
+                    string verificationStatus;
+
+                    if (fetchFarm.FarmLandDocuments == null || !fetchFarm.FarmLandDocuments.Any())
+                    {
+                        verificationStatus = "Not Uploaded";
+                    }
+                    else if (!fetchFarm.IsDocumentVerified)
+                    {
+                        verificationStatus = "Uploaded";
+                    }
+                    else
+                    {
+                        verificationStatus = "Verified";
+                    }
+
+                    return new FarmListRespopnseObject
+                    {
+                        DateAdded = fetchFarm.CreatedAt,
+                        MappingStatus = EnumExtensions.GetDisplayName(fetchFarm.MappingStatus),
+                        DocumentStatus = verificationStatus,
+                        LandSize = fetchFarm.FarmSize,
+                        FarmId = fetchFarm.Id,
+                    };
+                }).ToList();
+
+
+
+                return farms;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Create Farm failed unexpectedly");
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                   !string.IsNullOrEmpty(ex.Message) ? ex.Message : "Unable to submit farm data");
+            }
+        }
+
         public async Task<List<FarmListRespopnseObject>> FetchAllFarmsByFarmersBelongingToAnAgent(FarmMappingArgs args)
         {
             try
@@ -82,10 +158,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 args.agentId = agentId.Id;
                 var fetchFarms = await _farmRepo.FetchAllFarmsByFarmersBelongingToAnAgent(args);
-                if(fetchFarms == null)
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.NOTFOUND,
-                        "Farm does not exist.");
+                if (fetchFarms == null)
+                    return null;
+                    //throw new BaseException(
+                    //    Core.Enums.ExceptionType.NOTFOUND,
+                    //    "Farm does not exist.");
                 var farms = fetchFarms.Select(fetchFarm =>
                 {
                     string verificationStatus;
@@ -96,11 +173,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     }
                     else if (!fetchFarm.IsDocumentVerified)
                     {
-                        verificationStatus = "Partial";
+                        verificationStatus = "Uploaded";
                     }
                     else
                     {
-                        verificationStatus = "Completed";
+                        verificationStatus = "Verified";
                     }
 
                     return new FarmListRespopnseObject
@@ -147,9 +224,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var farms = await _farmRepo.FetchAllFarmsByFarmer(args);
 
                 if (!farms.Any())
-                    throw new BaseException(
-                        ExceptionType.NO_RECORD_FOUND,
-                        "No farms found for this farmer.");
+                    return null;
 
                 return farms.Select(fetchFarm =>
                 {

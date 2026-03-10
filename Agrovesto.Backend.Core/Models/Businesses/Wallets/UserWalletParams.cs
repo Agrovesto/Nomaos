@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
 
         // Business (if wallet belongs to a business context)
         public string? BelongToBusinessCode { get; set; }
+        public string? TransactionPin { get; set; }
 
         // ===== CONTEXT SETTINGS =====
 
