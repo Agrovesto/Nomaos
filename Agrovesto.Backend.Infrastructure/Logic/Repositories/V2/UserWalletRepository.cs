@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
-        Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
+        Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -92,13 +92,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args)
+        public async Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args)
         {
-            var wallets = await _context.UserWallets
+            args.pageNumber = args.pageNumber <= 0 ? 1 : args.pageNumber;
+            args.pageSize = args.pageSize <= 0 ? 10 : args.pageSize;
+
+            var query = _context.UserWallets
                 .Where(uw =>
                     uw.UserId == args.UserId &&
                     uw.BelongToBusinessCode == args.businessCode &&
-                    !uw.IsDeleted)
+                    !uw.IsDeleted);
+
+            var totalRecords = await query.CountAsync();
+
+            var wallets = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((args.pageNumber - 1) * args.pageSize)
+                .Take(args.pageSize)
                 .Select(uw => new UserWalletResponseModel
                 {
                     Id = uw.Id,
@@ -122,9 +132,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 })
                 .ToListAsync();
 
-            return wallets;
+            return new PagedListResponse<List<UserWalletResponseModel>>
+            {
+                PageNumber = args.pageNumber,
+                PageSize = args.pageSize,
+                Count = totalRecords,
+                
+                Data = wallets
+            };
         }
-
         public async Task ValidateTransactionPin(long walletId, string inputPin)
         {
             var security = await _context.WalletSecurities
