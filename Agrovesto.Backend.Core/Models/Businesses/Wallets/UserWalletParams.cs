@@ -14,6 +14,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? organizationCode { get; set; }
         public string? UserId { get; set; }
         public string Env { get; set; }
+        public int pageNumber { get; set; } = 1;
+        public int pageSize { get; set; } = 10;
     }
   public class UserWalletModel
     {

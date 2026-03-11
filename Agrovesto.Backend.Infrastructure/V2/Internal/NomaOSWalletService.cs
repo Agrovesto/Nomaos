@@ -26,7 +26,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         // Define methods that the NomaOSWalletService should implement
         Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
-        Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args);
+        Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
     }
     public class NomaOSWalletService : INomaOSWalletService
     {
@@ -35,7 +35,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IUserWalletRepository _userWalletRepository;
-        public NomaOSWalletService(IBusinessRepository businessRepository, 
+        public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory)
@@ -58,16 +58,16 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         {
             try
             {
-                    var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-                    if(business == null)throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
+                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+                if (business == null) throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
 
-                
+
                 var summary = await _userWalletRepository.GetUserFinancialSummary(args);
                 return summary;
             }
             catch (BaseException ex)
             {
-              //  _log.LogError($"Error retrieving Agents: {ex.Message}");
+                //  _log.LogError($"Error retrieving Agents: {ex.Message}");
 
                 throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
@@ -76,20 +76,20 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 throw new NotFoundException($"No Record Found");
             }
         }
-        public async Task<List<UserWalletResponseModel>> GetUserWallletsByUserId(UserWalletParams args)
+        public async Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args)
         {
             try
             {
-                    var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-                    if(business == null)throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
+                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+                if (business == null) throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
 
-                
+
                 var wallet = await _userWalletRepository.GetUserWallletsByUserId(args);
                 return wallet;
             }
             catch (BaseException ex)
             {
-              //  _log.LogError($"Error retrieving Agents: {ex.Message}");
+                //  _log.LogError($"Error retrieving Agents: {ex.Message}");
 
                 throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
             }
@@ -142,7 +142,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     : args.organizationCode;
 
                 //4. check if supplied details is different from what the system has
-               
+
 
                 // 4. Check for existing wallet with same provider + context
                 var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
@@ -186,7 +186,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ContextType = contextType.ToString(),
                     ContextReferenceId = contextReferenceId,
                     SetAsDefaultForContext = request.IsDefault,
-                    TransactionPin=request.TransactionPin
+                    TransactionPin = request.TransactionPin
                 };
 
                 // 8. Call repository to create wallet and context
@@ -205,7 +205,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
-      
+
         /**    public async Task<(bool status, string message)> CreateWallet(WalletQueryParams args)
    {
    
