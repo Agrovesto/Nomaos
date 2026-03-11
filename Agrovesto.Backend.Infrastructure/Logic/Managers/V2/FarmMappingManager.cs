@@ -85,7 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.NOTFOUND,
                         "Membership details not found.");
 
-                args.agentId = agentId.Id;
+                args.membershipId = agentId.Id;
                 var fetchFarms = await _farmRepo.FetchAllFarmsByFarmersBelongingToAMembership(args);
                 if (fetchFarms == null)
                     return null;
