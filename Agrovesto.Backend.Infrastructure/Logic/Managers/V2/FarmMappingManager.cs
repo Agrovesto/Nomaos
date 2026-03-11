@@ -8,8 +8,6 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.Extensions.Logging;
-using NetTopologySuite.Geometries;
-using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -80,12 +78,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.NOTFOUND,
                         "Business does not exist.");
 
-                var agentId = await _membershipRepository.GetMembershipDetailByUserId(args.userId)
+                var member = await _membershipRepository.GetMembershipDetailByUserId(args.userId)
                     ?? throw new BaseException(
                         Core.Enums.ExceptionType.NOTFOUND,
                         "Membership details not found.");
 
-                args.agentId = agentId.Id;
+                args.membershipId = member.Id;
                 var fetchFarms = await _farmRepo.FetchAllFarmsByFarmersBelongingToAMembership(args);
                 if (fetchFarms == null)
                     return null;

@@ -30,10 +30,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var result = await _walletManager.GetUserWallletsByUserId(query);
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
-                    Data = result,
+                    Data = result.Data,
                     Message = result.Count> 0? "Successful": "Failed",
                     Succeeded = true,
                     Count = result.Count,
+
                     //PageNumber = query.PageNumber,
                     //PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed

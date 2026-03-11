@@ -202,7 +202,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var result = await _walletService.GetUserWallletsByUserId(query);
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
-                    Data = result,
+                    Data = result.Data,
                     Message = result.Count > 0 ? "Successful" : "Failed",
                     Succeeded = true,
                     Count = result.Count,
