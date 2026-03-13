@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -9,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 {
@@ -52,6 +54,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     if (!string.IsNullOrWhiteSpace(data.Ward))
                         existingAgent.Ward = data.Ward;
 
+                    if (data.OrganizationId.HasValue)
+                    {
+                        bool exists = await _context.OrganizationAgents.AnyAsync(x =>
+                            x.AgentId == existingAgent.Id &&
+                            x.OrganizationId == data.OrganizationId.Value);
+
+                        if (!exists)
+                        {
+                            await _context.OrganizationAgents.AddAsync(new OrganizationAgent
+                            {
+                                AgentId = existingAgent.Id,
+                                OrganizationId = data.OrganizationId.Value,
+                                AssignedByUserId = data.OnboardedById,
+                                AssignedOn= DateTimeOffset.Now
+                            });
+                        }
+                    }
+                
                     _context.Agents.Update(existingAgent);
                     await _context.SaveChangesAsync();
 
@@ -59,10 +79,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
 
                 var entity = data.Map();
-
-                await _context.Agents.AddAsync(entity);
+                 await _context.Agents.AddAsync(entity);
                 await _context.SaveChangesAsync();
+                if (data.OrganizationId.HasValue)
+                {
+                    bool alreadyLinked = await _context.OrganizationAgents
+                        .AnyAsync(fo => fo.AgentId == entity.Id && fo.OrganizationId == data.OrganizationId.Value);
 
+                    if (!alreadyLinked)
+                    {
+                        await _context.OrganizationAgents.AddAsync(new OrganizationAgent
+                        {
+                            AgentId = entity.Id,
+                            OrganizationId = data.OrganizationId.Value,
+                            AssignedByUserId = data.OnboardedById,
+                            AssignedOn = DateTimeOffset.Now
+                        });
+                        await _context.SaveChangesAsync();
+                    }
+                }
                 return (true, entity.Map());
             }
             catch (BaseException ex)
@@ -154,10 +189,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var agents = _context.Agents
               .Where(x => x.BelongToBusinessCode == businessCode)
               .AsQueryable();
-            if (!string.IsNullOrEmpty(query.organizationCode))
-            {
-                agents = agents.Where(x=> x.OrganizationCode == query.organizationCode);
-            }
+            //if (!string.IsNullOrEmpty(query.organizationCode))
+            //{
+            //    agents = agents.Where(x=> x.OrganizationCode == query.organizationCode);
+            //}
 
                      var result = await agents
                 .OrderByDescending(s => s.OnBoardedOn)

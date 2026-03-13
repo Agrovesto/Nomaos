@@ -78,6 +78,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IAgentManager, AgentManager>();
             services.AddScoped<IMembershipManager, MembershipManager>();
             services.AddScoped<IFarmMappingManager, FarmMappingManager>();
+            services.AddScoped<IOrganizationManager, OrganizationManager>();
 
 
 
@@ -105,6 +106,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandEServiceRepository, MandEServiceRepositories>();
             services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
             services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
+            services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 
 
 

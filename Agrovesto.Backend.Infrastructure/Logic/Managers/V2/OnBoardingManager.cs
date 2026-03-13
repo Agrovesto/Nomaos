@@ -37,6 +37,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
@@ -126,17 +127,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 try
                 {
-                    var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
-                        args.userId,
-                        new ProfileRequestModel
-                        {
-                            FirstName = model.FirstName?.Trim(),
-                            LastName = model.LastName?.Trim(),
-                            PhoneNumber = model.PhoneNumber?.Trim(),
-                            Email = model.ContactEmail?.Trim()
-                        });
-
-                    args.userType ??= updatedUser.UserType;
+                   
+              
 
                     var parentBusiness =
                         await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
@@ -146,23 +138,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                             Core.Enums.ExceptionType.NOTFOUND,
                             "Parent business not found or deactivated.");
 
-                    var orgEmail = string.IsNullOrWhiteSpace(model.CompanyEmail)
-                        ? model.ContactEmail
-                        : model.CompanyEmail;
-
-                    var existingOrg =
-                        await _businessRepository.GetOrganizationAsync(orgEmail);
-
-                    if (existingOrg != null)
-                        throw new BaseException(
-                            Core.Enums.ExceptionType.ALREADY_EXIST,
-                            $"Organization with email '{orgEmail}' already exists.");
-
-                    model.OrganizationCode = await GenerateOrganizationCodeAsync(model.CompanyName);
 
                     var newOrganization =
-                        await _businessRepository.CreateOrganizationV2(model, args);
-
+                        await _businessRepository.CreateOrUpdateOrganization(model, args);
+                    var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
+                        args.userId,
+                        new ProfileRequestModel
+                        {
+                            FirstName = model.FirstName?.Trim(),
+                            LastName = model.LastName?.Trim(),
+                            PhoneNumber = model.PhoneNumber?.Trim(),
+                            Email = model.ContactEmail?.Trim(),
+                            organizationCode= newOrganization.OrganizationCode
+                        });
+                    args.userType ??= updatedUser.UserType;
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
@@ -217,24 +206,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "User Id is required.");
         }
 
-        private async Task<string> GenerateOrganizationCodeAsync(string companyName)
-        {
-            var cleanedName = companyName?
-                .Replace(" ", string.Empty)
-                .ToUpperInvariant() ?? "ORG";
-
-            var prefix = cleanedName.Length > 3
-                ? cleanedName[..3]
-                : cleanedName;
-
-            var uniqueSegment = Guid.NewGuid()
-                .ToString("N")
-                .Substring(0, 4)
-                .ToUpperInvariant();
-
-            return $"{prefix}{DateTimeOffset.UtcNow:MM}{uniqueSegment}";
-        }
-        private async Task SendOnboardingNotificationsAsync(
+          private async Task SendOnboardingNotificationsAsync(
     OrganizationResponseModel organization,
     string userId)
         {
@@ -510,6 +482,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "User Id missing.");
                 }
+                model.organizationCode = args.organizationCode;
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (hasOrg != null)
+                {
+                    model.OrganizationId = hasOrg.OrganizaionId;
+                }
                 var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, model);
                 model.CreatedOn = updateUser.CreatedOn;
                 model.Id = updateUser.Id;//args.UserId;
@@ -585,8 +563,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     await CreateFarmerProfileAsync(model, args);
                     break;
-                case UserType.Organization:
-                    break;
+                //case UserType.Organization:
+                //    await OnboardOrganization(new OrganizationOnboardingModel
+                //    {
+                     
+                //        FirstName = model.FirstName,
+                //        LastName = model.LastName,
+                //        PhoneNumber = model.PhoneNumber,
+                //        ContactEmail= model.Email
+                //    }, new OrganizationOnboardingArgs
+                //    {
+                //        businessCode=args.businessCode,
+                //        userId=model.Id,
+                        
+                //    });
+                //    break;
                 case UserType.Processors:
                     break;
                 case UserType.Suppliers:
@@ -595,10 +586,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         }
 
+        public async Task OnboardOrganization(
+OrganizationOnboardingModel org,
+OrganizationOnboardingArgs args)
+        {
+            var organization =
+                       await _businessRepository.CreateOrUpdateOrganization(org, args);
+            var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
+                args.userId,
+                new ProfileRequestModel
+                {
+                    FirstName = org.FirstName?.Trim(),
+                    LastName = org.LastName?.Trim(),
+                    PhoneNumber = org.PhoneNumber?.Trim(),
+                    Email = org.ContactEmail?.Trim(),
+                    organizationCode = organization.OrganizationCode
+                });
+            args.userType ??= updatedUser.UserType; 
+
+        }
 
         private async Task CreateAgentProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
-
+            
             await _agentRepository.CreateUpdateAgent(new AgentModel
             {
                 BelongToBusinessCode = args.businessCode,
@@ -617,12 +627,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 UserId = model.Id,
                 Ward = model.Ward,
                 OnboardedById = args.OnboardedByUserId,
-                OrganizationCode = args.organizationCode
+                OrganizationId = model.OrganizationId
             });
         }
 
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
+
+            var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+            if (hasOrg != null)
+            {
+                model.OrganizationId = hasOrg.OrganizaionId;
+            }
             //if (string.IsNullOrEmpty(model.CooperativeName))
             //{
             //    throw new BaseException(
@@ -663,7 +679,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 IsAssignedToAgentId = args.OnboardedByUserId,
                 HasbeenAssignedAgent = isAssignedagent,
                 Ward = model.Ward,
-                OrganizationCode = args.organizationCode
+                //OrganizationId = args.organizationCode
 
             });
 
@@ -824,7 +840,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Id = model.Id,
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber,
-                    Message = !string.IsNullOrEmpty(createUser.message) ? createUser.message : $"User created successfully. Some post-registration steps may need manual completion {message}."
+                    Message = !string.IsNullOrEmpty(createUser.message) ? $"{createUser.message} {message}" : $"User created successfully. Some post-registration steps may need manual completion {message}."
                 };
             }
             catch (BaseException)
@@ -1466,6 +1482,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             try
             {
+
+                var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+                if (hasOrg != null)
+                {
+                    model.OrganizationId = hasOrg.OrganizaionId;
+                }
                 ValidateCriticalInputs(model, args);
 
                 var dateTime = DateTimeOffset.UtcNow;
@@ -1569,7 +1591,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
   .Select(x => x.Value)
   .ToList() ?? new List<long>(),
                 BelongToBusinessCode = args.businessCode,
-                OrganizationCode = args.organizationCode,
+                OrganizationId = model.OrganizationId,
                 OnboardedById = args.OnboardedByUserId,
                 HasbeenAssignedAgent = args.OnboardedByUserId != null,
                 IsAssignedToAgentId = args.OnboardedByUserId,
@@ -1641,6 +1663,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             try
             {
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (hasOrg != null)
+                {
+                    model.OrganizationId = hasOrg.OrganizaionId;
+                }
                 ValidateQuickOnboarding(new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -1683,7 +1710,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     UserId = registerUser.model.Id,
                     Ward = model.Ward,
                     OnboardedById = args.OnboardedByUserId,
-                    OrganizationCode = args.organizationCode,
+                  OrganizationId = model.OrganizationId,
                    
                 });
 
