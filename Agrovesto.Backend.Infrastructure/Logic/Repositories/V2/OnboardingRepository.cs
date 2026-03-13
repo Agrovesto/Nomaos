@@ -22,6 +22,7 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -528,7 +529,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     SupervisorUserId=a.SupervisorUserId,
                     OnboardedById=a.OnboardedById,
                     OnBoardedOn=a.OnBoardedOn,
-                    OrganizationCode=a.OrganizationCode,
+                   // OrganizationCode=a.OrganizationCode,
                     PhoneNumber=a.PhoneNumber,
                     Ward=a.Ward,
                     UserId=userId
@@ -569,7 +570,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 MembershipLeaderGender = memberShip.MembershipLeaderGender,
                 MembershipLeaderLastName = memberShip.MembershipLeaderLastName,
                 MembershipLeaderMiddleName = memberShip.MembershipLeaderMiddleName,
-                OrganizationCode = memberShip.OrganizationCode,
+             //   OrganizationCode = memberShip.OrganizationCode,
                 Lga = memberShip.Lga,
                 Email = memberShip.Email,
                 HasbeenAssignedAgent = memberShip.HasbeenAssignedAgent,
@@ -717,9 +718,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     ExceptionType.BAD_REQUEST,
                     result.Errors.First().Description);
 
+            await LinkUserToOrganizationIfNeeded(user.Id, model.organizationCode);
+
             return user.Map();
         }
+        private async Task UpdateMissingCredentials(User existingUser, OnboardingRequestModel model)
+        {
+            bool updated = false;
 
+            if (string.IsNullOrEmpty(existingUser.Pin) && !string.IsNullOrEmpty(model.Pin))
+            {
+                var salt = EncryptionUtil.GetSalt();
+                existingUser.Pin = model.Pin;
+                existingUser.PinEncrypt = model.Pin.EncryptTransactionPin(salt);
+                existingUser.Salt = Convert.ToBase64String(salt);
+                updated = true;
+            }
+
+            if (string.IsNullOrEmpty(existingUser.Password) && !string.IsNullOrEmpty(model.Password))
+            {
+                existingUser.Password = model.Password;
+                updated = true;
+            }
+
+            if (updated)
+            {
+                await _context.SaveChangesAsync();
+            }
+        }
         public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(
     OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -733,9 +759,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (existingUser != null)
             {
+                await UpdateMissingCredentials(existingUser, model);
                 return await HandleExistingUser(existingUser, model, args, role);
             }
-
             return await CreateNewUser(model, args, role);
         }
         private void ValidateUserType(string userType)
@@ -791,6 +817,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     OnBoardingArgs args,
     IdentityRole role)
         {
+            
             bool hasRole = await _context.UserRoles
                 .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id);
 

@@ -57,5 +57,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(ListQueryParams query);
         Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams query);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(ListQueryParams query);
+        Task<LocationTypeModel> CreateLocationTypeAsync(LocationTypeModel model, ListQueryParams query);
+        Task<LocationTypeModel> GetLocationById(ListQueryParams query);
+        Task<List<LocationTypeModel>> GetLocationAsync(ListQueryParams query);
     }
 }

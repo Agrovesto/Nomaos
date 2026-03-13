@@ -17,16 +17,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ContactEmail { get; set; }
         public string? OrganizationCode { get; set; }
         public string? CompanyEmail { get; set; }
-        public string? Password { get; set; }
-        public string? Pin { get; set; }
-
         public string CompanyName { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }
         public string? PhoneNumber { get; set; }
         public string? OrganizationPhone { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+      
         public string? CompanyAddress { get; set; }
 
        public DateTimeOffset OnboardedOn { get; set; }
@@ -34,7 +30,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? CACNumber { get; set; }
 
         public string RoleInOrganization { get; set; }
-        public string BusinessCode { get; set; }
 
 
     }

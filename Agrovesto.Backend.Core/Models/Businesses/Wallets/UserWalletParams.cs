@@ -14,6 +14,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? organizationCode { get; set; }
         public string? UserId { get; set; }
         public string Env { get; set; }
+        public long Id { get; set; }
         public int pageNumber { get; set; } = 1;
         public int pageSize { get; set; } = 10;
     }
@@ -60,6 +61,23 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public bool SetAsDefaultForContext { get; set; } = true;
 
         public string ProviderName { get; set; }
+    }
+    public class UserWalletDetailResponseModel
+    {
+        public long Id { get; set; }
+        public string UserId { get; set; }  
+        public string ProviderName { get; set; }
+        public decimal WalletLedgerBalance { get; set; }
+        public bool IsActive { get; set; }
+        public decimal AvailableBalance { get; set; }
+        public decimal InputObligations { get; set; }
+        public string WalletNumber { get; set; }
+        public decimal WalletBalance { get; set; } = 0;
+
+        public string Currency { get; set; }
+        public string? BelongToBusinessCode { get; set; }
+        public long WalletProviderId { get; set; }
+        public List<UserWalletContextModel> Contexts { get; set; } = new();
     }
     public class UserWalletResponseModel
     {

@@ -287,7 +287,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = wallet,
 
 
-                    Message = wallet.status ? "Successful" : "Could not create wallet",
+                    Message = wallet.message,
                     Succeeded = wallet.status,
 
                     Code = wallet.status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed

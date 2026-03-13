@@ -67,32 +67,64 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var authBytes = Encoding.UTF8.GetBytes(authString);
             return Convert.ToBase64String(authBytes);
         }
-        private async Task<MomoAuthResponse> GetProviderToken(ProviderParams @params, string authToken)
+        private static void ExtractDefaultHeader(ProviderParams @params, string authToken, string key, HttpClient client)
         {
-            var headers = new Dictionary<string, string>
-                {
-                    { "Authorization",  $"Basic {authToken}"},
-                    { "Ocp-Apim-Subscription-Key", @params.SubscriptionKey },
-                    { "X-Target-Environment", @params.TargetEnvironment }
-                };
-            try
-            {
-                var request = await _httpService.Post($"{@params.BaseUrl}/collection/token/", null, headers);
-                var readResponse = await request.Content.ReadAsStringAsync();
-                //request.EnsureSuccessStatusCode();
+            client.DefaultRequestHeaders.Authorization =
+                new AuthenticationHeaderValue("Basic", authToken);
 
-                var response = JsonConvert.DeserializeObject<MomoAuthResponse>(readResponse);
-                  return response;
-
-
-            }
-            catch (Exception ex)
-            {
-                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-                return null;
-            }
-
+            client.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", key);
+            client.DefaultRequestHeaders.Add("X-Target-Environment", @params.TargetEnvironment);
+            client.DefaultRequestHeaders.Add("User-Agent", "PostmanRuntime/7.32.3");
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
         }
+        private async Task<MomoAuthResponse> GetProviderToken(
+  ProviderParams @params, string authToken, string key, string url)
+        {
+            var handler = new HttpClientHandler();
+
+            using var client = new HttpClient(handler);
+
+            ExtractDefaultHeader(@params, authToken, key, client);
+            var content = new StringContent("", Encoding.UTF8, "application/json");
+
+            var requesturl = $"{@params.BaseUrl}/{url}/token/";
+            var response = await client.PostAsync($"{requesturl}", content);
+
+            var json = await response.Content.ReadAsStringAsync();
+
+            response.EnsureSuccessStatusCode();
+
+            return JsonSerializer.Deserialize<MomoAuthResponse>(
+                json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            );
+        }
+        //private async Task<MomoAuthResponse> GetProviderToken(ProviderParams @params, string authToken)
+        //{
+        //    var headers = new Dictionary<string, string>
+        //        {
+        //            { "Authorization",  $"Basic {authToken}"},
+        //            { "Ocp-Apim-Subscription-Key", @params.SubscriptionKey },
+        //            { "X-Target-Environment", @params.TargetEnvironment }
+        //        };
+        //    try
+        //    {
+        //        var request = await _httpService.Post($"{@params.BaseUrl}/collection/token/", null, headers);
+        //        var readResponse = await request.Content.ReadAsStringAsync();
+        //        //request.EnsureSuccessStatusCode();
+
+        //        var response = JsonConvert.DeserializeObject<MomoAuthResponse>(readResponse);
+        //          return response;
+
+
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+        //        return null;
+        //    }
+
+        //}
 
         private static Dictionary<string, string> GenerateHeader(ProviderParams @params, string BearerToken)
         {
@@ -111,8 +143,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
             try
             {
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
 
-                var token = await GetProviderToken(@params, basicAuth);
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.Reference);
 
@@ -151,7 +183,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var callbackUrl = _configuration["CallbackUrl"];
             try
             {
-                var token = await GetProviderToken(@params, basicAuth);
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.Reference);
                 headers.Add("X-Callback-Url", callbackUrl);
@@ -218,7 +250,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var callbackUrl = _configuration["CallbackUrl"];
             try
             {
-                var token = await GetProviderToken(@params, basicAuth);
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "disbursement");
+
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.Reference);
                 headers.Add("X-Callback-Url", callbackUrl);
@@ -276,7 +309,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             try
             {
 
-                var token = await GetProviderToken(@params, basicAuth);
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", reference);
                 var request = await _httpService.Get($"{@params.BaseUrl}/collection/v2_0/payment/{reference}", headers);
@@ -319,7 +353,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
             try
             {
-                var token = await GetProviderToken(@params, basicAuth);
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+
                 var headers = GenerateHeader(@params, token.AccessToken);
 
                 // Normalize phone number to international format expected by provider.
@@ -334,7 +369,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var httpResponse = await _httpService.Get(
                     $"{@params.BaseUrl}/collection/v1_0/accountholder/msisdn/{normalized}/active",
                     headers);
-                httpResponse.StatusCode = System.Net.HttpStatusCode.NotFound;
 
                 if (httpResponse.IsSuccessStatusCode)
                 {
@@ -405,8 +439,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
             try
             {
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
 
-                var token = await GetProviderToken(@params, basicAuth);
                 var headers = GenerateHeader(@params, token.AccessToken);
 
                 var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/preapprovals/msisdn/{request.MSISDN}", headers);
@@ -443,7 +477,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             var callbackUrl = _configuration["CallbackUrl"];
             try
             {
-                var token = await GetProviderToken(@params, basicAuth);
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.Reference);
                 headers.Add("X-Callback-Url", $"{callbackUrl}/mtnmomo");

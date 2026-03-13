@@ -161,7 +161,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 {
                     UserId = userProfile.UserId,
                     Email = userProfile.Email,
-                    PhoneNumber = userProfile.Phone
+                    PhoneNumber = !string.IsNullOrEmpty( userProfile.Phone) ? userProfile.Phone : request.PhoneNumber
                 };
 
                 // 6. Validate Account with Provider

@@ -85,6 +85,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _excelConverterService = excelConverterService;
 
         }
+        public async Task<List<LocationTypeModel>> GetLocationAsync(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+            return await _businessRepository.GetLocationAsync(business.BusinessCode);
+
+        }
+        public async Task<LocationTypeModel> GetLocationById(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+            return await _businessRepository.GetLocationByIAsync(query.Id);
+
+        }
+
+        public async Task<LocationTypeModel> CreateLocationTypeAsync(LocationTypeModel model, ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+          model.BusinessCode=business.BusinessCode;
+
+            return await _businessRepository.CreateLocationTypeAsync(model);
+        }
+
         public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(ListQueryParams query)
         {
             var profile = await _farmerRepository.GetFarmerByUserId(query.UserId);
@@ -1682,7 +1709,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 UserId = userId,
                 Ward = model.Ward,
 
-                OrganizationCode = model.OrganizationCode
+             //   OrganizationCode = model.OrganizationCode
             };
 
             await _agentRepository.CreateAgent(agent);
@@ -1714,7 +1741,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 IsAssignedToAgentId = userId,
                 HasbeenAssignedAgent = isAssignedagent,
                 Ward = model.Ward,
-                OrganizationCode = model.OrganizationCode
+              //  OrganizationId = model.OrganizationCode
             };
 
             return await _cooperativeRepository.CreateCooperative(cooperative);

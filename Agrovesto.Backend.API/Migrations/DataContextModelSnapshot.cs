@@ -55,9 +55,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("OnboardedById")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("OrganizationCode")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
@@ -2034,6 +2031,30 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("InvoiceItems");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BusinessCode")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("LocationTypes");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE.MandEChartDefinition", b =>
                 {
                     b.Property<long>("Id")
@@ -2420,9 +2441,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("OnboardedById")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("OrganizationCode")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
@@ -2585,6 +2603,65 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("BusinessOrganizations");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("AgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("AssignedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("AssignedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("LocationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("OrganizationAgents");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgentRole", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AssignedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("OrganizationAgentId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("RoleId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationAgentId");
+
+                    b.HasIndex("RoleId");
+
+                    b.ToTable("OrganizationAgentRoles");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundleItem", b =>
                 {
                     b.Property<long>("Id")
@@ -2691,6 +2768,114 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("OrganizationId");
 
                     b.ToTable("OrganizationConfig");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationLocation", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("LgaId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LocationName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("LocationTypeId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("StateId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LgaId");
+
+                    b.HasIndex("LocationTypeId");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.HasIndex("StateId");
+
+                    b.ToTable("OrganizationLocations");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationMembership", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AssignedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("AssignedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long>("MembershipId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("OrganizationMemberships");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationRole", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("OrganizationId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RoleName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId");
+
+                    b.ToTable("OrganizationRoles");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OtherBundlePaymentCost", b =>
@@ -3856,7 +4041,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsEmailVerified")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsPhoneVerified")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsPinEnabled")
                         .HasColumnType("bit");
 
                     b.Property<DateTimeOffset?>("LastLoginDate")
@@ -4660,6 +4851,34 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("State");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgentRole", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", null)
+                        .WithMany("Roles")
+                        .HasForeignKey("OrganizationAgentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationRole", "OrganizationRole")
+                        .WithMany()
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OrganizationRole");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundleItem", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundlePlans", "OrganizationBundlePlans")
@@ -4687,6 +4906,52 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", null)
                         .WithMany("OrganizationConfigurations")
                         .HasForeignKey("OrganizationId");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationLocation", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", "LGA")
+                        .WithMany()
+                        .HasForeignKey("LgaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType", "LocationType")
+                        .WithMany()
+                        .HasForeignKey("LocationTypeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.States", "State")
+                        .WithMany()
+                        .HasForeignKey("StateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("LGA");
+
+                    b.Navigation("LocationType");
+
+                    b.Navigation("Organization");
+
+                    b.Navigation("State");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationRole", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OtherBundlePaymentCost", b =>
@@ -5029,6 +5294,11 @@ namespace Agrovesto.Backend.API.Migrations
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", b =>
                 {
                     b.Navigation("OrganizationConfigurations");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>
+                {
+                    b.Navigation("Roles");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundlePlans", b =>
