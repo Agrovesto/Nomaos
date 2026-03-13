@@ -87,6 +87,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public Organization Organization { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string LocationName { get; set; }
+        public double Capacity { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
+        public double StockLevel { get; set; }
         public long LocationTypeId { get; set; }
         public LocationType LocationType { get; set; }
         public long StateId { get; set; }

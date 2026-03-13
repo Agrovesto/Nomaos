@@ -1734,6 +1734,40 @@ namespace Agrovesto.Backend.Infrastructure
         #endregion walletProvider
         #region Business
 
+        public static OrganizationRoleModel ViewMap(this OrganizationRole entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new OrganizationRoleModel
+            {
+                Id = entity.Id,
+                Description = entity.Description,
+                OrganizationId = entity.OrganizationId,
+                BusinessCode = entity.BusinessCode,
+                RoleName=entity.RoleName
+            };
+        }
+
+        public static OrganizationRole Map(this OrganizationRoleModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new OrganizationRole
+            {
+                Description = model.Description,
+                OrganizationId = model.OrganizationId,
+                BusinessCode = model.BusinessCode,
+                RoleName = model.RoleName
+            };
+        }
+
+
         public static OrganizationLocationModel ViewMap(this OrganizationLocation entity)
         {
             if (entity == null)
@@ -1751,7 +1785,10 @@ namespace Agrovesto.Backend.Infrastructure
                 LocationName=entity.LocationName,
                 LocationTypeId=entity.LocationTypeId,
                 OrganizationId=entity.OrganizationId,
-                BusinessCode=entity.BusinessCode
+                BusinessCode=entity.BusinessCode,
+                Capacity = entity.Capacity,
+                CapacityType=entity.CapacityType,
+                StockLevel=entity.StockLevel,
             };
         }
 
@@ -1771,7 +1808,10 @@ namespace Agrovesto.Backend.Infrastructure
                 LocationName = model.LocationName,
                 LocationTypeId = model.LocationTypeId,
                 OrganizationId = model.OrganizationId,
-                BusinessCode=model.BusinessCode
+                BusinessCode=model.BusinessCode,
+                Capacity= model.Capacity,
+                CapacityType= model.CapacityType,
+                StockLevel=model.StockLevel,
             };
         }
 

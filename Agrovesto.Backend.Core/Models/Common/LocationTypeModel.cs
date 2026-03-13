@@ -28,6 +28,20 @@ namespace Agrovesto.Backend.Core.Models.Common
         public long LgaId { get; set; }
         public string? Address { get; set; }
         public bool IsActive { get; set; }
+        public double Capacity { get; set; }
+        public double StockLevel { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
+        public string? BusinessCode { get; set; }
+    }
+    public class OrganizationRoleModel
+    {
+
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        [Required]
+        public string RoleName { get; set; }
+        [Required]
+        public string Description { get; set; }
         public string? BusinessCode { get; set; }
     }
 }
