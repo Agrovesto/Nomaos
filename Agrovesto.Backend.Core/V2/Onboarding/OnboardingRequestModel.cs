@@ -233,6 +233,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long? OrganizationId { get; set; }
         public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
         public string? organizationCode { get; set; }
+        public long? LocationId { get; set; }
+        public long? RoleId { get; set; }
     }
     public class BulkOnboardingJobArgs
     {

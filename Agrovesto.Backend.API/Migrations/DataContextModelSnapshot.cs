@@ -2785,6 +2785,12 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<double>("Capacity")
+                        .HasColumnType("float");
+
+                    b.Property<string>("CapacityType")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
 
@@ -2806,6 +2812,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<long>("StateId")
                         .HasColumnType("bigint");
+
+                    b.Property<double>("StockLevel")
+                        .HasColumnType("float");
 
                     b.HasKey("Id");
 

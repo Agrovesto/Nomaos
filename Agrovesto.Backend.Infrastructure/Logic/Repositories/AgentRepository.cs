@@ -24,6 +24,68 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        public async Task<bool> UpdateOrganizationAgent(OrganizationAgentArgs data)
+        {
+            var existingAgent = await _context.Agents
+                    .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+            if (data.OrganizationId.HasValue)
+            {
+                bool exists = await _context.OrganizationAgents.AnyAsync(x =>
+                    x.AgentId == existingAgent.Id &&
+                    x.OrganizationId == data.OrganizationId && x.LocationId == data.LocationId);
+
+                if (!exists)
+                {
+                    await _context.OrganizationAgents.AddAsync(new OrganizationAgent
+                    {
+                        AgentId = existingAgent.Id,
+                        OrganizationId = data.OrganizationId.Value,
+                        AssignedByUserId = data.OnboardedById,
+                        AssignedOn = DateTimeOffset.Now,
+                        LocationId=data.LocationId
+                    });
+                }
+            }
+
+            _context.Agents.Update(existingAgent);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<bool> UpdateOrganizationAgentRole(OrganizationAgentArgs data)
+        {
+            var agent = await _context.Agents
+                .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+            if (agent == null)
+                throw new Exception("Agent not found");
+
+            var organizationAgent = await _context.OrganizationAgents
+                .FirstOrDefaultAsync(x =>
+                    x.AgentId == agent.Id &&
+                    x.OrganizationId == data.OrganizationId);
+
+            if (organizationAgent == null)
+                throw new Exception("Agent is not assigned to this organization");
+
+            bool exists = await _context.OrganizationAgentRoles.AnyAsync(x =>
+                x.OrganizationAgentId == organizationAgent.Id &&
+                x.RoleId == data.RoleId);
+
+            if (!exists)
+            {
+                await _context.OrganizationAgentRoles.AddAsync(new OrganizationAgentRole
+                {
+                    OrganizationAgentId = organizationAgent.Id,
+                    RoleId = data.RoleId,
+                    AssignedOn = DateTimeOffset.Now
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
         public async Task<(bool status, AgentModel data)> CreateUpdateAgent(AgentModel data)
         {
             try
