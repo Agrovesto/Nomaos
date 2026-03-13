@@ -50,7 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
        // public string? IsAssignedToAgentId { get; set; }
         public bool HasbeenAssignedAgent { get; set; }
-        public string? OrganizationCode { get; set; }
+       // public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
         public Tier Tier { get; set; }
         public long MemberShipTypeId { get; set; }
@@ -79,5 +79,19 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         Tier3,
         Tier4
 
+    }
+
+    public class OrganizationMembership //Memberships that belong to organization
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long OrganizationId { get; set; }
+        public long MembershipId { get; set; }
+
+        public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
+        public string? AssignedByUserId { get; set; }
     }
 }

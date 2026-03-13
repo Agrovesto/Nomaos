@@ -61,6 +61,49 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+
+        //[HttpGet("wallet-detail")]
+        //public async Task<IActionResult> GetUserWalletDetail([FromQuery] UserWalletParams query)
+        //{
+        //    try
+        //    {
+
+        //        query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+        //        var result = await _walletManager.GetUserWallletsByUserId(query);
+        //        return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
+        //        {
+        //            Data = result.Data,
+        //            Message = result.Count > 0 ? "Successful" : "Failed",
+        //            Succeeded = true,
+        //            Count = result.Count,
+
+        //            //PageNumber = query.PageNumber,
+        //            //PageSize = 10,
+        //            Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+        //        });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
+
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.Message,
+        //            Succeeded = false,
+        //        });
+        //    }
+
+
+        //}
+
+
         /// <summary>
         /// Create a wallet for a user (Personal or Organization context)
         /// </summary>
@@ -117,7 +160,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = wallet,
 
 
-                    Message = wallet.status? "Successful" : "Could not create wallet",
+                    Message = wallet.message,
                     Succeeded = wallet.status ,
 
                     Code = wallet.status  ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed

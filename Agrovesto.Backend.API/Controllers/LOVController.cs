@@ -28,7 +28,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IWalletProviderManager _walletProvider;
         private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly INotificationService _smsService;
-
+        private readonly IBusinessManager _businessManager;
         private readonly ISettingsManager _settingsManager;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
             IGoogleDriveService googleDriveService,
@@ -36,7 +36,7 @@ namespace Agrovesto.Backend.API.Controllers
             INigeriaStateImporterService nigeriaStateImporterService,
              IFlutterwaveService flutterwaveService,
              IWebHostEnvironment hostingEnvironment, INotificationService smsService,
-             ISettingsManager settingsManager, IWalletProviderManager walletProvider)
+             ISettingsManager settingsManager, IWalletProviderManager walletProvider, IBusinessManager businessManager)
         {
             _cafeOneWalletService = cafeOneWalletService;
             _hostingEnvironment = hostingEnvironment;
@@ -47,7 +47,87 @@ namespace Agrovesto.Backend.API.Controllers
             _verificationManager = verificationManager;
             _settingsManager = settingsManager;
             _walletProvider = walletProvider;
+            _businessManager = businessManager;
         }
+
+        [HttpGet("location-types")]
+
+        public async Task<IActionResult> GetLocationTypes([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _businessManager.GetLocationAsync(args);
+                return Ok(new Response<List<LocationTypeModel>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("location-type")]
+
+        public async Task<IActionResult> GetLocationType([FromQuery]ListQueryParams query)
+        {
+            try
+            {
+
+                var type = await _businessManager.GetLocationById(query);
+                return Ok(new Response<LocationTypeModel>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
 
         [HttpGet("membership-types")]
 

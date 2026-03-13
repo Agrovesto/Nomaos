@@ -398,6 +398,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         existingCooperative.MemberShipTypeId = data.MemberShipTypeId;
                     }
 
+                    if (data.OrganizationId.HasValue)
+                    {
+                        bool exists = await _context.OrganizationMemberships.AnyAsync(x =>
+                            x.MembershipId == existingCooperative.Id &&
+                            x.OrganizationId == data.OrganizationId.Value);
+
+                        if (!exists)
+                        {
+                            await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+                            {
+                                MembershipId = existingCooperative.Id,
+                                OrganizationId = data.OrganizationId.Value,
+                                AssignedByUserId = data.OnboardedById,
+                                AssignedOn = DateTimeOffset.Now
+                            });
+                        }
+                    }
+
+
                     //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
                     //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
 
@@ -696,10 +715,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var cooperatives = _context.MemberShips
                 .Where(x => x.BelongToBusinessCode == businessCode)
                 .AsQueryable();
-            if (!string.IsNullOrEmpty(query.organizationCode))
-            {
-                cooperatives = cooperatives.Where(x => x.OrganizationCode == query.organizationCode);
-            }
+            //if (!string.IsNullOrEmpty(query.organizationCode))
+            //{
+            //    cooperatives = cooperatives.Where(x => x.OrganizationCode == query.organizationCode);
+            //}
 
             var result = await cooperatives
        .OrderByDescending(s => s.OnBoardedOn)
@@ -730,10 +749,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
 
             // Filter by organization code
-            if (!string.IsNullOrWhiteSpace(query.organizationCode))
-            {
-                cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
-            }
+            //if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            //{
+            //    cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            //}
 
             var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
@@ -875,10 +894,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .AsNoTracking()
                 .Where(s => s.SupervisorUserId == supervisorId);
 
-            if (!string.IsNullOrWhiteSpace(query.organizationCode))
-            {
-                agentsQuery = agentsQuery.Where(s => s.OrganizationCode == query.organizationCode);
-            }
+            //if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            //{
+            //    agentsQuery = agentsQuery.Where(s => s.OrganizationCode == query.organizationCode);
+            //}
 
             var agents = await agentsQuery
                 .OrderByDescending(s => s.OnBoardedOn)
@@ -895,7 +914,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     BelongToBusinessCode = s.BelongToBusinessCode,
                     Email = s.Email,
                     PhoneNumber = s.PhoneNumber,
-                    OrganizationCode = s.OrganizationCode,
+                   // OrganizationCode = s.OrganizationCode,
                     Ward = s.Ward,
                     SupervisorUserId = s.SupervisorUserId,
                     UserId = s.UserId
