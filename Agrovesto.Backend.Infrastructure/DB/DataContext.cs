@@ -243,7 +243,28 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.Entity<Farm>()
                 .Property(f => f.FarmPolygon)
                 .HasColumnType("geography");
+            modelBuilder.Entity<OrganizationLocation>()
+              .HasOne(o => o.State)
+              .WithMany()
+              .HasForeignKey(o => o.StateId)
+              .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<OrganizationLocation>()
+                .HasOne(o => o.LGA)
+                .WithMany()
+                .HasForeignKey(o => o.LgaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<OrganizationLocation>()
+                .HasOne(o => o.LocationType)
+                .WithMany()
+                .HasForeignKey(o => o.LocationTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<OrganizationAgentRole>()
+                .HasOne(o => o.OrganizationRole)
+                .WithMany()
+                .HasForeignKey(o => o.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
             //modelBuilder.Entity<Farm>()
             //    .HasIndex(f => f.FarmPolygon)
             //    .HasDatabaseName("IX_Farm_Polygon")
@@ -289,8 +310,15 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }
         public DbSet<Agent> Agents { get; set; }
+        public DbSet<LocationType> LocationTypes { get; set; }
+        public DbSet<OrganizationLocation> OrganizationLocations { get; set; }
+        public DbSet<OrganizationRole> OrganizationRoles { get; set; }
+        public DbSet<OrganizationAgentRole> OrganizationAgentRoles { get; set; }
+
+        public DbSet<OrganizationAgent> OrganizationAgents { get; set; }
         public DbSet<MemberShip> MemberShips { get; set; }
         public DbSet<MemberShipType> MemberShipTypes { get; set; }
+        public DbSet<OrganizationMembership> OrganizationMemberships { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
         public DbSet<FarmerOrganization> FarmerOrganizations { get; set; }
         public DbSet<FarmerCooperative> FarmerCooperatives { get; set; }

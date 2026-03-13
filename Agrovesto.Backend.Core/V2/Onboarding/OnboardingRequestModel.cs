@@ -230,8 +230,9 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long YearsInAgric { get; set; }
         public long? MembershipTypeId { get; set; }
         public string? HighestLevelOfEducation { get; set; }
-
+        public long? OrganizationId { get; set; }
         public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
+        public string? organizationCode { get; set; }
     }
     public class BulkOnboardingJobArgs
     {

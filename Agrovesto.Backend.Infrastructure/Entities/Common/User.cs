@@ -32,27 +32,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public ICollection<UserOrganization> UserOrganizations { get; set; }
        // public UserLevel UserLevel { get; set; }
         public bool IsPhoneVerified { get; set; } = false;
+        public bool IsEmailVerified { get; set; } = false;
+
+        public bool IsPinEnabled { get; set; } = false;
     }
-    //public enum UserLevel
-    //{
-    //    [Display(Name = "Level 0")] //not verified
-    //    Level0,
 
-    //    [Display(Name = "Level 1")] //phone or email verified 
-    //    Level1,
-
-    //    [Display(Name = "Level 2")]//farmer:picture
-    //    Level2,
-
-    //    [Display(Name = "Level 3")] //farmer:nin/bvn,  cooperatuve: cooperative registration document
-    //    Level3,
-
-    //    [Display(Name = "Level 4")] //farmer: land mapping, cooperative: cac
-    //    Level4,
-
-    //    [Display(Name = "Level 5")] //nin/bvn
-    //    Level5
-    //}
     public class UserOrganization
     {
         public string UserId { get; set; }

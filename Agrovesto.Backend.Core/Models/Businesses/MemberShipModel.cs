@@ -27,6 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Ward { get; set; }
         public string? ContactPerson { get; set; }
         public string Email { get; set; }
+        public long OrganizationId { get; set; }
         public string? PhoneNumber { get; set; }
         public string? MembershipLeaderFirstName { get; set; }
         public string? MembershipLeaderMiddleName { get; set; }
@@ -80,7 +81,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string UserId { get; set; }
         public long Id { get; set; }
         public string BelongToBusinessCode { get; set; }  //which business
-        public string? OrganizationCode { get; set; }  //which business
+        public long? OrganizationId { get; set; }  //which business
         public string? MembershipLeaderFirstName { get; set; }
         public string? MembershipLeaderMiddleName { get; set; }
         public string? MembershipLeaderLastName { get; set; }

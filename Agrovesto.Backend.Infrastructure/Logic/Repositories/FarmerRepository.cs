@@ -288,7 +288,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 await UpdateFarmerValueChainItems(farmer.Id, update.SelectedItems);
                 isModified = true;
             }
+            if (!string.IsNullOrEmpty(update.OrganizationCode))
+            {
+                bool exists = await _context.FarmerOrganizations.AnyAsync(x =>
+                    x.FarmerId == farmer.Id &&
+                    x.OrganizationCode == update.OrganizationCode);
 
+                if (!exists)
+                {
+                    await _context.FarmerOrganizations.AddAsync(new FarmerOrganization
+                    {
+                        FarmerId = farmer.Id,
+                        OrganizationCode = update.OrganizationCode,
+                        OnboardedByUserId = farmer.OnboardedByUserId
+                    });
+                }
+            }
             if (update.CooperativeIds != null)
             {
                 var existing = _context.FarmerCooperatives.Where(fc => fc.FarmerId == farmer.Id);
@@ -396,10 +411,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             double cooperativePercentageChange = await CalculateCooperativePercentagePerformanceByAgent(agentId, currentMonth, previousMonth, currentYear, previousYear);
             var metrics = new BusinessEntitiesMetrics
             {
-                TotalCooperative = await _context.MemberShips.CountAsync(c =>
-                 (!string.IsNullOrEmpty(query.organizationCode) && (c.OrganizationCode.Contains(query.organizationCode)))
-           && c.BelongToBusinessCode == query.businessCode
-             ),
+                //TotalCooperative = await _context.MemberShips.CountAsync(c =>
+                // (!string.IsNullOrEmpty(query.organizationCode) && (c.OrganizationCode.Contains(query.organizationCode)))
+           //&& c.BelongToBusinessCode == query.businessCode
+           //  ),
                 TotalFarmer = farmers.Count,
                 TotalWarehouse = await _context.Warehouses.CountAsync(w =>
                  (!string.IsNullOrEmpty(query.organizationCode) && (w.OrganizationCode.Contains(query.organizationCode)))
@@ -462,8 +477,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (!string.IsNullOrEmpty(organizationCode))
             {
-                agentsQuery = agentsQuery.Where(a => a.OrganizationCode.Contains(organizationCode));
-                cooperativesQuery = cooperativesQuery.Where(c => c.OrganizationCode.Contains(organizationCode));
+               // agentsQuery = agentsQuery.Where(a => a.OrganizationCode.Contains(organizationCode));
+                //cooperativesQuery = cooperativesQuery.Where(c => c.OrganizationCode.Contains(organizationCode));
 
                 farmersQuery = from f in farmersQuery
                                join fo in _context.FarmerOrganizations
@@ -493,10 +508,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var agentsQuery = _context.Agents.Where(f =>
                 f.BelongToBusinessCode == businessCode);
 
-            if (!string.IsNullOrEmpty(organizationCode))
-            {
-                agentsQuery = agentsQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
-            }
+            //if (!string.IsNullOrEmpty(organizationCode))
+            //{
+            //    agentsQuery = agentsQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
+            //}
 
             var totalAgentsThisMonth = await agentsQuery
                 .CountAsync(f => f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
@@ -516,10 +531,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var cooperativesQuery = _context.MemberShips.Where(f =>
                 f.BelongToBusinessCode == businessCode);
 
-            if (!string.IsNullOrEmpty(organizationCode))
-            {
-                cooperativesQuery = cooperativesQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
-            }
+            //if (!string.IsNullOrEmpty(organizationCode))
+            //{
+            //    cooperativesQuery = cooperativesQuery.Where(f => f.OrganizationCode.Contains(organizationCode));
+            //}
 
             var totalCooperativesThisMonth = await cooperativesQuery
                 .CountAsync(f => f.OnBoardedOn.Year == currentYear && f.OnBoardedOn.Month == currentMonth);
