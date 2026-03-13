@@ -90,6 +90,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 //throw new BaseException(
                 //    Core.Enums.ExceptionType.NOTFOUND,
                 //    "Farm does not exist.");
+
+                //don't throw exception
                 var farms = fetchFarms.Select(fetchFarm =>
                 {
                     string verificationStatus;
