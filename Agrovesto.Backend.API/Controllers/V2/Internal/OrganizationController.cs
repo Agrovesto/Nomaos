@@ -425,7 +425,55 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+        [HttpGet("agent-detail")]
+        public async Task<IActionResult> GetAgentDetail([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) &&
+                string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                if (string.IsNullOrEmpty(args.UserId))
+                {
+                    return BadRequest(new Response<Dictionary<string, string>>()
+                    {
+                        Message = "Validation failed.",
+                        Succeeded = false,
+                        Data = new Dictionary<string, string>
+{
+    { "UserId", "UserId is required" }
+}
 
+                    });
+                }
+                var response = await _organizationManager.GetAgentDetail(args);
+            return Ok(response);
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
