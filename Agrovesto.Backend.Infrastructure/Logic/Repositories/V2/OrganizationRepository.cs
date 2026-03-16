@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationRoleModel> CreateRoleAsync(OrganizationRoleModel model);
         Task<List<OrganizationLocationModel>> GetLocationAsync(ListQueryParams query);
         Task<OrganizationLocationModel> GetLocationByIAsync(long Id);
+        Task<OrganizationAgentResponse> GetOrganizationAgentDetail(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args);
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
@@ -29,62 +30,141 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
         }
-        public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
+
+        public async Task<OrganizationAgentResponse> GetOrganizationAgentDetail(ListQueryParams args)
         {
-            var baseQuery =
-       from oa in _context.OrganizationAgents.AsNoTracking()
-       join a in _context.Agents.AsNoTracking()
-           on oa.AgentId equals a.Id
-       join loc in _context.OrganizationLocations.AsNoTracking()
-           on oa.LocationId equals loc.Id into locGroup
-       from loc in locGroup.DefaultIfEmpty()
-       where oa.OrganizationId == args.Id && oa.IsActive
-       select new { oa, a, loc };
+            var orgAgent = await _context.OrganizationAgents
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.AgentId ==args.Id  && x.IsActive);
 
-            var totalCount = await baseQuery.CountAsync();
+            if (orgAgent == null)
+                return null;
 
-            var agents = await baseQuery
-                .OrderByDescending(x => x.oa.AssignedOn)
-                .Skip((args.PageNumber - 1) * args.PageSize)
-                .Take(args.PageSize)
-                .Select(x => new OrganizationAgentResponse
+            var agent = await _context.Agents
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == orgAgent.AgentId);
+
+            var location = await _context.OrganizationLocations
+                .AsNoTracking()
+                .Where(x => x.Id == orgAgent.LocationId)
+                .Select(x => new OrganizationLocationDto
                 {
-                    AgentId = x.a.Id,
-                    UserId = x.a.UserId,
-                    Name = x.a.Name,
-                    Email = x.a.Email,
-                    PhoneNumber = x.a.PhoneNumber,
-                    State = x.a.State,
-                    Lga = x.a.Lga,
-                    Ward = x.a.Ward,
-                    OnBoardedOn = x.a.OnBoardedOn,
+                    LocationId = x.Id,
+                    LocationName = x.LocationName,
+                    LocationType = x.LocationType.Type,
+                    State = x.State.State,
+                    Lga = x.LGA.Name
+                })
+                .FirstOrDefaultAsync();
 
-                    Location = x.loc == null ? null : new OrganizationLocationDto
-                    {
-                        LocationId = x.loc.Id,
-                        LocationName = x.loc.LocationName,
-                        LocationType = x.loc.LocationType.Type,
-                        State = x.loc.State.State,
-                        Lga = x.loc.LGA.Name
-                    },
-
-                    Roles = _context.OrganizationAgentRoles
-                        .Where(r => r.OrganizationAgentId == x.oa.Id)
-                        .Select(r => new OrganiationRoleDto
-                        {
-                            RoleId = r.RoleId,
-                            RoleName = r.OrganizationRole.RoleName
-                        })
-                        .ToList()
+            var roles = await _context.OrganizationAgentRoles
+                .AsNoTracking()
+                .Where(x => x.OrganizationAgentId == orgAgent.Id)
+                .Select(x => new OrganiationRoleDto
+                {
+                    RoleId = x.RoleId,
+                    RoleName = x.OrganizationRole.RoleName
                 })
                 .ToListAsync();
+
+            return new OrganizationAgentResponse
+            {
+                AgentId = agent.Id,
+                UserId = agent.UserId,
+                Name = agent.Name,
+                Email = agent.Email,
+                PhoneNumber = agent.PhoneNumber,
+                State = agent.State,
+                Lga = agent.Lga,
+                Ward = agent.Ward,
+                OnBoardedOn = agent.OnBoardedOn,
+                Locations = location == null ? new List<OrganizationLocationDto>() : new List<OrganizationLocationDto> { location },
+                Roles = roles
+            };
+        }
+        public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
+        {
+            var organizationAgentsQuery = _context.OrganizationAgents
+                .AsNoTracking()
+                .Where(x => x.OrganizationId == args.Id && x.IsActive);
+
+            var totalCount = await organizationAgentsQuery.CountAsync();
+
+            var pagedAgents = await organizationAgentsQuery
+                .OrderByDescending(x => x.AssignedOn)
+                .Skip((args.PageNumber - 1) * args.PageSize)
+                .Take(args.PageSize)
+                .ToListAsync();
+
+            var agentIds = pagedAgents.Select(x => x.AgentId).ToList();
+            var orgAgentIds = pagedAgents.Select(x => x.Id).ToList();
+            var locationIds = pagedAgents.Select(x => x.LocationId).Distinct().ToList();
+
+            var agents = await _context.Agents
+                .AsNoTracking()
+                .Where(x => agentIds.Contains(x.Id))
+                .ToListAsync();
+
+            var locations = await _context.OrganizationLocations
+                .AsNoTracking()
+                .Where(x => locationIds.Contains(x.Id))
+                .Select(x => new OrganizationLocationDto
+                {
+                    LocationId = x.Id,
+                    LocationName = x.LocationName,
+                    LocationType = x.LocationType.Type,
+                    State = x.State.State,
+                    Lga = x.LGA.Name
+                })
+                .ToListAsync();
+
+            var roles = await _context.OrganizationAgentRoles
+                .AsNoTracking()
+                .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
+                .Select(x => new
+                {
+                    x.OrganizationAgentId,
+                    Role = new OrganiationRoleDto
+                    {
+                        RoleId = x.RoleId,
+                        RoleName = x.OrganizationRole.RoleName
+                    }
+                })
+                .ToListAsync();
+
+            var result = pagedAgents.Select(oa =>
+            {
+                var agent = agents.FirstOrDefault(x => x.Id == oa.AgentId);
+
+                return new OrganizationAgentResponse
+                {
+                    AgentId = agent?.Id ?? 0,
+                    UserId = agent?.UserId,
+                    Name = agent?.Name,
+                    Email = agent?.Email,
+                    PhoneNumber = agent?.PhoneNumber,
+                    State = agent?.State,
+                    Lga = agent?.Lga,
+                    Ward = agent?.Ward,
+                    OnBoardedOn = agent?.OnBoardedOn ?? DateTimeOffset.MinValue,
+
+                    Locations = locations
+                        .Where(l => l.LocationId == oa.LocationId)
+                        .ToList(),
+
+                    Roles = roles
+                        .Where(r => r.OrganizationAgentId == oa.Id)
+                        .Select(r => r.Role)
+                        .ToList()
+                };
+            }).ToList();
 
             return new PagedListResponse<List<OrganizationAgentResponse>>
             {
                 PageNumber = args.PageNumber,
                 PageSize = args.PageSize,
                 Count = totalCount,
-                Data = agents
+                Data = result
             };
         }
         public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)

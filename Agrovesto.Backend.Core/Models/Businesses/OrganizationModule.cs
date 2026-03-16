@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public DateTimeOffset OnBoardedOn { get; set; }
 
-        public OrganizationLocationDto Location { get; set; }
+        public List<OrganizationLocationDto> Locations { get; set; }
 
         public List<OrganiationRoleDto> Roles { get; set; }
     }
