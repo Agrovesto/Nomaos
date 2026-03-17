@@ -25,12 +25,25 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long? OrganizationId { get; set; }
  
     }
-
-    public class OrganizationAgentArgs
+    public class OrganizationAgentAssignmArgs
     {
         public long LocationId { get; set; }
+        public string BusinessCode { get; set; }
         public long RoleId { get; set; }
-        public string OnboardedById { get; set; }
+        public string? OrganizationCode { get; set; }
+        public string UserId { get; set; }
+        public string? OnboardedById { get; set; }
+        public long? OrganizationId { get; set; }
+
+    }
+    public class OrganizationAgentArgs
+    {
+
+        public string? OrganizationCode { get; set; }
+        public string BusinessCode { get; set; }
+        public long LocationId { get; set; }
+        public long RoleId { get; set; }
+        public string? OnboardedById { get; set; }
         public string UserId { get; set; }
         public long? OrganizationId { get; set; }
 
