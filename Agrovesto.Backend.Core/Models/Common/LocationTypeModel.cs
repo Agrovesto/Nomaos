@@ -16,6 +16,53 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public string? BusinessCode { get; set; }
     }
+    public class OrganizationAgentLocationResponseModel
+    {
+
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        public string LocationName { get; set; }
+        public long LocationTypeId { get; set; }
+        public string LocationType { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public long StateId { get; set; }
+        public long LgaId { get; set; }
+        public string? Address { get; set; }
+        public bool IsActive { get; set; }
+        public double Capacity { get; set; }
+        public double Allocation { get; set; }
+        public double AvailableCapacity { get; set; }
+      
+        public string? CapacityType { get; set; }
+        public string? BusinessCode { get; set; }
+
+    }
+
+    public class OrganizationLocationResponseModel
+    {
+
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        public string LocationName { get; set; }
+        public long LocationTypeId { get; set; }
+        public string LocationType { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public long StateId { get; set; }
+        public long LgaId { get; set; }
+        public string? Address { get; set; }
+        public bool IsActive { get; set; }
+        public double Capacity { get; set; }
+        public double TotalStock { get; set; }
+        public double CurrentUsage { get; set; }
+        public string AssignedAgentCount { get
+                ;set;
+        }
+        public string? CapacityType { get; set; } 
+        public string? BusinessCode { get; set; }
+
+    }
 
     public class OrganizationLocationModel
     {
@@ -32,6 +79,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public double StockLevel { get; set; }
         public string? CapacityType { get; set; } = "Bag";
         public string? BusinessCode { get; set; }
+        
     }
     public class OrganizationRoleModel
     {

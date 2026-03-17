@@ -66,6 +66,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string? env { get; set; }
         public string? SelectedProviderCode { get; set; }
+        public bool? Status { get; set; } = null;
         // filters
         public string? MappingStatus { get; set; } // "Mapped" or "Unmapped"
         public string? CooperativeStatus { get; set; } // "Linked" or "Not Linked"
