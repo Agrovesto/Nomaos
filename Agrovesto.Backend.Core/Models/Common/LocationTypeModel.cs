@@ -66,7 +66,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class OrganizationLocationModel
     {
-
+        public string LocationType { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
         public long Id { get; set; }
         public long OrganizationId { get; set; }
         public string LocationName { get; set; }
@@ -79,7 +81,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public double StockLevel { get; set; }
         public string? CapacityType { get; set; } = "Bag";
         public string? BusinessCode { get; set; }
-        
+        public double Used { get; set; }
+        public double Available { get; set; }
+
     }
     public class OrganizationRoleModel
     {

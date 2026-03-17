@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -21,16 +22,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<PagedListResponse<List<OrganizationAgentActivityLog>>> GetAgentActivityLogs(ListQueryParams args);
         Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query);
         Task<PagedListResponse<List<OrganizationAgentInputAllocationModel>>> GetAgentInputAllocations(ListQueryParams args);
+        Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams args);
+        Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
         Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
         Task<OrganizationLocationModel> GetLocationByIAsync(long Id);
+        Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
         Task<OrganizationAgentDetailResponse> GetOrganizationAgentDetail(ListQueryParams args);
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args);
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
         Task<bool> ReassignAgentToLocation(OrganizationAgentArgs data);
+        Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -371,6 +376,245 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
         #endregion agentviews
+
+        public async Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args)
+        {
+            var query = _context.OrganizationAgents
+                .AsNoTracking()
+                .Where(x => x.LocationId == args.Id && x.IsActive);
+
+            var totalCount = await query.CountAsync();
+
+            var pagedOrgAgents = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((args.PageNumber - 1) * args.PageSize)
+                .Take(args.PageSize)
+                .ToListAsync();
+
+            if (!pagedOrgAgents.Any())
+            {
+                return new PagedListResponse<List<LocationAgentDetailResponse>>
+                {
+                    PageNumber = args.PageNumber,
+                    PageSize = args.PageSize,
+                    Count = totalCount,
+                    Data = new List<LocationAgentDetailResponse>()
+                };
+            }
+
+            var orgAgentIds = pagedOrgAgents.Select(x => x.Id).ToList();
+            var agentIds = pagedOrgAgents.Select(x => x.AgentId).ToList();
+
+            var agents = await _context.Agents
+                .AsNoTracking()
+                .Where(x => agentIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id);
+
+            var roles = await _context.OrganizationAgentRoles
+                .AsNoTracking()
+                .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
+                .GroupBy(x => x.OrganizationAgentId)
+                .Select(g => new
+                {
+                    OrganizationAgentId = g.Key,
+                    RoleId = g.Select(x => x.RoleId).FirstOrDefault()
+                })
+                .ToListAsync();
+
+            var roleIds = roles.Select(x => x.RoleId).ToList();
+
+            var roleDict = await _context.OrganizationRoles
+                .AsNoTracking()
+                .Where(r => roleIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, r => r.RoleName);
+
+            // MOCK: Subscribers
+            var subscriberDict = pagedOrgAgents.ToDictionary(
+                x => x.Id,
+                x => new Random(x.Id.GetHashCode()).Next(5, 50)
+            );
+
+            // MOCK: Disbursed
+            var disbursedDict = pagedOrgAgents.ToDictionary(
+                x => x.Id,
+                x => (double)new Random(x.Id.GetHashCode()).Next(100, 1000)
+            );
+
+            var result = pagedOrgAgents.Select(oa =>
+            {
+                var agent = agents.GetValueOrDefault(oa.AgentId);
+
+                var roleEntry = roles.FirstOrDefault(r => r.OrganizationAgentId == oa.Id);
+
+                var roleName = roleEntry != null && roleDict.ContainsKey(roleEntry.RoleId)
+                    ? roleDict[roleEntry.RoleId]
+                    : "N/A";
+
+                return new LocationAgentDetailResponse
+                {
+                    AgentId = agent?.Id ?? 0,
+                    AgentName = agent?.Name,
+                    AgentRole = roleName,
+                    TotalSubscribers = subscriberDict.GetValueOrDefault(oa.Id, 0),
+                    TotalInputDisbursed = disbursedDict.GetValueOrDefault(oa.Id, 0),
+                    IsActive = oa.IsActive
+                };
+            }).ToList();
+
+            return new PagedListResponse<List<LocationAgentDetailResponse>>
+            {
+                PageNumber = args.PageNumber,
+                PageSize = args.PageSize,
+                Count = totalCount,
+                Data = result
+            };
+        }
+
+        public async Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args)
+        {
+            var pageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+
+            var location = await _context.OrganizationLocations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == args.Id);
+
+            if (location == null)
+                throw new NotFoundException("Location not found");
+
+            // MOCK: Input types (since no DB yet)
+            var mockInputs = new List<LocationInventoryBreakdownResponse>
+    {
+        new LocationInventoryBreakdownResponse
+        {
+            InputId = 1,
+            InputName = "Fertilizer",
+            TotalStock = location.StockLevel * 0.5
+        },
+        new LocationInventoryBreakdownResponse
+        {
+            InputId = 2,
+            InputName = "Seeds",
+            TotalStock = location.StockLevel * 0.3
+        },
+        new LocationInventoryBreakdownResponse
+        {
+            InputId = 3,
+            InputName = "Pesticides",
+            TotalStock = location.StockLevel * 0.2
+        }
+    };
+
+            // MOCK: Allocation per input (simulate assigned to agents)
+            var allocationDict = mockInputs.ToDictionary(
+                x => x.InputId,
+                x => new Random((int)x.InputId * (int)location.Id).Next(10, 100)
+            );
+
+            //  Calculate allocation + available balance
+            mockInputs.ForEach(x =>
+            {
+                x.QuantityAllocated = allocationDict.GetValueOrDefault(x.InputId, 0);
+
+                //  Available = TotalStock - Allocated
+                x.AvailableBalance = x.TotalStock - x.QuantityAllocated;
+
+                // Prevent negative (just in case mock overshoots)
+                if (x.AvailableBalance < 0)
+                    x.AvailableBalance = 0;
+            });
+
+            var totalCount = mockInputs.Count;
+
+            var pagedData = mockInputs
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedListResponse<List<LocationInventoryBreakdownResponse>>
+            {
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Count = totalCount,
+                Data = pagedData
+            };
+        }
+
+        public async Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args)
+        {
+            var pageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+
+            var location = await _context.OrganizationLocations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == args.Id);
+
+            if (location == null)
+                throw new NotFoundException("Location not found");
+
+            //  MOCK: Activity logs
+            var mockLogs = new List<LocationActivityLogResponse>
+    {
+        new LocationActivityLogResponse
+        {
+            Id = 1,
+            ActivityType = "Agent Assignment",
+            Name = "Agent Assigned",
+            Description = "Agent John Doe was assigned to this location",
+            TimeStamp = DateTimeOffset.Now.AddDays(-1)
+        },
+        new LocationActivityLogResponse
+        {
+            Id = 2,
+            ActivityType = "Input Disbursement",
+            Name = "Fertilizer Distributed",
+            Description = "50 units of fertilizer disbursed by Agent Jane",
+            TimeStamp = DateTimeOffset.Now.AddHours(-10)
+        },
+        new LocationActivityLogResponse
+        {
+            Id = 3,
+            ActivityType = "Stock Update",
+            Name = "Inventory Updated",
+            Description = "Stock level updated after new supply",
+            TimeStamp = DateTimeOffset.Now.AddHours(-5)
+        },
+        new LocationActivityLogResponse
+        {
+            Id = 4,
+            ActivityType = "Agent Update",
+            Name = "Agent Reassigned",
+            Description = "Agent moved to another location",
+            TimeStamp = DateTimeOffset.Now.AddHours(-2)
+        }
+    };
+
+            // Optional filtering (by activity type if passed in query.Search)
+            //if (!string.IsNullOrWhiteSpace(args.Search))
+            //{
+            //    mockLogs = mockLogs
+            //        .Where(x => x.ActivityType.Contains(args.Search, StringComparison.OrdinalIgnoreCase) ||
+            //                    x.Name.Contains(args.Search, StringComparison.OrdinalIgnoreCase))
+            //        .ToList();
+            //}
+
+            // 📄 Pagination
+            var totalCount = mockLogs.Count;
+
+            var pagedData = mockLogs
+                .OrderByDescending(x => x.TimeStamp)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedListResponse<List<LocationActivityLogResponse>>
+            {
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Count = totalCount,
+                Data = pagedData
+            };
+        }
         public async Task<bool> ReassignAgentToLocation(OrganizationAgentArgs data)
         {
             var existingAgent = await _context.Agents
@@ -560,7 +804,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Count = totalCount,
                 Data = result
             };
-        }  
+        }
+        public async Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model)
+        {
+            var existingLocation = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (existingLocation == null)
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND,"Location not found");
+
+            var duplicate = await _context.OrganizationLocations
+                .AnyAsync(x => x.LocationName == model.LocationName 
+                && x.StateId == model.StateId
+                && x.LgaId ==model.LgaId
+                && x.Address == model.Address
+                && x.Id != locationId);
+
+            if (duplicate)
+                throw new ValidationException("A location with this name already exists");
+            if (model.LocationTypeId > 0)
+                existingLocation.LocationTypeId = model.LocationTypeId;
+
+            if (model.StateId > 0)
+                existingLocation.StateId = model.StateId;
+
+            if (model.LgaId > 0)
+                existingLocation.LgaId = model.LgaId;
+
+            if (!string.IsNullOrWhiteSpace(model.Address))
+                existingLocation.Address = model.Address;
+
+            if (model.Capacity > 0)
+                existingLocation.Capacity = model.Capacity;
+
+            if (!string.IsNullOrWhiteSpace(model.CapacityType))
+                existingLocation.CapacityType = model.CapacityType;
+
+            if (!string.IsNullOrWhiteSpace(model.LocationName))
+                existingLocation.LocationName = model.LocationName;
+
+
+            existingLocation.IsActive = model.IsActive;
+
+            _context.OrganizationLocations.Update(existingLocation);
+            await _context.SaveChangesAsync();
+
+            return existingLocation.ViewMap();
+        }
         public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)
         {
             var orgExist = await _context.OrganizationLocations
@@ -663,13 +953,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<OrganizationLocationModel> GetLocationByIAsync(long Id)
         {
-            var org = await _context.Set<OrganizationLocation>()
+            var loc = await _context.Set<OrganizationLocation>()
+                 .Include(x => x.LocationType)
+                .Include(x => x.State)
+                .Include(x => x.LGA)
                 .FirstOrDefaultAsync(x => x.Id == Id);
-            if (org == null)
+            if (loc == null)
             {
                 return null;
             }
-            return org.ViewMap();
+            return new OrganizationLocationModel
+            {
+                Id = loc.Id,
+                StateId = loc.StateId,
+                LgaId = loc.LgaId,
+                BusinessCode = loc.BusinessCode,
+                OrganizationId = loc.OrganizationId,
+                LocationName = loc.LocationName,
+                LocationTypeId = loc.LocationTypeId,
+                State = loc.State?.State,
+                Lga = loc.LGA?.Name,
+                LocationType = loc.LocationType?.Type,
+                Address = loc.Address,
+                IsActive = loc.IsActive,
+                Capacity = loc.Capacity,
+                Used = loc.StockLevel,
+                Available = loc.Capacity - loc.StockLevel,
+                CapacityType = loc.CapacityType
+            };
         }
 
         public async Task<OrganizationRoleModel> CreateRoleAsync(OrganizationRoleModel model)
