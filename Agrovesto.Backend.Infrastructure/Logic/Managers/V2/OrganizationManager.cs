@@ -17,19 +17,35 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOrganizationManager
     {
+        Task<bool> AssignAgent(OrganizationAgentAssignmArgs model);
+        Task AssignAgentLocation(ProfileRequestModel model, OrganizationAgentArgs args);
+        Task<bool> AssignAgentToTole(ProfileRequestModel model, OrganizationAgentArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<OrganizationLocationModel> CreateLocation(OrganizationLocationModel model, ListQueryParams query);
         Task<OrganizationRoleModel> CreateRole(OrganizationRoleModel model, ListQueryParams query);
-        Task<List<OrganizationLocationModel>> GetLocationAsync(ListQueryParams query);
+        Task<PagedListResponse<List<OrganizationAgentActivityLog>>> GetAgentActivityLogs(ListQueryParams query);
+        Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query);
+        Task<Response<OrganizationAgentDetailResponse>> GetAgentDetail(ListQueryParams query);
+        Task<PagedListResponse<List<OrganizationAgentInputAllocationModel>>> GetAgentInputAllocations(ListQueryParams args);
+        Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args);
+        Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
+        Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams query);
+        Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
+        Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
         Task<OrganizationLocationModel> GetLocationById(ListQueryParams query);
+        Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
+        Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
+        Task<bool> ReassignAgentToLocation(ProfileRequestModel model, OrganizationAgentArgs args);
+        Task<OrganizationLocationModel> UpdateLocationAsync(OrganizationLocationModel model, ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -50,7 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _walletManager = walletManager;
         }
 
-        public async Task<List<OrganizationLocationModel>> GetLocationAsync(ListQueryParams query)
+        public async Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
@@ -64,6 +80,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _organizationRepository.GetLocationAsync(query);
 
         }
+        public async Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+
+            var agent = await _agentRepository.GetAgentDetailByUserId(query.UserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "User not found.");
+
+            query.Id = agent.Id;
+            return await _organizationRepository.GetAgentAssignedLocations(query);
+
+        }
         public async Task<OrganizationLocationModel> GetLocationById(ListQueryParams query)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
@@ -72,7 +105,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _organizationRepository.GetLocationByIAsync(query.Id);
 
         }
+        public async Task<OrganizationLocationModel> UpdateLocationAsync(OrganizationLocationModel model, ListQueryParams query)
+        {
+            try
+            {
+                if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Location Id is required");
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
+                var locationType = await _businessRepository.GetLocationByIAsync(model.LocationTypeId);
+                if (locationType == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Invalid Location Type"); }
+
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+                if (hasOrg != null)
+                {
+                    model.OrganizationId = hasOrg.OrganizaionId;
+                }
+                model.BusinessCode = business.BusinessCode;
+
+
+                return await _organizationRepository.UpdateLocationAsync(query.Id,model);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
         public async Task<OrganizationLocationModel> CreateLocation(OrganizationLocationModel model, ListQueryParams query)
         {
             try
@@ -119,7 +177,121 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
 
         }
+        public async Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args)
+        {
+          
+            var details = await _organizationRepository.GetAgentsByLocationAsync(args);
 
+            if (details == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "No record");
+
+            return details;
+        }
+        public async Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args)
+        {
+
+            var details = await _organizationRepository.GetLocationInventoryBreakdownAsync(args);
+
+            if (details == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "No record");
+
+            return details;
+        }
+        public async Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args)
+        {
+
+            var details = await _organizationRepository.GetLocationActivityLogsAsync(args);
+
+            if (details == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "No record");
+
+            return details;
+        }
+        public async Task<Response<OrganizationAgentDetailResponse>> GetAgentDetail(ListQueryParams query)
+        {
+           await EnrichAgentAsync(query);
+            var agent = await _organizationRepository.GetOrganizationAgentDetail(query);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return new Response<OrganizationAgentDetailResponse>
+            {
+                Data = agent,
+                Message = "Agent detail retrieved successfully"
+            };
+        }
+        #region agentviews
+        //Rework this view to wire real data
+        public async Task<PagedListResponse<List<OrganizationAgentActivityLog>>>
+    GetAgentActivityLogs(ListQueryParams query)
+        {
+            await EnrichAgentAsync(query);
+            var agent = await _organizationRepository.GetAgentActivityLogs(query);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return agent;
+        }
+        public async Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>>
+    GetAgentTransactionHistory(ListQueryParams query)
+        {
+            await EnrichAgentAsync(query);
+            var agent = await _organizationRepository.GetAgentTransactionHistory(query);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return agent;
+        }
+        public async Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args)
+
+        { 
+            await EnrichAgentAsync(args);
+            var agent = await _organizationRepository.GetOrganizationAgentPerformanceSummary(args);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return agent;
+        }
+        public async Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args)
+        {
+            await EnrichAgentAsync(args);
+            var agent = await _organizationRepository.GetAgentSubscribers(args);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return agent;
+        }
+        public async Task<PagedListResponse<List<OrganizationAgentInputAllocationModel>>> GetAgentInputAllocations(ListQueryParams args)
+        {
+            await EnrichAgentAsync(args);
+            var agent = await _organizationRepository.GetAgentInputAllocations(args);
+
+            if (agent == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Agent Detail not found");
+
+            return agent;
+        }
+        #endregion agentviews
+
+        private async Task EnrichAgentAsync(ListQueryParams args)
+        {
+            if (args.Id != 0) return;
+
+            var agent = await _agentRepository.GetAgentDetailByUserId(args.UserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "User not found.");
+
+            args.Id = agent.Id;
+
+        }
         private async Task FetchOrganizationDetails(ListQueryParams query)
         {
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
@@ -163,6 +335,94 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
 
         }
+        public async Task<bool> AssignAgentToTole(
+     
+            ProfileRequestModel model,
+   OrganizationAgentArgs args)
+        {
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
+            if (organization != null)
+                model.OrganizationId = organization.OrganizaionId;
+            var agentAssignment = new OrganizationAgentArgs
+                {
+                    OnboardedById = args.OnboardedById,
+                    OrganizationId = model.OrganizationId,
+                    RoleId = model.RoleId!.Value,
+                    UserId = args.UserId
+                };
+                return await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
+
+
+        }
+        public async Task AssignAgentLocation(
+    ProfileRequestModel model,
+    OrganizationAgentArgs args)
+        {
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
+            if (organization != null)
+                model.OrganizationId = organization.OrganizaionId;
+            var agentAssignment = new OrganizationAgentArgs
+            {
+                LocationId = model.LocationId!.Value,
+                OnboardedById = args.OnboardedById,
+                OrganizationId = model.OrganizationId,
+                UserId = args.UserId
+            };
+
+            await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
+        }
+        public async Task<bool> ReassignAgentToLocation(ProfileRequestModel model, OrganizationAgentArgs args)
+        {
+            var business = await GetBusinessOrFail(args.BusinessCode);
+
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
+            if (organization != null)
+                args.OrganizationId = organization.OrganizaionId;
+            args.LocationId = model.LocationId!.Value;
+            return await _organizationRepository.ReassignAgentToLocation(args);
+
+
+        }
+        public async Task<bool> AssignAgent(
+         OrganizationAgentAssignmArgs model)
+        {
+            try
+            {
+
+                var business = await GetBusinessOrFail(model.BusinessCode);
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(model.OrganizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                var agentAssignment = new OrganizationAgentArgs
+                {
+                    LocationId = model.LocationId,
+                    OnboardedById = model.OnboardedById,
+                    OrganizationId = model.OrganizationId,
+                    RoleId = model.RoleId,
+                    UserId = model.UserId
+                };
+
+                await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
+
+                await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
+
+
+                return true;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+
         public async Task<CreateAgentResponseModel> CreateAgentUser(
             ProfileRequestModel model,
             OnBoardingArgs args)
@@ -182,7 +442,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var registerUser = await _onboardingRepository.RegisterUser(onboardingRequest, args);
 
                 var agent = await CreateAgent(model, args, registerUser.model.Id);
-
+                
                 await AssignAgentToOrganization(model, args, registerUser.model.Id);
 
                 await EnsureWalletExists(registerUser.model, business);
@@ -261,23 +521,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 OrganizationId = model.OrganizationId
             });
         }
-        private async Task AssignAgentToOrganization(
-    ProfileRequestModel model,
-    OnBoardingArgs args,
-    string userId)
+        public async Task AssignAgentToOrganization(
+        ProfileRequestModel model,
+        OnBoardingArgs args,
+        string userId)
         {
+            if (!model.OrganizationId.HasValue)
+                throw new ValidationException("Organization is required");
+
             var agentAssignment = new OrganizationAgentArgs
             {
-                LocationId = model.LocationId!.Value,
-                OnboardedById = args.OnboardedByUserId,
+                        // nullable
                 OrganizationId = model.OrganizationId,
-                RoleId = model.RoleId!.Value,
+                OnboardedById = args.OnboardedByUserId,
                 UserId = userId
             };
 
-            await _agentRepository.UpdateOrganizationAgent(agentAssignment);
-            await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
+            if (model.LocationId.HasValue)
+            {
+                agentAssignment.LocationId = model.LocationId.Value;
+                await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
+            }
+            if (model.RoleId.HasValue)
+            {
+                agentAssignment.RoleId = model.RoleId.Value;
+                await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
+            }
         }
+
         private string BuildFullName(ProfileRequestModel model)
         {
             if (!string.IsNullOrWhiteSpace(model.FullName))
@@ -298,11 +569,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
 
-            if (!model.LocationId.HasValue)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "LocationId is required");
+            //if (!model.LocationId.HasValue)
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, "LocationId is required");
 
-            if (!model.RoleId.HasValue)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "RoleId is required");
+            //if (!model.RoleId.HasValue)
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, "RoleId is required");
         }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
