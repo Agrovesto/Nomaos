@@ -56,7 +56,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             IWalletManager walletManager,
             INotificationService notificationService,
             IAWSRekognitionManager faceManager,
-            ILogger<AgentManager> log, IOnboardingRepository onboardingRepository)
+            ILogger<AgentManager> log, 
+            IOnboardingRepository onboardingRepository)
         {
             _activityLogRepository = activityLogRepository;
             _walletManager = walletManager;
@@ -68,6 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _membershipRepository = membershipRepository;
             _sMSService = notificationService;
             _agentRepository = agentRepository;
+            _otpService = otpService;
         }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {
@@ -319,6 +321,7 @@ OnboardingRequestModel user,
                     "User can continue and complete setup later.");
             }
         }
+       
         public async Task<CreateMembershipResponseModel> CreateFarmerAsync(
      CreateFarmerRequest model,
      OnBoardingArgs args)
@@ -346,7 +349,8 @@ OnboardingRequestModel user,
                 {
                     UserId = user.model.Id,
                     MembershipId = farmer.data.Id,
-                    RequiresProfileCompletion = true
+                    RequiresProfileCompletion = true,
+                    Message= user.message
                 };
             }
             catch (BaseException)

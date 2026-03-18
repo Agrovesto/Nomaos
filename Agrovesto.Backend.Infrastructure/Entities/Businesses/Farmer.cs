@@ -32,6 +32,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; } // user/admin who onboarded
+        public bool IsActive { get; set; } = true;
+        public bool IsDeactivated { get; set; } = false;
     }
 
     public class Farmer
