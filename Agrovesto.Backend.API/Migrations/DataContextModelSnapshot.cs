@@ -1364,6 +1364,12 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("FarmerId")
                         .HasColumnType("bigint");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeactivated")
+                        .HasColumnType("bit");
+
                     b.Property<DateTimeOffset>("OnBoardedOn")
                         .HasColumnType("datetimeoffset");
 

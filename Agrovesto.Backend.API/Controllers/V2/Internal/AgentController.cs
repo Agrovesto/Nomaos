@@ -111,7 +111,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request !=null ? "Successful": "Failed",
+                    Message = request.Message,
                     Data = request
                 });
 
