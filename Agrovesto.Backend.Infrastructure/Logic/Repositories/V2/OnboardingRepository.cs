@@ -811,7 +811,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return null;
         }
-        private async Task<(OnboardingRequestModel, bool, string)> HandleExistingUser(
+        private async Task<(OnboardingRequestModel, bool status, string message)> HandleExistingUser(
     User user,
     OnboardingRequestModel model,
     OnBoardingArgs args,

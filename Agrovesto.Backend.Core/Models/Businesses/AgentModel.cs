@@ -75,4 +75,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Description { get; set; }
         public DateTimeOffset TimeStamp { get; set; }
     }
+
+    public class OrganizationDashboardResponse
+    {
+        public int TotalAgents { get; set; }
+        public int TotalActiveLocations { get; set; }
+        public decimal TotalEquityPaid { get; set; }
+        public decimal TotalProduceSold { get; set; }
+    }
 }

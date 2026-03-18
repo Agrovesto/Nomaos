@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Ward { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
-
+        public long OrganizationId { get; set; }
         public string? Bvn { get; set; }
         public string? NIN { get; set; }
         public string? Password { get; set; }
@@ -35,6 +35,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? HighestLevelOfEducation { get; set; }
         public List<long?>? AgentIds { get; set; }
         public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
+        public List<long?>? CooperativeIds { get; set; }
     }
 
     public class FarmerCooperativeDto

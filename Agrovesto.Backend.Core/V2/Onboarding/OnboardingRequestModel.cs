@@ -143,12 +143,15 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string AgentUserId { get; set; }
         public long AgentId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
+
+        public string Message { get; set; }
     }
     public class CreateMembershipResponseModel
     {
         public string UserId { get; set; }
         public long MembershipId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
+        public string Message { get; set; }
     }
     public class OnboardingResponseModel
     {
