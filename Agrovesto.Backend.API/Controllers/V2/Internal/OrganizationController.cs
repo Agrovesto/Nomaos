@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -25,6 +26,52 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             _organizationManager = organizationManager;
             _businessManager = businessManager;
+        }
+
+        #region AgentMgt
+
+        [HttpGet("agent-mgt-overview")]
+
+        public async Task<IActionResult> GetAgentManagementOverview([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.organizationCode = !string.IsNullOrEmpty(query.organizationCode) ? query.organizationCode : OrganizationCode;
+
+                if (string.IsNullOrEmpty(query.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+
+                var overview = await _organizationManager.GetOrganizationDashboardAsync(query);
+                return Ok(new Response<OrganizationDashboardResponse>()
+                {
+                    Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = overview
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
         }
 
         [HttpPatch("edit-location")]
@@ -520,7 +567,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-        #region AgentMgt
+      
         //create-agent
         [HttpPost("create-agent")]
         [AllowAnonymous]
@@ -556,7 +603,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request.Message,
                     Data = request
                 });
 
@@ -1303,6 +1350,174 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        
+        #endregion AgentMgt
+
+
+        #region FarmerMgt
+        [HttpPost("create-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                NormalizeOrganizationCode(args);
+
+
+                var request = await _organizationManager.CreateFarmerAsync(model, args);
+
+
+                return Ok(new Response<CreateFarmerResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = request.Message,
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpGet("farmers")]
+        public async Task<IActionResult> GetOrganizationFarmersAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+
+                var result = await _organizationManager.GetOrganizationFarmersAsync(query);
+                return Ok(new PagedListResponse<List<OrganizationFarmerResponse>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Data.Count > 0,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("farmer-detail")]
+        public async Task<IActionResult> GetFarmerDetailsAsync([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) &&
+                string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                if (string.IsNullOrEmpty(args.UserId))
+                {
+                    return BadRequest(new Response<Dictionary<string, string>>()
+                    {
+                        Message = "Validation failed.",
+                        Succeeded = false,
+                        Data = new Dictionary<string, string>
+{
+    { "UserId", "UserId is required" }
+}
+
+                    });
+                }
+                var response = await _organizationManager.GetFarmerDetailsAsync(args);
+                return Ok(response);
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        //bulk farmer upload
+        //link cooperative
+        //assign agent
+        //deactivate farmer
+        //list farmer, including the agent and cooperative,
+        #endregion FarmerMgt
+
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
@@ -1315,6 +1530,5 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
             }
         }
-        #endregion AgentMgt
     }
 }

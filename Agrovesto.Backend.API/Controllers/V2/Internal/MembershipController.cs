@@ -188,7 +188,7 @@ IFormFile file,
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request.Message,
                     Data = request
                 });
 
@@ -509,7 +509,7 @@ IFormFile file,
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request.Message,
                     Data = request
                 });
 

@@ -1507,7 +1507,8 @@ OrganizationOnboardingArgs args)
                 {
                     UserId = user.model.Id,
                     MembershipId = membership.data.Id,
-                    RequiresProfileCompletion = true
+                    RequiresProfileCompletion = true,
+                    Message= user.message,
                 };
             }
             catch (BaseException)
@@ -1732,7 +1733,8 @@ OrganizationOnboardingArgs args)
                     UserId = args.UserId,
                     AgentId = agent.data.Id,
                     AgentUserId= registerUser.model.Id,
-                    RequiresProfileCompletion = true
+                    RequiresProfileCompletion = true,
+                    Message= registerUser.message
                 };
             }
             catch (BaseException)
