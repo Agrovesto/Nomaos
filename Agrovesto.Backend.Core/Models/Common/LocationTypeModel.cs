@@ -66,9 +66,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class OrganizationLocationModel
     {
-        public string LocationType { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? LocationType { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public long Id { get; set; }
         public long OrganizationId { get; set; }
         public string LocationName { get; set; }
