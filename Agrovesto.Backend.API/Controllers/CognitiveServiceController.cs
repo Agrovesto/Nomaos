@@ -12,8 +12,8 @@ namespace Agrovesto.Backend.API.Controllers
     [ApiController]
     public class CognitiveServiceController : ControllerBase
     {
-        private readonly IFaceManager _faceManager;
-        public CognitiveServiceController(IFaceManager faceManager)
+        private readonly IAWSRekognitionManager _faceManager;
+        public CognitiveServiceController(IAWSRekognitionManager faceManager)
         {
             _faceManager = faceManager;
         }

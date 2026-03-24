@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
 
             // 1️⃣ Compute area
-            var points = dto.Coordinates.Select(c => (c.Lat, c.Lng)).ToList();
+            var points = dto.Coordinates.Select(c => (c.Latitude, c.Longitude)).ToList();
             var area = GeometryHelper.ComputePolygonArea(points);
                 var areaInSqMetres = GeometryHelper.CalculatePolygonAreaSqMeters(points); // Convert hectares to square metres
            var areaInDegrees = GeometryHelper.CalculatePolygonAreaDegrees(points);
@@ -53,59 +53,57 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 Name = dto.FarmName,
                 OwnershipType = dto.OwnershipType,
-                FarmerUserId = dto.FarmerUserId,
-                CooperativeId = dto.CooperativeId,
-                CommunityId = dto.CommunityId,
+                FarmerId = dto.FarmerId,
                 LocationDescription = dto.FarmLocation,
                 FarmLocation = dto.FarmLocation,
                 FarmState = dto.FarmState,
                 FarmLga = dto.FarmLga,
                 FarmWard = dto.FarmWard,
-                CoordinateTakenBy = getUserCred.model.Name,
-                CoordinateTakenByUserId = getUserCred.model.Id,
+                //CoordinateTakenBy = getUserCred.model.Name,
+                //CoordinateTakenByUserId = getUserCred.model.Id,
                 BelongToBusinessCode = args.businessCode,
                 OrganizationCode = args.organizationCode,
                 CreatedBy = getUserCred.model.Name,
                 MappedBy = getUserCred.model.Name,
-                AreaSize = area,
-                AreaInDegress = areaInDegrees,
-                AreaInSqMetre = areaInSqMetres,
+                FarmSize = area,
+                FarmSizeInDegress = areaInDegrees,
+                FarmSizeInSqMetre = areaInSqMetres,
                 Coordinates = dto.Coordinates.Select(c => new FarmCoordinate
                 {
-                    Latitude = c.Lat,
-                    Longitude = c.Lng,
+                    Latitude = c.Latitude,
+                    Longitude = c.Longitude,
                     Order = c.Order
                 }).ToList()
             };
 
             // 3️⃣ Check overlaps
             var allFarms = await _farmRepository.GetAllWithCoordinatesAsync();
-            var overlapping = new List<Farm>();
+            var overlapping = new List<FarmCoordinate>();
 
-            foreach (var existing in allFarms)
-            {
-                if (GeometryHelper.IsOverlapping(existing.Coordinates.ToList(), newFarm.Coordinates.ToList()))
-                    overlapping.Add(existing);
-            }
+            //foreach (var existing in allFarms)
+            //{
+            //    if (GeometryHelper.IsOverlapping(existing.Coordinates.ToList(), newFarm.Coordinates.ToList()))
+            //        overlapping.Add(existing);
+            //}
 
-            if (overlapping.Any())
-            {
-                newFarm.IsFarmFlaggedBySystem = true;
-                newFarm.FlaggedReason = "Overlapping coordinates with existing farms";
-                    newFarm.FlaggedOn= DateTimeOffset.UtcNow;
-                    newFarm.CoordinateOverlapWithFarmerIds = string.Join(",", overlapping.Select(x => x.FarmerUserId));
+            //if (overlapping.Any())
+            //{
+            //    newFarm.IsFarmFlaggedBySystem = true;
+            //    newFarm.FlaggedReason = "Overlapping coordinates with existing farms";
+            //        newFarm.FlaggedOn= DateTimeOffset.UtcNow;
+            //        newFarm.CoordinateOverlapWithFarmerIds = string.Join(",", overlapping.Select(x => x.FarmerUserId));
 
-                // Add audit trail
-                var audit = new FarmMappingAuditTrail
-                {
-                    Action = "Flagged",
-                    Farm = newFarm,
-                    PerformedByName = getUserCred.model.Name,
-                    PerformedByUserId = getUserCred.model.Id,
-                    Remarks = $"Farm flagged due to overlap with Farmer IDs: {newFarm.CoordinateOverlapWithFarmerIds}"
-                };
-                newFarm.AuditTrails.Add(audit);
-            }
+            //    // Add audit trail
+            //    var audit = new FarmMappingAuditTrail
+            //    {
+            //        Action = "Flagged",
+            //        Farm = newFarm,
+            //        PerformedByName = getUserCred.model.Name,
+            //        PerformedByUserId = getUserCred.model.Id,
+            //        Remarks = $"Farm flagged due to overlap with Farmer IDs: {newFarm.CoordinateOverlapWithFarmerIds}"
+            //    };
+            //    newFarm.AuditTrails.Add(audit);
+            //}
 
             // 4️⃣ Save
             var save= await _farmRepository.AddFarmAsync(newFarm);

@@ -28,19 +28,144 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IInputFinancingManagement _inputFinancingManagement;
         private readonly IPaymentProviderManager _providerManager;
         private readonly IReportManager _reportManager;
+        private readonly ISettingsManager _settingsManager;
+        private readonly IBusinessManager _businessManager;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
             IPaymentProviderManager providerManager,
             IAuthenticationRepository authenticationRepository,
-            IInputFinancingManagement inputFinancingManagement) : base(httpContextAccessor)
+            IInputFinancingManagement inputFinancingManagement,
+            IBusinessManager businessManager,
+            ISettingsManager settingsManager) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
             _providerManager = providerManager;
             _authenticationRepository = authenticationRepository;
             _walletProvider = walletProvider;
             _inputFinancingManagement = inputFinancingManagement;
+            _settingsManager = settingsManager;
+            _businessManager = businessManager;
         }
+
+        [AllowAnonymous]
+        [HttpPost("create-location-type")]
+        public async Task<IActionResult> LocationType([FromBody] LocationTypeModel model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                var type = await _businessManager.CreateLocationTypeAsync(model, args);
+
+                return Ok(new Response<LocationTypeModel>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("create-membership-type")]
+        public async Task<IActionResult> MemberShipType([FromBody]MemberShipTypeModel model,[FromQuery] BusinessRegistrationArgs args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                var type = await _settingsManager.CreateUpdateMemberShipType(model,args);
+
+                    return Ok(new Response<(bool status, MemberShipTypeModel data)>()
+                    {
+                        Code = (type.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                        Succeeded = true,
+                        Message = "Successful",
+                        Data = type
+                    });
+
+               
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+
         #region FarmerActivities
         [HttpGet("overview")]
         public async Task<IActionResult> GetCoreBusinessMetrics()

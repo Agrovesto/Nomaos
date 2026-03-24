@@ -233,10 +233,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var token = await GetProviderToken(@params.Url, @params.Email, @params.Password, @params.SecretKey);
 
                 var headers = new Dictionary<string, string>
-        {
-            { "x-api-key", @params.SecretKey }
-            // { "Authorization", $"Bearer {token.AccessToken}" }
-        };
+                {
+                    { "x-api-key", @params.SecretKey }
+                    // { "Authorization", $"Bearer {token.AccessToken}" }
+                };
 
                 var content = new StringContent(JsonConvert.SerializeObject(model), Encoding.UTF8, "application/json");
                 var httpResponse = await _httpService.Post($"{@params.Url}/api/v1/customers/add", content, headers);
