@@ -329,6 +329,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 ShouldAddCommission = model.ShouldAddCommission,
                 MaturityDate=model.MaturityDate,
                 BundleEquityPrice = model.BundleEquityPrice,
+                OrganizationCode=model.OrganizationCode,
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
             };
             _context.Set<Bundle>().Add(bundle);

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
@@ -124,7 +125,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 // 🔹 Fetch organization details (name + code)
                 var organizations = await _context.BusinessOrganizations
                     .Where(o => userOrganizations.Contains(o.OrganizationCode))
-                    .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.OrganizationName })
+                    .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.CompanyName })
                     .ToListAsync();
 
                 // 🔹 Convert to claim-safe JSON
@@ -370,7 +371,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             {
                 if (users.Count > 1)
                 {
-                    user = users.Where(u => u.UserType == UserType.Cooperative.ToString()).FirstOrDefault();
+                    user = users.Where(u => u.UserType == UserType.MemberShip.ToString()).FirstOrDefault();
                 }
                 else
                 {
@@ -762,6 +763,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return true;
 
+        }
+        public async Task<Response<long>> UpdateUserTypeAsync(
+    string oldUserType,
+    string newUserType)
+        {
+            // Pull only users that need updating
+            var users = _userManager.Users
+                .Where(u => u.UserType == oldUserType)
+                .ToList();
+
+            if (!users.Any())
+            {
+                return new Response<long>
+                {
+                    Message = "No users found with the specified UserType.",
+                    Data = 0
+                };
+            }
+
+            foreach (var user in users)
+            {
+                user.UserType = newUserType;
+            }
+
+            // Persist changes in one transaction
+            await _context.SaveChangesAsync();
+
+            return new Response<long>
+            {
+                Message = $"Updated {users.Count} users from '{oldUserType}' to '{newUserType}'.",
+                Data = users.Count
+            };
         }
 
     }

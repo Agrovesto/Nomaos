@@ -191,8 +191,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         Business,
         [Description("Farmer")]
         Farmer,
-        [Description("Cooperative")]
-        Cooperative,
+        [Description("MemberShip")]
+        MemberShip,
         [Description("Agent")]
         Agent,
         [Description("Suppliers")]
@@ -207,7 +207,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         Trader,
 
         [Description("Organization")]
-        Organization
+        Organization,
+        [Description("ServiceProvider")]
+        ServiceProvider
     }
     public class LoginModel
     {
@@ -258,7 +260,8 @@ namespace Agrovesto.Backend.Core.Models.Common
     public enum LoginType
     {
         Password,
-        Pin
+        Pin,
+        Otp
     }
 
     public class PreparedUser

@@ -9,6 +9,7 @@ using Amazon.Rekognition.Model;
 using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
+using Amazon.S3.Transfer;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -21,19 +22,19 @@ using S3Object = Amazon.Rekognition.Model.S3Object;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
 {
-    public class FaceManager : IFaceManager
+    public class AWSRekgnitionManager : IAWSRekognitionManager
     {
         private readonly AmazonRekognitionClient _rekognitionClient;
         private readonly AmazonS3Client _s3Client;
         private readonly IConfiguration _configuration;
         private readonly IFarmerRepository _farmerRepository;
         private const float SimilarityThreshold = 70F;
-        private readonly ILogger<FaceManager> _log;
-
-        public FaceManager(IConfiguration configuration, ILogger<FaceManager> log, IFarmerRepository farmerRepository)
+        private readonly ILogger<AWSRekgnitionManager> _log;
+        private readonly string _bucketName;
+        public AWSRekgnitionManager(IConfiguration configuration, ILogger<AWSRekgnitionManager> log, IFarmerRepository farmerRepository)
         {
             _log = log;
-
+            _bucketName = configuration["AWS:BucketName"];
             var awsAccessKey = configuration["AWS:AccessKey"];
             var awsSecretKey = configuration["AWS:SecretKey"];
             var region = configuration["AWS:Region"]; // Ensure this is set in appsettings.json
@@ -51,6 +52,179 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             _configuration = configuration;
             _farmerRepository = farmerRepository;
         }
+        public async Task<(byte[] FileBytes, string ContentType, string FileName)> GetFileAsync(string fileKey)
+        {
+            if (string.IsNullOrEmpty(fileKey))
+                throw new ArgumentException("File key cannot be null or empty.", nameof(fileKey));
+
+            try
+            {
+                string bucketName = _configuration["AWS:BucketName"];
+                if (string.IsNullOrEmpty(bucketName))
+                    throw new Exception("AWS S3 bucket is not configured.");
+
+                var response = await _s3Client.GetObjectAsync(bucketName, fileKey);
+
+                byte[] fileBytes;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await response.ResponseStream.CopyToAsync(memoryStream);
+                    fileBytes = memoryStream.ToArray();
+                }
+
+                return (FileBytes: fileBytes,
+                        ContentType: response.Headers.ContentType,
+                        FileName: Path.GetFileName(fileKey));
+            }
+            catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                throw new Exception($"File with key '{fileKey}' not found in S3 bucket.");
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error fetching file from S3: {ex.Message}");
+            }
+        }
+
+        public async Task<string> UploadFileAsync(IFormFile file, string folderName)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return "Invalid file.";
+            }
+
+            try
+            {
+                string bucketName = _configuration["AWS:BucketName"];
+                if (string.IsNullOrEmpty(bucketName))
+                {
+                    return "AWS S3 bucket is not configured.";
+                }
+
+                byte[] fileBytes;
+                using (var memoryStream = new MemoryStream())
+                {
+                    await file.CopyToAsync(memoryStream);
+                    fileBytes = memoryStream.ToArray();
+                }
+
+                using var md5 = System.Security.Cryptography.MD5.Create();
+                var fileHash = BitConverter.ToString(md5.ComputeHash(fileBytes)).Replace("-", "").ToLower();
+
+                string keyPrefix = string.IsNullOrEmpty(folderName) ? "" : $"{folderName}/";
+
+                var listRequest = new ListObjectsV2Request
+                {
+                    BucketName = bucketName,
+                    Prefix = keyPrefix
+                };
+
+                var existingObjects = await _s3Client.ListObjectsV2Async(listRequest);
+
+                foreach (var obj in existingObjects.S3Objects)
+                {
+                    var metadata = await _s3Client.GetObjectMetadataAsync(bucketName, obj.Key);
+
+                    string existingHash = null;
+                    if (metadata.Metadata.Keys.Contains("x-amz-meta-filehash"))
+                    {
+                        existingHash = metadata.Metadata["x-amz-meta-filehash"];
+                    }
+
+                    if (existingHash != null && existingHash == fileHash)
+                    {
+                        return obj.Key;
+                    }
+
+                }
+               // string fileKey = $"{keyPrefix}{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+                string fileKey = $"{folderName}{Path.GetExtension(file.FileName)}";
+
+                using (var memoryStream = new MemoryStream(fileBytes))
+                {
+                    var putRequest = new PutObjectRequest
+                    {
+                        BucketName = bucketName,
+                        Key = fileKey,
+                        InputStream = memoryStream,
+                        ContentType = file.ContentType
+                    };
+
+                    putRequest.Metadata.Add("FileHash", fileHash);
+
+                    await _s3Client.PutObjectAsync(putRequest);
+                }
+
+                return fileKey;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Upload file error: {ex.Message}");
+            }
+        }
+
+        //public async Task<string> UploadFileAsync(IFormFile file, string folderName)
+        //{
+        //    if (file == null || file.Length == 0)
+        //    {
+        //        return "Invalid file.";
+        //    }
+
+        //    try
+        //    {
+        //        string bucketName = _configuration["AWS:BucketName"];
+        //        if (string.IsNullOrEmpty(bucketName))
+        //        {
+        //            return  "AWS S3 bucket is not configured." ;
+        //        }
+
+        //        byte[] fileBytes;
+        //        using (var memoryStream = new MemoryStream())
+        //        {
+        //            await file.CopyToAsync(memoryStream);
+        //            fileBytes = memoryStream.ToArray();
+        //        }
+
+        //        //var existingFile = await _repository.GetUserFile(userId, businessCode, organizationCode);
+        //        //if (existingFile != null)
+        //        //{
+        //        //    try
+        //        //    {
+        //        //        var deleteRequest = new DeleteObjectRequest
+        //        //        {
+        //        //            BucketName = bucketName,
+        //        //            Key = existingFile.FileKey
+        //        //        };
+        //        //        await _s3Client.DeleteObjectAsync(deleteRequest);
+        //        //    }
+        //        //    catch (Exception ex)
+        //        //    {
+        //        //        throw new Exception($"Error deleting existing file: {ex.Message}");
+        //        //    }
+        //        //}
+
+        //        string fileKey = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+
+        //        using (var memoryStream = new MemoryStream(fileBytes))
+        //        {
+        //            var putRequest = new PutObjectRequest
+        //            {
+        //                BucketName = bucketName,
+        //                Key = fileKey,
+        //                InputStream = memoryStream,
+        //                ContentType = file.ContentType
+        //            };
+        //            await _s3Client.PutObjectAsync(putRequest);
+        //        }
+
+        //        return fileKey;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new Exception($"Upload file error: {ex.Message}");
+        //    }
+        //}
+
 
         public async Task<ImageComparisonResponse> CompareFaces(IFormFile uploadedImage, ImageVerificationArgs args)
         {
@@ -98,9 +272,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 var compareFacesResponse = await _rekognitionClient.CompareFacesAsync(compareFacesRequest);
                 bool isMatch = compareFacesResponse.FaceMatches.Count > 0;
 
-                return new ImageComparisonResponse { IsSimilarFace = isMatch, 
-                    ImageKey= targetImageRecord.ImageKey,
-                    SimilarityPercentage = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0 };
+                return new ImageComparisonResponse
+                {
+                    IsSimilarFace = isMatch,
+                    ImageKey = targetImageRecord.ImageKey,
+                    SimilarityPercentage = isMatch ? compareFacesResponse.FaceMatches[0].Similarity : 0
+                };
             }
             catch (BaseException ex)
             {
@@ -113,7 +290,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
                 throw new Exception($"Recognition Error: {ex.Message}");
             }
         }
-  private async Task<Amazon.Rekognition.Model.Image> GetImageFromS3(string bucket, string key)
+        private async Task<Amazon.Rekognition.Model.Image> GetImageFromS3(string bucket, string key)
         {
             try
             {

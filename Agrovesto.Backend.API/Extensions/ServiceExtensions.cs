@@ -16,6 +16,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -43,7 +44,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IWalletRepository, WalletRepository>();
             services.AddScoped<IFarmerRepository, FarmerRepository>();
             services.AddScoped<IAgentRepository, AgentRepository>();
-            services.AddScoped<ICooperativeRepository, CooperativeRepository>();
+            services.AddScoped<IMembershipRepository, MembershipRepository>();
             services.AddScoped<IFarmPlotDetailRepository, FarmPlotDetailRepository>();
             services.AddScoped<IWarehouseManagementRepository, WarehouseManagementRepository>();
             services.AddScoped<IInputFinancingManagementRepository, InputFinancingManagementRepository>();
@@ -63,7 +64,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmPlotDetailsManager, FarmPlotDetailsManager>();
             services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
-            services.AddScoped<IFaceManager, FaceManager>();
+            services.AddScoped<IAWSRekognitionManager, AWSRekgnitionManager>();
             services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
             services.AddScoped<IReportManager, ReportManager>();
             services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
@@ -75,10 +76,12 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
             services.AddScoped<IFarmManager, FarmManager>();
             services.AddScoped<IAgentManager, AgentManager>();
+            services.AddScoped<IMembershipManager, MembershipManager>();
+            services.AddScoped<IFarmMappingManager, FarmMappingManager>();
+            services.AddScoped<IOrganizationManager, OrganizationManager>();
 
 
 
-            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
@@ -86,10 +89,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
-            services.AddScoped<IWalletService, FCMBWalletService>();
+         
             services.AddScoped<IOtpService, OtpService>();
             services.AddScoped<IOnBoardingManager, OnBoardingManager>();
             services.AddScoped<IOnboardingRepository, OnboardingRepository>();
+            services.AddScoped<IFarmMappingRepository, FarmMappingRepository>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
            
 
@@ -101,7 +105,28 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandEActivityManager, MandEActivityManager>();
             services.AddScoped<IMandEServiceRepository, MandEServiceRepositories>();
             services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
+            services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
+            services.AddScoped<IOrganizationRepository, OrganizationRepository>();
 
+
+
+            //services.AddHttpClient<SterlingWalletService>();
+            //services.AddHttpClient<FCMBWalletService>();
+            //services.AddHttpClient<CafeOneWalletService>();
+            //  services.AddHttpClient<CredoService>();
+            services.AddScoped<IUserWalletRepository, UserWalletRepository>();
+            services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
+
+            services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
+
+
+            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IWalletService, SterlingWalletService>();
+            services.AddScoped<MTNMomo>();
+            services.AddScoped<IMTNMomo, MTNMomo>();
+
+            services.AddScoped<IGenericWalletService, MTNMomo>();
         }
     }
 }

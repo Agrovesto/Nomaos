@@ -169,40 +169,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (amount <= 0)
                 return ResponseDto.Failure("Invalid debit amount.");
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == walletId);
-            if (wallet == null)
-                return ResponseDto.Failure("Wallet not found.");
+            //var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.Id == walletId);
+            //if (wallet == null)
+            //    return ResponseDto.Failure("Wallet not found.");
 
             // Check balance
-            if (wallet.WalletBalance < amount)
-                return ResponseDto.Failure("Insufficient wallet balance.");
+            //if (wallet.WalletBalance < amount)
+            //    return ResponseDto.Failure("Insufficient wallet balance.");
 
-            // Debit wallet
-            wallet.WalletBalance -= amount;
+            //// Debit wallet
+            //wallet.WalletBalance -= amount;
 
             // Record transaction log for audit trail
             var transaction = new WalletTransaction
             {
              
-                WalletId = wallet.Id,
-                UserId = wallet.UserId,
+                //WalletId = wallet.Id,
+                //UserId = wallet.UserId,
                 Amount = amount,
                 TransactionType = "Debit",
                 Description = description,
                 Reference = $"TXN-{DateTime.UtcNow:yyyyMMddHHmmssfff}",
                 CreatedAt = DateTime.UtcNow,
-                BalanceAfter = wallet.WalletBalance
+                //BalanceAfter = wallet.WalletBalance
             };
 
-            _context.WalletTransactions.Add(transaction);
+           // _context.WalletTransactions.Add(transaction);
 
             // Save both updates
             await _context.SaveChangesAsync();
 
             return ResponseDto.Success("Wallet debited successfully.", new
             {
-                wallet.Id,
-                wallet.WalletBalance,
+                //wallet.Id,
+                //wallet.WalletBalance,
                 transaction.Reference,
                 transaction.Amount,
                 transaction.Description

@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+          //  if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
 
@@ -771,7 +771,10 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId ??= CurrentUserId;
                 args.WarehouseId = args.WarehouseId;
-
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
                 var result = await _warehouseManagementManager.ConfirmInputShipment(model, args);
                 return Ok(new Response<InputDeliveryTrackerModel>()
                 {

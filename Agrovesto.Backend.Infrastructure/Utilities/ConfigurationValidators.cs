@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
                 return (false, $"Contribution split total must equal 100%. Current total: {total}%.");
 
             var activeContributors = new List<string>();
-            if (config.CooperativeContributes) activeContributors.Add("Cooperative");
+            if (config.CooperativeContributes) activeContributors.Add("MemberShip");
             if (config.OrganizationContributes) activeContributors.Add("Organization");
             if (config.FinancialPartnerContributes) activeContributors.Add("FinancialPartner");
 
@@ -133,8 +133,8 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             if (disb.DisbursementTarget == "Farmer" && !sub.AllowFarmerSelfSubscription)
                 return (false, "Disbursement target is Farmer, but configuration doesn't allow farmer subscription.");
 
-            if (disb.DisbursementTarget == "Cooperative" && !sub.AllowCooperativeSubscription)
-                return (false, "Disbursement target is Cooperative, but configuration doesn't allow cooperative subscription.");
+            if (disb.DisbursementTarget == "MemberShip" && !sub.AllowCooperativeSubscription)
+                return (false, "Disbursement target is MemberShip, but configuration doesn't allow cooperative subscription.");
 
             return (true, "Disbursement configuration is valid.");
         }
