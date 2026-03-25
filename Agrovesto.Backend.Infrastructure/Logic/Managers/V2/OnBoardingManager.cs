@@ -86,6 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IFarmManager _farmManager;
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
+        private readonly IAWSService _awsService;
         public OnBoardingManager(IWalletManager walletManager,
             IConfiguration configuration,
             DataContext context,
@@ -94,7 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             IIdentityVerificationManager identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
-            , IExcelConverterService excelConverterService)
+            , IExcelConverterService excelConverterService, IAWSService awsService)
         {
             _onboardingRepository = onboardingRepository;
             _farmerRepository = farmerRepository;
@@ -112,6 +113,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _context = context;
             _notificationService = notificationService;
             _configuration = configuration;
+            _awsService = awsService;
         }
 
         public async Task<OrganizationResponseModel> CreateOrganization(
@@ -881,6 +883,7 @@ OrganizationOnboardingArgs args)
 
         private async Task GenerateAndSendOtp(OnboardingRequestModel model)
         {
+            var senderEmail = _configuration["Official:Email"];
             var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
                 ? OtpTarget.Email
                 : OtpTarget.Phone;
@@ -905,10 +908,19 @@ OrganizationOnboardingArgs args)
             // ------------------ Send OTP ------------------
             if (otpTarget == OtpTarget.Email)
             {
-                await _sMSService.SendEmailAsync(
-                    destination,
+                //use aws
+                await _awsService.SendEmailAsync(
+                    senderEmail,
+                    "tech@agrovesto.com",
+                   // destination,
                     "Confirm your account",
-                    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    $"Your verification code is {otp.Code}. It expires in 5 minutes.",
+                    $"Your verification code is {otp.Code}. It expires in 5 minutes."
+                    );
+                //await _sMSService.SendEmailAsync(
+                //    destination,
+                //    "Confirm your account",
+                //    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
             }
             else
             {

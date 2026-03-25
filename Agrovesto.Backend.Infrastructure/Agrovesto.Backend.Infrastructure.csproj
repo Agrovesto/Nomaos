@@ -52,6 +52,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.0" />
 <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
+<PackageReference Include="MimeKit" Version="4.15.1" />
      <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="NetTopologySuite.IO.GeoJSON" Version="4.0.0" />
