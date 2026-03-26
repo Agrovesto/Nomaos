@@ -6,7 +6,7 @@ set -x
 
 
 APP_NAME="Agrovesto.Backend.API"
-APP_DIR="/var/www/$APP_NAME"
+APP_DIR="/var/www/Agrovesto.Backend.Release"
 RELEASES_DIR="$APP_DIR/releases"
 RELEASE_ID="$(date +%Y%m%d%H%M%S)"
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
