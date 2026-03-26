@@ -1350,11 +1350,77 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        
+
         #endregion AgentMgt
 
 
         #region FarmerMgt
+        [HttpPost("bulk-onboard")]
+        public async Task<IActionResult> BulkOnboard(
+IFormFile file,
+[FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                args.userType = "Farmer";
+
+                if (file == null || file.Length == 0)
+                    return BadRequest("Excel file is required.");
+
+
+                using var stream = file.OpenReadStream();
+                var response = await _organizationManager.BulkOnboardFarmers(stream, args);
+
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+
         [HttpPost("create-farmer")]
         [AllowAnonymous]
         public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
