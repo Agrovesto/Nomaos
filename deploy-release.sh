@@ -104,7 +104,7 @@ EOF
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
-Description=$Agrovesto.Backend.Release
+Description=Agrovesto.Backend.Release
 After=network.target
 
 [Service]
