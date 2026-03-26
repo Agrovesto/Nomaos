@@ -886,7 +886,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CreatedOn = DateTimeOffset.Now,
                 IsActive = true,
                 UserType = args.userType,
-                BusinessCode = args.businessCode
+                BusinessCode = args.businessCode,
+                CreatedBy=args.UserId,
+                Name= model.FullName
+                
             };
         }
         private string GenerateUserId(OnBoardingArgs args)

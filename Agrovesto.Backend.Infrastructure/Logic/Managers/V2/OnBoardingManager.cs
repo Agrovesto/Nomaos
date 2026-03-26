@@ -275,6 +275,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             foreach (var row in rows)
             {
+                if (!long.TryParse(row.YearsInAgric, out var yearsInAgric))
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        $"Invalid YearsInAgric value: {row.YearsInAgric}"
+                    );
+                }
+                var valueChains = new List<ValueChainSelectionDto>();
+
+                if (!string.IsNullOrWhiteSpace(row.PartOfAgriculture))
+                {
+                    var items = string.IsNullOrWhiteSpace(row.ProductTypes)
+                        ? new List<string>()
+                        : row.ProductTypes
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(x => x.Trim())
+                            .ToList();
+
+                    valueChains.Add(new ValueChainSelectionDto
+                    {
+                        ValueChainType = row.PartOfAgriculture,
+                        Items = items
+                    });
+                }
                 rowNumber++;
                 try
                 {
@@ -287,6 +311,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         LastName = row.LastName,
                         Email = row.Email,
                         PhoneNumber = row.PhoneNumber,
+                        Password = "Admin123",
+                        Pin = "0000",
+
                     };
 
                     // Prepare onboarding args for farmer

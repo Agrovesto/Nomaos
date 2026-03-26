@@ -4053,6 +4053,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("bit");
 
+                    b.Property<int>("FarmerOnboardingStatus")
+                        .HasColumnType("int");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
@@ -4092,6 +4095,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<string>("OTP")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OnboardingError")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Password")

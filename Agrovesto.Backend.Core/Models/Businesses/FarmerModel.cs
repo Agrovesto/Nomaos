@@ -8,6 +8,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public enum FarmerOnboardingStatus
+    {
+        Pending = 0,
+        Completed = 1,
+        Failed = 2
+    }
     public class CreateFarmerRequest
     {
         public long Id { get; set; }
@@ -24,6 +30,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Ward { get; set; }
         public string? Gender { get; set; }
         public string? DateOfBirth { get; set; }
+        public string? FullName { get; set; }
         public long OrganizationId { get; set; }
         public string? Bvn { get; set; }
         public string? NIN { get; set; }

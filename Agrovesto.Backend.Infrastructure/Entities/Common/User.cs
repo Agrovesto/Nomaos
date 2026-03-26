@@ -1,4 +1,5 @@
 ﻿
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Microsoft.AspNetCore.Identity;
 using System;
@@ -12,6 +13,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
     public class User : IdentityUser
     {
+        public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
+        public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Pin { get; set; } 
