@@ -162,6 +162,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
+        public string? FullName { get; set; }
         public string? LogDescription { get; set; }
         public string? ActivityName { get; set; }
         public string? Id { get; set; }
@@ -276,6 +277,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public class OnBoardingArgs
     {
         public long Id { get; set; }
+        public long OrganizationId { get; set; }
     public string? Env { get; set; }
         public string userType { get; set; }
         public string? UserId { get; set; }

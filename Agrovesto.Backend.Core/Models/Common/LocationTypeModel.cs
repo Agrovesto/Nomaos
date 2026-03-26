@@ -105,6 +105,8 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class OrganizationFarmerResponse
     {
+        public string FarmerOnboardingStatus { get; set; }
+        public bool IsPendingOnboarding { get; set; }
         public long FarmerId { get; set; }
         public string UserId { get; set; }
         public string Name { get; set; }
