@@ -7,10 +7,13 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using DocumentFormat.OpenXml.Spreadsheet;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -29,6 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> AssignAgent(OrganizationAgentAssignmArgs model);
         Task AssignAgentLocation(ProfileRequestModel model, OrganizationAgentArgs args);
         Task<bool> AssignAgentToTole(ProfileRequestModel model, OrganizationAgentArgs args);
+        Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<CreateFarmerResponseModel> CreateFarmerAsync(CreateFarmerRequest model, OnBoardingArgs args);
         Task<OrganizationLocationModel> CreateLocation(OrganizationLocationModel model, ListQueryParams query);
@@ -67,7 +71,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ILogger<OrganizationManager> _log;
         private readonly IFarmerRepository _farmerRepository;
 
+        private readonly UserManager<User> _userManager;
+        private readonly IExcelConverterService _excelConverterService;
         public OrganizationManager(
+            IExcelConverterService excelConverterService,
             IWalletManager walletManager,
             IBusinessRepository businessRepository,
               IOnboardingRepository onboardingRepository,
@@ -77,21 +84,272 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
              IActivityLogRepository activityLogRepository,
               IOtpService otpService,
             INotificationService notificationService,
+            UserManager<User> userManager,
               ILogger<OrganizationManager> log)
         {
+
+            _excelConverterService = excelConverterService;
             _walletManager = walletManager;
             _businessRepository = businessRepository;
             _onboardingRepository = onboardingRepository;
             _organizationRepository = organizationRepository;
        _farmerRepository = farmerRepository;
             _agentRepository= agentRepository;
-         
+            _userManager = userManager;
             _log = log;
             _otpService = otpService;
             _sMSService = notificationService;
             _activityLogRepository = activityLogRepository;
         }
+        private async Task SetOnboardingStatus(string userId, FarmerOnboardingStatus status, string error = null)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user != null)
+            {
+                user.FarmerOnboardingStatus = status;
+                user.OnboardingError = error;
+                await _userManager.UpdateAsync(user);
+            }
+        }
+        public async Task<CreateFarmerResponseModel> CreateOrganizationFarmerAsync(
+    CreateFarmerRequest model,
+    OnBoardingArgs args)
+        {
+            string userId = null;
 
+            try
+            {
+                var dateTime = DateTimeOffset.UtcNow;
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                // STEP 1: Create user
+                var user = await RegisterFarmerOrFail(model, args);
+                userId = user.model.Id;
+
+                // STEP 2: Create farmer
+                var farmerResult = await CreateFarmerOrFails(
+                    model, args, business, userId, dateTime);
+
+                model.Id = farmerResult.data.Id;
+
+                // Non-critical steps
+                await RunNonCriticalSteps(
+                    model, args, business, user.model, dateTime);
+
+                return new CreateFarmerResponseModel
+                {
+                    UserId = userId,
+                    RequiresProfileCompletion = true,
+                    Message = user.message
+                };
+            }
+            catch (Exception ex)
+            {
+                // 🔥 CLEANUP (this solves your main concern)
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    var existingUser = await _userManager.FindByIdAsync(userId);
+                    if (existingUser != null)
+                    {
+                        await _userManager.DeleteAsync(existingUser);
+                    }
+                }
+
+                _log.LogError(ex, "CreateFarmerAsync failed");
+
+                throw;
+            }
+        }
+        //public async Task RetryFailedOnboarding(string userId)
+        //{
+        //    var user = await _userManager.FindByIdAsync(userId);
+
+        //    if (user == null)
+        //        throw new Exception("User not found");
+
+        //    if (user.FarmerOnboardingStatus != FarmerOnboardingStatus.Failed)
+        //        throw new Exception("User is not in failed state");
+
+        //    // rebuild request (important)
+        //    var model = new CreateFarmerRequest
+        //    {
+        //        FirstName = user.Name,
+        //        LastName = user.Name,
+        //        Email = user.Email,
+        //        PhoneNumber = user.PhoneNumber,
+        //        // fill other fields as needed
+        //    };
+
+        //    var args = new OnBoardingArgs
+        //    {
+        //        businessCode = user.BusinessCode,
+        //        organizationCode = user.OrganizationCode
+        //    };
+
+        //    await CreateFarmerAsync(model, args);
+        //}
+       
+        public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args)
+        {
+            if (excelStream == null)
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Excel file is required.");
+
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+            if (hasOrg != null)
+            {
+                args.OrganizationId = hasOrg.OrganizaionId;
+            }
+
+            var rows = _excelConverterService.ParseExcel(excelStream);
+
+            if (!rows.Any())
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Excel file contains no records.");
+
+            var result = new BulkOnboardingResult
+            {
+                Total = rows.Count,
+                Errors = new List<BulkOnboardingError>()
+            };
+
+            int rowNumber = 0;
+
+            var tasks = new List<Task>();
+            var semaphore = new SemaphoreSlim(5); // safe concurrency
+
+            foreach (var row in rows)
+            {
+                rowNumber++;
+                var currentRow = row;
+                var currentRowNumber = rowNumber;
+
+                await semaphore.WaitAsync();
+
+                tasks.Add(Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Validate YearsInAgric
+                        if (!long.TryParse(currentRow.YearsInAgric, out var years))
+                        {
+                            throw new BaseException(
+                                Core.Enums.ExceptionType.BAD_REQUEST,
+                                $"Invalid YearsInAgric: {currentRow.YearsInAgric}");
+                        }
+
+                        // ValueChain mapping
+                        var valueChains = new List<ValueChainSelectionDto>();
+
+                        if (!string.IsNullOrWhiteSpace(currentRow.PartOfAgriculture))
+                        {
+                            var items = string.IsNullOrWhiteSpace(currentRow.ProductTypes)
+                                ? new List<string>()
+                                : currentRow.ProductTypes
+                                    .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(x => x.Trim())
+                                    .ToList();
+
+                            valueChains.Add(new ValueChainSelectionDto
+                            {
+                                ValueChainType = currentRow.PartOfAgriculture,
+                                Items = items
+                            });
+                        }
+
+                        // Validate contact
+                        if (string.IsNullOrWhiteSpace(currentRow.Email) &&
+                            string.IsNullOrWhiteSpace(currentRow.PhoneNumber))
+                        {
+                            throw new BaseException(
+                                Core.Enums.ExceptionType.BAD_REQUEST,
+                                "Either phone or email is required.");
+                        }
+
+                        var model = new CreateFarmerRequest
+                        {
+                            FirstName = currentRow.FirstName,
+                            MiddleName = currentRow.MiddleName,
+                            LastName = currentRow.LastName,
+                            Email = currentRow.Email,
+                            PhoneNumber = currentRow.PhoneNumber,
+                            State = currentRow.StateOfResidence,
+                            DateOfBirth = currentRow.DateOfBirth,
+                            Bvn = currentRow.BVN,
+                            NIN = currentRow.NIN,
+                            Lga = currentRow.LGA,
+                            Ward = currentRow.Ward,
+                            Location = currentRow.ResidentialAddress,
+                            FarmerCategory = currentRow.CategoryOfFarmer,
+                            ValueChainDto = valueChains,
+                            YearsInAgric = years,
+                            OrganizationId = args.OrganizationId,
+                            Gender = currentRow.Gender,
+                            Password = "Admin123",
+                            Pin = "0000",
+                            OnboardedByUserId = args.OnboardedByUserId,
+                            HighestLevelOfEducation = currentRow.HighestLevelOfEducation
+                        };
+
+                        var farmerArgs = new OnBoardingArgs
+                        {
+                            businessCode = args.businessCode,
+                            organizationCode = args.organizationCode,
+                            userType = "Farmer",
+                            OnboardedByUserId = args.OnboardedByUserId,
+                            AgentIds = args.AgentIds,
+                            CooperativeIds = args.CooperativeIds
+                        };
+
+                        await CreateOrganizationFarmerAsync(model, farmerArgs);
+
+                        lock (result)
+                        {
+                            result.Successful++;
+                        }
+                    }
+                    catch (BaseException ex)
+                    {
+                        lock (result)
+                        {
+                            result.Failed++;
+                            result.Errors.Add(new BulkOnboardingError
+                            {
+                                RowNumber = currentRowNumber,
+                                Email = currentRow.Email,
+                                Error = ex.Message
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.LogError(ex, "Error on row {Row}", currentRowNumber);
+
+                        lock (result)
+                        {
+                            result.Failed++;
+                            result.Errors.Add(new BulkOnboardingError
+                            {
+                                RowNumber = currentRowNumber,
+                                Email = currentRow.Email,
+                                Error = "Unexpected error"
+                            });
+                        }
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
+
+            return result;
+        }
         public async Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args)
         {
             try
@@ -825,7 +1083,8 @@ DateTimeOffset dateTime)
                     Pin = model.Pin,
                     FirstName = model.FirstName,
                     MiddleName = model.MiddleName,
-                    LastName = model.LastName
+                    LastName = model.LastName,
+                    FullName=model.FullName
                 }, args);
 
             if (!result.status)
@@ -881,7 +1140,9 @@ DateTimeOffset dateTime)
                 SelectedItems = model.ValueChainDto,
                 YearsInAgric = model.YearsInAgric,
                 Level = FarmerLevel.Level1.ToString(),
-                HighestLevelOfEducation = model.HighestLevelOfEducation
+                HighestLevelOfEducation = model.HighestLevelOfEducation,
+                
+                
             };
 
             if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
