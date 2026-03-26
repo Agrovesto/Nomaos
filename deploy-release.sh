@@ -17,9 +17,9 @@ RELEASES_DIR="$APP_DIR/releases"
 CURRENT_DIR="$APP_DIR/current"
 PREVIOUS_DIR="$APP_DIR/previous"
 
-SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
-ENV_FILE="/etc/$APP_NAME.env"
-NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
+SERVICE_FILE="/etc/systemd/system/Agrovesto.Backend.Release.service"
+ENV_FILE="/etc/Agrovesto.Backend.Release.env"
+NGINX_SITE="/etc/nginx/sites-available/Agrovesto.Backend.Release"
 
 PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
 
@@ -48,7 +48,7 @@ rollback() {
     err "Deployment failed. Rolling back..."
     if [ -L "$PREVIOUS_DIR" ]; then
         sudo ln -sfn "$(readlink -f "$PREVIOUS_DIR")" "$CURRENT_DIR"
-        sudo systemctl restart "$APP_NAME"
+        sudo systemctl restart "Agrovesto.Backend.Release"
         log "Rollback complete."
     else
         err "No previous release found."
@@ -60,7 +60,7 @@ trap rollback ERR
 # ------------------------------------------------------------
 # PRECHECKS
 # ------------------------------------------------------------
-log "Starting deployment: $APP_NAME ($RELEASE_ID)"
+log "Starting deployment: Agrovesto.Backend.Release ($RELEASE_ID)"
 
 command -v dotnet >/dev/null || { err "dotnet not installed"; exit 1; }
 command -v nginx  >/dev/null || { err "nginx not installed"; exit 1; }
@@ -109,7 +109,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=$CURRENT_DIR
-ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
+ExecStart=/usr/bin/dotnet $CURRENT_DIR/Agrovesto.Backend.Release.dll
 Restart=always
 RestartSec=5
 KillSignal=SIGINT
@@ -236,5 +236,5 @@ log "Deployment successful!"
 echo ""
 echo "🌍 https://$DOMAIN"
 echo "📦 Release: $RELEASE_ID"
-echo "🔁 Rollback: ln -sfn \$(readlink -f $PREVIOUS_DIR) $CURRENT_DIR && systemctl restart $APP_NAME"
-echo "📜 Logs: journalctl -u $APP_NAME -f"
+echo "🔁 Rollback: ln -sfn \$(readlink -f $PREVIOUS_DIR) $CURRENT_DIR && systemctl restart Agrovesto.Backend.Release"
+echo "📜 Logs: journalctl -u Agrovesto.Backend.Release -f"
