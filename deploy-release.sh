@@ -91,39 +91,6 @@ fi
 # ------------------------------------------------------------
 sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
 
-# ------------------------------------------------------------
-# SYSTEMD SERVICE
-# ------------------------------------------------------------
-log "Configuring systemd service..."
-
-sudo tee "$ENV_FILE" > /dev/null <<EOF
-ASPNETCORE_ENVIRONMENT=Staging
-ASPNETCORE_URLS=http://0.0.0.0:$APP_PORT
-DOTNET_PRINT_TELEMETRY_MESSAGE=false
-EOF
-
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=Agrovesto.Backend.Release
-After=network.target
-
-[Service]
-WorkingDirectory=$CURRENT_DIR
-ExecStart=/usr/bin/dotnet $CURRENT_DIR/Agrovesto.Backend.Release.dll
-Restart=always
-RestartSec=5
-KillSignal=SIGINT
-User=$USER_NAME
-EnvironmentFile=$ENV_FILE
-SyslogIdentifier=Agrovesto.Backend.Release
-Port=5003
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable "Agrovesto.Backend.Release"
 
 # ------------------------------------------------------------
 # ATOMIC RELEASE SWITCH
@@ -158,76 +125,6 @@ sleep 5
 log "Cleaning old releases..."
 
 ls -1dt "$RELEASES_DIR"/* | tail -n +$((KEEP_RELEASES+1)) | xargs -r sudo rm -rf
-
-# ------------------------------------------------------------
-# NGINX CONFIG
-# ------------------------------------------------------------
-log "Configuring Nginx..."
-
-sudo tee "$NGINX_SITE" > /dev/null <<EOF
-server {
-    listen 80;
-    server_name $DOMAIN;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name $DOMAIN;
-
-    ssl_certificate     /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
-
-    add_header X-Frame-Options SAMEORIGIN;
-    add_header X-Content-Type-Options nosniff;
-    add_header X-XSS-Protection "1; mode=block";
-
-    gzip on;
-    gzip_types text/plain application/json application/javascript text/css;
-
-    location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_http_version 1.1;
-
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-
-sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-
-sudo nginx -t
-sudo systemctl reload nginx
-
-# ------------------------------------------------------------
-# SSL (CERTBOT)
-# ------------------------------------------------------------
-log "Ensuring SSL certificate..."
-
-if ! sudo certbot certificates | grep -q "$DOMAIN"; then
-    sudo certbot --nginx \
-        -d "$DOMAIN" \
-        --non-interactive \
-        --agree-tos \
-        --email dolapofashina@gmail.com \
-        --redirect
-else
-    sudo certbot renew --quiet || warn "Cert renewal skipped"
-fi
-
-sudo systemctl reload nginx
 
 # ------------------------------------------------------------
 # DONE
