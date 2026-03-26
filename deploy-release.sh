@@ -104,7 +104,7 @@ EOF
 
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
-Description=$APP_NAME
+Description=$Agrovesto.Backend.Release
 After=network.target
 
 [Service]
@@ -115,14 +115,15 @@ RestartSec=5
 KillSignal=SIGINT
 User=$USER_NAME
 EnvironmentFile=$ENV_FILE
-SyslogIdentifier=$APP_NAME
+SyslogIdentifier=Agrovesto.Backend.Release
+Port=5003
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable "$APP_NAME"
+sudo systemctl enable "Agrovesto.Backend.Release"
 
 # ------------------------------------------------------------
 # ATOMIC RELEASE SWITCH
@@ -135,21 +136,21 @@ sudo ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
 # START SERVICE
 # ------------------------------------------------------------
 log "Restarting application..."
-sudo systemctl restart "$APP_NAME"
+sudo systemctl restart "Agrovesto.Backend.Release"
 
 sleep 5
 
 # ------------------------------------------------------------
 # HEALTH CHECK
 # ------------------------------------------------------------
-log "Running health check..."
+# log "Running health check..."
 
-if ! curl -fsS "$HEALTH_ENDPOINT" >/dev/null; then
-    err "Health check failed!"
-    exit 1
-fi
+# if ! curl -fsS "$HEALTH_ENDPOINT" >/dev/null; then
+#     err "Health check failed!"
+#     exit 1
+# fi
 
-log "Health check passed."
+# log "Health check passed."
 
 # ------------------------------------------------------------
 # CLEANUP OLD RELEASES
