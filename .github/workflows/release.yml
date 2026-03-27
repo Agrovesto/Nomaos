@@ -41,12 +41,25 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_RELEASE }}
 
-      - name: Add EC2 host to known_hosts
+      - name: Add EC2 host to known_hosts (safe)
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST_RELEASE }} >> ~/.ssh/known_hosts
+      
+          echo "Scanning host key..."
+          ssh-keyscan -H ${{ secrets.EC2_HOST_RELEASE }} >> ~/.ssh/known_hosts 2>/dev/null || echo "ssh-keyscan failed, continuing..."
 
+      - name: Add EC2 host to known_hosts (retry)
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+      
+          for i in {1..5}; do
+            echo "Attempt $i..."
+            ssh-keyscan -T 5 -H ${{ secrets.EC2_HOST_RELEASE }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            sleep 5
+          done || echo "Skipping ssh-keyscan"
+      
       - name: Deploy, configure service, Nginx, SSL
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_RELEASE }} << 'EOF'
