@@ -47,23 +47,23 @@ jobs:
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_RELEASE }}
 
       - name: Add EC2 host to known_hosts (with retry + timeout)
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           for i in {1..5}; do
-            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
+            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_RELEASE }}"
+            ssh-keyscan -H ${{ secrets.EC2_HOST_RELEASE }} >> ~/.ssh/known_hosts 2>/RELEASE/null && break
             sleep 5
           done
 
       - name: Deploy source code + run deploy script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.Release && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.Release"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.Release/
+          ssh ubuntu@${{ secrets.EC2_HOST_RELEASE }} "sudo mkdir -p /var/www/Agrovesto.Backend.Release && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.Release"
+          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_RELEASE }}:/var/www/Agrovesto.Backend.Release/
   
       - name: Execute deployment script
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.Release/deploy-release.sh"
+          ssh ubuntu@${{ secrets.EC2_HOST_RELEASE }} "sudo bash /var/www/Agrovesto.Backend.Release/deploy-release.sh"
