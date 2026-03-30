@@ -286,15 +286,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args) 
+        public async Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args)
         {
+            if (args == null || string.IsNullOrWhiteSpace(args.businessCode))
+                return new List<MemberShipTypeModel>();
 
-            var type = await _context.MemberShipTypes.Where(m=>m.BusinessCode==args.businessCode).ToListAsync();
-            if (type.Count > 0)
-            {
-                return type.Select(x => x.Map()).ToList();
-            }
-            return null;
+            return await _context.MemberShipTypes
+                .AsNoTracking()
+                .Where(m => m.BusinessCode == args.businessCode)
+                .Select(x => new MemberShipTypeModel
+                {
+                    Id = x.Id,
+                    Name = x.Name ?? string.Empty,
+                })
+                .ToListAsync();
         }
         public async Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args)
         {
