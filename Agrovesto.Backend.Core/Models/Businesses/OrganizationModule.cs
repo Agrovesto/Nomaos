@@ -115,4 +115,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
     }
+
+    public class OrganizationFarmerSalesSummary
+    {
+        public long TotalVolumeSold { get; set; }
+        public long TotalRevenue { get; set; }
+        public long AverageSalesValue { get; set; }
+    }
+
+    public class OrganizationFarmerSalesHistor
+    {
+
+        public DateTimeOffset Date { get; set; }
+        public decimal ProductSold { get; set; }
+        public double Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalValue { get; set; }
+        public string PaymentStatus { get; set; } //Pending, Paid, Cancelled
+    }
 }

@@ -70,6 +70,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; }
+        public bool IsActive { get; set; } = true;
+
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
     }
     public enum Tier
     {
@@ -93,5 +97,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? AssignedByUserId { get; set; }
+        public bool IsActive { get; set; } = true;
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
     }
 }

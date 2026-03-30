@@ -33,7 +33,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; } // user/admin who onboarded
         public bool IsActive { get; set; } = true;
-        public bool IsDeactivated { get; set; } = false;
+
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
+        public DateTimeOffset? DeactivatedOn { get; set; }
     }
 
     public class Farmer
@@ -61,6 +64,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long YearsInAgric { get; set; }
         public string? HighestLevelOfEducation { get; set; }
         public FarmerLevel Level { get; set; }
+        [NotMapped]
+        public List<ValueChainSelectionDto> SelectedItems { get; set; }
     }
    
     public class FarmerCooperative
@@ -75,6 +80,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset JoinedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; }
+        public bool IsActive { get; set; } = true;
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
+
+        public string? OrganizationCode { get; set; }
+        public DateTimeOffset? DeactivatedOn { get; set; }
     }
     public class FarmerAgent
     {
@@ -88,6 +99,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? AssignedByUserId { get; set; }
+        public bool IsActive { get; set; } = true;
+
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
+        public string? OrganizationCode { get; set; }
+
+        public DateTimeOffset? DeactivatedOn { get; set; }
     }
 
 }

@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool IsOwner { get; set; } = false;
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? OrganizationCode { get; set; }
+        public bool IsActive { get; set; } = true;
 
     }
     //when business creates a businessworker,
