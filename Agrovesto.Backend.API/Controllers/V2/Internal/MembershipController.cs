@@ -31,8 +31,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("bulk-onboard")]
         public async Task<IActionResult> BulkOnboard(
-IFormFile file,
-[FromQuery] OnBoardingArgs args)
+        IFormFile file,
+        [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -153,7 +153,6 @@ IFormFile file,
         }
 
         [HttpPost("create-farmer")]
-        [AllowAnonymous]
         public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
         {
 
@@ -413,7 +412,6 @@ IFormFile file,
         }
 
         [HttpPost("update-membership-profile")]
-        [AllowAnonymous]
         public async Task<IActionResult> CreateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
@@ -474,7 +472,6 @@ IFormFile file,
         }
 
         [HttpPost("create-agent")]
-        [AllowAnonymous]
         public async Task<IActionResult> CreateAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
@@ -584,7 +581,7 @@ IFormFile file,
 
 
         }
-        [AllowAnonymous]
+       
         [HttpPut("assign-agent-to-farmer")]
         public async Task<IActionResult> AssignFarmerToAgents([FromQuery] AssignmentArgs args)
         {

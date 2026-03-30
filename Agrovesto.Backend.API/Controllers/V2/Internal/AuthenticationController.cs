@@ -699,7 +699,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.UserId ??= CurrentUserId;
                 args.OnboardedByUserId = CurrentUserId;
-
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode = args.organizationCode,
+                });
                 var request = await _onBoardingManager.AssignFarmerToCooperatives(args);
 
 

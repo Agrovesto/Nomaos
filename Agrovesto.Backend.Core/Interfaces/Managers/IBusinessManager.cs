@@ -60,5 +60,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
         Task<LocationTypeModel> CreateLocationTypeAsync(LocationTypeModel model, ListQueryParams query);
         Task<LocationTypeModel> GetLocationById(ListQueryParams query);
         Task<List<LocationTypeModel>> GetLocationAsync(ListQueryParams query);
+        Task<BusinessOrganizationDashboardResponse> GetBusinessDashboardAsync(ListQueryParams args);
     }
 }

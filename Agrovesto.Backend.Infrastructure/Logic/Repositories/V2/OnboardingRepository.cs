@@ -51,6 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
+        Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -710,7 +711,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 user.BVN = model.Bvn;
 
             user.ModifiedBy = userId;
-
+            if(user.UserType ==  UserType.Farmer.ToString())
+            {
+                var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
+                if (farmer != null)
+                {
+                    user.FarmerOnboardingStatus = FarmerOnboardingStatus.Completed;
+                }
+            }
             var result = await _userManager.UpdateAsync(user);
 
             if (!result.Succeeded)
@@ -800,7 +808,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return role;
         }
 
-        private async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
+        public async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
         {
             if (!string.IsNullOrWhiteSpace(model.Email))
                 return await _userManager.FindByNameAsync(model.Email);

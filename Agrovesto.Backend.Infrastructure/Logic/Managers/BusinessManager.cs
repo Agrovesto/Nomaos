@@ -2794,6 +2794,18 @@ ListQueryParams query, string imageKey)
             return await _businessRepository.GetBusinessOrganizationAsync(businessCode);
 
         }
+        public async Task<BusinessOrganizationDashboardResponse> GetBusinessDashboardAsync(ListQueryParams args)
+        {
+            try
+            {
+                return await _businessRepository.GetBusinessDashboardAsync(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
     }
     public class UserOrganizationComparer : IEqualityComparer<UserOrganization>
     {

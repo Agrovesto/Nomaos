@@ -79,10 +79,5 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         Disbursement = 1,  // Inputs given to farmer
         Repayment = 2      // Farmer paying back
     }
-    public enum PaymentStatus
-    {
-        Pending = 1,
-        Completed = 2,
-        Failed = 3
-    }
+   
 }
