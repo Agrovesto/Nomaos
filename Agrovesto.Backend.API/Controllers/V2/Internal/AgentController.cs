@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         //
         [HttpPost("create-membership")]
-        [AllowAnonymous]
+       
         public async Task<IActionResult> CreateMembershipUser([FromBody] MemberShipRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 

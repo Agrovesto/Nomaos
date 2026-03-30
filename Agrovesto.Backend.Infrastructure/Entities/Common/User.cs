@@ -44,7 +44,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     {
         public string UserId { get; set; }
         public User User { get; set; }
-
+        public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
     }
     public class OneTimePassword

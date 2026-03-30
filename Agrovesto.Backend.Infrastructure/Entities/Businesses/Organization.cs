@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? CACNumber { get; set; }
         public string? RoleInOrganization { get; set; }
         public DateTimeOffset OnboardedOn { get; set; }// = DateTimeOffset.Now;
+        public bool IsActive { get; set; } = true;
 
     }
 

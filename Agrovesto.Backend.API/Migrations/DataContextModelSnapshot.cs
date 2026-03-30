@@ -408,6 +408,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("DisputeEmail")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<string>("KycCategory")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -450,6 +453,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsOwner")
                         .HasColumnType("bit");
@@ -1246,8 +1252,23 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("AssignedOn")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeactivatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("FarmerId")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("OrganizationCode")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -1265,13 +1286,28 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("CooperativeId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeactivatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("FarmerId")
                         .HasColumnType("bigint");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<DateTimeOffset>("JoinedOn")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("OnboardedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OrganizationCode")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
@@ -1361,13 +1397,19 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeactivatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("FarmerId")
                         .HasColumnType("bigint");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDeactivated")
                         .HasColumnType("bit");
 
                     b.Property<DateTimeOffset>("OnBoardedOn")
@@ -1403,6 +1445,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("CollectionOfficerId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ContextType")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("CostOfPackagingMaterial")
                         .HasColumnType("decimal(18,2)");
@@ -1463,6 +1508,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("PackagingType")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PaymentStatus")
+                        .HasColumnType("int");
 
                     b.Property<decimal>("PriceOfLowestUnit")
                         .HasColumnType("decimal(18,2)");
@@ -2484,6 +2532,15 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("AssignedOn")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<long>("MemberShipId")
                         .HasColumnType("bigint");
 
@@ -2567,6 +2624,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FullName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -2625,6 +2685,12 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<DateTimeOffset>("AssignedOn")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -2797,8 +2863,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("CapacityType")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -2848,6 +2923,15 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<DateTimeOffset>("AssignedOn")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeactivatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.Property<long>("MembershipId")
                         .HasColumnType("bigint");
@@ -4186,6 +4270,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("OrganizationCode")
                         .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
 
                     b.HasKey("UserId", "OrganizationCode");
 
