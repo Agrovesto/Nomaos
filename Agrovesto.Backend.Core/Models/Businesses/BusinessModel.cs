@@ -70,6 +70,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         // filters
         public string? MappingStatus { get; set; } // "Mapped" or "Unmapped"
         public string? CooperativeStatus { get; set; } // "Linked" or "Not Linked"
+        public string? PaymentStatus { get; set; } // "Linked" or "Not Linked"
+        public string? SalesContext { get; set; } // "Linked" or "Not Linked"
+        public string? FarmerUserId { get; set; } // "Linked" or "Not Linked"
     }
     public class BusinessRegistrationArgs
     {

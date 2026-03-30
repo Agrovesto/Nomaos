@@ -153,6 +153,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
         #endregion agent
+
+        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var farmerExists = await _context.Farmers
+                    .AnyAsync(f => f.Id == args.Id);
+
+                if (!farmerExists)
+                    return false;
+
+                var now = DateTimeOffset.UtcNow;
+
+                var orgFarmer = await _context.FarmerOrganizations
+                    .FirstOrDefaultAsync(x => x.FarmerId == args.Id
+                                           && x.OrganizationCode == args.organizationCode
+                                           && x.IsActive);
+
+                if (orgFarmer == null)
+                    return false;
+
+                orgFarmer.IsActive = false;
+                orgFarmer.DeactivatedOn = now;
+                orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
+                orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message:  $"Deactivated by user {args.OnboardedByUserId}";
+
+
+                var farmerAgents = await _context.FarmerAgents
+                    .Where(x => x.FarmerId == args.Id
+                             && x.OrganizationCode == args.organizationCode
+                             && x.IsActive)
+                    .ToListAsync();
+
+                foreach (var agent in farmerAgents)
+                {
+                    agent.IsActive = false;
+                    agent.DeactivatedOn = now;
+                    orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
+                    orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message : $"Deactivated by user {args.OnboardedByUserId}";
+
+                }
+
+
+                var farmerMemberships = await _context.FarmerCooperatives
+                    .Where(x => x.FarmerId == args.Id
+                             && x.OrganizationCode == args.organizationCode
+                             && x.IsActive)
+                    .ToListAsync();
+
+                foreach (var membership in farmerMemberships)
+                {
+                    membership.IsActive = false;
+                    membership.DeactivatedOn = now;
+                    orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
+                    orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message : $"Deactivated by user {args.OnboardedByUserId}";
+
+                }
+
+
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId)
         {
             if (args.CooperativeIds == null || !args.CooperativeIds.Any())
@@ -187,7 +260,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     FarmerId = farmerId,
                     CooperativeId = cooperativeId,
                     OnboardedByUserId = args.OnboardedByUserId,
-                    JoinedOn = DateTimeOffset.UtcNow
+                    JoinedOn = DateTimeOffset.UtcNow,
+                    IsActive=true,
+                    OrganizationCode=args.organizationCode
                 }).ToList();
 
                 await _context.FarmerCooperatives.AddRangeAsync(newAssignments);

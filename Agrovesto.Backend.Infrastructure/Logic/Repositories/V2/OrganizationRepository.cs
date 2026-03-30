@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args);
         Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args);
+        Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams args);
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
@@ -245,12 +246,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 return null;
 
             var orgAgentIds = orgAgents.Select(x => x.Id).ToList();
-            var subscribers = 10; //replace when there is data.
+            var subscribers = 0; //replace when there is data.
 
-            var inputs = 4320;//replace when there is data
+            var inputs = 0;//replace when there is data
 
-            var totalEquityPaid = 8450000;// replace when there is data
-            var productSold = 15900000;//replace when there is data
+            var totalEquityPaid = 0;// replace when there is data
+            var productSold = 0;//replace when there is data
             return new OrganizationAgentPerformanceSummary
             {
                 ProductSold = productSold,
@@ -267,41 +268,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var factor = (args.Id % 3) + 1;
 
-            var subscribers = new List<OrganizationAgentSubscriberModel>
-    {
-        new OrganizationAgentSubscriberModel
-        {
-            Id = 1,
-            FarmerName = $"Farmer {args.Id }-A",
-            FarmerUserId = $"FRM{args.Id }01",
-            InputPackage = "Maize Package",
-            InputPackageId = 101,
-            EquityPaid = 10000 * factor,
-            Status = true
-        },
-        new OrganizationAgentSubscriberModel
-        {
-            Id = 2,
-            FarmerName = $"Farmer {args.Id }-B",
-            FarmerUserId = $"FRM{args.Id }02",
-            InputPackage = "Rice Package",
-            InputPackageId = 102,
-            EquityPaid = 15000 * factor,
-            Status = factor % 2 == 0
-        },
-        new OrganizationAgentSubscriberModel
-        {
-            Id = 3,
-            FarmerName = $"Farmer {args.Id }-C",
-            FarmerUserId = $"FRM{args.Id }03",
-            InputPackage = "Cassava Package",
-            InputPackageId = 103,
-            EquityPaid = 8000 * factor,
-            Status = true
-        }
-    };
+            var subscribers = new List<OrganizationAgentSubscriberModel>();
+    //{
+    //    new OrganizationAgentSubscriberModel
+    //    {
+    //        Id = 1,
+    //        FarmerName = $"Farmer {args.Id }-A",
+    //        FarmerUserId = $"FRM{args.Id }01",
+    //        InputPackage = "Maize Package",
+    //        InputPackageId = 101,
+    //        EquityPaid = 10000 * factor,
+    //        Status = true
+    //    },
+    //    new OrganizationAgentSubscriberModel
+    //    {
+    //        Id = 2,
+    //        FarmerName = $"Farmer {args.Id }-B",
+    //        FarmerUserId = $"FRM{args.Id }02",
+    //        InputPackage = "Rice Package",
+    //        InputPackageId = 102,
+    //        EquityPaid = 15000 * factor,
+    //        Status = factor % 2 == 0
+    //    },
+    //    new OrganizationAgentSubscriberModel
+    //    {
+    //        Id = 3,
+    //        FarmerName = $"Farmer {args.Id }-C",
+    //        FarmerUserId = $"FRM{args.Id }03",
+    //        InputPackage = "Cassava Package",
+    //        InputPackageId = 103,
+    //        EquityPaid = 8000 * factor,
+    //        Status = true
+    //    }
+    //};
 
-
+            if (!subscribers.Any())
+                return null;
             if (args.Status.HasValue)
             {
                 subscribers = subscribers.Where(x => x.Status == args.Status.Value).ToList();
@@ -329,38 +331,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var baseValue = args.Id % 5 + 1; // vary data per agent
 
-            var data = new List<OrganizationAgentInputAllocationModel>
-    {
-        new OrganizationAgentInputAllocationModel
-        {
-            Id = 1,
-            InputName = "Fertilizer",
-            Allocated = 100 * baseValue,
-            Distributed = 60 * baseValue,
-        },
-        new OrganizationAgentInputAllocationModel
-        {
-            Id = 2,
-            InputName = "Seeds",
-            Allocated = 80 * baseValue,
-            Distributed = 30 * baseValue,
-        },
-        new OrganizationAgentInputAllocationModel
-        {
-            Id = 3,
-            InputName = "Pesticides",
-            Allocated = 50 * baseValue,
-            Distributed = 20 * baseValue,
-        },
-        new OrganizationAgentInputAllocationModel
-        {
-            Id = 4,
-            InputName = "Herbicides",
-            Allocated = 30 * baseValue,
-            Distributed = 10 * baseValue,
-        }
-    };
-
+            var data = new List<OrganizationAgentInputAllocationModel>();
+            //{
+            //    new OrganizationAgentInputAllocationModel
+            //    {
+            //        Id = 1,
+            //        InputName = "Fertilizer",
+            //        Allocated = 100 * baseValue,
+            //        Distributed = 60 * baseValue,
+            //    },
+            //    new OrganizationAgentInputAllocationModel
+            //    {
+            //        Id = 2,
+            //        InputName = "Seeds",
+            //        Allocated = 80 * baseValue,
+            //        Distributed = 30 * baseValue,
+            //    },
+            //    new OrganizationAgentInputAllocationModel
+            //    {
+            //        Id = 3,
+            //        InputName = "Pesticides",
+            //        Allocated = 50 * baseValue,
+            //        Distributed = 20 * baseValue,
+            //    },
+            //    new OrganizationAgentInputAllocationModel
+            //    {
+            //        Id = 4,
+            //        InputName = "Herbicides",
+            //        Allocated = 30 * baseValue,
+            //        Distributed = 10 * baseValue,
+            //    }
+            //};
+            if (!data.Any())
+                return null;
             data.ForEach(x => x.Remaining = x.Allocated - x.Distributed);
 
             int pageNumber = args.PageNumber > 0 ? args.PageNumber : 1;
@@ -406,8 +409,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     .CountAsync(x => x.OrganizationId == args.Id && x.IsActive);
 
                 //  MOCK VALUES
-                var seed = args.Id.GetHashCode();
-                var random = new Random(seed);
+               
 
                 var totalEquityPaid = 0;//(decimal)random.Next(100000, 500000);
                 var totalProduceSold = 0; //(decimal)random.Next(200000, 800000);
@@ -476,17 +478,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Where(r => roleIds.Contains(r.Id))
                 .ToDictionaryAsync(r => r.Id, r => r.RoleName);
 
-            // MOCK: Subscribers
-            var subscriberDict = pagedOrgAgents.ToDictionary(
-                x => x.Id,
-                x => new Random(x.Id.GetHashCode()).Next(5, 50)
-            );
+            //// MOCK: Subscribers
+            //var subscriberDict = pagedOrgAgents.ToDictionary(
+            //    x => x.Id,
+            //    x => new Random(x.Id.GetHashCode()).Next(5, 50)
+            //);
 
-            // MOCK: Disbursed
-            var disbursedDict = pagedOrgAgents.ToDictionary(
-                x => x.Id,
-                x => (double)new Random(x.Id.GetHashCode()).Next(100, 1000)
-            );
+            //// MOCK: Disbursed
+            //var disbursedDict = pagedOrgAgents.ToDictionary(
+            //    x => x.Id,
+            //    x => (double)new Random(x.Id.GetHashCode()).Next(100, 1000)
+            //);
 
             var result = pagedOrgAgents.Select(oa =>
             {
@@ -503,8 +505,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     AgentId = agent?.Id ?? 0,
                     AgentName = agent?.Name,
                     AgentRole = roleName,
-                    TotalSubscribers = subscriberDict.GetValueOrDefault(oa.Id, 0),
-                    TotalInputDisbursed = disbursedDict.GetValueOrDefault(oa.Id, 0),
+                    TotalSubscribers = 0,//subscriberDict.GetValueOrDefault(oa.Id, 0),
+                    TotalInputDisbursed = 0,//disbursedDict.GetValueOrDefault(oa.Id, 0),
                     IsActive = oa.IsActive
                 };
             }).ToList();
@@ -531,27 +533,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 throw new NotFoundException("Location not found");
 
             // MOCK: Input types (since no DB yet)
-            var mockInputs = new List<LocationInventoryBreakdownResponse>
-    {
-        new LocationInventoryBreakdownResponse
-        {
-            InputId = 1,
-            InputName = "Fertilizer",
-            TotalStock = location.StockLevel * 0.5
-        },
-        new LocationInventoryBreakdownResponse
-        {
-            InputId = 2,
-            InputName = "Seeds",
-            TotalStock = location.StockLevel * 0.3
-        },
-        new LocationInventoryBreakdownResponse
-        {
-            InputId = 3,
-            InputName = "Pesticides",
-            TotalStock = location.StockLevel * 0.2
-        }
-    };
+            var mockInputs = new List<LocationInventoryBreakdownResponse>();
+            //{
+            //    new LocationInventoryBreakdownResponse
+            //    {
+            //        InputId = 1,
+            //        InputName = "Fertilizer",
+            //        TotalStock = location.StockLevel * 0.5
+            //    },
+            //    new LocationInventoryBreakdownResponse
+            //    {
+            //        InputId = 2,
+            //        InputName = "Seeds",
+            //        TotalStock = location.StockLevel * 0.3
+            //    },
+            //    new LocationInventoryBreakdownResponse
+            //    {
+            //        InputId = 3,
+            //        InputName = "Pesticides",
+            //        TotalStock = location.StockLevel * 0.2
+            //    }
+            //};
+            if (!mockInputs.Any())
+                return null;
 
             // MOCK: Allocation per input (simulate assigned to agents)
             var allocationDict = mockInputs.ToDictionary(
@@ -601,41 +605,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 throw new NotFoundException("Location not found");
 
             //  MOCK: Activity logs
-            var mockLogs = new List<LocationActivityLogResponse>
-    {
-        new LocationActivityLogResponse
-        {
-            Id = 1,
-            ActivityType = "Agent Assignment",
-            Name = "Agent Assigned",
-            Description = "Agent John Doe was assigned to this location",
-            TimeStamp = DateTimeOffset.Now.AddDays(-1)
-        },
-        new LocationActivityLogResponse
-        {
-            Id = 2,
-            ActivityType = "Input Disbursement",
-            Name = "Fertilizer Distributed",
-            Description = "50 units of fertilizer disbursed by Agent Jane",
-            TimeStamp = DateTimeOffset.Now.AddHours(-10)
-        },
-        new LocationActivityLogResponse
-        {
-            Id = 3,
-            ActivityType = "Stock Update",
-            Name = "Inventory Updated",
-            Description = "Stock level updated after new supply",
-            TimeStamp = DateTimeOffset.Now.AddHours(-5)
-        },
-        new LocationActivityLogResponse
-        {
-            Id = 4,
-            ActivityType = "Agent Update",
-            Name = "Agent Reassigned",
-            Description = "Agent moved to another location",
-            TimeStamp = DateTimeOffset.Now.AddHours(-2)
-        }
-    };
+            var mockLogs = new List<LocationActivityLogResponse>();
+            //{
+            //    new LocationActivityLogResponse
+            //    {
+            //        Id = 1,
+            //        ActivityType = "Agent Assignment",
+            //        Name = "Agent Assigned",
+            //        Description = "Agent John Doe was assigned to this location",
+            //        TimeStamp = DateTimeOffset.Now.AddDays(-1)
+            //    },
+            //    new LocationActivityLogResponse
+            //    {
+            //        Id = 2,
+            //        ActivityType = "Input Disbursement",
+            //        Name = "Fertilizer Distributed",
+            //        Description = "50 units of fertilizer disbursed by Agent Jane",
+            //        TimeStamp = DateTimeOffset.Now.AddHours(-10)
+            //    },
+            //    new LocationActivityLogResponse
+            //    {
+            //        Id = 3,
+            //        ActivityType = "Stock Update",
+            //        Name = "Inventory Updated",
+            //        Description = "Stock level updated after new supply",
+            //        TimeStamp = DateTimeOffset.Now.AddHours(-5)
+            //    },
+            //    new LocationActivityLogResponse
+            //    {
+            //        Id = 4,
+            //        ActivityType = "Agent Update",
+            //        Name = "Agent Reassigned",
+            //        Description = "Agent moved to another location",
+            //        TimeStamp = DateTimeOffset.Now.AddHours(-2)
+            //    }
+            //};
+            if (!mockLogs.Any())
+                return null;
 
             // Optional filtering (by activity type if passed in query.Search)
             //if (!string.IsNullOrWhiteSpace(args.Search))
@@ -1545,15 +1551,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
 
-            // ================================
-            // COMPLETED FARMERS QUERY
-            // ================================
             var completedQuery =
                 from fo in _context.FarmerOrganizations
                 join f in _context.Farmers on fo.FarmerId equals f.Id
                 join u in _context.Users on f.UserId equals u.Id
                 where fo.OrganizationCode == args.organizationCode
-                      && fo.IsActive && !fo.IsDeactivated
+                      && fo.IsActive
                 select new
                 {
                     UserId = u.Id,
@@ -1575,9 +1578,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     IsPending = false
                 };
 
-            // ================================
-            // PENDING FARMERS QUERY
-            // ================================
             var pendingQuery =
                 from u in _context.Users
                 where u.UserType == UserType.Farmer.ToString()
@@ -1604,19 +1604,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     IsPending = true
                 };
 
-            // ================================
-            // UNION BEFORE PROJECTION
-            // ================================
             var unifiedQuery = completedQuery.Concat(pendingQuery);
 
-            // ================================
-            // TOTAL COUNT
-            // ================================
             var totalCount = await unifiedQuery.CountAsync();
 
-            // ================================
-            // PAGINATE
-            // ================================
             var pagedData = await unifiedQuery
                 .OrderByDescending(x => x.FarmerCreatedOn ?? x.CreatedOn)
                 .Skip((args.PageNumber - 1) * args.PageSize)
@@ -1628,27 +1619,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Select(x => x.FarmerId.Value)
                 .ToList();
 
-            // ================================
-            // AGENT COUNTS
-            // ================================
             var agentCounts = await _context.FarmerAgents
                 .Where(x => farmerIds.Contains(x.FarmerId))
                 .GroupBy(x => x.FarmerId)
                 .Select(g => new { g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.Key, x => x.Count);
 
-            // ================================
-            // COOPERATIVE COUNTS
-            // ================================
             var membershipCounts = await _context.FarmerCooperatives
                 .Where(x => farmerIds.Contains(x.FarmerId))
                 .GroupBy(x => x.FarmerId)
                 .Select(g => new { g.Key, Count = g.Count() })
                 .ToDictionaryAsync(x => x.Key, x => x.Count);
 
-            // ================================
-            // MAP TO DTO
-            // ================================
             var result = pagedData.Select(x =>
             {
                 var isPending = x.FarmerId == null;
@@ -1860,6 +1842,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 ValueChainItems = valueChainItems,
                 Agents = agents,
                 Memberships = memberships
+            };
+        }
+        
+
+        public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
+        {
+            var farmer = await _context.Farmers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == args.FarmerUserId);
+
+            if (farmer == null)
+                return null;
+
+            var orgFarmer = await _context.FarmerOrganizations
+                .AsNoTracking()
+                .Where(x => x.FarmerId == farmer.Id && x.IsActive)
+                .ToListAsync();
+
+            if (!orgFarmer.Any())
+                return null;
+
+            var orgFarmerIds = orgFarmer.Select(x => x.Id).ToList();
+
+            var totalVolumeSold = 0;// replace when there is data
+            var totalRevenue = 0;//replace when there is data
+            var averageSalesValue = 0;//replace when there is data
+            return new OrganizationFarmerSalesSummary
+            {
+               TotalRevenue = totalRevenue,
+               TotalVolumeSold=totalVolumeSold,
+               AverageSalesValue= averageSalesValue
             };
         }
 

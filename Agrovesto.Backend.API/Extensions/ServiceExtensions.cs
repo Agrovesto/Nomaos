@@ -128,6 +128,7 @@ namespace Agrovesto.Backend.API.Extensions
 
             services.AddScoped<IGenericWalletService, MTNMomo>();
             services.AddScoped<IAWSService, AWSService>();
+            services.AddScoped<ISalesRepository, SalesRepository>();
         }
     }
 }

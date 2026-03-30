@@ -827,5 +827,143 @@ namespace Agrovesto.Backend.API.Controllers
 
         #endregion payment
 
+        #region OrganizationMgt
+        [HttpGet("organization-mgt-overview")]
+
+        public async Task<IActionResult> GetOrganizationManagementOverview([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                var overview = await _businessManager.GetBusinessDashboardAsync(query);
+                return Ok(new Response<BusinessOrganizationDashboardResponse>()
+                {
+                    Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = overview
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpGet("registered-organizations")] //accessed by agrovesto
+        public async Task<IActionResult> GetBusinessOrganization([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessOrganizationAsync(query.businessCode);
+                return Ok(new PagedListResponse<List<OrganizationModel>>()
+                {
+                    Data = result,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [AllowAnonymous]
+        [HttpPost("register-organization")]
+        public async Task<IActionResult> CreateOrganization([FromBody] OrganizationModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+
+            //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
+
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = CurrentUserId;
+                var isAdmin = CurrentUserRole;
+
+                var createMerchant = await _businessManager.CreateOrganization(model, args);
+
+                return Ok(new Response<string>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        #endregion OrganizationMgt
     }
 }
