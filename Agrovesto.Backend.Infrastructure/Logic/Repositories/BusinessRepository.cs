@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
@@ -186,35 +187,87 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return org.Map();
         }
+        public async Task<BusinessOrganizationDashboardResponse> GetBusinessDashboardAsync(ListQueryParams args)
+        {
+            if (args == null)
+                throw new ArgumentNullException(nameof(args));
 
-      
+            if (string.IsNullOrEmpty(args.businessCode))
+                throw new ValidationException("Invalid Business");
+
+            try
+            {
+                var totalOrgs = await _context.Set<Organization>()
+                   
+                    .Where(x => x.BusinessCode == args.businessCode).ToListAsync();
+                
+
+                var seed = args.Id.GetHashCode();
+                var random = new Random(seed);
+
+                var totalEquityPaid = 0;//(decimal)random.Next(100000, 500000);
+                var totalProduceSold = 0; //(decimal)random.Next(200000, 800000);
+
+                return new BusinessOrganizationDashboardResponse
+                {
+                    TotalOrganizations = totalOrgs.Count,
+                    TotalActiveOrganizations= totalOrgs.Where(x=>x.IsActive).Count(),
+
+                   
+                    TotalEquityPaid = totalEquityPaid,
+                    TotalProduceSold = totalProduceSold
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error retrieving organization dashboard", ex);
+            }
+        }
+
         public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
         {
-            var organizations = await (
+            var query = await (
                 from org in _context.BusinessOrganizations
+
+                    // Creator (Organization Owner)
+                join creator in _context.Set<User>()
+                    on new { org.BusinessCode, Email = org.OrganizationEmail }
+                    equals new { creator.BusinessCode, Email = creator.Email }
+
+                    // LEFT JOIN OrganizationUsers
+                join orgUser in _context.UserOrganizations
+                    on org.OrganizationCode equals orgUser.OrganizationCode into orgUsersGroup
+                from orgUser in orgUsersGroup.DefaultIfEmpty()
+
+                    // LEFT JOIN Users (members)
                 join user in _context.Set<User>()
-    on new { org.BusinessCode, Email = org.OrganizationEmail }
-    equals new { user.BusinessCode, Email = user.Email }
+                    on orgUser.UserId equals user.Id into usersGroup
+                from user in usersGroup.DefaultIfEmpty()
+
                 where org.BusinessCode == businessCode
+
                 select new
                 {
                     Org = org,
+                    Creator = creator,
                     User = user
                 }
             ).ToListAsync();
 
-            if (organizations == null || organizations.Count == 0)
+            if (query == null || query.Count == 0)
                 return null;
 
-            var result = organizations
+            var result = query
                 .GroupBy(x => x.Org.OrganizationId)
                 .Select(g =>
                 {
-                    var first = g.First();
-                    var org = first.Org;
-                    var creatorUser = g
-                        .OrderBy(u => u.User.CreatedOn)
-                        .First().User;
+                    var org = g.First().Org;
+                    var creator = g.First().Creator;
+
+                    var users = g
+                        .Where(x => x.User != null)
+                        .Select(x => x.User)
+                        .Distinct();
 
                     return new OrganizationModel
                     {
@@ -227,16 +280,71 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         ContactEmail = org.ContactEmail,
                         Location = org.CompanyAddress,
                         OrganizationEmail = org.OrganizationEmail,
+                        PhoneNumber= org.PhoneNumber,
+                        State= org.State.State,
+                        Lga=org.LGA.Name,
+                        // ✅ Total users in organization
+                        UserCount = users.Count(),
 
-                        // Pulled from Users table
-                        Kick = creatorUser.Password,          // Your “kick” field
-                        OnboardedOn = creatorUser.CreatedOn   // Date they were onboarded
+                        // ✅ Total ACTIVE users
+                        ActiveUserCount = users.Count(u => u.IsActive),
+
+                        OnboardedOn = creator.CreatedOn
                     };
                 })
                 .ToList();
 
             return result;
         }
+        //    public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
+        //    {
+        //        var organizations = await (
+        //            from org in _context.BusinessOrganizations
+        //            join user in _context.Set<User>()
+        //on new { org.BusinessCode, Email = org.OrganizationEmail }
+        //equals new { user.BusinessCode, Email = user.Email }
+        //            where org.BusinessCode == businessCode
+        //            select new
+        //            {
+        //                Org = org,
+        //                User = user
+        //            }
+        //        ).ToListAsync();
+
+        //        if (organizations == null || organizations.Count == 0)
+        //            return null;
+
+        //        var result = organizations
+        //            .GroupBy(x => x.Org.OrganizationId)
+        //            .Select(g =>
+        //            {
+        //                var first = g.First();
+        //                var org = first.Org;
+        //                var creatorUser = g
+        //                    .OrderBy(u => u.User.CreatedOn)
+        //                    .First().User;
+
+        //                return new OrganizationModel
+        //                {
+        //                    OrganizaionId = org.OrganizationId,
+        //                    OrganizationName = org.CompanyName,
+        //                    BusinessCode = org.BusinessCode,
+        //                    OrganizationCode = org.OrganizationCode,
+        //                    ContacPerson = org.FullName,
+        //                    Contact = org.PhoneNumber,
+        //                    ContactEmail = org.ContactEmail,
+        //                    Location = org.CompanyAddress,
+        //                    OrganizationEmail = org.OrganizationEmail,
+
+        //                    // Pulled from Users table
+        //                    Kick = creatorUser.Password,          // Your “kick” field
+        //                    OnboardedOn = creatorUser.CreatedOn   // Date they were onboarded
+        //                };
+        //            })
+        //            .ToList();
+
+        //        return result;
+        //    }
 
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
         {

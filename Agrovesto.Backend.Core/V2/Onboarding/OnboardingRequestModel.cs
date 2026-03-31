@@ -162,6 +162,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
+        public string? FullName { get; set; }
         public string? LogDescription { get; set; }
         public string? ActivityName { get; set; }
         public string? Id { get; set; }
@@ -170,8 +171,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? Pin { get; set; }
+        public string? DefaultPin { get; set; }
         public string? Password { get; set; }
+        public string? DefaultPassword { get; set; }
         public string? Email { get; set; }
+        public bool HasDefaultPassword { get; set; } = false;
+        public bool HasDefaultPin { get; set; } = false;    
     }
     public enum OnboardingStatus
     {
@@ -275,10 +280,16 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnBoardingArgs
     {
+
+
+        public List<long?>? MembershipIds { get; set; }
         public long Id { get; set; }
+        public long OrganizationId { get; set; }
     public string? Env { get; set; }
         public string userType { get; set; }
         public string? UserId { get; set; }
+        public string? AgentUserId { get; set; }
+        public string? MembershipUserId { get; set; }
         public string? OnboardedByUserId { get; set; }
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
@@ -295,6 +306,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
     }
+    public class TaskDescription
+    {
+        public string? Message { get; set; }
+    }
     public class AssignmentArgs
     {
         public long Id { get; set; }
@@ -306,6 +321,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
         public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? MembershipIds { get; set; }
         public List<long?>? AgentIds { get; set; }
 
         //public string? env { get; set; }

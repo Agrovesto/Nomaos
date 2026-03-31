@@ -38,8 +38,14 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
 
         public async Task<List<StateModel>> GetStatesAsync()
         {
-            var states = await _context.States.AsNoTracking().ToListAsync();
-            return states.Select(x=>x.Map()).ToList();
+            return await _context.States
+                .AsNoTracking()
+                .Select(x => new StateModel
+                {
+                    StateId = x.StateId,
+                    State = x.State ?? string.Empty
+                })
+                .ToListAsync();
         }
         public async Task<List<LGAModel>> GetLgasByState(long stateId)
         {

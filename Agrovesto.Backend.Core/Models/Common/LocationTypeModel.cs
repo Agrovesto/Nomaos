@@ -66,9 +66,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class OrganizationLocationModel
     {
-        public string LocationType { get; set; }
-        public string State { get; set; }
-        public string Lga { get; set; }
+        public string? LocationType { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
         public long Id { get; set; }
         public long OrganizationId { get; set; }
         public string LocationName { get; set; }
@@ -105,6 +105,8 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class OrganizationFarmerResponse
     {
+        public string FarmerOnboardingStatus { get; set; }
+        public bool IsPendingOnboarding { get; set; }
         public long FarmerId { get; set; }
         public string UserId { get; set; }
         public string Name { get; set; }

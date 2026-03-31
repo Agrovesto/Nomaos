@@ -1350,11 +1350,324 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        
+
         #endregion AgentMgt
 
 
         #region FarmerMgt
+        [HttpPost("bulk-onboard")]
+        public async Task<IActionResult> BulkOnboard(IFormFile file,[FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                args.userType = "Farmer";
+
+                if (file == null || file.Length == 0)
+                    return BadRequest("Excel file is required.");
+
+
+                using var stream = file.OpenReadStream();
+                var response = await _organizationManager.BulkOnboardFarmersBatchAsync(stream, args);
+
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpPost("create-membership")]
+        
+        public async Task<IActionResult> CreateMembershipUser([FromBody] MemberShipRequestModel model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+              
+                var request = await _organizationManager.CreateMembershipUser(model, args);
+
+
+                return Ok(new Response<CreateMembershipResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = request.Message,
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpGet("farmer/sales-overview")]
+
+        public async Task<IActionResult> GetOrganizationFarmerSalesSummary([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode = query.organizationCode,
+                });
+               if(string.IsNullOrEmpty(query.FarmerUserId))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Farmer user Id is required");
+                }
+                var overview = await _organizationManager.GetOrganizationFarmerSalesSummary(query);
+                return Ok(new Response<OrganizationFarmerSalesSummary>()
+                {
+                    Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = overview
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("farmer/sales-history")]
+
+        public async Task<IActionResult> FarmerSalesHistory([FromQuery] ListQueryParams query, CancellationToken cancellationToken)
+        {
+            try
+            {
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode = query.organizationCode,
+                });
+                if (string.IsNullOrEmpty(query.FarmerUserId))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Farmer user Id is required");
+                }
+                var response = await _organizationManager.FarmerSalesHistory(query, cancellationToken);
+                return Ok(new PagedListResponse<List<OrganizationFarmerSalesHistor>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = response != null ? "Successful" : "Failed",
+                    Data = response.Data,
+                    Count = response.Count,
+                    PageSize = query.PageSize,
+                    PageNumber = query.PageNumber
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpPut("deactivate-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> DeactivateFarmerFromOrganization([FromQuery] AssignmentArgs args, 
+            [FromBody] TaskDescription model)
+        {
+
+            try
+            {
+                
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode = args.organizationCode,
+                });
+                await EnrichFarmerAsync(args);
+                var request = await _organizationManager.DeactivateFarmerFromOrganization(args, model.Message);
+
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpPut("assign-cooperatives-to-farmer")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AssignFarmerToCooperatives([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
+        {
+
+            try
+            {
+                if (!model.MembershipIds.Any())
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "No Memberhsip selected.");
+                }
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode= args.organizationCode,
+                });
+                await EnrichFarmerAsync(args);
+                args.CooperativeIds = model.MembershipIds;
+
+                var request = await _organizationManager.AssignFarmerToCooperatives(args);
+
+
+                return Ok(new Response<FarmerModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
         [HttpPost("create-farmer")]
         [AllowAnonymous]
         public async Task<IActionResult> CreateFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
@@ -1530,5 +1843,61 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
             }
         }
+
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            //  if (CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(args.MembershipUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.MembershipIds ??= new List<long?>();
+
+            if (!args.MembershipIds.Contains(coop.Id))
+                args.MembershipIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+            //  if(CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var agent = await _businessManager.GetAgentDetailByUserId(args.AgentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
+        private async Task EnrichFarmerAsync(AssignmentArgs args)
+        {
+            if (args.Id != 0) return;
+            if(string.IsNullOrEmpty(args.farmerUserId)) throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Farmer Id is required.");
+            var farmer = await _businessManager.GetFarmerByUserId(args.farmerUserId);
+
+            if (farmer == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Farmer not found for the specified user.");
+
+            args.Id = farmer.Id;
+
+        }
+
     }
 }

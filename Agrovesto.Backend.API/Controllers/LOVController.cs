@@ -257,7 +257,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(500)]
         public async Task<IActionResult> States()
         {
-
+            try { 
             var request = await _nigeriaStateImporterService.GetStatesAsync();
             return Ok(new Response<List<StateModel>>()
             {
@@ -266,6 +266,24 @@ namespace Agrovesto.Backend.API.Controllers
                 Message = request == null ? "Failed" : "Success",
                 Data = request.Count > 0 ? request : null
             });
+        }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+            Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+        Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
         }
         [AllowAnonymous]
         [HttpGet("lga/{stateId}")]

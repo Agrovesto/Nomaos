@@ -56,5 +56,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams args);
         Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string membershipId);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(long farmerId, ListQueryParams query);
+        Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null);
     }
 }

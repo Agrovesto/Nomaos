@@ -38,7 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(60);
+            sqlOptions.CommandTimeout(300);
             sqlOptions.UseNetTopologySuite();
         });
 
