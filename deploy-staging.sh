@@ -10,7 +10,7 @@ set -Eeuo pipefail
 # CONFIGURATION
 # ------------------------------------------------------------
 APP_NAME="Agrovesto.Backend.API"
-DOMAIN="release-noma-api.com"
+DOMAIN="dev-noma-api.com"
 
 APP_DIR="/var/www/Agrovesto.Backend.API"
 RELEASES_DIR="$APP_DIR/releases"
