@@ -15,6 +15,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Core.Models.Payment;
 using Microsoft.AspNetCore.Authorization;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -30,6 +31,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IReportManager _reportManager;
         private readonly ISettingsManager _settingsManager;
         private readonly IBusinessManager _businessManager;
+        private readonly IAWSService _aWSService;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
@@ -37,7 +39,8 @@ namespace Agrovesto.Backend.API.Controllers
             IAuthenticationRepository authenticationRepository,
             IInputFinancingManagement inputFinancingManagement,
             IBusinessManager businessManager,
-            ISettingsManager settingsManager) : base(httpContextAccessor)
+            ISettingsManager settingsManager,
+            IAWSService aWSService) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
             _providerManager = providerManager;
@@ -46,6 +49,48 @@ namespace Agrovesto.Backend.API.Controllers
             _inputFinancingManagement = inputFinancingManagement;
             _settingsManager = settingsManager;
             _businessManager = businessManager;
+            _aWSService = aWSService;
+        }
+        [AllowAnonymous]
+        [HttpPost("create-email-template")]
+        public async Task<IActionResult> LocationType()
+        {
+            
+            try
+            {
+
+               await _aWSService.CreateTemplateAsync();
+
+                return Ok(new Response<bool>()
+                {
+                    Code =Core.CoreUtils.Constants.ResponseCodes.Success,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = true
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
         }
 
         [AllowAnonymous]

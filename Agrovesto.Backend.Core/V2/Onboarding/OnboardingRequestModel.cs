@@ -171,8 +171,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? Pin { get; set; }
+        public string? DefaultPin { get; set; }
         public string? Password { get; set; }
+        public string? DefaultPassword { get; set; }
         public string? Email { get; set; }
+        public bool HasDefaultPassword { get; set; } = false;
+        public bool HasDefaultPin { get; set; } = false;    
     }
     public enum OnboardingStatus
     {

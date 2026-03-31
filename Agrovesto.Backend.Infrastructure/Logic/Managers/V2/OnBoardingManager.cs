@@ -28,6 +28,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using NetTopologySuite.Operation.Valid;
+using Org.BouncyCastle.Asn1.Ocsp;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -452,7 +453,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             )
         {
             ValidateLoginModel(model);
-            return await _onboardingRepository.Login(model, businessCode);
+            var login= await _onboardingRepository.Login(model, businessCode);
+
+            return login;
+        }
+        private async Task SendDefaultCredentialNotification(User user)
+        {
+            var senderEmail = _configuration["Official:Email"];
+            if (!string.IsNullOrEmpty(user.Email))
+            {
+                await _awsService.SendEmailAsync(senderEmail,
+                    user.Email, 
+                    "Action Required: Change Your Default Password" ,
+                    $"You are currently using a default credential. Please log in and change it immediately.",
+                    $"You are currently using a default credential. Please log in and change it immediately."
+                );
+            }
+
+            if (!string.IsNullOrEmpty(user.PhoneNumber))
+            {
+                await _sMSService.SendSmsAsync( 
+                    user.PhoneNumber,
+                    "You're using a default PIN/password. Please change it immediately."
+                );
+            }
         }
 
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
@@ -848,12 +872,20 @@ OrganizationOnboardingArgs args)
 
                     if(env == Env.Live.ToString())
                     {
-
+                        if (createUser.model.HasDefaultPassword)
+                        {
+                            await SendDefaultCredentialChange(createUser.model);
+                        }
                         await GenerateAndSendOtp(createUser.model);
                     }
                     else
                     {
-                        message = await DummyGenerateAndSendOtp(createUser.model);
+                        if (createUser.model.HasDefaultPassword)
+                        {
+                            await SendDefaultCredentialChange(createUser.model);
+                        }
+                        await GenerateAndSendOtp(createUser.model);
+                       // message = await DummyGenerateAndSendOtp(createUser.model);
                     }
                 }
                 catch (Exception ex)
@@ -908,6 +940,67 @@ OrganizationOnboardingArgs args)
                                     });
         }
 
+    //    private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
+    //    {
+    //        var senderEmail = _configuration["Official:Email"];
+    //        var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+    //            ? OtpTarget.Email
+    //            : OtpTarget.Phone;
+
+    //        var destination = otpTarget == OtpTarget.Email
+    //            ? model.Email
+    //            : model.PhoneNumber;
+
+
+    //        // ------------------ Send OTP ------------------
+    //        if (otpTarget == OtpTarget.Email)
+    //        {
+    //            //use aws
+    //            await _awsService.SendEmailAsync(
+    //                senderEmail,
+    //                destination,
+    //                "Change your password",
+    //                $"Your default password is {model.Password}. Kindly login and change this.",
+    //$"Your default password is {model.Password}. Kindly login and change this."
+    //                );
+    //        }
+    //        else
+    //        {
+    //            await _sMSService.SendSmsAsync(
+    //                    destination,
+    //                     $"Your default pin is {model.Pin}. Kindly login and change this.");
+    //        }
+    //    }
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
+        {
+            var senderEmail = _configuration["Official:Email"];
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
+            var destination = otpTarget == OtpTarget.Email ? model.Email : model.PhoneNumber;
+
+            if (otpTarget == OtpTarget.Email)
+            {
+                // Send email using SES template
+                await _awsService.SendTemplatedEmailAsync(
+                    senderEmail,
+                    destination,
+                    "AgrovestoWelcomeTemplate",
+                    new
+                    {
+                        name = model.FirstName ?? "User",
+                        loginLink = "https://app.agrovesto.com/login",
+                        password = model.Password
+                    }
+                );
+            }
+            else
+            {
+                // SMS fallback
+                await _sMSService.SendSmsAsync(
+                    destination,
+                    $"Your default pin is {model.Pin}. Kindly login and change this."
+                );
+            }
+        }
         private async Task GenerateAndSendOtp(OnboardingRequestModel model)
         {
             var senderEmail = _configuration["Official:Email"];
@@ -938,8 +1031,7 @@ OrganizationOnboardingArgs args)
                 //use aws
                 await _awsService.SendEmailAsync(
                     senderEmail,
-                    "tech@agrovesto.com",
-                   // destination,
+                    destination,
                     "Confirm your account",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes.",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes."
