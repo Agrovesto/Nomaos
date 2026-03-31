@@ -37,7 +37,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IOrganizationConfigurationRepository _orgConfig;
         public WalletSetUpManager(IBusinessRepository businessRepository, IFarmerRepository farmerRepository,
-            IWalletManager walletManager,IOrganizationConfigurationRepository orgConfig,IWalletService walletService, IWalletProviderRepository providerRepo)
+            IWalletManager walletManager,IOrganizationConfigurationRepository orgConfig,
+            IWalletService walletService, IWalletProviderRepository providerRepo)
         {
             _walletService = walletService;
             _providerRepo = providerRepo;

@@ -191,7 +191,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 join fc in _context.FarmerCooperatives.AsNoTracking()
                     on farmer.Id equals fc.FarmerId into fcGroup
                 from farmerCoop in fcGroup.DefaultIfEmpty()
-                join cooperative in _context.Cooperatives.AsNoTracking()
+                join cooperative in _context.MemberShips.AsNoTracking()
                     on farmerCoop.CooperativeId equals cooperative.Id into coopGroup
                 from coop in coopGroup.DefaultIfEmpty()
                 select new { farm, farmer, CooperativeId = farmerCoop.CooperativeId, CooperativeName = coop != null ? coop.Name : null };

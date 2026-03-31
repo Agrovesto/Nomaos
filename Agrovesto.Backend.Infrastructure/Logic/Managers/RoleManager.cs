@@ -93,6 +93,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         #endregion business
 
         #region globalAdmin
+        public async Task<AgrovestoResponse<RoleModel>> UpdateRoleAsync(string roleId, RoleModel model)
+        {
+            var role = await _roleManager.FindByIdAsync(roleId);
+
+            if (role == null)
+            {
+                return new AgrovestoResponse<RoleModel>
+                {
+                    Message = "Role not found.",
+                    Result = null
+                };
+            }
+
+            var existingRoleWithSameName = await _roleManager.FindByNameAsync(model.RoleName);
+            if (existingRoleWithSameName != null && existingRoleWithSameName.Id != role.Id)
+            {
+                return new AgrovestoResponse<RoleModel>
+                {
+                    Message = $"Another role with name '{model.RoleName}' already exists.",
+                    Result = null
+                };
+            }
+
+            // 🔁 Update fields
+            role.Name = model.RoleName;
+            role.NormalizedName = model.RoleName.ToUpperInvariant();
+            role.Descriptions = model.RoleDescription;
+            role.IsAvailableToBusiness = model.IsAvailableToBusiness;
+
+            var result = await _roleManager.UpdateAsync(role);
+
+            if (result.Succeeded)
+            {
+                return new AgrovestoResponse<RoleModel>
+                {
+                    Message = "Role updated successfully.",
+                    Result = role.Map()
+                };
+            }
+
+            return new AgrovestoResponse<RoleModel>
+            {
+                Message = string.Join(", ", result.Errors.Select(e => e.Description)),
+                Result = null
+            };
+        }
+
         public async Task<AgrovestoResponse<RoleModel>> CreateRoleAsync(RoleModel model)
         {
             if (await _roleManager.RoleExistsAsync(model.RoleName))

@@ -1,62 +1,45 @@
 #!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API
-# Author: Dolapo Fashina 
 set -euo pipefail
 set -x
 
-
 APP_NAME="Agrovesto.Backend.API"
 APP_DIR="/var/www/$APP_NAME"
+INCOMING_DIR="$APP_DIR/incoming"
 RELEASES_DIR="$APP_DIR/releases"
 RELEASE_ID="$(date +%Y%m%d%H%M%S)"
 RELEASE_DIR="$RELEASES_DIR/$RELEASE_ID"
 CURRENT_DIR="$APP_DIR/current"
 PREVIOUS_DIR="$APP_DIR/previous"
 USER_NAME="www-data"
-CI_USER="ubuntu"
-PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
-
-export HOME=/tmp
-export DOTNET_CLI_HOME=/tmp
-export NUGET_PACKAGES="/tmp/.nuget/packages"
 
 echo "🚀 Deploying $APP_NAME — release $RELEASE_ID"
 
+# ------------------------------------------------------------
+# Prepare release
+# ------------------------------------------------------------
 mkdir -p "$RELEASE_DIR"
-sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
+cp -r "$INCOMING_DIR"/* "$RELEASE_DIR"/
 
-# ------------------------------------------------------------
-# Build & publish
-# ------------------------------------------------------------
-dotnet publish "$PROJECT_PATH"\
-  -c Release \
-  -r linux-x64 \
-  --self-contained true \
-  /p:PublishTrimmed=false \
-  -o "$RELEASE_DIR"
-
-chmod +x "$RELEASE_DIR/$APP_NAME"
+chmod +x "$RELEASE_DIR/$APP_NAME" || true
 
 # ------------------------------------------------------------
 # Save previous release
 # ------------------------------------------------------------
 if [ -L "$CURRENT_DIR" ]; then
-  sudo ln -sfn "$(readlink -f "$CURRENT_DIR")" "$PREVIOUS_DIR"
+  ln -sfn "$(readlink -f "$CURRENT_DIR")" "$PREVIOUS_DIR"
 fi
 
 # ------------------------------------------------------------
-# Switch release atomically
+# Atomic switch
 # ------------------------------------------------------------
-sudo ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
-sudo chown -R "$USER_NAME:$USER_NAME" "$RELEASE_DIR"
-sudo systemctl restart "$APP_NAME"
+ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
+chown -R "$USER_NAME:$USER_NAME" "$RELEASE_DIR"
+
+systemctl restart "$APP_NAME"
 
 # ------------------------------------------------------------
 # Cleanup old releases (keep last 3)
 # ------------------------------------------------------------
-ls -1dt "$RELEASES_DIR"/* | tail -n +4 | sudo xargs rm -rf || true
+ls -1dt "$RELEASES_DIR"/* | tail -n +4 | xargs rm -rf || true
 
 echo "✅ Deployment successful"
-
-
-

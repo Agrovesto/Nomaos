@@ -1,8 +1,10 @@
 ﻿
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -11,6 +13,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
     public class User : IdentityUser
     {
+        public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
+        public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
         public string? PhoneNumber { get; set; }
         public string? Pin { get; set; } 
@@ -29,26 +33,22 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
-        public UserLevel UserLevel { get; set; }
+       // public UserLevel UserLevel { get; set; }
         public bool IsPhoneVerified { get; set; } = false;
-    }
-    public enum UserLevel
-    {
-        None,//not verified
-        Level1, //phone or email verified 
+        public bool IsEmailVerified { get; set; } = false;
 
-        Level2, //farmer:picture
-
-        Level3, //farmer:nin/bvn,  cooperatuve: cooperative registration document
-      
-      Level4,//farmer: land mapping, cooperative: cac
-      Level5, //nin/bvn
+        public bool IsPinEnabled { get; set; } = false;
+      //  public string? DefaultPassword { get; set; }
+            public bool HasDefaultPassword { get; set; } = false;
+       // public string? DefaultPin { get; set; }
+        public bool HasDefaultPin { get; set; } = false;
     }
+
     public class UserOrganization
     {
         public string UserId { get; set; }
         public User User { get; set; }
-
+        public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
     }
     public class OneTimePassword

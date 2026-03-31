@@ -47,27 +47,31 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-                //if (args.Id == 0 && currentRole == "Cooperative")
+                //if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
                 //{
-                //    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-                //    args.Id = coop.Id;
+                //    args.organizationCode = OrganizationCode;
                 //}
+                //var currentRole = CurrentUserRole;
+
+
+                //args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                //args.OnboardedByUserId = CurrentUserId;
+
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                //ResolveUserContext(args);
+                if (CurrentUserId != null && CurrentUserRole != args.userType)
+                {
+                    await EnrichArgsByRoleAsync(args);
+                }
+
                 if (file == null || file.Length == 0)
                 return BadRequest("Excel file is required.");
 
 
             using var stream = file.OpenReadStream();
-            var response = await _onBoardingManager.BulkOnboardBusinessUsers(stream, args);
+            var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
 
-            //return Ok(response);
                 return Ok(new Response<BulkOnboardingResult>()
                 {
                     Code = ResponseCodes.Success,
@@ -120,20 +124,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+               
+                args.OnboardedByUserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+               // ResolveUserContext(args);
+                if (CurrentUserId != null && CurrentUserRole != args.userType)
                 {
-                    args.organizationCode = OrganizationCode;
+                    await EnrichArgsByRoleAsync(args);
                 }
-                var currentRole = CurrentUserRole;
 
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-                if (args.Id == 0 && currentRole == "Cooperative")
-                {
-                    var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-                    args.Id = coop.Id;
-                }
-                args.OnboardedByUserId = args.UserId;
                 var request = await _onBoardingManager.CreateBusinessUser(model, args);
 
 
@@ -223,7 +222,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("resend-otp")]
         [AllowAnonymous]
-        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model)
+        public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)
@@ -244,7 +243,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                await _onBoardingManager.ResendOnboardingOtp(model);
+                await _onBoardingManager.ResendOnboardingOtp(model, args);
 
 
                 return Ok(new Response<string>()
@@ -299,6 +298,47 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var result = await _onBoardingManager.CreateUserProfile(model, args);
 
                 return Ok(new Response<(bool status, string message)>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("create-organization-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> CreateOrganization(
+    [FromBody] OrganizationOnboardingModel model,
+    [FromQuery] OrganizationOnboardingArgs args)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            try
+            {
+                args.onboardedByUserId = CurrentUserId;
+             
+                var result = await _onBoardingManager.CreateOrganization(model, args);
+
+                return Ok(new Response<OrganizationResponseModel>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -479,6 +519,69 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
              }
 
          }
+
+        [HttpPost("bulk-onboard-farmers")]
+        public async Task<IActionResult> BulkOnboardFarmers(
+            IFormFile file,
+            [FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                if (file == null || file.Length == 0)
+                    return BadRequest("Excel file is required.");
+
+                using var stream = file.OpenReadStream();
+
+                var response = await _onBoardingManager.BulkOnboardFarmers(stream, args, CurrentUserId, CurrentUserRole);
+
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
          **/
 
         [HttpPost("login")]
@@ -596,7 +699,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.UserId ??= CurrentUserId;
                 args.OnboardedByUserId = CurrentUserId;
-
+                NormalizeOrganizationCode(new OnBoardingArgs
+                {
+                    organizationCode = args.organizationCode,
+                });
                 var request = await _onBoardingManager.AssignFarmerToCooperatives(args);
 
 
@@ -700,6 +806,59 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         //}
 
+        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
+        {
+            var currentRole = CurrentUserRole;
+
+            switch (currentRole)
+            {
+                case "MemberShip":
+                    await EnrichCooperativeAsync(args);
+                    break;
+
+                case "Agent":
+                    await EnrichAgentAsync(args);
+                    break;
+            }
+        }
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            //  if (CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+            //  if(CurrentUserRole != args.userType) return;
+            if (args.Id != 0) return;
+
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
 
         private IActionResult ValidationProblemResponse()
         {
@@ -740,59 +899,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     );
                 }
             }
-        }
-        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
-        {
-            var currentRole = CurrentUserRole;
-
-            switch (currentRole)
-            {
-                case "Cooperative":
-                    await EnrichCooperativeAsync(args);
-                    break;
-
-                case "Agent":
-                    await EnrichAgentAsync(args);
-                    break;
-            }
-        }
-        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
-        {
-          //  if (CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-
-            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-            if (coop == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Cooperative not found for the specified user.");
-
-            args.Id = coop.Id;
-
-            args.CooperativeIds ??= new List<long?>();
-
-            if (!args.CooperativeIds.Contains(coop.Id))
-                args.CooperativeIds.Add(coop.Id);
-        }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
-        {
-          //  if(CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-            
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
-
-            if (agent == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Agent not found for the specified user.");
-
-            args.Id = agent.Id;
-
-            args.AgentIds ??= new List<long?>();
-
-            if (!args.AgentIds.Contains(agent.Id))
-                args.AgentIds.Add(agent.Id);
         }
 
     }

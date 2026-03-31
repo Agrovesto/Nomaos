@@ -1,19 +1,20 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
-using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
-using Agrovesto.Backend.Infrastructure.Entities.Businesses;
-using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -22,6 +23,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         Task<OrganizationConfigurationModel> GetByCodeAsync(BusinessRegistrationArgs args);
         //Task<IEnumerable<OrganizationConfigurationModel>> GetAllAsync();
         Task CreateOrUpdateOrgConfig(OrganizationConfigurationModel config, BusinessRegistrationArgs args);
+        Task<MemberShipTypeModel?> GetMemberShipTypeById(long id);
+        Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args);
+        Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args);
         //Task UpdateAsync(OrganizationConfigurationModel config);
         //Task DeleteAsync(string orgId);
     }
@@ -30,15 +34,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
     {
         private readonly IOrganizationConfigurationRepository _orgConfig;
         private readonly IBusinessRepository _businessRepository;
+        private readonly IMembershipRepository _cooperativeRepository;
         private readonly ILogger<SettingsManager> _log;
 
-        public SettingsManager(ILogger<SettingsManager> log,IOrganizationConfigurationRepository orgConfig, IBusinessRepository businessRepository)
+        public SettingsManager(ILogger<SettingsManager> log,IOrganizationConfigurationRepository orgConfig, IBusinessRepository businessRepository, IMembershipRepository cooperativeRepository)
         {
             _orgConfig = orgConfig;
             _businessRepository = businessRepository;
             _log = log;
+            _cooperativeRepository = cooperativeRepository;
         }
+      
+        public async Task<(bool status, MemberShipTypeModel data)> CreateUpdateMemberShipType(MemberShipTypeModel data, BusinessRegistrationArgs args)
+        {
+            if (string.IsNullOrEmpty(args.businessCode))
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Business code is required.");
 
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "Business does not exist.");
+            return await _cooperativeRepository.CreateUpdateMemberShipType(data, args);
+        }
+        public async Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args)
+        {
+            if (string.IsNullOrEmpty(args.businessCode))
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Business code is required.");
+
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
+                ?? throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "Business does not exist.");
+
+            return await _cooperativeRepository.GetMembershipTypes(args);
+        }
+        public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
+        {
+
+            return await _cooperativeRepository.GetMemberShipTypeById(id);
+        }        
         public async Task CreateOrUpdateOrgConfig(OrganizationConfigurationModel config, BusinessRegistrationArgs args)
         {
             try
