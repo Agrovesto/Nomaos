@@ -22,28 +22,29 @@ namespace Agrovesto.Backend.API.Controllers
     {
         private readonly ICafeOneWalletService _cafeOneWalletService;
         private readonly INigeriaStateImporterService _nigeriaStateImporterService;
-        private readonly IFlutterwaveService _flutterwaveService;
-        private readonly IGoogleDriveService _googleDriveService;
+      //  private readonly IFlutterwaveService _flutterwaveService;
+       // private readonly IGoogleDriveService _googleDriveService;
         private readonly IIdentityVerificationManager _verificationManager;
         private readonly IWalletProviderManager _walletProvider;
-        private readonly IWebHostEnvironment _hostingEnvironment;
+      //  private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly INotificationService _smsService;
         private readonly IBusinessManager _businessManager;
         private readonly ISettingsManager _settingsManager;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
-            IGoogleDriveService googleDriveService,
+        //    IGoogleDriveService googleDriveService,
             IIdentityVerificationManager verificationManager,
             INigeriaStateImporterService nigeriaStateImporterService,
-             IFlutterwaveService flutterwaveService,
-             IWebHostEnvironment hostingEnvironment, INotificationService smsService,
+            // IFlutterwaveService flutterwaveService,
+            // IWebHostEnvironment hostingEnvironment, 
+             INotificationService smsService,
              ISettingsManager settingsManager, IWalletProviderManager walletProvider, IBusinessManager businessManager)
         {
             _cafeOneWalletService = cafeOneWalletService;
-            _hostingEnvironment = hostingEnvironment;
+           // _hostingEnvironment = hostingEnvironment;
             _nigeriaStateImporterService = nigeriaStateImporterService;
-            _flutterwaveService = flutterwaveService;
+           // _flutterwaveService = flutterwaveService;
             _smsService = smsService;
-            _googleDriveService = googleDriveService;
+            //_googleDriveService = googleDriveService;
             _verificationManager = verificationManager;
             _settingsManager = settingsManager;
             _walletProvider = walletProvider;
@@ -209,12 +210,12 @@ namespace Agrovesto.Backend.API.Controllers
 
 
 
-        [HttpPost("supporting-image")]
-        public async Task<IActionResult> UploadImage([FromForm] SupportingDOcument model)
-        {
-            var imageUrl = await _googleDriveService.UploadFileAsync(model.File);
-            return Ok(new { imageUrl });
-        }
+        //[HttpPost("supporting-image")]
+        //public async Task<IActionResult> UploadImage([FromForm] SupportingDOcument model)
+        //{
+        //    var imageUrl = await _googleDriveService.UploadFileAsync(model.File);
+        //    return Ok(new { imageUrl });
+        //}
 
         [HttpGet("nin/{nin}")]
         [ProducesResponseType(typeof(NINDataVerificationResponse<NINData, Verification>), 200)]
@@ -262,9 +263,9 @@ namespace Agrovesto.Backend.API.Controllers
             return Ok(new Response<List<StateModel>>()
             {
                 Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
-                Succeeded = request != null,
-                Message = request == null ? "Failed" : "Success",
-                Data = request.Count > 0 ? request : null
+                Succeeded = true,
+                Message =  "Success",
+                Data = request
             });
         }
             catch (BaseException ex)
