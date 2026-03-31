@@ -38,6 +38,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsEmailVerified { get; set; } = false;
 
         public bool IsPinEnabled { get; set; } = false;
+      //  public string? DefaultPassword { get; set; }
+            public bool HasDefaultPassword { get; set; } = false;
+       // public string? DefaultPin { get; set; }
+        public bool HasDefaultPin { get; set; } = false;
     }
 
     public class UserOrganization
