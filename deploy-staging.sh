@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# Agrovesto Backend API — Production Release Deployment Script
+# Agrovesto Backend API — Production API Deployment Script
 # Zero-downtime oriented, rollback-capable, idempotent
 # ============================================================
 
@@ -10,16 +10,16 @@ set -Eeuo pipefail
 # CONFIGURATION
 # ------------------------------------------------------------
 APP_NAME="Agrovesto.Backend.API"
-DOMAIN="release-noma-api.com"
+DOMAIN="dev-noma-api.com"
 
-APP_DIR="/var/www/Agrovesto.Backend.Release"
+APP_DIR="/var/www/Agrovesto.Backend.API"
 RELEASES_DIR="$APP_DIR/releases"
 CURRENT_DIR="$APP_DIR/current"
 PREVIOUS_DIR="$APP_DIR/previous"
 
-SERVICE_FILE="/etc/systemd/system/Agrovesto.Backend.Release.service"
-ENV_FILE="/etc/Agrovesto.Backend.Release.env"
-NGINX_SITE="/etc/nginx/sites-available/Agrovesto.Backend.Release"
+SERVICE_FILE="/etc/systemd/system/Agrovesto.Backend.API.service"
+ENV_FILE="/etc/Agrovesto.Backend.API.env"
+NGINX_SITE="/etc/nginx/sites-available/Agrovesto.Backend.API"
 
 PROJECT_PATH="$APP_DIR/Agrovesto.Backend.API/Agrovesto.Backend.API.csproj"
 
@@ -27,7 +27,7 @@ USER_NAME="www-data"
 CI_USER="ubuntu"
 
 KEEP_RELEASES=3
-APP_PORT=5003
+APP_PORT=5000
 HEALTH_ENDPOINT="http://127.0.0.1:$APP_PORT/health"
 
 export HOME=/tmp
@@ -48,7 +48,7 @@ rollback() {
     err "Deployment failed. Rolling back..."
     if [ -L "$PREVIOUS_DIR" ]; then
         sudo ln -sfn "$(readlink -f "$PREVIOUS_DIR")" "$CURRENT_DIR"
-        sudo systemctl restart "Agrovesto.Backend.Release"
+        sudo systemctl restart "Agrovesto.Backend.API"
         log "Rollback complete."
     else
         err "No previous release found."
@@ -60,7 +60,7 @@ trap rollback ERR
 # ------------------------------------------------------------
 # PRECHECKS
 # ------------------------------------------------------------
-log "Starting deployment: Agrovesto.Backend.Release ($RELEASE_ID)"
+log "Starting deployment: Agrovesto.Backend.API ($RELEASE_ID)"
 
 command -v dotnet >/dev/null || { err "dotnet not installed"; exit 1; }
 command -v nginx  >/dev/null || { err "nginx not installed"; exit 1; }
@@ -75,7 +75,7 @@ sudo mkdir -p "$RELEASES_DIR"
 log "Building application..."
 
 dotnet publish "$PROJECT_PATH" \
-  -c Release \
+  -c API \
   --self-contained false \
   -o "$RELEASE_DIR"
 
@@ -103,7 +103,7 @@ sudo ln -sfn "$RELEASE_DIR" "$CURRENT_DIR"
 # START SERVICE
 # ------------------------------------------------------------
 log "Restarting application..."
-sudo systemctl restart "Agrovesto.Backend.Release"
+sudo systemctl restart "Agrovesto.Backend.API"
 
 sleep 5
 
@@ -132,6 +132,6 @@ ls -1dt "$RELEASES_DIR"/* | tail -n +$((KEEP_RELEASES+1)) | xargs -r sudo rm -rf
 log "Deployment successful!"
 echo ""
 echo "🌍 https://$DOMAIN"
-echo "📦 Release: $RELEASE_ID"
-echo "🔁 Rollback: ln -sfn \$(readlink -f $PREVIOUS_DIR) $CURRENT_DIR && systemctl restart Agrovesto.Backend.Release"
-echo "📜 Logs: journalctl -u Agrovesto.Backend.Release -f"
+echo "📦 API: $RELEASE_ID"
+echo "🔁 Rollback: ln -sfn \$(readlink -f $PREVIOUS_DIR) $CURRENT_DIR && systemctl restart Agrovesto.Backend.API"
+echo "📜 Logs: journalctl -u Agrovesto.Backend.API -f"
