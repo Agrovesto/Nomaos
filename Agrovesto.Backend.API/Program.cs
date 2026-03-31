@@ -1,4 +1,4 @@
-using Agrovesto.Backend.API.Extensions;
+﻿using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -42,6 +43,21 @@ var builder = WebApplication.CreateBuilder(args);
 
 //              );
 
+//builder.Services.AddDbContext<DataContext>(options =>
+//    options.UseSqlServer(
+//        builder.Configuration.GetConnectionString("DefaultConnection"),
+//        sqlOptions =>
+//        {
+//            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+//            sqlOptions.EnableRetryOnFailure(
+//                maxRetryCount: 5,
+//                maxRetryDelay: TimeSpan.FromSeconds(10),
+//                errorNumbersToAdd: null);
+//            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
+//        },
+//        c=>c.UseNetTopologySuite())
+//    );
+
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -52,9 +68,11 @@ builder.Services.AddDbContext<DataContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-        }));
-
+            sqlOptions.CommandTimeout(60);
+            sqlOptions.UseNetTopologySuite(); 
+        }
+    )
+);
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 
@@ -86,6 +104,10 @@ builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddAWSService<IAmazonRekognition>();
 
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50 MB
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(opt =>
@@ -158,7 +180,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSwaggerGen(option =>
 {
-    option.SwaggerDoc("v1", new OpenApiInfo { Title = "NOMAOS Platform", Version = "v1" });
+    option.SwaggerDoc("v1", new OpenApiInfo { Title = "NOMAOS Platform API", Version = "v1" });
     option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -187,7 +209,16 @@ builder.Services.AddSwaggerGen(option =>
    // option.OperationFilter<AddCustomHeaderParameter>();
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
 
+    // IMPORTANT for Linux + Nginx
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 // Add logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -214,7 +245,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
-
+app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -225,7 +256,7 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
-    c.DocumentTitle = "NOMAOS Platform";
+    c.DocumentTitle = "NOMAOS Platform API";
     //  c.RoutePrefix = "/docs";
 
 });

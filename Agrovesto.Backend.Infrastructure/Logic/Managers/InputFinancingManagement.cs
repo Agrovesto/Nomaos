@@ -38,11 +38,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ICafeOneWalletService _cafeOneWalletService;
         // private readonly IWalletRepository _walletRepository;
         private readonly INotificationService _whisperSMSService;
-        private readonly IFaceManager _faceManager;
+        private readonly IAWSRekognitionManager _faceManager;
         private readonly IConfiguration _configuration;
         private readonly IWalletManager _walletManager;
         public InputFinancingManagement(IFarmerCreditScoremanager farmerCreditScoremanager,IInputFinancingManagementRepository repository,
-            IFaceManager faceManager, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
+            IAWSRekognitionManager faceManager, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, ILogger<InputFinancingManagement> log, IWarehouseManagementRepository warehouseManagementRepository, INotificationService whisperSMSService,
             IFarmerRepository farmerRepository,
             ICafeOneWalletService cafeOneWalletService,
@@ -707,8 +707,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     var userWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
 
-                    if (userWallet != null)
-                    {
+                    //if (userWallet != null)
+                    //{
                         getInputInventory.TotalBundlePackageRequested = model.QuantityOfInterest;
                         var updateBundleSubscription = await _warehouseManagementRepository.UpdateBundleSubscriptions(getInputInventory);
                         //update bundke
@@ -718,14 +718,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         await dbTransaction.CommitAsync();
 
                         response.RepaymentBalance = model.EquityPaymentBalanceDeficit;
-                        response = await GenerateInputSubscriptionInterestPaymentSlip(response, userWallet, createWarehouse.data.ExpectedTotalEquityPrice);
+                        response = await GenerateInputSubscriptionInterestPaymentSlip(response, 
+                           // userWallet, 
+                            createWarehouse.data.ExpectedTotalEquityPrice);
 
 
                         await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer, business.BusinessName);
                         status = true;
-                    }
+                    //}
 
-                    status = false;
+                    //status = false;
 
                     //return (status, response);
 
@@ -757,17 +759,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             var selectedBundle = bundleOfInterest.Where(x => x.InterestedBundleId == model.InterestedBundleId).FirstOrDefault();
 
-            var receipt = await GenerateInputSubscriptionInterestPaymentSlip(response, userWallet, selectedBundle.ExpectedTotalEquityPrice);
+            var receipt = await GenerateInputSubscriptionInterestPaymentSlip(response,
+              //  userWallet, 
+                selectedBundle.ExpectedTotalEquityPrice);
 
             return response;
         }
         private async Task<BundleSubscriptionInterestResponseModel> GenerateInputSubscriptionInterestPaymentSlip(BundleSubscriptionInterestResponseModel response,
-           SterlingBankWalletModel userWallet,
+          // SterlingBankWalletModel userWallet,
            decimal ExpectedTotalEquityPrice)
         {
-            response.AccountName = userWallet.AccountName;
-            response.AccountNumber = userWallet.AccountNumber;
-            response.BankName = userWallet.BankName;
+            response.AccountName = "Bayo";//userWallet.AccountName;
+            response.AccountNumber = "8000121212";//userWallet.AccountNumber;
+            response.BankName = "Sterling";// userWallet.BankName;
             response.Amount = ExpectedTotalEquityPrice;
             response.RepaymentBalance = response.RepaymentBalance;
 

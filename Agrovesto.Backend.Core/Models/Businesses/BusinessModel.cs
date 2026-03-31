@@ -10,6 +10,25 @@ using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class CreateWalletRequest
+    {
+        public string PhoneNumber { get; set; }
+        public string FullName { get; set; }    
+        public string NIN { get; set; }
+        public string DOB { get; set; }
+        public string TransactionPin { get; set; }
+        public string? WalletProviderCode { get; set; }
+        public bool IsDefault { get; set; }
+    }
+    public class WalletQueryParams
+    {
+        public string businessCode { get; set; }
+        public string? UserId { get; set; }
+        public string? organizationCode { get; set; }
+        public long Id { get; set; }
+        public string? env { get; set; }
+      
+    }
     public class TransactionQueryParams
     {
         public int PageNumber { get; set; } = 1;
@@ -29,6 +48,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class ListQueryParams
     {
+        public string? FilterBy { get; set; }
         public long farmerId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
@@ -46,9 +66,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long Id { get; set; }
         public string? env { get; set; }
         public string? SelectedProviderCode { get; set; }
+        public bool? Status { get; set; } = null;
         // filters
         public string? MappingStatus { get; set; } // "Mapped" or "Unmapped"
         public string? CooperativeStatus { get; set; } // "Linked" or "Not Linked"
+        public string? PaymentStatus { get; set; } // "Linked" or "Not Linked"
+        public string? SalesContext { get; set; } // "Linked" or "Not Linked"
+        public string? FarmerUserId { get; set; } // "Linked" or "Not Linked"
     }
     public class BusinessRegistrationArgs
     {

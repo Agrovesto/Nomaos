@@ -19,33 +19,34 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
-    //public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
-    //{
-    //    public DataContext CreateDbContext(string[] args)
-    //    {
-    //        var config = new ConfigurationBuilder()
-    //            .SetBasePath(Directory.GetCurrentDirectory())
-    //            .AddJsonFile("appsettings.Development.json")
-    //            .Build();
+    public class DataContextFactory : IDesignTimeDbContextFactory<DataContext>
+    {
+        public DataContext CreateDbContext(string[] args)
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.Development.json")
+                .Build();
 
-    //        var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
-    //        optionsBuilder.UseSqlServer(
-    //          config.GetConnectionString("DefaultConnection"),
-    //    sqlOptions =>
-    //    {
-    //        sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-    //        sqlOptions.EnableRetryOnFailure(
-    //            maxRetryCount: 5,
-    //            maxRetryDelay: TimeSpan.FromSeconds(10),
-    //            errorNumbersToAdd: null);
-    //        sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-    //    });
+            var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
+            optionsBuilder.UseSqlServer(
+              config.GetConnectionString("DefaultConnection"),
+        sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+            sqlOptions.CommandTimeout(300);
+            sqlOptions.UseNetTopologySuite();
+        });
 
-    //        return new DataContext(optionsBuilder.Options);
-    //    }
-    //}
-   
-    
+            return new DataContext(optionsBuilder.Options);
+        }
+    }
+
+
     public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
@@ -57,6 +58,82 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<UserWallet>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.WalletProviderId })
+                      .IsUnique();
+
+                entity.Property(x => x.Currency)
+                      .HasMaxLength(3)
+                      .IsRequired();
+
+                entity.Property(x => x.WalletNumber)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(x => x.BelongToBusinessCode)
+                      .HasMaxLength(50);
+
+                entity.HasOne(x => x.WalletProvider)
+                      .WithMany()
+                      .HasForeignKey(x => x.WalletProviderId)
+                      .OnDelete(DeleteBehavior.Restrict);
+            });
+            modelBuilder.Entity<UserWalletContext>(entity =>
+            {
+                entity.HasIndex(x => new { x.UserId, x.ContextType, x.ContextReferenceId })
+                      .IsUnique();
+
+                entity.Property(x => x.ContextReferenceId)
+                      .HasMaxLength(100);
+
+                entity.HasOne(x => x.UserWallet)
+                      .WithMany(x => x.WalletContexts)
+                      .HasForeignKey(x => x.UserWalletId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(x => x.ContextType)
+                      .HasConversion<string>();
+            });
+            modelBuilder.Entity<UserWalletTransactions>(entity =>
+            {
+                entity.HasIndex(x => x.TransactionReference)
+                      .IsUnique();
+
+                entity.Property(x => x.TransactionReference)
+                      .HasMaxLength(50)
+                      .IsRequired();
+
+                entity.Property(x => x.Currency)
+                      .HasMaxLength(3)
+                      .IsRequired();
+
+                entity.Property(x => x.ProviderReference)
+                      .HasMaxLength(100);
+
+                entity.Property(x => x.ProviderStatus)
+                      .HasMaxLength(50);
+
+                entity.Property(x => x.TransactionDescription)
+                      .HasMaxLength(500);
+
+                entity.Property(x => x.ChargedTo)
+                      .HasMaxLength(100);
+
+                entity.Property(x => x.ChargedToId)
+                      .HasMaxLength(100);
+
+                entity.HasOne(x => x.UserWallet)
+                      .WithMany(x => x.Transactions)
+                      .HasForeignKey(x => x.UserWalletId)
+                      .OnDelete(DeleteBehavior.Restrict);
+
+                entity.Property(x => x.WalletTransactionType)
+                      .HasConversion<string>();
+
+                entity.Property(x => x.WalletTransactionStatus)
+                      .HasConversion<string>();
+            });
             modelBuilder.Entity<UserOrganization>()
                 .HasKey(uo => new
                 {
@@ -159,6 +236,40 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithOne(r => r.MandEDataset)
                 .HasForeignKey(r => r.MandEDatasetId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Farm>()
+                .HasKey(f => f.Id);
+
+            modelBuilder.Entity<Farm>()
+                .Property(f => f.FarmPolygon)
+                .HasColumnType("geography");
+            modelBuilder.Entity<OrganizationLocation>()
+              .HasOne(o => o.State)
+              .WithMany()
+              .HasForeignKey(o => o.StateId)
+              .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<OrganizationLocation>()
+                .HasOne(o => o.LGA)
+                .WithMany()
+                .HasForeignKey(o => o.LgaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<OrganizationLocation>()
+                .HasOne(o => o.LocationType)
+                .WithMany()
+                .HasForeignKey(o => o.LocationTypeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<OrganizationAgentRole>()
+                .HasOne(o => o.OrganizationRole)
+                .WithMany()
+                .HasForeignKey(o => o.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+            //modelBuilder.Entity<Farm>()
+            //    .HasIndex(f => f.FarmPolygon)
+            //    .HasDatabaseName("IX_Farm_Polygon")
+            //    .IsSpatial();
+
             //for market transaction
             //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
         }
@@ -174,6 +285,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
+        public DbSet<ActivityLog> ActivityLogs { get; set; }
+        public DbSet<MemberShipAgent> MemberShipAgents { get; set; }
         public DbSet<UserDevice> UserDevices { get; set; }
         public DbSet<MandEDataset> MandEDatasets { get; set; }
         public DbSet<MandEDataFieldDefinition> MandEDataFieldDefinitions { get; set; }
@@ -197,7 +310,15 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletProviderParameter> WalletProviderParameters { get; set; }
         public DbSet<SterlingBankWallet> SterlingBankWallets { get; set; }
         public DbSet<Agent> Agents { get; set; }
-        public DbSet<Cooperative> Cooperatives { get; set; }
+        public DbSet<LocationType> LocationTypes { get; set; }
+        public DbSet<OrganizationLocation> OrganizationLocations { get; set; }
+        public DbSet<OrganizationRole> OrganizationRoles { get; set; }
+        public DbSet<OrganizationAgentRole> OrganizationAgentRoles { get; set; }
+
+        public DbSet<OrganizationAgent> OrganizationAgents { get; set; }
+        public DbSet<MemberShip> MemberShips { get; set; }
+        public DbSet<MemberShipType> MemberShipTypes { get; set; }
+        public DbSet<OrganizationMembership> OrganizationMemberships { get; set; }
         public DbSet<Farmer> Farmers { get; set; }
         public DbSet<FarmerOrganization> FarmerOrganizations { get; set; }
         public DbSet<FarmerCooperative> FarmerCooperatives { get; set; }
@@ -229,8 +350,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
         public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
-       public DbSet<Wallet> Wallets { get; set; }
-       public DbSet<WalletTransaction> WalletTransactions { get; set; }
+
 
 
         public DbSet<OrganizationBundlePlans> OrganizationBundlePlans { get; set; }
@@ -243,12 +363,20 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<CooperativeCreditScore> CooperativeCreditScores { get; set; }
         public DbSet<InputFinancingScheme> InputFinancingSchemes { get; set; }
         public DbSet<InputSubscription> InputSubscriptions { get; set; }
-        public DbSet<FarmAllocation> FarmAllocations { get; set; }
+   
         public DbSet<Farm> Farms { get; set; }
         public DbSet<FarmMappingAuditTrail> FarmMappingAuditTrails { get; set; }
         public DbSet<FarmLandDocument> FarmLandDocuments { get; set; }
+        public DbSet<FarmAllocation> FarmAllocations { get; set; }
+        public DbSet<FarmCoordinate> FarmCoordinates { get; set; }
         public DbSet<KYCDetails> KYCDetails { get; set; }
-
+        public DbSet<UserWallet> UserWallets { get; set; }
+        public DbSet<WalletSecurity> WalletSecurities { get; set; }
+        public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
+        public DbSet<UserWalletContext> UserWalletContexts { get; set; }
+        public DbSet<InputTransaction> InputTransactions { get; set; }
+        public DbSet<InputAllocation> InputAllocations { get; set; }
+        public DbSet<Input> Inputs { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

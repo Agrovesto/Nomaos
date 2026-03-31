@@ -14,7 +14,6 @@
     <Folder Include="V2\Core\Billing\" />
     <Folder Include="V2\Core\Audit\" />
     <Folder Include="V2\Core\Tenancy\" />
-    <Folder Include="V2\Internal\" />
     <Folder Include="V2\Public\MandE\" />
     <Folder Include="V2\Public\Financing\" />
     <Folder Include="V2\Public\KYC\" />
@@ -29,6 +28,7 @@
     <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.2" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.502" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.502" />
+    <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
@@ -45,12 +45,14 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer.NetTopologySuite" Version="8.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.0" />
 <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
+<PackageReference Include="MimeKit" Version="4.15.1" />
      <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="NetTopologySuite.IO.GeoJSON" Version="4.0.0" />
