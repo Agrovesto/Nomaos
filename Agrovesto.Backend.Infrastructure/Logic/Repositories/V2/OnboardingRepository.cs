@@ -247,6 +247,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.PinEncrypt == hashedPin;
         }
+
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
     LoginModel model,
     string businessCode)
@@ -299,55 +300,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             return !string.IsNullOrWhiteSpace(user.PasswordHash);
         }
-        //public async Task<string> GenerateOtp(string userId)
-        //{
-        //    var code = new Random().Next(100000, 999999).ToString();
-
-        //    var otp = new UserOtp
-        //    {
-        //        UserId = userId,
-        //        Code = code,
-        //        CreatedOn = DateTime.UtcNow,
-        //        ExpiresAt = DateTime.UtcNow.AddMinutes(5),
-        //        IsUsed = false
-        //    };
-
-        //    _context.UserOtps.Add(otp);
-
-        //    await _context.SaveChangesAsync();
-
-        //    return code;
-        //}
-        //public async Task<bool> ValidateOtp(string userId, string otp)
-        //{
-        //    var record = await _context.UserOtps
-        //        .Where(x =>
-        //            x.UserId == userId &&
-        //            x.Code == otp &&
-        //            !x.IsUsed)
-        //        .OrderByDescending(x => x.CreatedOn)
-        //        .FirstOrDefaultAsync();
-
-        //    if (record == null)
-        //        return false;
-
-        //    if (record.ExpiresAt < DateTime.UtcNow)
-        //        return false;
-
-        //    record.IsUsed = true;
-
-        //    await _context.SaveChangesAsync();
-
-        //    return true;
-        //}
-       
+         
         private bool HasPin(User user)
         {
             return !string.IsNullOrWhiteSpace(user.PinEncrypt);
         }
         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
-      User user,
-      LoginModel model)
+   User user,
+   LoginModel model)
         {
             switch (model.LoginMethod)
             {
@@ -734,18 +694,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             bool updated = false;
 
-            if (string.IsNullOrEmpty(existingUser.Pin) && !string.IsNullOrEmpty(model.Pin))
+            // ✅ Update PIN
+            if (!string.IsNullOrWhiteSpace(model.Pin))
             {
                 var salt = EncryptionUtil.GetSalt();
-                existingUser.Pin = model.Pin;
+
                 existingUser.PinEncrypt = model.Pin.EncryptTransactionPin(salt);
                 existingUser.Salt = Convert.ToBase64String(salt);
+
+                // ✅ Remove default flag
+                existingUser.HasDefaultPin = false;
+
                 updated = true;
             }
 
-            if (string.IsNullOrEmpty(existingUser.Password) && !string.IsNullOrEmpty(model.Password))
+            // ✅ Update Password (USE IDENTITY)
+            if (!string.IsNullOrWhiteSpace(model.Password))
             {
-                existingUser.Password = model.Password;
+                // Remove old password
+                var removeResult = await _userManager.RemovePasswordAsync(existingUser);
+
+                if (!removeResult.Succeeded)
+                {
+                    throw new Exception("Failed to remove old password");
+                }
+
+                // Add new password (this hashes it properly)
+                var addResult = await _userManager.AddPasswordAsync(existingUser, model.Password);
+
+                if (!addResult.Succeeded)
+                {
+                    throw new Exception("Failed to set new password");
+                }
+
+                // ✅ Remove default flag
+                existingUser.HasDefaultPassword = false;
+
                 updated = true;
             }
 
@@ -754,6 +738,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await _context.SaveChangesAsync();
             }
         }
+        //private async Task UpdateMissingCredentials(User existingUser, OnboardingRequestModel model)
+        //{
+        //    bool updated = false;
+
+        //    if (string.IsNullOrEmpty(existingUser.Pin) && !string.IsNullOrEmpty(model.Pin))
+        //    {
+        //        var salt = EncryptionUtil.GetSalt();
+        //        existingUser.Pin = model.Pin;
+        //        existingUser.PinEncrypt = model.Pin.EncryptTransactionPin(salt);
+        //        existingUser.Salt = Convert.ToBase64String(salt);
+        //        updated = true;
+        //    }
+
+        //    if (string.IsNullOrEmpty(existingUser.Password) && !string.IsNullOrEmpty(model.Password))
+        //    {
+        //        existingUser.Password = model.Password;
+        //        updated = true;
+        //    }
+
+        //    if (updated)
+        //    {
+        //        await _context.SaveChangesAsync();
+        //    }
+        //}
         public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(
     OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -855,11 +863,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var salt = EncryptionUtil.GetSalt();
 
+            string defaultPin = "0000";
+            string defaultPassword = "Admin123";
+
+            var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
+        ? defaultPassword
+        : model.Password;
+
+            var pinToUse = string.IsNullOrWhiteSpace(model.Pin) && !string.IsNullOrWhiteSpace(model.PhoneNumber)
+                ? defaultPin
+                : model.Pin;
+
+            bool isDefaultPassword = string.IsNullOrWhiteSpace(model.Password);
+            bool isDefaultPin = string.IsNullOrWhiteSpace(model.Pin) && !string.IsNullOrWhiteSpace(model.PhoneNumber);
+
+
             var user = BuildUserEntity(model, args, salt);
 
-            IdentityResult createUser = string.IsNullOrEmpty(model.Password)
-                ? await _userManager.CreateAsync(user)
-                : await _userManager.CreateAsync(user, model.Password);
+            if (!string.IsNullOrEmpty(pinToUse))
+            {
+                user.PinEncrypt = pinToUse.EncryptTransactionPin(salt);
+            }
+
+            user.HasDefaultPassword = isDefaultPassword;
+            user.HasDefaultPin = isDefaultPin;
+
+            var createUser = await _userManager.CreateAsync(user, passwordToUse);
 
             if (!createUser.Succeeded)
             {
@@ -877,6 +906,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 "Registration Successful."
             );
         }
+        /**  private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
+           {
+               string defaultPin = "0000";
+               string defaultPassword = "Admin123";
+
+               // Set default PIN only if:
+               // - PIN is not supplied
+               // - Phone number exists
+               if (string.IsNullOrWhiteSpace(model.Pin) && !string.IsNullOrWhiteSpace(model.PhoneNumber))
+               {
+                   model.DefaultPin = defaultPin;
+               }
+
+               // Set default Password only if:
+               // - Password is not supplied
+               // - Email exists
+               if (string.IsNullOrWhiteSpace(model.Password) && !string.IsNullOrWhiteSpace(model.Email))
+               {
+                   model.DefaultPassword = defaultPassword;
+               }
+
+               return new User
+               {
+                   Id = GenerateUserId(args),
+                   UserName = model.Email ?? model.PhoneNumber,
+                   Email = model.Email,
+                   PhoneNumber = model.PhoneNumber,
+                   Pin = model.Pin,
+                   PinEncrypt = string.IsNullOrEmpty(model.Pin)
+                       ? null
+                       : model.Pin.EncryptTransactionPin(salt),
+                   Salt = Convert.ToBase64String(salt),
+                   Password = model.Password,
+                   CreatedOn = DateTimeOffset.Now,
+                   IsActive = true,
+                   UserType = args.userType,
+                   BusinessCode = args.businessCode,
+                   CreatedBy = args.UserId,
+                   Name = model.FullName,
+                   DefaultPassword = model.DefaultPassword,
+                   DefaultPin= model.DefaultPin,
+                   HasDefaultPassword = !string.IsNullOrEmpty(model.DefaultPassword),
+                   HasDefaultPin = !string.IsNullOrEmpty(model.DefaultPin)
+               };
+           }**/
+
         private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
         {
             return new User
@@ -885,19 +960,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserName = model.Email ?? model.PhoneNumber,
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber,
-                Pin = model.Pin,
-                PinEncrypt = string.IsNullOrEmpty(model.Pin)
-                    ? null
-                    : model.Pin.EncryptTransactionPin(salt),
                 Salt = Convert.ToBase64String(salt),
-                Password = model.Password,
                 CreatedOn = DateTimeOffset.Now,
                 IsActive = true,
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
-                CreatedBy=args.UserId,
-                Name= model.FullName
-                
+                CreatedBy = args.UserId,
+                Name = model.FullName
             };
         }
         private string GenerateUserId(OnBoardingArgs args)
@@ -937,7 +1006,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 Email = user.Email,
                 PhoneNumber = user.PhoneNumber,
-                Id = user.Id
+                Id = user.Id,
+                Pin= user.Pin,
+                Password=user.Password,
+                HasDefaultPin=user.HasDefaultPin,
+                HasDefaultPassword=user.HasDefaultPassword,
             };
         }
       /**  public async Task<(OnboardingRequestModel model, bool status, string message)> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args)
