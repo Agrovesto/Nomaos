@@ -4140,6 +4140,12 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<int>("FarmerOnboardingStatus")
                         .HasColumnType("int");
 
+                    b.Property<bool>("HasDefaultPassword")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("HasDefaultPin")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
