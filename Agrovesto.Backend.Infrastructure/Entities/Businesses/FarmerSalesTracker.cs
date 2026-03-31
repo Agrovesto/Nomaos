@@ -46,5 +46,23 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal PriceOfLowestUnit { get; set; }
         public double LowestUnitQuntity { get; set; }
         public string? OrganizationCode { get; set; }
+        public PaymentStatus PaymentStatus     { get; set; }
+        public SaleContextType ContextType { get; set; } = SaleContextType.Independent;
+    }
+    public enum SaleContextType
+    {
+        Independent = 1,
+        Agent=2,
+        Membership=3,
+        Organization = 4
+    }
+    public enum PaymentStatus
+    {
+        [Display(Name = "Pending")]
+        Pending,
+        [Display(Name = "Paid")]
+        Paid,
+        [Display(Name = "Cancelled")]
+        Cancelled
     }
 }

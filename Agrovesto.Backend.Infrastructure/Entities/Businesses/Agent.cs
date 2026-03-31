@@ -47,6 +47,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? AssignedByUserId { get; set; }
         public long LocationId { get; set; } //warehouse/aggregration centre, distribution centre etc
         public bool IsActive { get; set; } = true;
+
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
     }
     public class OrganizationAgentRole
     {
@@ -99,6 +102,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? Address { get; set; }
         public bool IsActive { get; set; }
         public string BusinessCode { get; set; }
+        public string? CreatedByUserId { get; set; }
+        public string? DeactivationReason { get; set; }
+        public string? DeactivatedByUserId { get; set; }
     }
     public class LocationType
     {
