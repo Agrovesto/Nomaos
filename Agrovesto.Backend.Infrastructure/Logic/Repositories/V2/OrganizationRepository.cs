@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args);
         Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args);
+        Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams args);
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
@@ -1543,7 +1544,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
         public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
-            ListQueryParams args)
+      ListQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(args.organizationCode))
                 throw new ValidationException("Organization code is required");
@@ -1551,118 +1552,166 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
 
-            var completedQuery =
-                from fo in _context.FarmerOrganizations
-                join f in _context.Farmers on fo.FarmerId equals f.Id
-                join u in _context.Users on f.UserId equals u.Id
-                where fo.OrganizationCode == args.organizationCode
-                      && fo.IsActive
-                select new
-                {
-                    UserId = u.Id,
-                    FarmerId = (long?)f.Id,
-                    FullName = u.Name,
-                    PhoneNumber = u.PhoneNumber,
-                    Email = u.Email,
-                    CreatedOn = u.CreatedOn,
-                    FarmerOnboardingStatus = u.FarmerOnboardingStatus,
-                    Name = f.Name,
-                    Gender = f.Gender,
-                    State = f.State,
-                    Lga = f.Lga,
-                    Ward = f.Ward,
-                    Location = f.Location,
-                    FarmerCategory = f.FarmerCategory,
-                    Level = (int?)f.Level,
-                    FarmerCreatedOn = (DateTimeOffset?)f.OnBoardedOn,
-                    IsPending = false
-                };
+            var skip = (args.PageNumber - 1) * args.PageSize;
 
-            var pendingQuery =
-                from u in _context.Users
-                where u.UserType == UserType.Farmer.ToString()
-                      && u.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed
-                      && u.CreatedBy == args.UserId // adjust if needed
-                select new
-                {
-                    UserId = u.Id,
-                    FarmerId = (long?)null,
-                    FullName = u.Name,
-                    PhoneNumber = u.PhoneNumber,
-                    Email = u.Email,
-                    CreatedOn = u.CreatedOn,
-                    FarmerOnboardingStatus = u.FarmerOnboardingStatus,
-                    Name = (string)null,
-                    Gender = (string)null,
-                    State = (string)null,
-                    Lga = (string)null,
-                    Ward = (string)null,
-                    Location = (string)null,
-                    FarmerCategory = (string)null,
-                    Level = (int?)null,
-                    FarmerCreatedOn = (DateTimeOffset?)null,
-                    IsPending = true
-                };
+            // =====================================================
+            // 1. COMPLETED FARMERS (Organization-linked farmers)
+            // =====================================================
+            var completedQuery = from fo in _context.FarmerOrganizations.AsNoTracking()
+                                 join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
+                                 join u in _context.Users.AsNoTracking() on f.UserId equals u.Id
+                                 where fo.OrganizationCode == args.organizationCode
+                                       && fo.IsActive
+                                 select new OrganizationFarmerResponse
+                                 {
+                                     FarmerId = f.Id,
+                                     UserId = u.Id,
+                                     Name = f.Name ?? u.Name,
+                                     PhoneNumber = u.PhoneNumber,
+                                     Email = u.Email,
+                                     Gender = f.Gender,
+                                     State = f.State,
+                                     Lga = f.Lga,
+                                     Ward = f.Ward,
+                                     Location = f.Location,
+                                     FarmerCategory = f.FarmerCategory,
+                                     Level = EnumExtensions.GetDisplayName((FarmerLevel)f.Level),
+                                     CreatedOn = f.OnBoardedOn == default ? u.CreatedOn : f.OnBoardedOn,
+                                     FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
+                                     IsPendingOnboarding = false
+                                 };
 
-            var unifiedQuery = completedQuery.Concat(pendingQuery);
+            // =====================================================
+            // 2. PENDING FARMERS (Not completed onboarding)
+            // =====================================================
+            var pendingQuery = from u in _context.Users.AsNoTracking()
+                               where u.UserType == UserType.Farmer.ToString()
+                                     && u.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed
+                                     && u.CreatedBy == args.UserId
+                               select new OrganizationFarmerResponse
+                               {
+                                   FarmerId = 0,
+                                   UserId = u.Id,
+                                   Name = u.Name,
+                                   PhoneNumber = u.PhoneNumber,
+                                   Email = u.Email,
+                                   Gender = null,
+                                   State = null,
+                                   Lga = null,
+                                   Ward = null,
+                                   Location = null,
+                                   FarmerCategory = null,
+                                   Level = "Pending",
+                                   CreatedOn = u.CreatedOn,
+                                   FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
+                                   IsPendingOnboarding = true
+                               };
 
-            var totalCount = await unifiedQuery.CountAsync();
+            // =====================================================
+            // 3. TOTAL COUNT (SEQUENTIAL - SAFE FOR DbContext)
+            // =====================================================
+            var completedCount = await _context.FarmerOrganizations
+                .AsNoTracking()
+                .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive)
+                .CountAsync();
 
-            var pagedData = await unifiedQuery
-                .OrderByDescending(x => x.FarmerCreatedOn ?? x.CreatedOn)
-                .Skip((args.PageNumber - 1) * args.PageSize)
-                .Take(args.PageSize)
+            var pendingCount = await _context.Users
+                .AsNoTracking()
+                .Where(x =>
+                    x.UserType == UserType.Farmer.ToString() &&
+                    x.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed &&
+                    x.CreatedBy == args.UserId)
+                .CountAsync();
+
+            var totalCount = completedCount + pendingCount;
+
+            // =====================================================
+            // 4. FETCH DATA (NO PARALLEL DB EXECUTION)
+            // =====================================================
+            var completedList = await completedQuery
+                .OrderByDescending(x => x.CreatedOn)
                 .ToListAsync();
 
-            var farmerIds = pagedData
-                .Where(x => x.FarmerId.HasValue)
-                .Select(x => x.FarmerId.Value)
+            var pendingList = await pendingQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .ToListAsync();
+
+            // =====================================================
+            // 5. MERGE + SORT + PAGINATE (IN MEMORY ONLY)
+            // =====================================================
+            var merged = completedList
+                .Concat(pendingList)
+                .OrderByDescending(x => x.CreatedOn)
                 .ToList();
 
-            var agentCounts = await _context.FarmerAgents
-                .Where(x => farmerIds.Contains(x.FarmerId))
-                .GroupBy(x => x.FarmerId)
-                .Select(g => new { g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.Key, x => x.Count);
+            var pagedData = merged
+                .Skip(skip)
+                .Take(args.PageSize)
+                .ToList();
 
-            var membershipCounts = await _context.FarmerCooperatives
-                .Where(x => farmerIds.Contains(x.FarmerId))
-                .GroupBy(x => x.FarmerId)
-                .Select(g => new { g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.Key, x => x.Count);
+            // =====================================================
+            // 6. AGGREGATIONS (ONLY FOR CURRENT PAGE)
+            // =====================================================
+            var farmerIds = pagedData
+                .Where(x => x.FarmerId > 0)
+                .Select(x => x.FarmerId.Value)
+                .Distinct()
+                .ToList();
 
-            var result = pagedData.Select(x =>
+            Dictionary<long, int> agentCounts = new();
+            Dictionary<long, int> membershipCounts = new();
+
+            if (farmerIds.Any())
             {
-                var isPending = x.FarmerId == null;
+                var agentCountsTask = _context.FarmerAgents
+                    .AsNoTracking()
+                    .Where(x => farmerIds.Contains(x.FarmerId))
+                    .GroupBy(x => x.FarmerId)
+                    .Select(g => new { g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Key, x => x.Count);
 
-                return new OrganizationFarmerResponse
-                {
-                    FarmerId = x.FarmerId ?? 0,
-                    UserId = x.UserId,
-                    Name = x.Name ?? x.FullName,
-                    PhoneNumber = x.PhoneNumber,
-                    Email = x.Email,
-                    Gender = x.Gender,
-                    State = x.State,
-                    Lga = x.Lga,
-                    Ward = x.Ward,
-                    Location = x.Location,
-                    FarmerCategory = x.FarmerCategory,
-                    Level = x.Level.HasValue
-                        ? EnumExtensions.GetDisplayName((FarmerLevel)x.Level.Value)
-                        : "Pending",
-                    CreatedOn = x.FarmerCreatedOn ?? x.CreatedOn,
-                    AgentCount = x.FarmerId.HasValue && agentCounts.ContainsKey(x.FarmerId.Value)
-                        ? agentCounts[x.FarmerId.Value]
-                        : 0,
-                    MembershipCount = x.FarmerId.HasValue && membershipCounts.ContainsKey(x.FarmerId.Value)
-                        ? membershipCounts[x.FarmerId.Value]
-                        : 0,
-                    FarmerOnboardingStatus = x.FarmerOnboardingStatus.ToString(),
-                    IsPendingOnboarding = isPending
-                };
+                var membershipCountsTask = _context.FarmerCooperatives
+                    .AsNoTracking()
+                    .Where(x => farmerIds.Contains(x.FarmerId))
+                    .GroupBy(x => x.FarmerId)
+                    .Select(g => new { g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+                agentCounts = await agentCountsTask;
+                membershipCounts = await membershipCountsTask;
+            }
+
+            // =====================================================
+            // 7. FINAL SHAPE
+            // =====================================================
+            var result = pagedData.Select(x => new OrganizationFarmerResponse
+            {
+                FarmerId = x.FarmerId,
+                UserId = x.UserId,
+                Name = x.Name,
+                PhoneNumber = x.PhoneNumber,
+                Email = x.Email,
+                Gender = x.Gender,
+                State = x.State,
+                Lga = x.Lga,
+                Ward = x.Ward,
+                Location = x.Location,
+                FarmerCategory = x.FarmerCategory,
+                Level = x.Level,
+                CreatedOn = x.CreatedOn,
+                FarmerOnboardingStatus = x.FarmerOnboardingStatus,
+                IsPendingOnboarding = x.IsPendingOnboarding,
+                AgentCount = x.FarmerId > 0 && agentCounts.TryGetValue(x.FarmerId.Value, out var a)
+                    ? a
+                    : 0,
+                MembershipCount = x.FarmerId > 0 && membershipCounts.TryGetValue(x.FarmerId.Value, out var m)
+                    ? m
+                    : 0
             }).ToList();
 
+            // =====================================================
+            // 8. RESPONSE
+            // =====================================================
             return new PagedListResponse<List<OrganizationFarmerResponse>>
             {
                 PageNumber = args.PageNumber,
@@ -1671,6 +1720,138 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Data = result
             };
         }
+        //public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
+        //    ListQueryParams args)
+        //{
+        //    if (string.IsNullOrWhiteSpace(args.organizationCode))
+        //        throw new ValidationException("Organization code is required");
+
+        //    args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+        //    args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+
+        //    var completedQuery =
+        //        from fo in _context.FarmerOrganizations
+        //        join f in _context.Farmers on fo.FarmerId equals f.Id
+        //        join u in _context.Users on f.UserId equals u.Id
+        //        where fo.OrganizationCode == args.organizationCode
+        //              && fo.IsActive
+        //        select new
+        //        {
+        //            UserId = u.Id,
+        //            FarmerId = (long?)f.Id,
+        //            FullName = u.Name,
+        //            PhoneNumber = u.PhoneNumber,
+        //            Email = u.Email,
+        //            CreatedOn = u.CreatedOn,
+        //            FarmerOnboardingStatus = u.FarmerOnboardingStatus,
+        //            Name = f.Name,
+        //            Gender = f.Gender,
+        //            State = f.State,
+        //            Lga = f.Lga,
+        //            Ward = f.Ward,
+        //            Location = f.Location,
+        //            FarmerCategory = f.FarmerCategory,
+        //            Level = (int?)f.Level,
+        //            FarmerCreatedOn = (DateTimeOffset?)f.OnBoardedOn,
+        //            IsPending = false
+        //        };
+
+        //    var pendingQuery =
+        //        from u in _context.Users
+        //        where u.UserType == UserType.Farmer.ToString()
+        //              && u.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed
+        //              && u.CreatedBy == args.UserId // adjust if needed
+        //        select new
+        //        {
+        //            UserId = u.Id,
+        //            FarmerId = (long?)null,
+        //            FullName = u.Name,
+        //            PhoneNumber = u.PhoneNumber,
+        //            Email = u.Email,
+        //            CreatedOn = u.CreatedOn,
+        //            FarmerOnboardingStatus = u.FarmerOnboardingStatus,
+        //            Name = (string)null,
+        //            Gender = (string)null,
+        //            State = (string)null,
+        //            Lga = (string)null,
+        //            Ward = (string)null,
+        //            Location = (string)null,
+        //            FarmerCategory = (string)null,
+        //            Level = (int?)null,
+        //            FarmerCreatedOn = (DateTimeOffset?)null,
+        //            IsPending = true
+        //        };
+
+        //    var unifiedQuery = completedQuery.Concat(pendingQuery);
+
+        //    var totalCount = await unifiedQuery.CountAsync();
+
+        //    var pagedData = await unifiedQuery
+        //        .OrderByDescending(x => x.FarmerCreatedOn ?? x.CreatedOn)
+        //        .Skip((args.PageNumber - 1) * args.PageSize)
+        //        .Take(args.PageSize)
+        //        .ToListAsync();
+
+        //    var farmerIds = pagedData
+        //        .Where(x => x.FarmerId.HasValue)
+        //        .Select(x => x.FarmerId.Value)
+        //        .ToList();
+
+        //    var agentCounts = await _context.FarmerAgents
+        //        .Where(x => farmerIds.Contains(x.FarmerId))
+        //        .GroupBy(x => x.FarmerId)
+        //        .Select(g => new { g.Key, Count = g.Count() })
+        //        .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        //    var membershipCounts = await _context.FarmerCooperatives
+        //        .Where(x => farmerIds.Contains(x.FarmerId))
+        //        .GroupBy(x => x.FarmerId)
+        //        .Select(g => new { g.Key, Count = g.Count() })
+        //        .ToDictionaryAsync(x => x.Key, x => x.Count);
+
+        //    var result = pagedData.Select(x =>
+        //    {
+        //        var isPending = x.FarmerId == null;
+
+        //        return new OrganizationFarmerResponse
+        //        {
+        //            FarmerId = x.FarmerId ?? 0,
+        //            UserId = x.UserId,
+        //            Name = x.Name ?? x.FullName,
+        //            PhoneNumber = x.PhoneNumber,
+        //            Email = x.Email,
+        //            Gender = x.Gender,
+        //            State = x.State,
+        //            Lga = x.Lga,
+        //            Ward = x.Ward,
+        //            Location = x.Location,
+        //            FarmerCategory = x.FarmerCategory,
+        //            Level = x.Level.HasValue
+        //                ? EnumExtensions.GetDisplayName((FarmerLevel)x.Level.Value)
+        //                : "Pending",
+        //            CreatedOn = x.FarmerCreatedOn ?? x.CreatedOn,
+        //            AgentCount = x.FarmerId.HasValue && agentCounts.ContainsKey(x.FarmerId.Value)
+        //                ? agentCounts[x.FarmerId.Value]
+        //                : 0,
+        //            MembershipCount = x.FarmerId.HasValue && membershipCounts.ContainsKey(x.FarmerId.Value)
+        //                ? membershipCounts[x.FarmerId.Value]
+        //                : 0,
+        //            FarmerOnboardingStatus = x.FarmerOnboardingStatus.ToString(),
+        //            IsPendingOnboarding = isPending
+        //        };
+        //    }).ToList();
+
+        //    return new PagedListResponse<List<OrganizationFarmerResponse>>
+        //    {
+        //        PageNumber = args.PageNumber,
+        //        PageSize = args.PageSize,
+        //        Count = totalCount,
+        //        Data = result
+        //    };
+        //}
+
+
+
         //    public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
         //ListQueryParams args)
         //    {
@@ -1844,7 +2025,77 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Memberships = memberships
             };
         }
-        
+        public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
+        {
+            if (args == null)
+                throw new ArgumentNullException(nameof(args));
+
+            if (string.IsNullOrWhiteSpace(args.organizationCode))
+                throw new ValidationException("Invalid Organization");
+
+            try
+            {
+                // ✅ Base Query (VERY IMPORTANT: reuse this)
+                var farmerOrgQuery = _context.FarmerOrganizations
+                    .AsNoTracking()
+                    .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive);
+
+                // ✅ TOTAL FARMERS
+                var totalFarmers = await farmerOrgQuery
+                    .Select(x => x.FarmerId)
+                    .Distinct()
+                    .CountAsync();
+
+                // ✅ ACTIVE FARMERS (Completed onboarding)
+                var activeFarmers = await (
+                    from fo in farmerOrgQuery
+                    join f in _context.Farmers on fo.FarmerId equals f.Id
+                    join u in _context.Users on f.UserId equals u.Id
+                    where u.FarmerOnboardingStatus == FarmerOnboardingStatus.Completed
+                    select f.Id
+                ).Distinct().CountAsync();
+
+                // ✅ FARMERS WITH LOANS
+                //var farmersWithLoans = await (
+                //    from fo in farmerOrgQuery
+                //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
+                //    where l.IsActive
+                //    select l.FarmerId
+                //).Distinct().CountAsync();
+
+                //// ✅ RECOVERY RATE
+                //// Assumption: LoanRepayments table exists
+                //var totalLoanAmount = await (
+                //    from fo in farmerOrgQuery
+                //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
+                //    where l.IsActive
+                //    select l.Amount
+                //).SumAsync() ?? 0;
+
+                //var totalRecoveredAmount = await (
+                //    from fo in farmerOrgQuery
+                //    join r in _context.Repayments on fo.FarmerId equals r.FarmerId
+                //    where r.IsSuccessful
+                //    select r.Amount
+                //).SumAsync() ?? 0;
+
+                //var recoveryRate = totalLoanAmount == 0
+                //    ? 0
+                //    : (totalRecoveredAmount / totalLoanAmount) * 100;
+
+                return new OrganizationFarmerDashboardResponse
+                {
+                    TotalFarmers = totalFarmers,
+                    ActiveFarmers = activeFarmers,
+                    FarmersWithLoans = 0,//farmersWithLoans,
+                    RecoveryRate = 0//Math.Round(recoveryRate, 2)
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception("Error retrieving organization farmer dashboard", ex);
+            }
+        }
 
         public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
         {

@@ -68,7 +68,7 @@ builder.Services.AddDbContext<DataContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(60);
+            sqlOptions.CommandTimeout(300);
             sqlOptions.UseNetTopologySuite(); 
         }
     )
@@ -125,10 +125,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         )
     };
 });
-//builder.Services.Configure<JwtBearerOptions>(options =>
-//{
-//    options.UseSecurityTokenValidators = true;
-//});
 builder.Services.Configure<FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
@@ -139,10 +135,8 @@ builder.Services.Configure<FormOptions>(o =>
 
 builder.Services.AddControllers();
 
-// Add health checks
 builder.Services.AddHttpClient();
 builder.Services.AddHealthChecks()
-    // Database health checks
     .AddDbContextCheck<DataContext>("Database", tags: new[] { "database", "critical" })
     .AddSqlServer(
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -151,7 +145,6 @@ builder.Services.AddHealthChecks()
         timeout: TimeSpan.FromSeconds(5),
         tags: new[] { "database", "critical" })
     
-    // External service health checks
     .AddCheck<IdentityPassHealthCheck>("IdentityPass API", tags: new[] { "external" })
     .AddCheck<TermiiSmsHealthCheck>("Termii SMS API", tags: new[] { "external" })
     .AddCheck<CountryStateCityApiHealthCheck>("Country State City API", tags: new[] { "external" })
@@ -164,7 +157,6 @@ builder.Services.AddHealthChecks()
        // options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
     }, name: "AWS S3", tags: new[] { "external", "storage" })
     
-    // API endpoint health checks
     .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
     .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
 
@@ -175,12 +167,15 @@ builder.Services.AddScoped<CountryStateCityApiHealthCheck>();
 builder.Services.AddScoped<SendGridHealthCheck>();
 builder.Services.AddScoped<ApiEndpointHealthCheck>();
 builder.Services.AddScoped<ApplicationComponentHealthCheck>();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSwaggerGen(option =>
 {
-    option.SwaggerDoc("v1", new OpenApiInfo { Title = "NOMAOS Platform API", Version = "v1" });
+    option.SwaggerDoc("v1", new OpenApiInfo
+    { 
+        Title = "NOMAOS Platform API",
+        Version = "v1" 
+    });
     option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -190,7 +185,13 @@ builder.Services.AddSwaggerGen(option =>
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
-
+    //option.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    //{
+    //    Description = "Enter your API Key",
+    //    Type = SecuritySchemeType.ApiKey,
+    //    Name = "x-api-key",
+    //    In = ParameterLocation.Header
+    //});
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -204,9 +205,20 @@ builder.Services.AddSwaggerGen(option =>
             },
             new string[]{}
         }
+        //,
+        //{
+        //    new OpenApiSecurityScheme
+        //    {
+        //        Reference = new OpenApiReference
+        //        {
+        //            Type = ReferenceType.SecurityScheme,
+        //            Id = "ApiKey"
+        //        }
+        //    },
+        //    new string[] {}
+        //}
     });
 
-   // option.OperationFilter<AddCustomHeaderParameter>();
 });
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -215,15 +227,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
         ForwardedHeaders.XForwardedFor |
         ForwardedHeaders.XForwardedProto;
 
-    // IMPORTANT for Linux + Nginx
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
-// Add logging
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Register your service
 builder.Services.AddHealthChecks();
 
 var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
@@ -247,19 +256,43 @@ var app = builder.Build();
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
-}
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
-    c.DocumentTitle = "NOMAOS Platform API";
-    //  c.RoutePrefix = "/docs";
 
-});
+    //app.UseWhen(
+    //ctx => ctx.Request.Path.StartsWithSegments("/swagger/v1/swagger.json"),
+    //swaggerApp =>
+    //{
+    //    swaggerApp.Use(async (context, next) =>
+    //    {
+    //        var allowedKey = "nomaos123456789t";
+    //        var providedKey = context.Request.Headers["x-api-key"];
+
+    //        if (providedKey != allowedKey)
+    //        {
+    //            context.Response.StatusCode = 403;
+    //            await context.Response.WriteAsync("Forbidden");
+    //            return;
+    //        }
+
+    //        await next();
+    //    });
+    //});
+   
+    
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
+        c.DocumentTitle = "NOMAOS Platform API";
+        //  c.RoutePrefix = "/docs";
+
+    });
+}
+
+
+
 //using (var scope = app.Services.CreateScope())
 //{
 //    var db = scope.ServiceProvider.GetRequiredService<DataContext>();

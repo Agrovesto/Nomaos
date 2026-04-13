@@ -30,7 +30,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #region AgentMgt
 
-        [HttpGet("agent-mgt-overview")]
+         [HttpGet("agent-mgt-overview")]
 
         public async Task<IActionResult> GetAgentManagementOverview([FromQuery] ListQueryParams query)
         {
@@ -1727,6 +1727,51 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+
+        [HttpGet("farmer-mgt-overview")]
+
+        public async Task<IActionResult> GetOrganizationFarmerDashboardAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.organizationCode = !string.IsNullOrEmpty(query.organizationCode) ? query.organizationCode : OrganizationCode;
+
+                if (string.IsNullOrEmpty(query.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+
+                var overview = await _organizationManager.GetOrganizationFarmerDashboardAsync(query);
+                return Ok(new Response<OrganizationFarmerDashboardResponse>()
+                {
+                    Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = overview
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("farmers")]
         public async Task<IActionResult> GetOrganizationFarmersAsync([FromQuery] ListQueryParams query)
         {

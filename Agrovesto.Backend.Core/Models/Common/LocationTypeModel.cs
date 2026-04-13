@@ -103,11 +103,31 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Message { get; set; }
         public bool RequiresProfileCompletion { get; set; }
     }
+    public class FarmerFlatRow
+    {
+        public string UserId { get; set; }
+        public long? FarmerId { get; set; }
+        public string Name { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Email { get; set; }
+        public string Gender { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string Ward { get; set; }
+        public string Location { get; set; }
+        public string FarmerCategory { get; set; }
+        public string Level { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        public string Status { get; set; }
+        public bool IsPending { get; set; }
+        public int AgentCount { get; set; }
+        public int MembershipCount { get; set; }
+    }
     public class OrganizationFarmerResponse
     {
         public string FarmerOnboardingStatus { get; set; }
         public bool IsPendingOnboarding { get; set; }
-        public long FarmerId { get; set; }
+        public long? FarmerId { get; set; }
         public string UserId { get; set; }
         public string Name { get; set; }
         public string PhoneNumber { get; set; }
@@ -123,7 +143,13 @@ namespace Agrovesto.Backend.Core.Models.Common
         public int MembershipCount { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
     }
-
+    public class OrganizationFarmerDashboardResponse
+    {
+        public int TotalFarmers { get; set; }
+        public int ActiveFarmers { get; set; }
+        public int FarmersWithLoans { get; set; }
+        public decimal RecoveryRate { get; set; }
+    }
     public class OrganizationFarmerDetailResponse
     {
         // Farmer Details
