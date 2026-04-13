@@ -12,9 +12,9 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
-   
 
 
+    
     public class UsersProfileResponse
     {
         public string UserId { get; set; }
@@ -175,6 +175,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Password { get; set; }
         public string? DefaultPassword { get; set; }
         public string? Email { get; set; }
+        public string? Bvn { get; set; }
+        public string? Nin { get; set; }
         public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;    
     }
