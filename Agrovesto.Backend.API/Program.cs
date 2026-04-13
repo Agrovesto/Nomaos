@@ -58,10 +58,10 @@ var builder = WebApplication.CreateBuilder(args);
 //        c=>c.UseNetTopologySuite())
 //    );
 
-//builder.Services.AddStackExchangeRedisCache(options =>
-//{
-//    options.Configuration = builder.Configuration["Redis:ConnectionString"];
-//});
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:ConnectionString"];
+});
 
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
