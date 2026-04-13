@@ -843,10 +843,10 @@ SELECT
 
                     LocationCount = x.LocationCount,
                     RoleCount = totalRoles,
-                    Subscribers = 10, //update when you have subscribers 
-                    InputDisbursed = 4320, // update when you have data
-                    EquityPaid = 8900000, // update when you have data
-                    ProductSold = 14200 //update when you have data
+                    Subscribers = 0, //TODO:update when you have subscribers 
+                    InputDisbursed = 0, //TODO:update when you have data
+                    EquityPaid = 0, //TODO:update when you have data
+                    ProductSold = 0 //TODO:update when you have data
 
                 };
             }).ToList();
