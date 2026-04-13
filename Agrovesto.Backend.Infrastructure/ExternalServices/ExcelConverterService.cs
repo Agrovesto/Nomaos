@@ -30,7 +30,42 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
             _cooperativeRepository = cooperativeRepository;
             _farmerRepository = farmerRepository;
         }
+        public List<BulkOnboardingExcelRow> BulkParseExcel(Stream fileStream)
+        {
+            var result = new List<BulkOnboardingExcelRow>();
 
+            using var workbook = new XLWorkbook(fileStream);
+            var worksheet = workbook.Worksheet(1);
+
+            var rows = worksheet.RangeUsed().RowsUsed().Skip(1);
+
+            foreach (var row in rows)
+            {
+                result.Add(new BulkOnboardingExcelRow
+                {
+                    FirstName = row.Cell(1).GetString(),
+                    MiddleName = row.Cell(2).GetString(),
+                    LastName = row.Cell(3).GetString(),
+                    DateOfBirth = row.Cell(4).GetString(),
+                    Gender = row.Cell(5).GetString(),
+                    StateOfResidence = row.Cell(6).GetString(),
+                    LGA = row.Cell(7).GetString(),
+                    Ward = row.Cell(8).GetString(),
+                    ResidentialAddress = row.Cell(9).GetString(),
+                    PhoneNumber = row.Cell(10).GetString(),
+                    Email = row.Cell(11).GetString(),
+                    CategoryOfFarmer = row.Cell(12).GetString(),
+                    PartOfAgriculture = row.Cell(13).GetString(),
+                    ProductTypes = row.Cell(14).GetString(),
+                    YearsInAgric = row.Cell(15).GetString(),
+                    HighestLevelOfEducation = row.Cell(16).GetString(),
+                    BVN = row.Cell(17).GetString(),
+                    NIN = row.Cell(18).GetString()
+                });
+            }
+
+            return result;
+        }
         public List<BulkOnboardingExcelRow> ParseExcel(Stream fileStream)
         {
             var result = new List<BulkOnboardingExcelRow>();

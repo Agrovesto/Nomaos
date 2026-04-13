@@ -367,11 +367,7 @@ OnboardingRequestModel user,
         }
         public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query)
         {
-           
-            var profile = await _membershipRepository.GetMembershipDetailByUserId(query.UserId);
-            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
-
-            return await _membershipRepository.GetMembershipDashboardAsync(profile.Id);
+            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

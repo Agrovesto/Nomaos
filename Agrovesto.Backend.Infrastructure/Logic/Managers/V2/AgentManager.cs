@@ -85,10 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
-
-                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+               
                 var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
                 if (farmers == null) return new PagedListResponse<List<FarmerAgentDto>>
                 {

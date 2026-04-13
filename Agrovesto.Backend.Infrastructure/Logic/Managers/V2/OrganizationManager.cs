@@ -11,13 +11,16 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
+using EFCore.BulkExtensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -31,7 +34,6 @@ using System.Threading.Tasks;
 using static ClosedXML.Excel.XLPredefinedFormat;
 using DateTime = System.DateTime;
 using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
-
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOrganizationManager
@@ -63,6 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query);
         Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args);
+        Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams query);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
@@ -88,6 +91,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ISalesRepository _salesRepository;
         private readonly RoleManager<Role> _roleManager;
         private readonly DataContext _context;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IBackgroundTaskQueue _taskQueue;
         public OrganizationManager(
             IExcelConverterService excelConverterService,
             IWalletManager walletManager,
@@ -104,7 +109,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             RoleManager<Role> roleManager,
             ISalesRepository salesRepository,
             DataContext context,
-              ILogger<OrganizationManager> log)
+              ILogger<OrganizationManager> log,
+              IBackgroundTaskQueue taskQueue,
+              IServiceScopeFactory scopeFactory)
         {
             _context=context;
             _excelConverterService = excelConverterService;
@@ -122,16 +129,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _membershipRepository = membershipRepository;
             _salesRepository = salesRepository;
             _roleManager = roleManager;
-
+            _taskQueue = taskQueue;
+            _scopeFactory=scopeFactory;
         }
 
         #region bulkupload
-        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
+
+        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+            Stream excelStream,
+            OnBoardingArgs args)
         {
             if (excelStream == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+            // Copy stream to memory so we can both inspect and save to disk for background processing
+            using var ms = new MemoryStream();
+            await excelStream.CopyToAsync(ms);
+            ms.Position = 0;
 
-            var rows = _excelConverterService.ParseExcel(excelStream);
+            var rows = _excelConverterService.BulkParseExcel(ms);
 
             if (!rows.Any())
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
@@ -139,222 +154,298 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var result = new BulkOnboardingResult
             {
                 Total = rows.Count,
-                Errors = new List<BulkOnboardingError>()
+                Errors = new List<BulkOnboardingError>(),
+                Successful = 0
             };
 
-            const int batchSize = 500;
-            int rowNumber = 2;
-
-            foreach (var batch in rows.Select((x, i) => new { x, i })
-                                      .GroupBy(x => x.i / batchSize)
-                                      .Select(g => g.Select(v => v.x).ToList()))
+            // Persist file to temp location for background worker
+            var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+            Directory.CreateDirectory(tempDir);
+            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+            ms.Position = 0;
+            await using (var fs = File.Create(tmpFile))
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var usersToCreate = new List<User>();
-                    var farmersToCreate = new List<Farmer>();
-
-                    // ---------------------------
-                    // STEP 1: VALIDATE + BUILD
-                    // ---------------------------
-                    foreach (var row in batch)
-                    {
-                        try
-                        {
-                            if (string.IsNullOrWhiteSpace(row.FirstName) || string.IsNullOrWhiteSpace(row.LastName))
-                                throw new Exception("FirstName and LastName are required.");
-
-                            if (!long.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
-                                throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
-
-                            if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
-                                throw new Exception("Either PhoneNumber or Email is required.");
-
-                            var valueChains = GetValueChains(row);
-
-                            var farmer = new Farmer
-                            {
-                                Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
-                                Email = row.Email,
-                                PhoneNumber = row.PhoneNumber,
-                                Gender = row.Gender,
-                                State = row.StateOfResidence,
-                                Lga = row.LGA,
-                                Ward = row.Ward,
-                                Location = row.ResidentialAddress,
-                                FarmerCategory = row.CategoryOfFarmer,
-                                YearsInAgric = years,
-                                Level = FarmerLevel.Level1,
-                                HighestLevelOfEducation = row.HighestLevelOfEducation,
-                                OnBoardedOn = DateTimeOffset.UtcNow,
-                                SelectedItems = valueChains
-                            };
-
-                            farmersToCreate.Add(farmer);
-
-                            var salt = EncryptionUtil.GetSalt();
-
-                            var user = BuildUserEntity(new OnboardingRequestModel
-                            {
-                                Email = row.Email,
-                                PhoneNumber = row.PhoneNumber,
-                                Password = "Admin123@",
-                                Pin = "0000",
-                                FirstName = row.FirstName,
-                                MiddleName = row.MiddleName,
-                                LastName = row.LastName
-                            }, args, salt);
-
-                            usersToCreate.Add(user);
-                        }
-                        catch (Exception ex)
-                        {
-                            result.Errors.Add(new BulkOnboardingError
-                            {
-                                RowNumber = rowNumber,
-                                Email = row.Email,
-                                Error = ex.Message
-                            });
-                        }
-
-                        rowNumber++;
-                    }
-
-                    // ---------------------------
-                    // STEP 2: HANDLE DUPLICATES
-                    // ---------------------------
-                    var emails = usersToCreate.Where(x => x.Email != null).Select(x => x.Email).ToList();
-                    var phones = usersToCreate.Where(x => x.PhoneNumber != null).Select(x => x.PhoneNumber).ToList();
-
-                    var existingUsers = await _context.Users
-                        .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
-                        .ToListAsync();
-
-                    foreach (var user in usersToCreate.ToList())
-                    {
-                        var existing = existingUsers.FirstOrDefault(x =>
-                            x.Email == user.Email || x.PhoneNumber == user.PhoneNumber);
-
-                        if (existing != null)
-                        {
-                            var farmer = farmersToCreate.First(f =>
-                                f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                            farmer.UserId = existing.Id;
-                            usersToCreate.Remove(user);
-                        }
-                    }
-
-                    // ---------------------------
-                    // STEP 3: SAVE USERS
-                    // ---------------------------
-                    if (usersToCreate.Any())
-                    {
-                        await _context.Users.AddRangeAsync(usersToCreate);
-                        await _context.SaveChangesAsync();
-
-                        foreach (var user in usersToCreate)
-                        {
-                            var farmer = farmersToCreate.First(f =>
-                                f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                            farmer.UserId = user.Id;
-                        }
-                    }
-
-                    // ---------------------------
-                    // STEP 4: SAVE FARMERS
-                    // ---------------------------
-                    if (farmersToCreate.Any())
-                    {
-                        await _context.Farmers.AddRangeAsync(farmersToCreate);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ---------------------------
-                    // STEP 5: VALUE CHAINS
-                    // ---------------------------
-                    var valueChainItems = new List<FarmerValueChainItem>();
-
-                    foreach (var farmer in farmersToCreate)
-                    {
-                        foreach (var vc in farmer.SelectedItems ?? new())
-                        {
-                            foreach (var item in vc.Items ?? new())
-                            {
-                                valueChainItems.Add(new FarmerValueChainItem
-                                {
-                                    FarmerId = farmer.Id,
-                                    ValueChainType = vc.ValueChainType,
-                                    ItemName = item
-                                });
-                            }
-                        }
-                    }
-
-                    if (valueChainItems.Any())
-                    {
-                        await _context.FarmerValueChainItems.AddRangeAsync(valueChainItems);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ---------------------------
-                    // STEP 6: FARMER ORGANIZATION
-                    // ---------------------------
-                    var farmerOrgMappings = farmersToCreate
-                        .Select(f => new FarmerOrganization
-                        {
-                            FarmerId = f.Id,
-                            OrganizationCode = args.organizationCode,
-                            OnboardedByUserId = args.OnboardedByUserId
-                        })
-                        .ToList();
-
-                    var farmerIds = farmerOrgMappings.Select(x => x.FarmerId).ToList();
-
-                    var existingMappings = await _context.FarmerOrganizations
-                        .Where(x => farmerIds.Contains(x.FarmerId) &&
-                                    x.OrganizationCode == args.organizationCode)
-                        .ToListAsync();
-
-                    var existingSet = new HashSet<string>(
-                        existingMappings.Select(x => $"{x.FarmerId}-{x.OrganizationCode}")
-                    );
-
-                    var newMappings = farmerOrgMappings
-                        .Where(m => !existingSet.Contains($"{m.FarmerId}-{m.OrganizationCode}"))
-                        .ToList();
-
-                    if (newMappings.Any())
-                    {
-                        await _context.FarmerOrganizations.AddRangeAsync(newMappings);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ✅ COMMIT BATCH
-                    await transaction.CommitAsync();
-
-                    result.Successful += farmersToCreate.Count;
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-
-                    result.Errors.Add(new BulkOnboardingError
-                    {
-                        RowNumber = rowNumber,
-                        Error = "Batch failed: " + ex.Message
-                    });
-
-                    result.Failed += batch.Count;
-                }
+                ms.Position = 0;
+                await ms.CopyToAsync(fs);
+                await fs.FlushAsync();
             }
 
-            return result;
-        }  // --- Helpers ---
-        private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
+            // Validate background queue and scope factory to avoid NullReferenceException
+            if (_taskQueue == null || _scopeFactory == null)
+            {
+                // Fail fast with a clear message instead of allowing a NullReferenceException
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
+            }
+
+            // Queue background work item that calls processor
+            _taskQueue.QueueTask(async cancellationToken =>
+            {
+                try
+                {
+                    if (_scopeFactory == null)
+                    {
+                        // Should not happen due to the earlier check, but guard anyway
+                        return;
+                    }
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+
+                    result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+
+                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
+                      }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        if (_scopeFactory != null)
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                        }
+                    }
+                    catch { }
+                }
+            });
+
+            return result; 
+    }
+
+    /** public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
+     {
+         if (excelStream == null)
+             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+
+         var rows = _excelConverterService.BulkParseExcel(excelStream);
+
+         if (!rows.Any())
+             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+
+         var result = new BulkOnboardingResult
+         {
+             Total = rows.Count,
+             Errors = new List<BulkOnboardingError>()
+         };
+
+         const int batchSize = 500;
+         int rowNumber = 2;
+
+         foreach (var batch in rows.Select((x, i) => new { x, i })
+                                   .GroupBy(x => x.i / batchSize)
+                                   .Select(g => g.Select(v => v.x).ToList()))
+         {
+             using var transaction = await _context.Database.BeginTransactionAsync();
+
+             try
+             {
+                 var usersToCreate = new List<User>();
+                 var farmersToCreate = new List<Farmer>();
+
+                 // ---------------------------
+                 // STEP 1: VALIDATE + BUILD
+                 // ---------------------------
+                 foreach (var row in batch)
+                 {
+                     try
+                     {
+                         if (string.IsNullOrWhiteSpace(row.FirstName) || string.IsNullOrWhiteSpace(row.LastName))
+                             throw new Exception("FirstName and LastName are required.");
+
+                         if (!long.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
+                             throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
+
+                         if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
+                             throw new Exception("Either PhoneNumber or Email is required.");
+
+                         var valueChains = GetValueChains(row);
+
+                         var farmer = new Farmer
+                         {
+                             Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
+                             Email = row.Email,
+                             PhoneNumber = row.PhoneNumber,
+                             Gender = row.Gender,
+                             State = row.StateOfResidence,
+                             Lga = row.LGA,
+                             Ward = row.Ward,
+                             Location = row.ResidentialAddress,
+                             FarmerCategory = row.CategoryOfFarmer,
+                             YearsInAgric = years,
+                             Level = FarmerLevel.Level1,
+                             HighestLevelOfEducation = row.HighestLevelOfEducation,
+                             OnBoardedOn = DateTimeOffset.UtcNow,
+                             SelectedItems = valueChains
+                         };
+
+                         farmersToCreate.Add(farmer);
+
+                         var salt = EncryptionUtil.GetSalt();
+
+                         var user = BuildUserEntity(new OnboardingRequestModel
+                         {
+                             Email = row.Email,
+                             PhoneNumber = row.PhoneNumber,
+                             Password = "Admin123@",
+                             Pin = "0000",
+                             FirstName = row.FirstName,
+                             MiddleName = row.MiddleName,
+                             LastName = row.LastName
+                         }, args, salt);
+
+                         usersToCreate.Add(user);
+                     }
+                     catch (Exception ex)
+                     {
+                         result.Errors.Add(new BulkOnboardingError
+                         {
+                             RowNumber = rowNumber,
+                             Email = row.Email,
+                             Error = ex.Message
+                         });
+                     }
+
+                     rowNumber++;
+                 }
+
+                 // ---------------------------
+                 // STEP 2: HANDLE DUPLICATES
+                 // ---------------------------
+                 var emails = usersToCreate.Where(x => x.Email != null).Select(x => x.Email).ToList();
+                 var phones = usersToCreate.Where(x => x.PhoneNumber != null).Select(x => x.PhoneNumber).ToList();
+
+                 var existingUsers = await _context.Users
+                     .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
+                     .ToListAsync();
+
+                 foreach (var user in usersToCreate.ToList())
+                 {
+                     var existing = existingUsers.FirstOrDefault(x =>
+                         x.Email == user.Email || x.PhoneNumber == user.PhoneNumber);
+
+                     if (existing != null)
+                     {
+                         var farmer = farmersToCreate.First(f =>
+                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
+
+                         farmer.UserId = existing.Id;
+                         usersToCreate.Remove(user);
+                     }
+                 }
+
+                 // ---------------------------
+                 // STEP 3: SAVE USERS
+                 // ---------------------------
+                 if (usersToCreate.Any())
+                 {
+                     await _context.Users.AddRangeAsync(usersToCreate);
+                     await _context.SaveChangesAsync();
+
+                     foreach (var user in usersToCreate)
+                     {
+                         var farmer = farmersToCreate.First(f =>
+                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
+
+                         farmer.UserId = user.Id;
+                     }
+                 }
+
+                 // ---------------------------
+                 // STEP 4: SAVE FARMERS
+                 // ---------------------------
+                 if (farmersToCreate.Any())
+                 {
+                     await _context.Farmers.AddRangeAsync(farmersToCreate);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ---------------------------
+                 // STEP 5: VALUE CHAINS
+                 // ---------------------------
+                 var valueChainItems = new List<FarmerValueChainItem>();
+
+                 foreach (var farmer in farmersToCreate)
+                 {
+                     foreach (var vc in farmer.SelectedItems ?? new())
+                     {
+                         foreach (var item in vc.Items ?? new())
+                         {
+                             valueChainItems.Add(new FarmerValueChainItem
+                             {
+                                 FarmerId = farmer.Id,
+                                 ValueChainType = vc.ValueChainType,
+                                 ItemName = item
+                             });
+                         }
+                     }
+                 }
+
+                 if (valueChainItems.Any())
+                 {
+                     await _context.FarmerValueChainItems.AddRangeAsync(valueChainItems);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ---------------------------
+                 // STEP 6: FARMER ORGANIZATION
+                 // ---------------------------
+                 var farmerOrgMappings = farmersToCreate
+                     .Select(f => new FarmerOrganization
+                     {
+                         FarmerId = f.Id,
+                         OrganizationCode = args.organizationCode,
+                         OnboardedByUserId = args.OnboardedByUserId
+                     })
+                     .ToList();
+
+                 var farmerIds = farmerOrgMappings.Select(x => x.FarmerId).ToList();
+
+                 var existingMappings = await _context.FarmerOrganizations
+                     .Where(x => farmerIds.Contains(x.FarmerId) &&
+                                 x.OrganizationCode == args.organizationCode)
+                     .ToListAsync();
+
+                 var existingSet = new HashSet<string>(
+                     existingMappings.Select(x => $"{x.FarmerId}-{x.OrganizationCode}")
+                 );
+
+                 var newMappings = farmerOrgMappings
+                     .Where(m => !existingSet.Contains($"{m.FarmerId}-{m.OrganizationCode}"))
+                     .ToList();
+
+                 if (newMappings.Any())
+                 {
+                     await _context.FarmerOrganizations.AddRangeAsync(newMappings);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ✅ COMMIT BATCH
+                 await transaction.CommitAsync();
+
+                 result.Successful += farmersToCreate.Count;
+             }
+             catch (Exception ex)
+             {
+                 await transaction.RollbackAsync();
+
+                 result.Errors.Add(new BulkOnboardingError
+                 {
+                     RowNumber = rowNumber,
+                     Error = "Batch failed: " + ex.Message
+                 });
+
+                 result.Failed += batch.Count;
+             }
+         }
+
+         return result;
+     }  // --- Helpers ---
+    
+     **/
+    private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
         {
             if (string.IsNullOrWhiteSpace(row.PartOfAgriculture))
                 return new List<ValueChainSelectionDto>();
@@ -1586,8 +1677,25 @@ DateTimeOffset dateTime)
                     $"{fieldName} must contain only numbers."
                 );
         }
+        public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
+        {
 
-        public async Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query)
+            try
+            {
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (hasOrg != null)
+                {
+                    args.Id = hasOrg.OrganizaionId;
+                }
+                return await _organizationRepository.GetOrganizationFarmerDashboardAsync(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+         
+        }
+            public async Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query)
         {
             await EnrichFarmerAsync(query);
             var farmer = await _organizationRepository.GetFarmerDetailsAsync(query);
