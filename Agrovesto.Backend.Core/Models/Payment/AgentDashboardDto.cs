@@ -51,7 +51,25 @@ namespace Agrovesto.Backend.Core.Models.Payment
 
         public DateTimeOffset Date { get; set; }
     }
+    public class MembershipDashboardFlatDto
+    {
+        public string UserId { get; set; }
+        public long MembershipId { get; set; }
+        public string Name { get; set; }
+        public string MembershipType { get; set; }
+        public string Status { get; set; }
+        public DateTime DateCreated { get; set; }
+        public string Location { get; set; }
 
+        public int TotalAgents { get; set; }
+        public int TotalFarmers { get; set; }
+        public int TotalFarms { get; set; }
+        public double TotalFarmSize { get; set; }
+
+        public int Completed { get; set; }
+        public int InProgress { get; set; }
+        public int NotStarted { get; set; }
+    }
     public class MembershipDashboardDto
     {
         public MembershipInfoDto Membership { get; set; }

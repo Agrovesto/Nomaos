@@ -8,12 +8,16 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Runtime.Internal.Util;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using PhoneNumbers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
@@ -22,10 +26,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class MembershipRepository : IMembershipRepository
     {
         private readonly DataContext _context;
-
-        public MembershipRepository(DataContext context)
+        private readonly IDistributedCache _cache;
+        public MembershipRepository(DataContext context, IDistributedCache cache)
         {
             _context = context;
+            _cache = cache;
         }
         public async Task<MemberShipModel> AssignMembershipToAgents(AssignmentArgs args, long membershipId)
         {
@@ -77,81 +82,87 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
+        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId)
         {
-            // 1️⃣ Membership Info + Status
-            var membership = await _context.MemberShips
-                .Where(m => m.Id == membershipId)
-                .Select(m => new MembershipInfoDto
-                {
-                    UserId=m.UserId,
-                    MembershipId = m.Id,
-                    Name = m.Name,
-                    MembershipType = m.MemberShipType.Name,
-                    Status = m.IsActive ? "Active" : "Inactive",
-                    DateCreated = m.OnBoardedOn,
-                    Location = m.Location
-                })
-                .FirstOrDefaultAsync();
-
-            if (membership == null)
+            if (string.IsNullOrWhiteSpace(membershipuserId))
                 throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
 
-            // 2️⃣ Farmer IDs Linked to Membership
-            var farmerQuery = _context.FarmerCooperatives
-                .Where(fc => fc.CooperativeId == membershipId)
-                .Select(fc => fc.FarmerId)
-                .Distinct();
+            // =========================
+            // 1. MAIN DASHBOARD (SQL)
+            // =========================
+            var dashboard = await _context.Set<MembershipDashboardFlatDto>()
+                .FromSqlRaw(@"
+SELECT
+    m.UserId,
+    m.Id AS MembershipId,
+    m.Name,
+    mt.Name AS MembershipType,
+    CASE WHEN m.IsActive = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
+    m.OnBoardedOn AS DateCreated,
+    m.Location,
 
-            var totalFarmers = await farmerQuery.CountAsync();
+    -- Summary
+    (SELECT COUNT(DISTINCT ma.AgentId)
+     FROM MemberShipAgents ma
+     WHERE ma.MemberShipId = m.Id) AS TotalAgents,
 
-            // 3️⃣ Agent Overview
-            var membershipQuery = _context.MemberShipAgents
-               .Where(fc => fc.MemberShipId == membershipId)
-               .Select(fc => fc.AgentId)
-               .Distinct();
+    (SELECT COUNT(DISTINCT fc.FarmerId)
+     FROM FarmerCooperatives fc
+     WHERE fc.CooperativeId = m.Id) AS TotalFarmers,
 
-            var totalAgents = await membershipQuery.CountAsync();
+    (SELECT COUNT(*)
+     FROM Farms f
+     WHERE f.FarmerId IN (
+         SELECT fc.FarmerId
+         FROM FarmerCooperatives fc
+         WHERE fc.CooperativeId = m.Id
+     )) AS TotalFarms,
 
-            // 4️⃣ Farm Overview
-            var farmQuery = _context.Farms
-                .Where(f => farmerQuery.Contains(f.FarmerId));
+    (SELECT ISNULL(SUM(f.FarmSizeInSqMetre), 0)
+     FROM Farms f
+     WHERE f.FarmerId IN (
+         SELECT fc.FarmerId
+         FROM FarmerCooperatives fc
+         WHERE fc.CooperativeId = m.Id
+     )) AS TotalFarmSize,
 
-            var totalFarms = await farmQuery.CountAsync();
+    -- Mapping Progress
+    (SELECT COUNT(*)
+     FROM Farms f
+     WHERE f.MappingStatus = 2 AND f.FarmerId IN (
+         SELECT fc.FarmerId FROM FarmerCooperatives fc WHERE fc.CooperativeId = m.Id
+     )) AS Completed,
 
-            var farmSizeTotal = await farmQuery
-                .SumAsync(f => (double?)f.FarmSizeInSqMetre) ?? 0;
+    (SELECT COUNT(*)
+     FROM Farms f
+     WHERE f.MappingStatus = 1 AND f.FarmerId IN (
+         SELECT fc.FarmerId FROM FarmerCooperatives fc WHERE fc.CooperativeId = m.Id
+     )) AS InProgress,
 
-            // 5️⃣ Mapping Progress
-            var mappingStats = await farmQuery
-                .GroupBy(f => f.MappingStatus)
-                .Select(g => new
-                {
-                    Status = g.Key,
-                    Count = g.Count()
-                })
-                .ToListAsync();
+    (SELECT COUNT(*)
+     FROM Farms f
+     WHERE f.MappingStatus = 0 AND f.FarmerId IN (
+         SELECT fc.FarmerId FROM FarmerCooperatives fc WHERE fc.CooperativeId = m.Id
+     )) AS NotStarted
 
-            var completed = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.Verified)?.Count ?? 0;
+FROM MemberShips m
+LEFT JOIN MemberShipTypes mt ON m.MemberShipTypeId = mt.Id
+WHERE m.UserId = @userId
+",
+                new SqlParameter("@userId", membershipuserId))
+                .AsNoTracking()
+                .FirstOrDefaultAsync();
 
-            var inProgress = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.Mapped)?.Count ?? 0;
+            if (dashboard == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
 
-            var notStarted = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.UnMapped)?.Count ?? 0;
-
-            var mappingPercentage = totalFarms == 0
-                ? 0
-                : (int)Math.Round((double)completed / totalFarms * 100);
-
+            // =========================
+            // 2. HISTOGRAM (EF)
+            // =========================
             var farmerLinkChart = await _context.FarmerCooperatives
-                .Where(fc => fc.CooperativeId == membershipId)
-                .GroupBy(fc => new
-                {
-                    fc.JoinedOn.Year,
-                    fc.JoinedOn.Month
-                })
+                .AsNoTracking()
+                .Where(fc => fc.CooperativeId == dashboard.MembershipId)
+                .GroupBy(fc => new { fc.JoinedOn.Year, fc.JoinedOn.Month })
                 .Select(g => new MonthlyFarmerLinkDto
                 {
                     Year = g.Key.Year,
@@ -162,8 +173,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .ThenBy(x => x.Month)
                 .ToListAsync();
 
+            // =========================
+            // 3. RECENT ACTIVITIES (EF)
+            // =========================
             var recentActivities = await _context.ActivityLogs
-                .Where(a => a.PerformedByUserId == membership.UserId)
+                .AsNoTracking()
+                .Where(a => a.PerformedByUserId == dashboard.UserId)
                 .OrderByDescending(a => a.CreatedOn)
                 .Take(5)
                 .Select(a => new ActivityDto
@@ -174,35 +189,189 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 })
                 .ToListAsync();
 
+            // =========================
+            // 4. COMPUTATIONS
+            // =========================
+            var mappingPercentage = dashboard.TotalFarms == 0
+                ? 0
+                : (int)Math.Round((double)dashboard.Completed / dashboard.TotalFarms * 100);
+
+            // =========================
+            // 5. FINAL RESPONSE
+            // =========================
             return new MembershipDashboardDto
             {
-                Membership = membership,
+                Membership = new MembershipInfoDto
+                {
+                    UserId = dashboard.UserId,
+                    MembershipId = dashboard.MembershipId,
+                    Name = dashboard.Name,
+                    MembershipType = dashboard.MembershipType,
+                    Status = dashboard.Status,
+                    DateCreated = dashboard.DateCreated,
+                    Location = dashboard.Location
+                },
 
                 Summary = new MemberSummaryDto
                 {
-                    TotalAgents = totalAgents,
-                    TotalFarmers = totalFarmers,
-                    TotalFarms = totalFarms,
-                    TotalFarmSize = farmSizeTotal,
-                    FarmsMapped = completed,
+                    TotalAgents = dashboard.TotalAgents,
+                    TotalFarmers = dashboard.TotalFarmers,
+                    TotalFarms = dashboard.TotalFarms,
+                    TotalFarmSize = dashboard.TotalFarmSize,
+                    FarmsMapped = dashboard.Completed,
                     MappingProgressPercentage = mappingPercentage
                 },
 
                 MappingProgress = new FarmMappingProgressDto
                 {
-                    TotalFarms = totalFarms,
-                    Completed = completed,
-                    InProgress = inProgress,
-                    NotStarted = notStarted
+                    TotalFarms = dashboard.TotalFarms,
+                    Completed = dashboard.Completed,
+                    InProgress = dashboard.InProgress,
+                    NotStarted = dashboard.NotStarted
                 },
 
                 FarmerLinkHistogram = farmerLinkChart,
-
                 RecentActivities = recentActivities,
-
-                CanAddFarmer = membership.Status == "Active"
+                CanAddFarmer = dashboard.Status == "Active"
             };
         }
+        /// <summary>
+        /// TODO: REVERT TO THIS IF FAILED
+        /// </summary>
+        /// <param name="agentUserId"></param>
+        /// <returns></returns>
+
+        //public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId)
+        //{
+
+        //    var membership = await _context.MemberShips
+        //        .Where(m => m.UserId == membershipuserId)
+        //        .Select(m => new MembershipInfoDto
+        //        {
+        //            UserId=m.UserId,
+        //            MembershipId = m.Id,
+        //            Name = m.Name,
+        //            MembershipType = m.MemberShipType.Name,
+        //            Status = m.IsActive ? "Active" : "Inactive",
+        //            DateCreated = m.OnBoardedOn,
+        //            Location = m.Location
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    if (membership == null)
+        //        throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+
+        //    // 2️⃣ Farmer IDs Linked to Membership
+        //    var farmerQuery = _context.FarmerCooperatives
+        //        .Where(fc => fc.CooperativeId == membership.MembershipId)
+        //        .Select(fc => fc.FarmerId)
+        //        .Distinct();
+
+        //    var totalFarmers = await farmerQuery.CountAsync();
+
+        //    // 3️⃣ Agent Overview
+        //    var membershipQuery = _context.MemberShipAgents
+        //       .Where(fc => fc.MemberShipId == membership.MembershipId)
+        //       .Select(fc => fc.AgentId)
+        //       .Distinct();
+
+        //    var totalAgents = await membershipQuery.CountAsync();
+
+        //    // 4️⃣ Farm Overview
+        //    var farmQuery = _context.Farms
+        //        .Where(f => farmerQuery.Contains(f.FarmerId));
+
+        //    var totalFarms = await farmQuery.CountAsync();
+
+        //    var farmSizeTotal = await farmQuery
+        //        .SumAsync(f => (double?)f.FarmSizeInSqMetre) ?? 0;
+
+        //    // 5️⃣ Mapping Progress
+        //    var mappingStats = await farmQuery
+        //        .GroupBy(f => f.MappingStatus)
+        //        .Select(g => new
+        //        {
+        //            Status = g.Key,
+        //            Count = g.Count()
+        //        })
+        //        .ToListAsync();
+
+        //    var completed = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.Verified)?.Count ?? 0;
+
+        //    var inProgress = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.Mapped)?.Count ?? 0;
+
+        //    var notStarted = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.UnMapped)?.Count ?? 0;
+
+        //    var mappingPercentage = totalFarms == 0
+        //        ? 0
+        //        : (int)Math.Round((double)completed / totalFarms * 100);
+
+        //    var farmerLinkChart = await _context.FarmerCooperatives
+        //        .Where(fc => fc.CooperativeId == membership.MembershipId)
+        //        .GroupBy(fc => new
+        //        {
+        //            fc.JoinedOn.Year,
+        //            fc.JoinedOn.Month
+        //        })
+        //        .Select(g => new MonthlyFarmerLinkDto
+        //        {
+        //            Year = g.Key.Year,
+        //            Month = g.Key.Month,
+        //            FarmerCount = g.Count()
+        //        })
+        //        .OrderBy(x => x.Year)
+        //        .ThenBy(x => x.Month)
+        //        .ToListAsync();
+
+        //    var recentActivities = await _context.ActivityLogs
+        //        .Where(a => a.PerformedByUserId == membership.UserId)
+        //        .OrderByDescending(a => a.CreatedOn)
+        //        .Take(5)
+        //        .Select(a => new ActivityDto
+        //        {
+        //            Description = a.ActivityName,
+        //            PerformedBy = a.PerformedByUserId,
+        //            Date = a.CreatedOn
+        //        })
+        //        .ToListAsync();
+
+        //    var result= new MembershipDashboardDto
+        //    {
+        //        Membership = membership,
+
+        //        Summary = new MemberSummaryDto
+        //        {
+        //            TotalAgents = totalAgents,
+        //            TotalFarmers = totalFarmers,
+        //            TotalFarms = totalFarms,
+        //            TotalFarmSize = farmSizeTotal,
+        //            FarmsMapped = completed,
+        //            MappingProgressPercentage = mappingPercentage
+        //        },
+
+        //        MappingProgress = new FarmMappingProgressDto
+        //        {
+        //            TotalFarms = totalFarms,
+        //            Completed = completed,
+        //            InProgress = inProgress,
+        //            NotStarted = notStarted
+        //        },
+
+        //        FarmerLinkHistogram = farmerLinkChart,
+
+        //        RecentActivities = recentActivities,
+
+        //        CanAddFarmer = membership.Status == "Active"
+        //    };
+
+
+        //    return result;
+        //}
+
+
         /** public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
          {
              //  Membership basic info

@@ -2,18 +2,23 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime;
+using Amazon.Runtime.Internal.Util;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -49,9 +54,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     public class OrganizationRepository : IOrganizationRepository
     {
         private readonly DataContext _context;
-        public OrganizationRepository(DataContext context)
+
+        private readonly IDistributedCache _cache;
+        public OrganizationRepository(DataContext context, IDistributedCache cache)
         {
             _context = context;
+
+            _cache = cache;
         }
         #region agentviews
         //Rework this view to wire real data
@@ -396,37 +405,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (args.Id <= 0)
                 throw new ValidationException("Invalid Organization");
 
-            try
-            {
-                var totalAgents = await _context.OrganizationAgents
-                    .AsNoTracking()
-                    .Where(x => x.OrganizationId == args.Id && x.IsActive)
-                    .Select(x => x.AgentId)
-                    .Distinct()
-                    .CountAsync();
+            var organizationId = args.Id;
 
-                var totalActiveLocations = await _context.OrganizationLocations
-                    .AsNoTracking()
-                    .CountAsync(x => x.OrganizationId == args.Id && x.IsActive);
+            var result = await _context.Database
+                .SqlQueryRaw<OrganizationDashboardResponse>(
+        @"
+SELECT
+    (SELECT COUNT(DISTINCT AgentId)
+     FROM OrganizationAgents
+     WHERE OrganizationId = {0} AND IsActive = 1) AS TotalAgents,
 
-                //  MOCK VALUES
-               
+    (SELECT COUNT(*)
+     FROM OrganizationLocations
+     WHERE OrganizationId = {0} AND IsActive = 1) AS TotalActiveLocations,
 
-                var totalEquityPaid = 0;//(decimal)random.Next(100000, 500000);
-                var totalProduceSold = 0; //(decimal)random.Next(200000, 800000);
+    CAST(0 AS decimal(18,2)) AS TotalEquityPaid,
+ CAST(0 AS decimal(18,2)) AS TotalInputDisbursed,
+    CAST(0 AS decimal(18,2)) AS TotalProduceSold
+", organizationId)
+                .FirstOrDefaultAsync();
 
-                return new OrganizationDashboardResponse
-                {
-                    TotalAgents = totalAgents,
-                    TotalActiveLocations = totalActiveLocations,
-                    TotalEquityPaid = totalEquityPaid,
-                    TotalProduceSold = totalProduceSold
-                };
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Error retrieving organization dashboard", ex);
-            }
+            return result ?? new OrganizationDashboardResponse();
         }
         public async Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args)
         {
@@ -2072,69 +2071,150 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (string.IsNullOrWhiteSpace(args.organizationCode))
                 throw new ValidationException("Invalid Organization");
 
-            try
-            {
-                // ✅ Base Query (VERY IMPORTANT: reuse this)
-                var farmerOrgQuery = _context.FarmerOrganizations
-                    .AsNoTracking()
-                    .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive);
+            var result = await _context.Database
+                .SqlQueryRaw<OrganizationFarmerDashboardResponse>(
+        @"
+SELECT
+    -- Total Farmers
+    (SELECT COUNT(DISTINCT fo.FarmerId)
+     FROM FarmerOrganizations fo
+     WHERE fo.OrganizationCode = @orgCode AND fo.IsActive = 1) AS TotalFarmers,
 
-                // ✅ TOTAL FARMERS
-                var totalFarmers = await farmerOrgQuery
-                    .Select(x => x.FarmerId)
-                    .Distinct()
-                    .CountAsync();
+    -- Active Farmers (Completed onboarding)
+    (SELECT COUNT(DISTINCT fo.FarmerId)
+     FROM FarmerOrganizations fo
+     INNER JOIN Farmers f ON fo.FarmerId = f.Id
+     INNER JOIN Users u ON f.UserId = u.Id
+     WHERE fo.OrganizationCode = @orgCode
+       AND fo.IsActive = 1
+       AND u.FarmerOnboardingStatus = 1) AS ActiveFarmers,
 
-                // ✅ ACTIVE FARMERS (Completed onboarding)
-                var activeFarmers = await (
-                    from fo in farmerOrgQuery
-                    join f in _context.Farmers on fo.FarmerId equals f.Id
-                    join u in _context.Users on f.UserId equals u.Id
-                    where u.FarmerOnboardingStatus == FarmerOnboardingStatus.Completed
-                    select f.Id
-                ).Distinct().CountAsync();
+    -- Placeholder (future loan integration)
+    0 AS FarmersWithLoans,
 
-                // ✅ FARMERS WITH LOANS
-                //var farmersWithLoans = await (
-                //    from fo in farmerOrgQuery
-                //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-                //    where l.IsActive
-                //    select l.FarmerId
-                //).Distinct().CountAsync();
+    -- Placeholder recovery rate
+    CAST(0 AS decimal(18,2)) AS RecoveryRate
+",
+                new SqlParameter("@orgCode", args.organizationCode)
+                )
+                .FirstOrDefaultAsync();
 
-                //// ✅ RECOVERY RATE
-                //// Assumption: LoanRepayments table exists
-                //var totalLoanAmount = await (
-                //    from fo in farmerOrgQuery
-                //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-                //    where l.IsActive
-                //    select l.Amount
-                //).SumAsync() ?? 0;
-
-                //var totalRecoveredAmount = await (
-                //    from fo in farmerOrgQuery
-                //    join r in _context.Repayments on fo.FarmerId equals r.FarmerId
-                //    where r.IsSuccessful
-                //    select r.Amount
-                //).SumAsync() ?? 0;
-
-                //var recoveryRate = totalLoanAmount == 0
-                //    ? 0
-                //    : (totalRecoveredAmount / totalLoanAmount) * 100;
-
-                return new OrganizationFarmerDashboardResponse
-                {
-                    TotalFarmers = totalFarmers,
-                    ActiveFarmers = activeFarmers,
-                    FarmersWithLoans = 0,//farmersWithLoans,
-                    RecoveryRate = 0//Math.Round(recoveryRate, 2)
-                };
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("Error retrieving organization farmer dashboard", ex);
-            }
+            return result ?? new OrganizationFarmerDashboardResponse();
         }
+        /// <summary>
+        /// TODO: REVERT
+        /// </summary>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        //public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
+        //{
+        //    if (args == null)
+        //        throw new ArgumentNullException(nameof(args));
+
+        //    if (string.IsNullOrWhiteSpace(args.organizationCode))
+        //        throw new ValidationException("Invalid Organization");
+
+        //    try
+        //    {
+        //        var cacheKey = $"organization-farmer-dashboard:{args.organizationCode}";
+
+        //        string cachedData = null;
+        //        try
+        //        {
+        //            if (_cache != null)
+        //                cachedData = await _cache.GetStringAsync(cacheKey);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            // Redis/Distributed cache timeout or connection issue — degrade gracefully
+        //            try { Console.WriteLine($"Cache read failed for {cacheKey}: {ex.Message}"); } catch { }
+        //            cachedData = null;
+        //        }
+
+        //        if (!string.IsNullOrEmpty(cachedData))
+        //        {
+        //            return JsonSerializer.Deserialize<OrganizationFarmerDashboardResponse>(cachedData);
+        //        }
+        //        // ✅ Base Query (VERY IMPORTANT: reuse this)
+        //        var farmerOrgQuery = _context.FarmerOrganizations
+        //            .AsNoTracking()
+        //            .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive);
+
+        //        // ✅ TOTAL FARMERS
+        //        var totalFarmers = await farmerOrgQuery
+        //            .Select(x => x.FarmerId)
+        //            .Distinct()
+        //            .CountAsync();
+
+        //        // ✅ ACTIVE FARMERS (Completed onboarding)
+        //        var activeFarmers = await (
+        //            from fo in farmerOrgQuery
+        //            join f in _context.Farmers on fo.FarmerId equals f.Id
+        //            join u in _context.Users on f.UserId equals u.Id
+        //            where u.FarmerOnboardingStatus == FarmerOnboardingStatus.Completed
+        //            select f.Id
+        //        ).Distinct().CountAsync();
+
+        //        // ✅ FARMERS WITH LOANS
+        //        //var farmersWithLoans = await (
+        //        //    from fo in farmerOrgQuery
+        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
+        //        //    where l.IsActive
+        //        //    select l.FarmerId
+        //        //).Distinct().CountAsync();
+
+        //        //// ✅ RECOVERY RATE
+        //        //// Assumption: LoanRepayments table exists
+        //        //var totalLoanAmount = await (
+        //        //    from fo in farmerOrgQuery
+        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
+        //        //    where l.IsActive
+        //        //    select l.Amount
+        //        //).SumAsync() ?? 0;
+
+        //        //var totalRecoveredAmount = await (
+        //        //    from fo in farmerOrgQuery
+        //        //    join r in _context.Repayments on fo.FarmerId equals r.FarmerId
+        //        //    where r.IsSuccessful
+        //        //    select r.Amount
+        //        //).SumAsync() ?? 0;
+
+        //        //var recoveryRate = totalLoanAmount == 0
+        //        //    ? 0
+        //        //    : (totalRecoveredAmount / totalLoanAmount) * 100;
+
+        //        var result= new OrganizationFarmerDashboardResponse
+        //        {
+        //            TotalFarmers = totalFarmers,
+        //            ActiveFarmers = activeFarmers,
+        //            FarmersWithLoans = 0,//farmersWithLoans,
+        //            RecoveryRate = 0//Math.Round(recoveryRate, 2)
+        //        };
+        //        var cacheOptions = new DistributedCacheEntryOptions
+        //        {
+        //            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+        //        };
+
+        //        var serialized = JsonSerializer.Serialize(result);
+
+        //        try
+        //        {
+        //            if (_cache != null)
+        //                await _cache.SetStringAsync(cacheKey, serialized, cacheOptions);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            // Swallow cache set exceptions to avoid failing the request when Redis is down
+        //            try { Console.WriteLine($"Cache write failed for {cacheKey}: {ex.Message}"); } catch { }
+        //        }
+
+        //        return result;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new Exception("Error retrieving organization farmer dashboard", ex);
+        //    }
+        //}
 
         public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
         {

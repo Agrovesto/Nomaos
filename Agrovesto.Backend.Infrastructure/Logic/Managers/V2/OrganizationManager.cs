@@ -11,13 +11,16 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
+using EFCore.BulkExtensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -31,8 +34,6 @@ using System.Threading.Tasks;
 using static ClosedXML.Excel.XLPredefinedFormat;
 using DateTime = System.DateTime;
 using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
-
-using EFCore.BulkExtensions;
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOrganizationManager
@@ -90,6 +91,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ISalesRepository _salesRepository;
         private readonly RoleManager<Role> _roleManager;
         private readonly DataContext _context;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IBackgroundTaskQueue _taskQueue;
         public OrganizationManager(
             IExcelConverterService excelConverterService,
             IWalletManager walletManager,
@@ -106,7 +109,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             RoleManager<Role> roleManager,
             ISalesRepository salesRepository,
             DataContext context,
-              ILogger<OrganizationManager> log)
+              ILogger<OrganizationManager> log,
+              IBackgroundTaskQueue taskQueue,
+              IServiceScopeFactory scopeFactory)
         {
             _context=context;
             _excelConverterService = excelConverterService;
@@ -124,224 +129,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _membershipRepository = membershipRepository;
             _salesRepository = salesRepository;
             _roleManager = roleManager;
-
+            _taskQueue = taskQueue;
+            _scopeFactory=scopeFactory;
         }
 
         #region bulkupload
 
-public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
-    Stream excelStream,
-    OnBoardingArgs args)
-    {
-        if (excelStream == null)
-            throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
-
-        var rows = _excelConverterService.BulkParseExcel(excelStream);
-
-        if (!rows.Any())
-            throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
-
-        var result = new BulkOnboardingResult
+        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+            Stream excelStream,
+            OnBoardingArgs args)
         {
-            Total = rows.Count,
-            Errors = new List<BulkOnboardingError>()
-        };
+            if (excelStream == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+            // Copy stream to memory so we can both inspect and save to disk for background processing
+            using var ms = new MemoryStream();
+            await excelStream.CopyToAsync(ms);
+            ms.Position = 0;
 
-        int rowNumber = 2;
+            var rows = _excelConverterService.BulkParseExcel(ms);
 
-        // ---------------------------
-        // STEP 1: BUILD MEMORY MODEL
-        // ---------------------------
-        var aggregates = new List<BulkRowAggregate>();
-            var bulkConfig = new BulkConfig
+            if (!rows.Any())
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+
+            var result = new BulkOnboardingResult
             {
-                BatchSize = 10000,
-                BulkCopyTimeout = 300,
-                UseTempDB = true
+                Total = rows.Count,
+                Errors = new List<BulkOnboardingError>(),
+                Successful = 0
             };
-        foreach (var row in rows)
-        {
-            try
+
+            // Persist file to temp location for background worker
+            var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+            Directory.CreateDirectory(tempDir);
+            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+            ms.Position = 0;
+            await using (var fs = File.Create(tmpFile))
             {
-                if (string.IsNullOrWhiteSpace(row.FirstName) ||
-                    string.IsNullOrWhiteSpace(row.LastName))
-                    throw new Exception("FirstName and LastName are required.");
-
-                if (!int.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
-                    throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
-
-                if (string.IsNullOrWhiteSpace(row.Email) &&
-                    string.IsNullOrWhiteSpace(row.PhoneNumber))
-                    throw new Exception("Email or PhoneNumber is required.");
-
-                var salt = EncryptionUtil.GetSalt();
-
-                var user = BuildUserEntity(new OnboardingRequestModel
-                {
-                    Email = row.Email,
-                    PhoneNumber = row.PhoneNumber,
-                    Password = "Admin123@",
-                    Pin = "0000",
-                    FirstName = row.FirstName,
-                    MiddleName = row.MiddleName,
-                    LastName = row.LastName,
-                    Bvn=row.BVN,
-                    Nin=row.NIN
-                }, args, salt);
-
-                var farmer = new Farmer
-                {
-                    Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
-                    Email = row.Email,
-                    PhoneNumber = row.PhoneNumber,
-                    Gender = row.Gender,
-                    State = row.StateOfResidence,
-                    Lga = row.LGA,
-                    Ward = row.Ward,
-                    Location = row.ResidentialAddress,
-                    FarmerCategory = row.CategoryOfFarmer,
-                    YearsInAgric = years,
-                    Level = FarmerLevel.Level1,
-                    HighestLevelOfEducation = row.HighestLevelOfEducation,
-                    OnBoardedOn = DateTimeOffset.UtcNow
-                };
-
-                aggregates.Add(new BulkRowAggregate
-                {
-                    User = user,
-                    Farmer = farmer,
-                    ValueChains = GetValueChains(row)
-                });
-            }
-            catch (Exception ex)
-            {
-                result.Errors.Add(new BulkOnboardingError
-                {
-                    RowNumber = rowNumber,
-                    Email = row.Email,
-                    Error = ex.Message
-                });
+                ms.Position = 0;
+                await ms.CopyToAsync(fs);
+                await fs.FlushAsync();
             }
 
-            rowNumber++;
-        }
-
-        if (!aggregates.Any())
-            return result;
-
-        // ---------------------------
-        // STEP 2: CHECK EXISTING USERS (BULK QUERY ONLY)
-        // ---------------------------
-        var emails = aggregates
-            .Where(x => x.User.Email != null)
-            .Select(x => x.User.Email)
-            .Distinct()
-            .ToList();
-
-        var existingUsers = await _context.Users
-            .AsNoTracking()
-            .Where(u => emails.Contains(u.Email))
-            .Select(u => new { u.Id, u.Email })
-            .ToListAsync();
-
-        var existingMap = existingUsers.ToDictionary(x => x.Email, x => x.Id);
-
-        var newUsers = new List<User>();
-        var farmers = new List<Farmer>();
-        var valueChains = new List<FarmerValueChainItem>();
-        var userOrgs = new List<UserOrganization>();
-        var farmerOrgs = new List<FarmerOrganization>();
-
-        // ---------------------------
-        // STEP 3: PREPARE BULK DATASETS
-        // ---------------------------
-        foreach (var agg in aggregates)
-        {
-            if (agg.User.Email != null && existingMap.TryGetValue(agg.User.Email, out var userId))
+            // Validate background queue and scope factory to avoid NullReferenceException
+            if (_taskQueue == null || _scopeFactory == null)
             {
-                agg.Farmer.UserId = userId;
-            }
-            else
-            {
-                newUsers.Add(agg.User);
+                // Fail fast with a clear message instead of allowing a NullReferenceException
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
             }
 
-            farmers.Add(agg.Farmer);
-        }
-
-        // ---------------------------
-        // STEP 4: BULK INSERT USERS
-        // ---------------------------
-        if (newUsers.Any())
-        {
-            await _context.BulkInsertAsync(newUsers, bulkConfig);
-
-            // map newly inserted users back (EF bulk auto updates identity keys)
-            foreach (var agg in aggregates)
+            // Queue background work item that calls processor
+            _taskQueue.QueueTask(async cancellationToken =>
             {
-                if (agg.User != null && !string.IsNullOrEmpty(agg.User.Id))
-                    agg.Farmer.UserId = agg.User.Id;
-            }
-        }
-
-        // ---------------------------
-        // STEP 5: BULK INSERT FARMERS
-        // ---------------------------
-        await _context.BulkInsertAsync(farmers, bulkConfig);
-
-        // ---------------------------
-        // STEP 6: VALUE CHAINS (FLATTENED)
-        // ---------------------------
-        foreach (var agg in aggregates)
-        {
-            foreach (var vc in agg.ValueChains ?? new())
-            {
-                foreach (var item in vc.Items ?? new())
+                try
                 {
-                    valueChains.Add(new FarmerValueChainItem
+                    if (_scopeFactory == null)
                     {
-                        FarmerId = agg.Farmer.Id,
-                        ValueChainType = vc.ValueChainType,
-                        ItemName = item
-                    });
+                        // Should not happen due to the earlier check, but guard anyway
+                        return;
+                    }
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+
+                    result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+
+                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
+                      }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        if (_scopeFactory != null)
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                        }
+                    }
+                    catch { }
                 }
-            }
-        }
+            });
 
-        if (valueChains.Any())
-            await _context.BulkInsertAsync(valueChains, bulkConfig);
-
-        // ---------------------------
-        // STEP 7: USER ORGS (BULK)
-        // ---------------------------
-        userOrgs = aggregates
-            .Where(x => x.Farmer.UserId != null)
-            .Select(x => new UserOrganization
-            {
-                UserId = x.Farmer.UserId,
-                OrganizationCode = args.organizationCode
-            })
-            .DistinctBy(x => new { x.UserId, x.OrganizationCode })
-            .ToList();
-
-        if (userOrgs.Any())
-            await _context.BulkInsertAsync(userOrgs, bulkConfig);
-
-        // ---------------------------
-        // STEP 8: FARMER ORGS (BULK)
-        // ---------------------------
-        farmerOrgs = aggregates.Select(x => new FarmerOrganization
-        {
-            FarmerId = x.Farmer.Id,
-            OrganizationCode = args.organizationCode,
-            OnboardedByUserId = args.OnboardedByUserId
-        }).ToList();
-
-        await _context.BulkInsertAsync(farmerOrgs, bulkConfig);
-
-        result.Successful = farmers.Count;
-
-        return result;
+            return result; 
     }
 
     /** public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
