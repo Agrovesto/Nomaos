@@ -58,6 +58,11 @@ var builder = WebApplication.CreateBuilder(args);
 //        c=>c.UseNetTopologySuite())
 //    );
 
+//builder.Services.AddStackExchangeRedisCache(options =>
+//{
+//    options.Configuration = builder.Configuration["Redis:ConnectionString"];
+//});
+
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -78,7 +83,11 @@ builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").G
 
 builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
 
+builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
+// Register the bulk onboarding processor so scoped resolution from background tasks works
+builder.Services.AddScoped<BulkOnboardingProcessor>();
 
 
 builder.Services.AddIdentity<User, Role>(opt =>

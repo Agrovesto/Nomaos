@@ -77,8 +77,18 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string BVN { get; set; }
         public string NIN { get; set; }
     }
+    public class BulkUploadJob
+    {
+        public Guid Id { get; set; }
+        public string FilePath { get; set; }
+        public string Status { get; set; } // Pending, Processing, Completed, Failed
+        public string? ErrorMessage { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
     public class BulkOnboardingResult
     {
+        public string Message { get; set; } = string.Empty;
         public int Total { get; set; }
         public int Successful { get; set; }
         public int Failed { get; set; }

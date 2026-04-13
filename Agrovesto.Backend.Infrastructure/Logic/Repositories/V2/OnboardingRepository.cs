@@ -252,6 +252,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     LoginModel model,
     string businessCode)
         {
+            // Validate business quickly
             var business = await _context.Businesses
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
@@ -259,39 +260,70 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
                 return (false, "Business is inactive or not found", null);
 
+            // Resolve user (password path uses UserManager for normalized lookup; pin path uses a targeted query)
             var user = await ResolveUserAsync(model, businessCode);
             if (user == null)
                 return (false, "Invalid credentials", null);
 
+            // Validate credentials (password hashing is unavoidable)
             var credentialResult = await ValidateCredentialsAsync(user, model);
             if (!credentialResult.Success)
                 return (false, credentialResult.Message, null);
 
-            var roles = await _userManager.GetRolesAsync(user);
+            // Fetch roles with a single efficient DB query (avoids Identity internal overhead)
+            var roles = await (from ur in _context.UserRoles.AsNoTracking()
+                               join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                               where ur.UserId == user.Id
+                               select r.Name)
+                              .ToListAsync();
+
             if (!roles.Any())
                 return (false, "User has no assigned roles", null);
 
             var hasPendingOnboarding = HasPendingOnboarding(user);
 
-            user.LastLoginDate = DateTimeOffset.UtcNow;
-            await _context.SaveChangesAsync();
+            // Update LastLoginDate only when it is stale to reduce write volume
+            try
+            {
+                var needUpdate = !user.LastLoginDate.HasValue || (DateTimeOffset.UtcNow - user.LastLoginDate.Value) > TimeSpan.FromMinutes(1);
+                if (needUpdate)
+                {
+                    // Use ExecuteUpdateAsync to avoid loading/tracking entity for update
+                    await _context.Users
+                        .Where(u => u.Id == user.Id)
+                        .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginDate, u => DateTimeOffset.UtcNow));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't fail login due to a non-critical write error
+                try { _log.LogWarning(ex, "Failed to update LastLoginDate for user {userId}", user.Id); } catch { }
+            }
 
-            var organizations = await GetUserOrganizationsAsync(user.Id);
+            // Load organizations in a single query joining user organizations to business organizations
+            var organizations = await (from uo in _context.UserOrganizations.AsNoTracking()
+                                       join bo in _context.BusinessOrganizations.AsNoTracking() on uo.OrganizationCode equals bo.OrganizationCode
+                                       where uo.UserId == user.Id
+                                       select new OrganizationDto
+                                       {
+                                           OrganizationCode = bo.OrganizationCode,
+                                           OrganizationName = bo.CompanyName
+                                       }).ToListAsync();
 
             var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
 
             var token = GenerateJwtToken(claims);
             var time = DateTime.UtcNow.AddDays(1);
+
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
-                Email=user.Email,
-                Name=user.Name,
-                phone_number=user.PhoneNumber,
-             
+                Email = user.Email,
+                Name = user.Name,
+                phone_number = user.PhoneNumber,
                 Token = token,
                 TokenType = TokenType.AccessToken,
-                ExpiresOn = time,//DateTime.UtcNow.AddDays(1),
+                ExpiresOn = time,
                 Roles = roles.ToList(),
                 Organizations = organizations
             });
