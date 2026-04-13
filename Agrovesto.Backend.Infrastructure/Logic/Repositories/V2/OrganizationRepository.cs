@@ -1608,45 +1608,85 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                                };
 
             // =====================================================
-            // 3. TOTAL COUNT (SEQUENTIAL - SAFE FOR DbContext)
+            // 3. TOTAL COUNT (UNION OF UNIQUE USERS)
+            // Use a UNION at the database level to avoid double-counting users that
+            // may appear in both the completed and pending sets.
             // =====================================================
-            var completedCount = await _context.FarmerOrganizations
-                .AsNoTracking()
-                .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive)
-                .CountAsync();
+            var completedUserIdsQuery =
+                from fo in _context.FarmerOrganizations.AsNoTracking()
+                join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
+                join u in _context.Users.AsNoTracking() on f.UserId equals u.Id
+                where fo.OrganizationCode == args.organizationCode && fo.IsActive
+                select u.Id;
 
-            var pendingCount = await _context.Users
+            var pendingUserIdsQuery = _context.Users
                 .AsNoTracking()
                 .Where(x =>
                     x.UserType == UserType.Farmer.ToString() &&
                     x.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed &&
                     x.CreatedBy == args.UserId)
-                .CountAsync();
+                .Select(x => x.Id);
 
-            var totalCount = completedCount + pendingCount;
+            // Load completed user ids first, then count pending users that are not present in completed set.
+            // This avoids subtle differences caused by DB-level UNION behavior and ensures we count unique users as expected.
+            var completedUserIdsDistinct = await completedUserIdsQuery
+                .Distinct()
+                .ToListAsync();
+
+            var pendingUserIdsDistinct = await pendingUserIdsQuery
+                .Distinct()
+                .ToListAsync();
+
+            var pendingOnlyCount = pendingUserIdsDistinct
+                .Where(id => !completedUserIdsDistinct.Contains(id))
+                .Count();
+
+            var totalCount = completedUserIdsDistinct.Count + pendingOnlyCount;
 
             // =====================================================
             // 4. FETCH DATA (NO PARALLEL DB EXECUTION)
             // =====================================================
-            var completedList = await completedQuery
-                .OrderByDescending(x => x.CreatedOn)
-                .ToListAsync();
-
-            var pendingList = await pendingQuery
-                .OrderByDescending(x => x.CreatedOn)
-                .ToListAsync();
-
             // =====================================================
-            // 5. MERGE + SORT + PAGINATE (IN MEMORY ONLY)
+            // 4b. Efficient DB-side pagination by UserId (avoid loading full lists)
+            //  - Build a lightweight union of (UserId, CreatedOn) from completed and pending queries
+            //  - Group by UserId and pick the latest CreatedOn per user in the database
+            //  - Order by that date, then select the page of UserIds
+            //  - Finally load full rows only for those UserIds and assemble final ordered page
+            // This reduces memory and prevents duplicate users across the two sets.
             // =====================================================
-            var merged = completedList
-                .Concat(pendingList)
-                .OrderByDescending(x => x.CreatedOn)
-                .ToList();
+            var lightweightUnion = completedQuery
+                .Select(x => new { x.UserId, x.CreatedOn })
+                .Concat(pendingQuery.Select(x => new { x.UserId, x.CreatedOn }));
 
-            var pagedData = merged
+            var pageUserIdsWithDate = await lightweightUnion
+                .Where(x => !string.IsNullOrWhiteSpace(x.UserId))
+                .GroupBy(x => x.UserId)
+                .Select(g => new { UserId = g.Key, LatestCreatedOn = g.Max(x => x.CreatedOn) })
+                .OrderByDescending(x => x.LatestCreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
+                .ToListAsync();
+
+            var pageUserIds = pageUserIdsWithDate.Select(x => x.UserId).ToList();
+
+            // Load only the full records for the users in the current page
+            var completedPage = pageUserIds.Any()
+                ? await completedQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
+                : new List<OrganizationFarmerResponse>();
+
+            var pendingPage = pageUserIds.Any()
+                ? await pendingQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
+                : new List<OrganizationFarmerResponse>();
+
+            // Merge and pick the most recent record per UserId
+            var mergedDict = completedPage.Concat(pendingPage)
+                .GroupBy(x => x.UserId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedOn).First());
+
+            // Preserve ordering from pageUserIdsWithDate
+            var pagedData = pageUserIdsWithDate
+                .Select(p => mergedDict.GetValueOrDefault(p.UserId))
+                .Where(x => x != null)
                 .ToList();
 
             // =====================================================
@@ -1663,22 +1703,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (farmerIds.Any())
             {
-                var agentCountsTask = _context.FarmerAgents
+                // Do not execute multiple EF Core operations in parallel on the same DbContext.
+                // Execute sequentially to avoid: "A second operation was started on this context instance before a previous operation completed."
+                agentCounts = await _context.FarmerAgents
                     .AsNoTracking()
                     .Where(x => farmerIds.Contains(x.FarmerId))
                     .GroupBy(x => x.FarmerId)
                     .Select(g => new { g.Key, Count = g.Count() })
                     .ToDictionaryAsync(x => x.Key, x => x.Count);
 
-                var membershipCountsTask = _context.FarmerCooperatives
+                membershipCounts = await _context.FarmerCooperatives
                     .AsNoTracking()
                     .Where(x => farmerIds.Contains(x.FarmerId))
                     .GroupBy(x => x.FarmerId)
                     .Select(g => new { g.Key, Count = g.Count() })
                     .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                agentCounts = await agentCountsTask;
-                membershipCounts = await membershipCountsTask;
             }
 
             // =====================================================

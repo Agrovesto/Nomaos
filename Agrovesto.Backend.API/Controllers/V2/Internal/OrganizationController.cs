@@ -650,7 +650,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = result.Succeeded,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    PageSize = query.PageSize,
                     Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -1794,7 +1794,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = result.Data.Count > 0,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    PageSize = query.PageSize,
                     Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
