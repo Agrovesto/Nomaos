@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -60,19 +61,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams query);
         Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query);
+        Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams request, CancellationToken cancellationToken);
+        Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args);
+        Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
+        Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args);
         Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
         Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
         Task<OrganizationLocationModel> GetLocationById(ListQueryParams query);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
+        Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query);
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query);
         Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams query);
+        Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args);
+        Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args, CancellationToken cancellationToken);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
+        Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(ListQueryParams query);
+        Task<Response<FarmerSalesSummaryDto?>> GetSalesSummary(ListQueryParams args);
         Task<bool> ReassignAgentToLocation(ProfileRequestModel model, OrganizationAgentArgs args);
+        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds);
         Task<OrganizationLocationModel> UpdateLocationAsync(OrganizationLocationModel model, ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
@@ -96,9 +107,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IBackgroundTaskQueue _taskQueue;
         private readonly IAWSService _awsService;
-
+        private readonly IFarmerTransactionRepository _farmerTransactionRepository;
         private readonly IConfiguration _configuration;
+        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         public OrganizationManager(
+            IInputFinancingManagementRepository inputFinancingManagementRepository,
+            IFarmerTransactionRepository farmerTransactionRepository,
             IExcelConverterService excelConverterService,
             IWalletManager walletManager,
             IBusinessRepository businessRepository,
@@ -120,6 +134,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                IAWSService awsService,
                IConfiguration configuration)
         {
+            _inputFinancingManagementRepository = inputFinancingManagementRepository;
+            _farmerTransactionRepository =farmerTransactionRepository;
             _context=context;
             _excelConverterService = excelConverterService;
             _walletManager = walletManager;
@@ -143,6 +159,71 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _configuration = configuration;
         }
 
+        #region salesTracker
+        public async Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(
+         ListQueryParams query)
+        {
+            try
+            {
+                var transactions = await _farmerTransactionRepository.GetSalesHistory(query);
+                if (transactions == null) return new PagedListResponse<List<FarmerSalesHistoryModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerSalesHistoryModel>>
+                {
+                    Succeeded = true,
+                    Data = transactions.Data,
+                    Count = transactions.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = query.PageSize,
+
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving sales: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<Response<FarmerSalesSummaryDto?>> GetSalesSummary(
+   ListQueryParams args)
+        {
+            try
+            {
+                var transactions = await _farmerTransactionRepository.GetSalesSummary(args);
+             
+                return new Response<FarmerSalesSummaryDto?>
+                {
+                    Succeeded = true,
+                    Data = transactions,
+
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving sales: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        #endregion salesTracker
         #region bulkupload
 
         public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
@@ -976,8 +1057,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             await FetchOrganizationDetails(query);
             return await _organizationRepository.GetOrganizationAgents(query);
 
-
         }
+     
         public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
     ListQueryParams query)
         { 
@@ -1021,7 +1102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<Response<OrganizationAgentDetailResponse>> GetAgentDetail(ListQueryParams query)
         {
-           await EnrichAgentAsync(query);
+          // await EnrichAgentAsync(query);
             var agent = await _organizationRepository.GetOrganizationAgentDetail(query);
 
             if (agent == null)
@@ -1786,9 +1867,115 @@ DateTimeOffset dateTime)
             args.Id = farmer.Id;
 
         }
+        public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
+        {
+            try
+            {
+
+                return await _organizationRepository.GetOrganizationFarmerSalesSummary(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<OrganizationFarmerSalesHistor>>> FarmerSalesHistory(
+     ListQueryParams request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.SalesContext = "Organization";
+                return await _salesRepository.FarmerSalesHistory(request, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message = null)
+        {
+
+            return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
+        }
+
         #endregion FarmerMgt
 
         #region MembershipMgt
+        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args)
+        {
+
+            try
+            {
+                return await _organizationRepository.GetOrganizationMembershipDashboard(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+
+        }
+        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeIds);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Remove Farmer failed.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
+
+        public async Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+
+                var cooperative = await _organizationRepository.GetCooperativesByOrganization(query.organizationCode, query);
+                if (cooperative == null) return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
+                {
+                    Succeeded = true,
+                    Data = cooperative,
+                    Count = cooperative.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Membership: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
         public async Task<CreateMembershipResponseModel> CreateMembershipUser(
    MemberShipRequestModel model,
    OnBoardingArgs args)
@@ -1796,7 +1983,7 @@ DateTimeOffset dateTime)
             try
             {
 
-                var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (hasOrg != null)
                 {
                     model.OrganizationId = hasOrg.OrganizaionId;
@@ -1816,6 +2003,7 @@ DateTimeOffset dateTime)
                 var business = await GetBusinessOrFail(args.businessCode);
 
                 var user = await RegisterMembershipLeaderOrFail(model, args);
+                await SendDefaultCredentialChange(user.model);
 
                 var membership = await CreateMembershipOrFail(
                     model, args, business, user.model.Id, dateTime);
@@ -1844,41 +2032,37 @@ DateTimeOffset dateTime)
                     "Unable to complete onboarding at the moment.");
             }
         }
-        public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
-        {
-            try
-            {
-              
-                return await _organizationRepository.GetOrganizationFarmerSalesSummary(args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<OrganizationFarmerSalesHistor>>> FarmerSalesHistory(
-     ListQueryParams request, CancellationToken cancellationToken)
-        { 
-            try
-            {
-                request.SalesContext = "Organization";
-                return await _salesRepository.FarmerSalesHistory(request, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-
-        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null)
-        {   
-
-            return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
-        }
+   
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args)
         {   
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
+        }
+        public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeId);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Could not remove farmer from this membership.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
         }
 
         private async Task RunMembershipNonCriticalSteps(
@@ -1893,7 +2077,7 @@ DateTimeOffset dateTime)
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await SendDefaultCredentialChange(user);
+               
             }
             catch (Exception ex)
             {
@@ -1999,6 +2183,87 @@ DateTimeOffset dateTime)
 
         #endregion MembershipMgt
 
+
+        #region input
+        public async Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args)
+        {
+            try
+            {
+                await EnrichFarmerQuery(args);
+
+                return await _inputFinancingManagementRepository.GetInputLoanSummaryAsync(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args)
+        {
+            try
+            {
+                
+                return await _inputFinancingManagementRepository.GetLoanDetailAsync(args.Id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args)
+        {
+            try
+            {
+
+                return await _inputFinancingManagementRepository.GetFinancingRepaymentSummaryAsync(args.Id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(
+     ListQueryParams request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await EnrichFarmerQuery(request);
+
+                return await _inputFinancingManagementRepository.GetFinancingBreakdownAsync(request);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(
+       long inputAllocationId,
+       ListQueryParams args, CancellationToken cancellationToken)
+        {
+            try
+            {
+
+                return await _inputFinancingManagementRepository.GetRepaymentBreakdownAsync(inputAllocationId, args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        private async Task EnrichFarmerQuery(ListQueryParams request)
+        {
+            var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId);
+
+            if (farmer == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Farmer not found for the specified user.");
+
+            request.Id = farmer.Id;
+        }
+
+        #endregion input
     }
 
 }

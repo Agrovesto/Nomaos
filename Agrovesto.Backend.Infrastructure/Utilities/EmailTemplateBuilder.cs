@@ -57,7 +57,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
 
         <p>For security reasons, please log in as soon as possible and change your password.</p>
 
-        <a href='{frontendUrl}' class='btn' target=''>Login to NomaOS</a>
+        <a href='{frontendUrl}' class='btn' target='_blank'>Login to NomaOS</a>
 
         <p style='margin-top:15px;'>If the button above does not work, copy and paste this link into your browser:</p>
         <p><a href='{frontendUrl}'>{frontendUrl}</a></p>

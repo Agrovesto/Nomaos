@@ -97,4 +97,39 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public List<long> AgentIds { get; set; } //= new List<AgentModel>();
     }
+
+    public class OrganizationMemberShipResponseModel
+    {
+        public string Name { get; set; }
+        public string? MembershipType { get; set; }
+        public string Location { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string? Ward { get; set; }
+        public string ContactPerson { get; set; }
+        public string PhoneNumber { get; set; }
+        public string UserId { get; set; }
+        public long Id { get; set; }
+        public bool HasbeenAssignedAgent { get; set; }
+        public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;        
+        public long TotalFarmers { get; set; }
+        public decimal WalletBalance { get; set; }
+        public long TotalInputReceived { get; set; }
+        public long TotalVerifiedFarmers { get; set; }
+        public long TotalUnverifiedFarmers { get; set; }
+        public decimal RecoveryAmount { get; set; }
+        public string Tier { get; set; }
+    }
+    public class OrganizationMembershipDashboardResponse
+    {
+        public int TotalMemberships { get; set; }
+
+        public int TotalFarmers { get; set; }
+
+        public int TotalVerifiedFarmers { get; set; }
+
+        public int TotalUnverifiedFarmers { get; set; }
+        public decimal TotalRecoveryAmount { get; set; }
+        public decimal TotalInputDisbursed { get; set; }
+    }
 }

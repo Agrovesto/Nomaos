@@ -34,6 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<PagedListResponse<List<LocationAgentDetailResponse>>> GetAgentsByLocationAsync(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams args);
+        Task<List<OrganizationMemberShipResponseModel>> GetCooperativesByOrganization(string organizationCode, ListQueryParams query);
         Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query);
         Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
         Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
@@ -46,6 +47,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams args);
+        Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams query);
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
         Task<bool> ReassignAgentToLocation(OrganizationAgentArgs data);
@@ -710,19 +712,248 @@ SELECT
             await _context.SaveChangesAsync();
             return true;
         }
-
         public async Task<OrganizationAgentDetailResponse> GetOrganizationAgentDetail(ListQueryParams args)
         {
             var agent = await _context.Agents
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == args.Id);
+                .FirstOrDefaultAsync(x => x.UserId == args.UserId);
 
             if (agent == null)
                 return null;
 
             var orgAgents = await _context.OrganizationAgents
                 .AsNoTracking()
-                .Where(x => x.AgentId == args.Id && x.IsActive)
+                .Where(x => x.AgentId == agent.Id && x.IsActive)
+                .ToListAsync();
+
+            if (orgAgents.Count == 0)
+                return null;
+
+            var orgAgentIds = orgAgents.Select(x => x.Id).ToList();
+
+            var locationIds = orgAgents
+                .Where(x => x.LocationId > 0)
+                .Select(x => x.LocationId)
+                .Distinct()
+                .ToList();
+            var locations = await (
+                from loc in _context.OrganizationLocations.AsNoTracking()
+                where locationIds.Contains(loc.Id)
+
+                join lt in _context.LocationTypes.AsNoTracking()
+                    on loc.LocationTypeId equals lt.Id into ltJoin
+                from lt in ltJoin.DefaultIfEmpty()
+
+                join st in _context.States.AsNoTracking()
+                    on loc.StateId equals st.StateId into stJoin
+                from st in stJoin.DefaultIfEmpty()
+
+                join lga in _context.LGAs.AsNoTracking()
+                    on loc.LgaId equals lga.LgaId into lgaJoin
+                from lga in lgaJoin.DefaultIfEmpty()
+
+                select new OrganizationLocationDto
+                {
+                    LocationId = loc.Id,
+                    LocationName = loc.LocationName,
+
+                    LocationType = lt != null ? lt.Type : null,
+                    State = st != null ? st.State : null,
+                    Lga = lga != null ? lga.Name : null
+                }
+            )
+            .ToListAsync();
+
+            var roles = await (
+                from r in _context.OrganizationAgentRoles.AsNoTracking()
+                where orgAgentIds.Contains(r.OrganizationAgentId)
+
+                join rr in _context.OrganizationRoles.AsNoTracking()
+                    on r.RoleId equals rr.Id
+
+                select new OrganiationRoleDto
+                {
+                    RoleId = rr.Id,
+                    RoleName = rr.RoleName
+                }
+            )
+            .Distinct()
+            .ToListAsync();
+            return new OrganizationAgentDetailResponse
+            {
+                AgentId = agent.Id,
+                UserId = agent.UserId,
+                Name = agent.Name,
+                Email = agent.Email,
+                PhoneNumber = agent.PhoneNumber,
+                State = agent.State,
+                Lga = agent.Lga,
+                Ward = agent.Ward,
+                OnBoardedOn = agent.OnBoardedOn,
+
+                Locations = locations,
+                Roles = roles
+            };
+        }
+        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(
+       ListQueryParams query)
+        {
+            var result = await
+            (
+                from m in _context.MemberShips.AsNoTracking()
+
+                join om in _context.OrganizationMemberships.AsNoTracking()
+                    on m.Id equals om.MembershipId
+
+                join o in _context.BusinessOrganizations.AsNoTracking()
+                    on om.OrganizationId equals o.OrganizationId
+
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on m.Id equals fc.CooperativeId into farmerJoin
+                from fc in farmerJoin.DefaultIfEmpty()
+
+                join f in _context.Farmers.AsNoTracking()
+                    on fc.FarmerId equals f.Id into farmerDetailJoin
+                from f in farmerDetailJoin.DefaultIfEmpty()
+
+                where o.OrganizationCode == query.organizationCode
+
+                group f by 1 into g
+                select new OrganizationMembershipDashboardResponse
+                {
+                    TotalMemberships =
+                        (from m2 in _context.MemberShips
+                         join om2 in _context.OrganizationMemberships on m2.Id equals om2.MembershipId
+                         join o2 in _context.BusinessOrganizations on om2.OrganizationId equals o2.OrganizationId
+                         where o2.OrganizationCode == query.organizationCode
+                         select m2.Id).Distinct().Count(),
+
+                    TotalFarmers = g.Count(x => x != null),
+
+                    TotalVerifiedFarmers = g.Count(x => x != null && x.Level != FarmerLevel.Level1),
+
+                    TotalUnverifiedFarmers = g.Count(x => x != null && x.Level == FarmerLevel.Level1),
+                    TotalInputDisbursed=0,
+                    TotalRecoveryAmount=0
+                }
+            )
+            .FirstOrDefaultAsync();
+
+            return result ?? new OrganizationMembershipDashboardResponse();
+        }
+        public async Task<List<OrganizationMemberShipResponseModel>> GetCooperativesByOrganization(
+           string organizationCode,
+           ListQueryParams query)
+        {
+            var baseQuery =
+                from m in _context.MemberShips.AsNoTracking()
+
+                join om in _context.OrganizationMemberships.AsNoTracking()
+                    on m.Id equals om.MembershipId
+
+                join o in _context.BusinessOrganizations.AsNoTracking()
+                    on om.OrganizationId equals o.OrganizationId
+
+                where o.OrganizationCode == organizationCode
+
+                select m;
+
+            var memberships = await baseQuery
+                .OrderByDescending(x => x.OnBoardedOn)
+                .ToListAsync();
+
+            if (!memberships.Any())
+                return new List<OrganizationMemberShipResponseModel>();
+
+            var membershipIds = memberships.Select(x => x.Id).ToList();
+
+            var farmerLinks = await (
+                from fc in _context.FarmerCooperatives.AsNoTracking()
+                where membershipIds.Contains(fc.CooperativeId)
+
+                join f in _context.Farmers.AsNoTracking()
+                    on fc.FarmerId equals f.Id
+
+                select new
+                {
+                    fc.CooperativeId,
+                    f.Id,
+                    f.Level
+                }
+            ).ToListAsync();
+
+            var membershipAgents = await _context.MemberShipAgents
+                .AsNoTracking()
+                .Where(x => membershipIds.Contains(x.MemberShipId))
+                .Select(x => x.MemberShipId)
+                .Distinct()
+                .ToListAsync();
+
+            var agentSet = membershipAgents.ToHashSet();
+
+            var result = memberships.Select(m =>
+            {
+                var farmersForMembership = farmerLinks
+                    .Where(x => x.CooperativeId == m.Id)
+                    .ToList();
+
+                var totalFarmers = farmersForMembership.Count;
+
+                var totalVerifiedFarmers = farmersForMembership
+                    .Count(x => x.Level != FarmerLevel.Level1);
+
+                var totalUnverifiedFarmers = totalFarmers - totalVerifiedFarmers;
+
+                var hasAgent = agentSet.Contains(m.Id);
+
+                return new OrganizationMemberShipResponseModel
+                {
+                    Id = m.Id,
+                    Name = m.Name,
+                    Location = m.Location,
+                    State = m.State,
+                    Lga = m.Lga,
+                    OnBoardedOn = m.OnBoardedOn,
+
+                    ContactPerson =
+                        $"{m.MembershipLeaderLastName} {m.MembershipLeaderFirstName}",
+
+                    PhoneNumber = m.PhoneNumber,
+                    UserId = m.UserId,
+                    Tier = EnumExtensions.GetDisplayName(m.Tier),
+                    MembershipType = m.MemberShipType?.Name,
+                    Ward = m.Ward,
+
+                    TotalFarmers = totalFarmers,
+                    TotalVerifiedFarmers = totalVerifiedFarmers,
+                    TotalUnverifiedFarmers = totalUnverifiedFarmers,
+                    TotalInputReceived = 0,
+                    RecoveryAmount = 0,
+
+                    HasbeenAssignedAgent = hasAgent
+                };
+            }).ToList();
+
+            return result;
+        }
+
+        /// <summary>
+        /// TODO: REVERT if it fails
+        /// </summary>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        /**public async Task<OrganizationAgentDetailResponse> GetOrganizationAgentDetail(ListQueryParams args)
+        {
+            var agent = await _context.Agents
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == args.UserId);
+
+            if (agent == null)
+                return null;
+
+            var orgAgents = await _context.OrganizationAgents
+                .AsNoTracking()
+                .Where(x => x.AgentId == agent.Id && x.IsActive)
                 .ToListAsync();
 
             if (!orgAgents.Any())
@@ -770,6 +1001,7 @@ SELECT
                 Roles = roles
             };
         }
+        **/
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
         {
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
@@ -841,6 +1073,7 @@ SELECT
                 Data = result
             };
         }
+       
         /// <summary>
         /// TODO: revert if fails
         /// </summary>
@@ -946,6 +1179,7 @@ SELECT
 
             var duplicate = await _context.OrganizationLocations
                 .AnyAsync(x => x.LocationName == model.LocationName
+                && x.OrganizationId==model.OrganizationId
                 && x.StateId == model.StateId
                 && x.LgaId == model.LgaId
                 && x.Address == model.Address
@@ -985,7 +1219,7 @@ SELECT
         public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)
         {
             var orgExist = await _context.OrganizationLocations
-              .FirstOrDefaultAsync(x => x.LocationName == model.LocationName);
+              .FirstOrDefaultAsync(x => x.LocationName == model.LocationName && x.OrganizationId == model.OrganizationId);
 
             if (orgExist != null)
             {
@@ -1633,9 +1867,6 @@ SELECT
 
             var skip = (args.PageNumber - 1) * args.PageSize;
 
-            // =====================================================
-            // 1. COMPLETED FARMERS (Organization-linked farmers)
-            // =====================================================
             var completedQuery = from fo in _context.FarmerOrganizations.AsNoTracking()
                                  join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
                                  join u in _context.Users.AsNoTracking() on f.UserId equals u.Id
@@ -1657,12 +1888,10 @@ SELECT
                                      Level = EnumExtensions.GetDisplayName((FarmerLevel)f.Level),
                                      CreatedOn = f.OnBoardedOn == default ? u.CreatedOn : f.OnBoardedOn,
                                      FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
-                                     IsPendingOnboarding = false
+                                     IsPendingOnboarding = false,
+                                     IsActive=fo.IsActive
                                  };
 
-            // =====================================================
-            // 2. PENDING FARMERS (Not completed onboarding)
-            // =====================================================
             var pendingQuery = from u in _context.Users.AsNoTracking()
                                where u.UserType == UserType.Farmer.ToString()
                                      && u.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed
@@ -1683,14 +1912,10 @@ SELECT
                                    Level = "Pending",
                                    CreatedOn = u.CreatedOn,
                                    FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
-                                   IsPendingOnboarding = true
+                                   IsPendingOnboarding = true,
+                                   
                                };
 
-            // =====================================================
-            // 3. TOTAL COUNT (UNION OF UNIQUE USERS)
-            // Use a UNION at the database level to avoid double-counting users that
-            // may appear in both the completed and pending sets.
-            // =====================================================
             var completedUserIdsQuery =
                 from fo in _context.FarmerOrganizations.AsNoTracking()
                 join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
@@ -1706,8 +1931,6 @@ SELECT
                     x.CreatedBy == args.UserId)
                 .Select(x => x.Id);
 
-            // Load completed user ids first, then count pending users that are not present in completed set.
-            // This avoids subtle differences caused by DB-level UNION behavior and ensures we count unique users as expected.
             var completedUserIdsDistinct = await completedUserIdsQuery
                 .Distinct()
                 .ToListAsync();
@@ -1722,17 +1945,7 @@ SELECT
 
             var totalCount = completedUserIdsDistinct.Count + pendingOnlyCount;
 
-            // =====================================================
-            // 4. FETCH DATA (NO PARALLEL DB EXECUTION)
-            // =====================================================
-            // =====================================================
-            // 4b. Efficient DB-side pagination by UserId (avoid loading full lists)
-            //  - Build a lightweight union of (UserId, CreatedOn) from completed and pending queries
-            //  - Group by UserId and pick the latest CreatedOn per user in the database
-            //  - Order by that date, then select the page of UserIds
-            //  - Finally load full rows only for those UserIds and assemble final ordered page
-            // This reduces memory and prevents duplicate users across the two sets.
-            // =====================================================
+          
             var lightweightUnion = completedQuery
                 .Select(x => new { x.UserId, x.CreatedOn })
                 .Concat(pendingQuery.Select(x => new { x.UserId, x.CreatedOn }));
@@ -1748,7 +1961,6 @@ SELECT
 
             var pageUserIds = pageUserIdsWithDate.Select(x => x.UserId).ToList();
 
-            // Load only the full records for the users in the current page
             var completedPage = pageUserIds.Any()
                 ? await completedQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
                 : new List<OrganizationFarmerResponse>();
@@ -1757,20 +1969,14 @@ SELECT
                 ? await pendingQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
                 : new List<OrganizationFarmerResponse>();
 
-            // Merge and pick the most recent record per UserId
             var mergedDict = completedPage.Concat(pendingPage)
                 .GroupBy(x => x.UserId)
                 .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedOn).First());
 
-            // Preserve ordering from pageUserIdsWithDate
             var pagedData = pageUserIdsWithDate
                 .Select(p => mergedDict.GetValueOrDefault(p.UserId))
                 .Where(x => x != null)
                 .ToList();
-
-            // =====================================================
-            // 6. AGGREGATIONS (ONLY FOR CURRENT PAGE)
-            // =====================================================
             var farmerIds = pagedData
                 .Where(x => x.FarmerId > 0)
                 .Select(x => x.FarmerId.Value)
@@ -1779,12 +1985,11 @@ SELECT
 
             Dictionary<long, int> agentCounts = new();
             Dictionary<long, int> membershipCounts = new();
+            Dictionary<long, double> RepaymentPercentage = new();
 
             if (farmerIds.Any())
             {
-                // Do not execute multiple EF Core operations in parallel on the same DbContext.
-                // Execute sequentially to avoid: "A second operation was started on this context instance before a previous operation completed."
-                agentCounts = await _context.FarmerAgents
+                   agentCounts = await _context.FarmerAgents
                     .AsNoTracking()
                     .Where(x => farmerIds.Contains(x.FarmerId))
                     .GroupBy(x => x.FarmerId)
@@ -1797,13 +2002,22 @@ SELECT
                     .GroupBy(x => x.FarmerId)
                     .Select(g => new { g.Key, Count = g.Count() })
                     .ToDictionaryAsync(x => x.Key, x => x.Count);
+                RepaymentPercentage = await _context.Repayments
+       .AsNoTracking()
+       .Where(x => farmerIds.Contains(x.FarmerId))
+       .GroupBy(x => x.FarmerId)
+       .Select(g => new
+       {
+           FarmerId = g.Key,
+           Percentage = g.Count(x => x.IsComplete) * 100.0 / g.Count()
+       })
+       .ToDictionaryAsync(x => x.FarmerId, x => x.Percentage);
+             
             }
 
-            // =====================================================
-            // 7. FINAL SHAPE
-            // =====================================================
             var result = pagedData.Select(x => new OrganizationFarmerResponse
             {
+                IsActive=x.IsActive,
                 FarmerId = x.FarmerId,
                 UserId = x.UserId,
                 Name = x.Name,
@@ -1824,12 +2038,12 @@ SELECT
                     : 0,
                 MembershipCount = x.FarmerId > 0 && membershipCounts.TryGetValue(x.FarmerId.Value, out var m)
                     ? m
+                    : 0,
+                RepaymentPercentage = x.FarmerId > 0 && RepaymentPercentage.TryGetValue(x.FarmerId.Value, out var r)
+                    ? r
                     : 0
             }).ToList();
 
-            // =====================================================
-            // 8. RESPONSE
-            // =====================================================
             return new PagedListResponse<List<OrganizationFarmerResponse>>
             {
                 PageNumber = args.PageNumber,
@@ -2087,9 +2301,7 @@ SELECT
                 .Where(f => f.FarmerId == query.Id);
             var farms = await farmsQuery.ToListAsync();
 
-            // ===========================
-            // FETCH AGENTS
-            // ===========================
+           
             var agents = await (from fa in _context.FarmerAgents
                                 join a in _context.Agents on fa.AgentId equals a.Id
                                 where fa.FarmerId == query.Id
@@ -2103,9 +2315,6 @@ SELECT
                                 })
                                 .ToListAsync();
 
-            // ===========================
-            // FETCH COOPERATIVES
-            // ===========================
             var memberships = await (from fc in _context.FarmerCooperatives
                                      join c in _context.MemberShips on fc.CooperativeId equals c.Id
                                      where fc.FarmerId == query.Id
@@ -2118,9 +2327,6 @@ SELECT
                                      })
                                      .ToListAsync();
 
-            // ===========================
-            // MAP RESPONSE
-            // ===========================
             return new OrganizationFarmerDetailResponse
             {
                 FarmerId = farmer.Id,
@@ -2161,7 +2367,7 @@ SELECT
      INNER JOIN Farmers f ON fo.FarmerId = f.Id
      INNER JOIN AspNetUsers u ON f.UserId = u.Id
      WHERE fo.OrganizationCode = @orgCode
-       AND fo.IsActive = 1) AS TotalFarmers,
+       ) AS TotalFarmers,
 
     -- Active Farmers
     (SELECT COUNT(DISTINCT f.Id)
@@ -2169,8 +2375,7 @@ SELECT
      INNER JOIN Farmers f ON fo.FarmerId = f.Id
      INNER JOIN AspNetUsers u ON f.UserId = u.Id
      WHERE fo.OrganizationCode = @orgCode
-       AND fo.IsActive = 1
-       AND u.FarmerOnboardingStatus = 1) AS ActiveFarmers,
+       AND fo.IsActive = 1) AS ActiveFarmers,
 
     0 AS FarmersWithLoans,
     CAST(0 AS decimal(18,2)) AS RecoveryRate
@@ -2298,34 +2503,29 @@ SELECT
 
         public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
         {
-            var farmer = await _context.Farmers
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.UserId == args.FarmerUserId);
+            var query = _context.FarmerSalesTracker
+                .Where(x => x.FarmerUserId == args.UserId)
+                .AsNoTracking();
 
-            if (farmer == null)
-                return null;
+            var summary = await query
+                .GroupBy(x => 1)
+                .Select(g => new OrganizationFarmerSalesSummary
+                {
+                    TotalVolumeSold = g.Sum(x => (decimal?)x.QuantitySoldToday) ?? 0,
+                    TotalRevenue = g.Sum(x => (decimal?)x.TotalPriceSold) ?? 0,
+                    AverageSalesValue = g.Average(x => (decimal?)x.TotalPriceSold) ?? 0
+                })
+                .FirstOrDefaultAsync();
 
-            var orgFarmer = await _context.FarmerOrganizations
-                .AsNoTracking()
-                .Where(x => x.FarmerId == farmer.Id && x.IsActive)
-                .ToListAsync();
-
-            if (!orgFarmer.Any())
-                return null;
-
-            var orgFarmerIds = orgFarmer.Select(x => x.Id).ToList();
-
-            var totalVolumeSold = 0;// replace when there is data
-            var totalRevenue = 0;//replace when there is data
-            var averageSalesValue = 0;//replace when there is data
-            return new OrganizationFarmerSalesSummary
+            return summary ?? new OrganizationFarmerSalesSummary
             {
-               TotalRevenue = totalRevenue,
-               TotalVolumeSold=totalVolumeSold,
-               AverageSalesValue= averageSalesValue
+                TotalVolumeSold = 0,
+                TotalRevenue = 0,
+                AverageSalesValue = 0
             };
         }
 
+        
         #endregion FarmerMgt
     }
 }

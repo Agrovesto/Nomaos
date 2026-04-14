@@ -3062,9 +3062,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("CompletedOn")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("FarmerUserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<long>("FarmerId")
+                        .HasColumnType("bigint");
 
                     b.Property<long>("InterestedBundleId")
                         .HasColumnType("bigint");
