@@ -2381,7 +2381,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = entity.BelongToBusinessCode,
                 OrganizationCode = entity.OrganizationCode,
                 CompletedOn = entity.CompletedOn,
-                FarmerUserId = entity.FarmerUserId,
+                FarmerId = entity.FarmerId,
                 Id = entity.Id,
                 InterestedBundleId = entity.InterestedBundleId,
                 IsComplete = entity.IsComplete
@@ -2403,7 +2403,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = model.BelongToBusinessCode,
                 OrganizationCode = model.OrganizationCode,
                 CompletedOn = model.CompletedOn,
-                FarmerUserId = model.FarmerUserId,
+                FarmerId = model.FarmerId,
                 InterestedBundleId = model.InterestedBundleId,
                 IsComplete = model.IsComplete
             };

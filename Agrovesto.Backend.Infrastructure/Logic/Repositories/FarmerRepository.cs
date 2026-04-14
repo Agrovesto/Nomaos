@@ -320,18 +320,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return farmer?.Map();
         }
-
-        public async Task<bool> RemoveFarmerFromCooperative(long farmerId, long cooperativeId)
+        public async Task<bool> RemoveFarmerFromCooperative(long farmerId,long cooperativeId)
         {
+            var links = await _context.FarmerCooperatives
+                .Where(fc => fc.FarmerId == farmerId && fc.CooperativeId==cooperativeId)
+                .ToListAsync();
 
-            var link = await _context.FarmerCooperatives
-                .FirstOrDefaultAsync(fc => fc.FarmerId == farmerId && fc.CooperativeId == cooperativeId);
-
-            if (link == null)
+            if (links == null || links.Count == 0)
                 return false;
 
-            _context.FarmerCooperatives.Remove(link);
+            _context.FarmerCooperatives.RemoveRange(links);
             await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> RemoveFarmerFromCooperatives(long farmerId, List<long> cooperativeIds)
+        {
+            var links = await _context.FarmerCooperatives
+                .Where(fc => fc.FarmerId == farmerId && cooperativeIds.Contains(fc.CooperativeId))
+                .ToListAsync();
+
+            if (links == null || links.Count == 0)
+                return false;
+
+            _context.FarmerCooperatives.RemoveRange(links);
+            await _context.SaveChangesAsync();
+
             return true;
         }
         /// <summary>
@@ -2146,6 +2160,21 @@ SELECT
             }
             return query.Select(x => x.Map()).ToList();
         }
+      
+        public async Task<bool> RemoveFarmerFromAgent(long farmerId, List<long> agentIds)
+        {
+            var links = await _context.FarmerAgents
+                .Where(fc => fc.FarmerId == farmerId && agentIds.Contains(fc.AgentId))
+                .ToListAsync();
+
+            if (links == null || links.Count == 0)
+                return false;
+
+            _context.FarmerAgents.RemoveRange(links);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
         public async Task<FarmerModel> AssignFarmerToAgents(AssignmentArgs args, long farmerId)
         {
             if (args.AgentIds == null || !args.AgentIds.Any())
@@ -2194,7 +2223,62 @@ SELECT
             return updatedFarmer.Map();
         }
 
+        public async Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId)
+        {
+            if (args.AgentIds == null || !args.AgentIds.Any())
+                return null;
 
+            var farmerExists = await _context.Farmers
+                .AsNoTracking()
+                .AnyAsync(f => f.Id == farmerId);
+
+            if (!farmerExists)
+                return null;
+
+            var newAgentIds = args.AgentIds
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .Distinct()
+                .ToList();
+
+            var existingAssignments = await _context.FarmerAgents
+                .Where(fa => fa.FarmerId == farmerId)
+                .ToListAsync();
+
+            var agentsToRemove = existingAssignments
+                .Where(fa => !newAgentIds.Contains(fa.AgentId))
+                .ToList();
+
+            var existingAgentIds = existingAssignments
+                .Select(fa => fa.AgentId)
+                .ToList();
+
+            var agentsToAdd = newAgentIds
+                .Except(existingAgentIds)
+                .ToList();
+
+            if (agentsToRemove.Any())
+                _context.FarmerAgents.RemoveRange(agentsToRemove);
+
+            if (agentsToAdd.Any())
+            {
+                var newAssignments = agentsToAdd.Select(agentId => new FarmerAgent
+                {
+                    FarmerId = farmerId,
+                    AgentId = agentId,
+                    AssignedOn = DateTimeOffset.UtcNow
+                });
+
+                await _context.FarmerAgents.AddRangeAsync(newAssignments);
+            }
+
+            await _context.SaveChangesAsync();
+
+            var updatedFarmer = await _context.Farmers
+                .FirstOrDefaultAsync(f => f.Id == farmerId);
+
+            return updatedFarmer?.Map();
+        }
         public async Task<FarmerModel> AssignFarmerToAgent(string onboardedByUserId, long farmerId)
         {
             var farmer = await _context.Farmers.Where(c => c.Id == farmerId).FirstOrDefaultAsync();
@@ -2370,7 +2454,7 @@ SELECT
 
              var repayments = await _context.Repayments
                 .Include(r => r.RepaymentBreakdown)
-                .Where(r => r.FarmerUserId == farmer.UserId)
+                .Where(r => r.FarmerId == farmer.Id)
                 .ToListAsync();
 
              var visitations = await _context.FarmVisitationActivities

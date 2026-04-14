@@ -13,9 +13,18 @@ using System.Threading.Tasks;
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
 
+    public class UsersProfile
+    {
+        public string UserId { get; set; }
+        public string UserType { get; set; }
 
-    
-    public class UsersProfileResponse
+        // Common
+        public string Email { get; set; }
+        public string Phone { get; set; }
+        public string Name { get; set; }
+    }
+
+        public class UsersProfileResponse
     {
         public string UserId { get; set; }
         public string UserType { get; set; }
@@ -330,7 +339,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? agentUserId { get; set; }
         public string? UserId { get; set; }
         public string? OnboardedByUserId { get; set; }
-        public string businessCode { get; set; }
+        public string? businessCode { get; set; }
         public string? organizationCode { get; set; }
         public List<long?>? CooperativeIds { get; set; }
         public List<long?>? MembershipIds { get; set; }

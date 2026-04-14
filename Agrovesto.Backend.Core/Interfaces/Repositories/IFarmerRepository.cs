@@ -28,7 +28,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> AssignFarmerToCooperative(long farmerId,
     long cooperativeId,
     string? assignedByUserId = null);
-        Task<bool> RemoveFarmerFromCooperative(long farmerId, long cooperativeId);
+        Task<bool> RemoveFarmerFromCooperatives(long farmerId, List<long> cooperativeIds);
         Task<BusinessEntitiesMetrics> GetBusinessEntitiesMetricsAsyncByAgent(string agentId, ListQueryParams query);
         Task<FarmerModel> AssignFarmerToAgent(string agentuserId, long farmerId);
         Task<List<FarmerModel>> FilterFarmerForDownload(string? businessCode,
@@ -57,5 +57,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string membershipId);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(long farmerId, ListQueryParams query);
         Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null);
+        Task<bool> RemoveFarmerFromAgent(long farmerId, List<long> agentIds);
+        Task<bool> RemoveFarmerFromCooperative(long farmerId, long cooperativeId);
+        Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
     }
 }
