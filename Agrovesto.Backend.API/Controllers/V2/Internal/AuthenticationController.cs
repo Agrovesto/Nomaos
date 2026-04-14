@@ -736,7 +736,178 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+       /** [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            if (!ModelState.IsValid)
+            {
 
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                var request = await _authenticationRepository.ForgotPassword(model.Username);
+                return Ok(new Response<string>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request.Message
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(PasswordResetModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                var resetPasswordRequest = await _authenticationRepository.ResetPassword(model);
+                if (resetPasswordRequest.Status)
+                {
+                    return Ok(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Success",
+                        Data = resetPasswordRequest
+                    });
+                }
+                else
+                {
+                    return BadRequest(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.NotSuccessful,
+                        Succeeded = false,
+                        Message = "Failed",
+                        Data = resetPasswordRequest
+                    });
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                model.UserName = CurrentUserEmail;
+                var resetPasswordRequest = await _authenticationRepository.ChangePassword(model);
+                if (resetPasswordRequest.Status)
+                {
+                    return Ok(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = true,
+                        Message = "Success",
+                        Data = resetPasswordRequest
+                    });
+                }
+                else
+                {
+                    return BadRequest(new Response<(bool Status, string Message)>()
+                    {
+                        Code = ResponseCodes.NotSuccessful,
+                        Succeeded = false,
+                        Message = "Failed",
+                        Data = resetPasswordRequest
+                    });
+                }
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        **/
         //[HttpPost("Verify-NIN")]
         //[AllowAnonymous]
         //public async Task<IActionResult> VerifyNIN([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)

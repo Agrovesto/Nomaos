@@ -1090,10 +1090,13 @@ OrganizationOnboardingArgs args)
                 {
                     if (model.OtpTarget == OtpTarget.Email)
                     {
-                        await _sMSService.SendEmailAsync(
+                        await _awsService.SendEmailAsync(
+                            _configuration["Official:Email"],
                             otp.Destination,
                             "Confirm your account",
-                            $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes.",
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes."
+                            );
                     }
                     else
                     {
@@ -1881,6 +1884,8 @@ OrganizationOnboardingArgs args)
             }
         }
     
+
+
 
     }
 

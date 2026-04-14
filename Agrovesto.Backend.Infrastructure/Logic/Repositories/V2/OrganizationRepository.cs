@@ -772,6 +772,82 @@ SELECT
         }
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
         {
+            args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+            args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+
+            var baseQuery =
+                from oa in _context.OrganizationAgents.AsNoTracking()
+                where oa.OrganizationId == args.Id && oa.IsActive
+
+                join a in _context.Agents.AsNoTracking()
+                    on oa.AgentId equals a.Id
+
+                group new { oa, a } by new
+                {
+                    a.Id,
+                    a.UserId,
+                    a.Name,
+                    a.Email,
+                    a.PhoneNumber,
+                    a.State,
+                    a.Lga,
+                    a.Ward,
+                    a.OnBoardedOn
+                }
+                into g
+
+                select new OrganizationAgentResponse
+                {
+                    AgentId = g.Key.Id,
+                    UserId = g.Key.UserId,
+                    Name = g.Key.Name,
+                    Email = g.Key.Email,
+                    PhoneNumber = g.Key.PhoneNumber,
+                    State = g.Key.State,
+                    Lga = g.Key.Lga,
+                    Ward = g.Key.Ward,
+                    OnBoardedOn = g.Key.OnBoardedOn,
+
+                    LocationCount = g
+                        .Where(x => x.oa.LocationId > 0)
+                        .Select(x => x.oa.LocationId)
+                        .Distinct()
+                        .Count(),
+
+                    RoleCount =
+                        (from r in _context.OrganizationAgentRoles
+                         where g.Select(x => x.oa.Id).Contains(r.OrganizationAgentId)
+                         select r.Id).Count(),
+
+                    Subscribers = 0,
+                    InputDisbursed = 0,
+                    EquityPaid = 0,
+                    ProductSold = 0
+                };
+
+            var totalCount = await baseQuery.CountAsync();
+
+            var result = await baseQuery
+                .OrderByDescending(x => x.AgentId)
+                .Skip((args.PageNumber - 1) * args.PageSize)
+                .Take(args.PageSize)
+                .ToListAsync();
+
+            return new PagedListResponse<List<OrganizationAgentResponse>>
+            {
+                PageNumber = args.PageNumber,
+                PageSize = args.PageSize,
+                Count = totalCount,
+                Data = result
+            };
+        }
+        /// <summary>
+        /// TODO: revert if fails
+        /// </summary>
+        /// <param name="args"></param>
+        /// <returns></returns>
+      /**  public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
+        {
             var query =
     from oa in _context.OrganizationAgents.AsNoTracking()
     where oa.OrganizationId == args.Id && oa.IsActive
@@ -859,6 +935,7 @@ SELECT
                 Data = result
             };
         }
+      **/
         public async Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model)
         {
             var existingLocation = await _context.OrganizationLocations
@@ -1136,6 +1213,7 @@ SELECT
                             {
                                 FarmerId = farmer.Id,
                                 OrganizationCode = data.OrganizationCode,
+                                IsActive=true,
                                 OnboardedByUserId = data.OnboardedByUserId
                             });
                         }
@@ -1161,6 +1239,7 @@ SELECT
                             {
                                 FarmerId = farmer.Id,
                                 CooperativeId = id,
+                                IsActive=true,
                                 OnboardedByUserId = data.OnboardedByUserId,
                                 JoinedOn = DateTimeOffset.UtcNow
                             }));
@@ -1189,7 +1268,8 @@ SELECT
                                 FarmerId = farmer.Id,
                                 AgentId = id,
                                 AssignedByUserId = data.OnboardedByUserId,
-                                AssignedOn = DateTimeOffset.UtcNow
+                                AssignedOn = DateTimeOffset.UtcNow,
+                                IsActive=true,
                             }));
 
                         _context.FarmerAgents.RemoveRange(toRemove);
@@ -2072,32 +2152,32 @@ SELECT
                 throw new ValidationException("Invalid Organization");
 
             var result = await _context.Database
-                .SqlQueryRaw<OrganizationFarmerDashboardResponse>(
-        @"
+    .SqlQueryRaw<OrganizationFarmerDashboardResponse>(
+@"
 SELECT
-    -- Total Farmers
-    (SELECT COUNT(DISTINCT fo.FarmerId)
-     FROM FarmerOrganizations fo
-     WHERE fo.OrganizationCode = @orgCode AND fo.IsActive = 1) AS TotalFarmers,
-
-    -- Active Farmers (Completed onboarding)
-    (SELECT COUNT(DISTINCT fo.FarmerId)
+    -- Total Farmers (MATCHES WORKING QUERY)
+    (SELECT COUNT(DISTINCT f.Id)
      FROM FarmerOrganizations fo
      INNER JOIN Farmers f ON fo.FarmerId = f.Id
-     INNER JOIN Users u ON f.UserId = u.Id
+     INNER JOIN AspNetUsers u ON f.UserId = u.Id
+     WHERE fo.OrganizationCode = @orgCode
+       AND fo.IsActive = 1) AS TotalFarmers,
+
+    -- Active Farmers
+    (SELECT COUNT(DISTINCT f.Id)
+     FROM FarmerOrganizations fo
+     INNER JOIN Farmers f ON fo.FarmerId = f.Id
+     INNER JOIN AspNetUsers u ON f.UserId = u.Id
      WHERE fo.OrganizationCode = @orgCode
        AND fo.IsActive = 1
        AND u.FarmerOnboardingStatus = 1) AS ActiveFarmers,
 
-    -- Placeholder (future loan integration)
     0 AS FarmersWithLoans,
-
-    -- Placeholder recovery rate
     CAST(0 AS decimal(18,2)) AS RecoveryRate
 ",
-                new SqlParameter("@orgCode", args.organizationCode)
-                )
-                .FirstOrDefaultAsync();
+    new SqlParameter("@orgCode", args.organizationCode)
+)
+.FirstOrDefaultAsync();
 
             return result ?? new OrganizationFarmerDashboardResponse();
         }

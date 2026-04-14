@@ -145,7 +145,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                             MiddleName = row.MiddleName,
                             LastName = row.LastName,
                             Bvn = row.BVN,
-                            Nin = row.NIN
+                            Nin = row.NIN,
+                            
                         }, args, salt);
 
                         var farmer = new Farmer
@@ -231,6 +232,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                     var phone = agg.User.PhoneNumber;
 
                     agg.User.UserType = args.userType;
+                    agg.User.IsActive = true;
+                   
                     // if farmer exists (email or phone), skip entire row
                     if (!string.IsNullOrWhiteSpace(email) && existingFarmerEmails.Contains(email))
                     {
@@ -451,6 +454,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                                 _logger.LogWarning(ex, "Bulk insert for user-orgs failed, falling back to single inserts");
                                 foreach (var uo in toInsertUserOrgs)
                                 {
+                                    uo.IsActive = true;
                                     try { _context.UserOrganizations.Add(uo); await _context.SaveChangesAsync(token); } catch { }
                                 }
                             }
@@ -461,6 +465,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                     var farmerOrgCandidates = farmersToInsert.Select(f => new FarmerOrganization
                     {
                         FarmerId = f.Id,
+                        IsActive=true,
                         OrganizationCode = args.organizationCode,
                         OnboardedByUserId = args.OnboardedByUserId
                     }).ToList();
@@ -486,6 +491,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                             _logger.LogWarning(ex, "Bulk insert for farmer-orgs failed, falling back to single inserts");
                             foreach (var fo in toInsertFarmerOrgs)
                             {
+                                fo.IsActive = true;
                                 try { _context.FarmerOrganizations.Add(fo); await _context.SaveChangesAsync(token); } catch { }
                             }
                         }
