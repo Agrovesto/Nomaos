@@ -141,7 +141,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Level { get; set; }
         public int AgentCount { get; set; }
         public int MembershipCount { get; set; }
+        public double RepaymentPercentage { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
+        public bool IsActive { get; set; }
     }
     public class OrganizationFarmerDashboardResponse
     {

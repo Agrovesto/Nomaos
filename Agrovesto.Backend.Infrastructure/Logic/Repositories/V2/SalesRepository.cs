@@ -154,7 +154,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Quantity = x.QuantitySoldToday, 
                     UnitPrice = x.PriceOfLowestUnit, 
                     TotalValue = (decimal)x.QuantitySoldToday * x.PriceOfLowestUnit, 
-                    ProductSold = (decimal)x.QuantitySoldToday * x.PriceOfLowestUnit, 
+                    ProductSold = x.CropSold, 
                     PaymentStatus = EnumExtensions.GetDisplayName(x.PaymentStatus) 
                 }).ToListAsync(cancellationToken);
 

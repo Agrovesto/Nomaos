@@ -351,11 +351,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var fetchFarms = await _farmRepo.FetchFarmsAsync(args);
                 if (fetchFarms == null) return null;
 
+                var capturerDetails = await _onboardingRepository.FindUserById(fetchFarms.CreatedBy);
                 var farms = new FarmDetailsResponse
                 {
                     DateAdded = fetchFarms.CreatedAt,
                     MappingStatus = EnumExtensions.GetDisplayName(fetchFarms.MappingStatus),
-                    AddedBy = fetchFarms.CreatedBy,
+                    AddedById = fetchFarms.CreatedBy,
 
                     Documents = fetchFarms.FarmLandDocuments != null && fetchFarms.FarmLandDocuments.Any()
                         ? fetchFarms.FarmLandDocuments.Select(x => new FarmLandDocumentDto
@@ -393,9 +394,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         : null,
 
                     Accuracy = fetchFarms.MappingAccuracy,
-                    CapturedBy = fetchFarms.CapturedBy,
+                    CapturedById = fetchFarms.CapturedBy,
 
-                    CapturedOn = fetchFarms.CapturedOn
+                    CapturedOn = fetchFarms.CapturedOn,
+                    CapturedBy= capturerDetails.Name,
+                    AddedBy=capturerDetails.Name,
+                    CapturedByType= capturerDetails.UserType,
+                    AddedByType=capturerDetails.UserType
+
                 };
                 if (farms.Documents?.Any() == true)
                 {
