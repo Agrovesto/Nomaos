@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+﻿using AfricasTalkingCS;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -20,6 +21,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using EFCore.BulkExtensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -93,6 +95,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly DataContext _context;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IBackgroundTaskQueue _taskQueue;
+        private readonly IAWSService _awsService;
+
+        private readonly IConfiguration _configuration;
         public OrganizationManager(
             IExcelConverterService excelConverterService,
             IWalletManager walletManager,
@@ -111,7 +116,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             DataContext context,
               ILogger<OrganizationManager> log,
               IBackgroundTaskQueue taskQueue,
-              IServiceScopeFactory scopeFactory)
+              IServiceScopeFactory scopeFactory,
+               IAWSService awsService,
+               IConfiguration configuration)
         {
             _context=context;
             _excelConverterService = excelConverterService;
@@ -131,6 +138,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _roleManager = roleManager;
             _taskQueue = taskQueue;
             _scopeFactory=scopeFactory;
+            _awsService = awsService;
+
+            _configuration = configuration;
         }
 
         #region bulkupload
@@ -193,8 +203,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
                     logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
 
-                    result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
-
+                 
                     await processor.ProcessAsync(tmpFile, args, cancellationToken);
                       }
                 catch (Exception ex)
@@ -211,6 +220,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     catch { }
                 }
             });
+            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
 
             return result; 
     }
@@ -961,8 +971,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query)
         {
-            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            if (string.IsNullOrEmpty(query.businessCode)) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
             await FetchOrganizationDetails(query);
             return await _organizationRepository.GetOrganizationAgents(query);
@@ -1245,7 +1254,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var registerUser = await _onboardingRepository.RegisterUser(onboardingRequest, args);
 
                 var agent = await CreateAgent(model, args, registerUser.model.Id);
-                
+
+                await SendDefaultCredentialChange(registerUser.model);
+
                 await AssignAgentToOrganization(model, args, registerUser.model.Id);
 
                 await EnsureWalletExists(registerUser.model, business);
@@ -1503,7 +1514,7 @@ DateTimeOffset dateTime)
                 await LogActivity(user, args);
                 await EnsureWalletExists(user, business);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
+                await SendDefaultCredentialChange(user);
             }
             catch (Exception ex)
             {
@@ -1527,38 +1538,90 @@ DateTimeOffset dateTime)
 
                                     });
         }
-        private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
         {
-            var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-                ? OtpTarget.Email
-                : OtpTarget.Phone;
+            var senderEmail = _configuration["Official:Email"];
 
-            var destination = otpTarget == OtpTarget.Email
-                ? model.Email
-                : model.PhoneNumber;
+            var loginUrl = _configuration["Official:LoginUrl"];
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
+            var destination = otpTarget == OtpTarget.Email ? model.Email : model.PhoneNumber;
 
-            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
-            {
-                UserId = model.Id,
-                Target = otpTarget,
-                Destination = destination,
-                Purpose = OtpPurpose.Onboarding,
-                ExpiryMinutes = 5
-            });
-
-            // ------------------ Send OTP ------------------
             if (otpTarget == OtpTarget.Email)
             {
-                await _sMSService.SendEmailAsync(
+                var frontendUrl = $"{loginUrl}/login"; 
+                var year = DateTime.UtcNow.Year;
+
+                var email = EmailTemplateBuilder.BuildAccountCreatedEmail(
+                    model.Password,
+                    frontendUrl,
+                    year
+                );
+
+                await _awsService.SendEmailAsync(
+        senderEmail,
+        destination,
+        email.Subject,
+        email.BodyHtml,
+        email.BodyText
+    );
+            }
+            else
+            {
+                // SMS fallback
+                await _sMSService.SendSmsAsync(
                     destination,
-                    "Confirm your account",
-                    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    $"Your default pin is {model.Pin}. Kindly login and change this."
+                );
             }
         }
+        //private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        //{
+        //    var senderEmail = _configuration["Official:Email"];
+        //    var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+        //        ? OtpTarget.Email
+        //        : OtpTarget.Phone;
+
+        //    var destination = otpTarget == OtpTarget.Email
+        //        ? model.Email
+        //        : model.PhoneNumber;
+
+        //    await _otpService.InvalidateActiveOtps(
+        //        model.Id,
+        //        otpTarget);
+
+        //    var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+        //    {
+        //        UserId = model.Id,
+        //        Target = otpTarget,
+        //        Destination = destination,
+        //        Purpose = OtpPurpose.Onboarding,
+        //        ExpiryMinutes = 5
+        //    });
+
+        //    // ------------------ Send OTP ------------------
+        //    if (otpTarget == OtpTarget.Email)
+        //    {
+        //        //use aws
+        //        await _awsService.SendEmailAsync(
+        //            senderEmail,
+        //            destination,
+        //            "Confirm your account",
+        //            $"Your verification code is {model..Code}. It expires in 5 minutes.",
+        //            $"Your verification code is {otp.Code}. It expires in 5 minutes."
+        //            );
+        //        //await _sMSService.SendEmailAsync(
+        //        //    destination,
+        //        //    "Confirm your account",
+        //        //    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+        //    }
+        //    else
+        //    {
+        //        await _sMSService.SendSmsAsync(
+        //                otp.Destination,
+        //                $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+        //    }
+        //}
 
         private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterFarmerOrFail(
          CreateFarmerRequest model,
@@ -1830,7 +1893,7 @@ DateTimeOffset dateTime)
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
+                await SendDefaultCredentialChange(user);
             }
             catch (Exception ex)
             {
