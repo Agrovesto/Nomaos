@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class RepaymentModel
     {
          public long Id { get; set; }
-        public string FarmerUserId { get; set; }
+        public long FarmerId { get; set; }
         public long InterestedBundleId { get; set; }
         public string? OrganizationCode { get; set; }
         public string BelongToBusinessCode { get; set; }

@@ -52,6 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfileResponse> GetUserProfile(string userId);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
+        Task<UsersProfile> FindUserById(string userId);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -70,8 +71,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
         }
+        public async Task<UsersProfile> FindUserById(string userId)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
 
-    
+            if (user == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+            var response = new UsersProfile
+            {
+                UserId = user.Id,
+                UserType = user.UserType,
+                Email = user.Email,
+                Phone = user.PhoneNumber,
+                Name=user.Name
+            };
+
+           
+
+            return response;
+        }
+
+
         //public async Task<TokenModel> RefreshAsync(string refreshToken, string deviceId)
         //{
         //    var stored = await _context.RefreshTokens
