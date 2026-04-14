@@ -203,8 +203,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
                     logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
 
-                    result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
-
+                 
                     await processor.ProcessAsync(tmpFile, args, cancellationToken);
                       }
                 catch (Exception ex)
@@ -221,6 +220,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     catch { }
                 }
             });
+            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
 
             return result; 
     }
@@ -1541,22 +1541,30 @@ DateTimeOffset dateTime)
         private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
         {
             var senderEmail = _configuration["Official:Email"];
+
+            var loginUrl = _configuration["Official:LoginUrl"];
+
             var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
             var destination = otpTarget == OtpTarget.Email ? model.Email : model.PhoneNumber;
 
             if (otpTarget == OtpTarget.Email)
             {
-                // Send email using SES template
-                await _awsService.SendEmailAsync(
-                    senderEmail,
-                    destination,
-                    "Confirm your account",
-                      $"An account was created for you on NomaOS, Login with your email and this default password{model.Password}. " +
-                      $"Kindly change your password.",
-          $"An account was created for you on NomaOS, Login with your email and this default password{model.Password}. " +
-                      $"Kindly change your password."
-                   
+                var frontendUrl = $"{loginUrl}/login"; 
+                var year = DateTime.UtcNow.Year;
+
+                var email = EmailTemplateBuilder.BuildAccountCreatedEmail(
+                    model.Password,
+                    frontendUrl,
+                    year
                 );
+
+                await _awsService.SendEmailAsync(
+        senderEmail,
+        destination,
+        email.Subject,
+        email.BodyHtml,
+        email.BodyText
+    );
             }
             else
             {

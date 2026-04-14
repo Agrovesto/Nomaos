@@ -931,7 +931,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _userManager.AddToRoleAsync(user, role.Name);
 
             await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-
+            user.Pin = pinToUse;
+            user.Password = passwordToUse;
+            model.Pin = pinToUse;
+            model.Password = passwordToUse;
             return (
                 MapUserResponse(user, model),
                 true,
@@ -998,7 +1001,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
                 CreatedBy = args.UserId,
-                Name = model.FullName
+                Name = model.FullName,
             };
         }
         private string GenerateUserId(OnBoardingArgs args)
