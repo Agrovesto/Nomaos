@@ -76,9 +76,16 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public MemberSummaryDto Summary { get; set; }
         public FarmMappingProgressDto MappingProgress { get; set; }
         public List<MonthlyFarmerLinkDto> FarmerLinkHistogram { get; set; }
+        public List<MonthlyInputDisbursementDto> FarmerInputDisbursedLinkHistogram { get; set; }
 
         public List<ActivityDto> RecentActivities { get; set; }
         public bool CanAddFarmer { get; set; }
+    }
+    public class MonthlyInputDisbursementDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public int InputCount { get; set; }
     }
     public class MonthlyFarmerLinkDto
     {
@@ -96,6 +103,8 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public int TotalFarms { get; set; }
         public int FarmsMapped { get; set; }
         public int MappingProgressPercentage { get; set; }
+        public int TotalVerifiedFarmers { get; set; }
+        public int TotalUnverifiedFarmers { get; set; }
     }
 
     public class FarmMappingProgressDto
@@ -123,6 +132,7 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public string Status { get; set; }
         public DateTimeOffset DateCreated { get; set; }
         public string Location { get; set; }
+        public string LeaderName { get; set; }
     }
 
 }

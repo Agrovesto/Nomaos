@@ -160,77 +160,80 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         #endregion agent
 
-        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null)
+        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message = null)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            try
+            return await strategy.ExecuteAsync(async () =>
             {
-                var farmerExists = await _context.Farmers
-                    .AnyAsync(f => f.Id == args.Id);
+                using var transaction = await _context.Database.BeginTransactionAsync();
 
-                if (!farmerExists)
-                    return false;
-
-                var now = DateTimeOffset.UtcNow;
-
-                var orgFarmer = await _context.FarmerOrganizations
-                    .FirstOrDefaultAsync(x => x.FarmerId == args.Id
-                                           && x.OrganizationCode == args.organizationCode
-                                           && x.IsActive);
-
-                if (orgFarmer == null)
-                    return false;
-
-                orgFarmer.IsActive = false;
-                orgFarmer.DeactivatedOn = now;
-                orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
-                orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message:  $"Deactivated by user {args.OnboardedByUserId}";
-
-
-                var farmerAgents = await _context.FarmerAgents
-                    .Where(x => x.FarmerId == args.Id
-                             && x.OrganizationCode == args.organizationCode
-                             && x.IsActive)
-                    .ToListAsync();
-
-                foreach (var agent in farmerAgents)
+                try
                 {
-                    agent.IsActive = false;
-                    agent.DeactivatedOn = now;
+                    var farmerExists = await _context.Farmers
+                        .AnyAsync(f => f.Id == args.Id);
+
+                    if (!farmerExists)
+                        return false;
+
+                    var now = DateTimeOffset.UtcNow;
+
+                    var reason = !string.IsNullOrWhiteSpace(message)
+                        ? message
+                        : $"Deactivated by user {args.OnboardedByUserId}";
+
+                    var orgFarmer = await _context.FarmerOrganizations
+                        .FirstOrDefaultAsync(x => x.FarmerId == args.Id
+                                              && x.OrganizationCode == args.organizationCode
+                                              && x.IsActive);
+
+                    if (orgFarmer == null)
+                        return false;
+
+                    orgFarmer.IsActive = false;
+                    orgFarmer.DeactivatedOn = now;
                     orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
-                    orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message : $"Deactivated by user {args.OnboardedByUserId}";
+                    orgFarmer.DeactivationReason = reason;
 
+                    var farmerAgents = await _context.FarmerAgents
+                        .Where(x => x.FarmerId == args.Id
+                                 && x.OrganizationCode == args.organizationCode
+                                 && x.IsActive)
+                        .ToListAsync();
+
+                    foreach (var agent in farmerAgents)
+                    {
+                        agent.IsActive = false;
+                        agent.DeactivatedOn = now;
+                        agent.DeactivatedByUserId = args.OnboardedByUserId;
+                        agent.DeactivationReason = reason;
+                    }
+
+                    var farmerMemberships = await _context.FarmerCooperatives
+                        .Where(x => x.FarmerId == args.Id
+                                 && x.OrganizationCode == args.organizationCode
+                                 && x.IsActive)
+                        .ToListAsync();
+
+                    foreach (var membership in farmerMemberships)
+                    {
+                        membership.IsActive = false;
+                        membership.DeactivatedOn = now;
+                        membership.DeactivatedByUserId = args.OnboardedByUserId;
+                        membership.DeactivationReason = reason;
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return true;
                 }
-
-
-                var farmerMemberships = await _context.FarmerCooperatives
-                    .Where(x => x.FarmerId == args.Id
-                             && x.OrganizationCode == args.organizationCode
-                             && x.IsActive)
-                    .ToListAsync();
-
-                foreach (var membership in farmerMemberships)
+                catch
                 {
-                    membership.IsActive = false;
-                    membership.DeactivatedOn = now;
-                    orgFarmer.DeactivatedByUserId = args.OnboardedByUserId;
-                    orgFarmer.DeactivationReason = !string.IsNullOrEmpty(message) ? message : $"Deactivated by user {args.OnboardedByUserId}";
-
+                    await transaction.RollbackAsync();
+                    throw;
                 }
-
-
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                return true;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+            });
         }
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId)
         {

@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Microsoft.AspNetCore.Authorization;
@@ -25,18 +26,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
         private readonly IOnBoardingManager _onboardingManager;
-        private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context;
+        private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
+        private readonly IMembershipManager _membershipManager;
 
         private readonly IFarmMappingManager _farmMappingManager;
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
             IBusinessManager businessManager,
              IOrganizationManager organizationManager,
+             IMembershipManager membershipManager,
              IOnBoardingManager onboardingManager, IFarmMappingManager farmMappingManager) : base(httpContextAccessor)
         {
             _farmMappingManager = farmMappingManager;
             _organizationManager = organizationManager;
             _businessManager = businessManager;
             _onboardingManager = onboardingManager;
+            _membershipManager = membershipManager;
             _context = (Agrovesto.Backend.Infrastructure.DB.DataContext)httpContextAccessor.HttpContext.RequestServices.GetService(typeof(Agrovesto.Backend.Infrastructure.DB.DataContext));
         }
 
@@ -170,7 +174,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
 
                 args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -232,7 +236,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
 
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
@@ -278,7 +282,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
 
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
@@ -322,7 +326,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var type = await _organizationManager.GetLocationById(query);
                 return Ok(new Response<OrganizationLocationModel>()
                 {
@@ -361,11 +365,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -408,11 +408,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -455,11 +451,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -518,8 +510,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -564,8 +555,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -608,7 +598,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var type = await _organizationManager.GetRoleById(query);
                 return Ok(new Response<OrganizationRoleModel>()
                 {
@@ -650,8 +640,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                query.organizationCode = !string.IsNullOrEmpty(query.organizationCode) ? query.organizationCode : OrganizationCode;
-
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -692,10 +681,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
@@ -759,7 +745,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                NormalizeOrganizationCode(args);
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
 
 
                 var request = await _organizationManager.CreateAgentUser(model, args);
@@ -799,11 +785,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -848,11 +830,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -928,11 +906,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedById = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-              string.IsNullOrEmpty(args.OrganizationCode))
-                {
-                    args.OrganizationCode = OrganizationCode;
-                }
+                args.OrganizationCode = args.OrganizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.OrganizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -998,11 +972,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedById = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-              string.IsNullOrEmpty(args.OrganizationCode))
-                {
-                    args.OrganizationCode = OrganizationCode;
-                }
+                args.OrganizationCode = args.OrganizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.OrganizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1065,11 +1035,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedById = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-              string.IsNullOrEmpty(args.OrganizationCode))
-                {
-                    args.OrganizationCode = OrganizationCode;
-                }
+                args.OrganizationCode = args.OrganizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.OrganizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1112,11 +1078,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1172,11 +1134,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1232,11 +1190,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1288,11 +1242,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1348,11 +1298,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1425,12 +1371,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-          
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-              string.IsNullOrEmpty(args.OrganizationCode))
-                {
-                    model.OrganizationCode = OrganizationCode;
-                }
+
+                args.OrganizationCode = args.OrganizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(model.OrganizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1481,8 +1423,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                query.organizationCode = !string.IsNullOrEmpty(query.organizationCode) ? query.organizationCode : OrganizationCode;
-
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1542,7 +1483,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
 
                 var request = await _organizationManager.CreateMembershipUser(model, args);
 
@@ -1582,11 +1523,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                 string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1602,6 +1539,159 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     PageNumber = query.PageNumber,
                     PageSize = 10,
                     Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("membership/farmers")]
+        public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
+
+                var currentRole = CurrentUserRole;
+                if (string.IsNullOrEmpty(query.UserId))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "userId is required");
+                }
+                var result = await _membershipManager.GetMembershipFarmers(query);
+                return Ok(new PagedListResponse<List<FarmerMembershipDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpPost("membership/create-farmer")]
+        public async Task<IActionResult> CreateMembershipFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                if (string.IsNullOrEmpty(args.UserId))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Membership userId is required");
+                }
+                args.OnboardedByUserId = CurrentUserId;
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+
+                await EnrichCooperativeAsync(args);
+
+
+                var request = await _membershipManager.CreateFarmerAsync(model, args);
+
+
+                return Ok(new Response<CreateMembershipResponseModel>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = request.Message,
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("membership-detail")]
+        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(query.UserId))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Membership userId is required");
+                }
+                var result = await _membershipManager.GetMembershipDashboardAsync(query);
+                return Ok(new Response<MembershipDashboardDto>()
+                {
+                    Data = result,
+
+
+                    Message = result != null ? "Successful" : "Could not retrieve data",
+                    Succeeded = result != null ? true : false,
+
+                    Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
             catch (BaseException ex)
@@ -1651,7 +1741,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
                 args.userType = "Farmer";
 
                 if (file == null || file.Length == 0)
@@ -1696,11 +1788,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = query.organizationCode,
-                });
-               if(string.IsNullOrEmpty(query.FarmerUserId))
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(query.FarmerUserId))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Farmer user Id is required");
                 }
@@ -1741,10 +1830,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = query.organizationCode,
-                });
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.FarmerUserId))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Farmer user Id is required");
@@ -1787,11 +1873,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1832,11 +1914,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1879,11 +1957,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -1925,10 +1999,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = query.organizationCode,
-                });
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var overview = await _organizationManager.GetInputLoanSummaryAsync(query);
                 return Ok(new Response<InputLoanSummaryDto>()
                 {
@@ -1966,11 +2037,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = query.organizationCode,
-                });
-               
+
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
+
                 var response = await _organizationManager.GetFinancingBreakdownAsync(query, cancellationToken);
                 return Ok(new PagedListResponse<List<FinancingBreakdownDto>>()
                 {
@@ -2014,12 +2083,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = args.organizationCode,
-                });
+               
                 await EnrichFarmerAsync(args);
                 var request = await _organizationManager.DeactivateFarmerFromOrganization(args, model.Message);
 
@@ -2053,6 +2120,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+      
         //link cooperative
         [HttpPut("assign-cooperatives-to-farmer")]
         [AllowAnonymous]
@@ -2068,10 +2136,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         "No Memberhsip selected.");
                 }
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode= args.organizationCode,
-                });
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
                 args.CooperativeIds = model.MembershipIds;
 
@@ -2135,10 +2201,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         "No Memberhsip selected.");
                 }
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new OnBoardingArgs
-                {
-                    organizationCode = args.organizationCode,
-                });
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
                 args.CooperativeIds = model.MembershipIds;
                 var CooperativeIds = args.CooperativeIds
@@ -2202,7 +2266,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                NormalizeOrganizationCode(args);
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
 
 
                 var request = await _organizationManager.CreateFarmerAsync(model, args);
@@ -2244,8 +2309,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                query.organizationCode = !string.IsNullOrEmpty(query.organizationCode) ? query.organizationCode : OrganizationCode;
 
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -2287,10 +2352,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
@@ -2334,11 +2397,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
@@ -2350,9 +2410,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Message = "Validation failed.",
                         Succeeded = false,
                         Data = new Dictionary<string, string>
-{
-    { "UserId", "UserId is required" }
-}
+                        {
+                            { "UserId", "UserId is required" }
+                        }
 
                     });
                 }
@@ -2405,10 +2465,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     throw new ValidationException("UserId is required");
                 }
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 var saveFarmerFace = await _onboardingManager.SaveFarmerImage(model, args);
 
 
@@ -2450,8 +2508,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
        [FromQuery] AssignmentArgs args,
         [FromBody] AssignmentArgs model)
         {
-            try { 
-            await EnrichFarmerAsync(args);
+            try {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                await EnrichFarmerAsync(args);
             args.AgentIds = model.AgentIds;
 
             if (model == null || model.AgentIds == null || !model.AgentIds.Any())
@@ -2496,6 +2556,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
                 args.AgentIds = model.AgentIds;
                 var request = await _onboardingManager.AssignFarmerToAgents(args);
@@ -2537,6 +2599,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
                 args.AgentIds = model.AgentIds;
                 var request = await _onboardingManager.RemoveFarmerToAgents(args);
@@ -2578,7 +2642,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-             
+
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(query.farmerUserId)) throw new BaseException(
                             Core.Enums.ExceptionType.BAD_REQUEST,
                             "Farmer Id is required.");
@@ -2626,10 +2691,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 var currentRole = CurrentUserRole;
                 if (query.farmId <= 0)
                 {
@@ -2688,13 +2751,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
             }
         }
-
+              
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
-            //  if (CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
 
-            var coop = await _businessManager.GetCooperativeDetailByUserId(args.MembershipUserId);
+            var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
 
             if (coop == null)
                 throw new BaseException(
@@ -2702,6 +2764,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     "Cooperative not found for the specified user.");
 
             args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+
 
             args.MembershipIds ??= new List<long?>();
 
