@@ -191,14 +191,14 @@ DateTimeOffset dateTime)
                 UserId = userId,
                 DateOfBirth = model.DateOfBirth,
                 CooperativeIds = args.CooperativeIds?
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList() ?? new List<long>(),
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList() ?? new List<long>(),
 
                 AgentIds = model.AgentIds?
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList() ?? new List<long>(),
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList() ?? new List<long>(),
 
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
