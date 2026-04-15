@@ -554,8 +554,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         private async Task<MemberShipModel> GetCooperativeProfile(string userId)
         {
-            // 1️⃣ Load membership along with MemberShipType, Lga, State, Ward
-            var memberShip = await _context.MemberShips
+             var memberShip = await _context.MemberShips
                 .AsNoTracking()
                 .Include(m => m.MemberShipType)
                 .Include(m => m.Lga)
@@ -566,14 +565,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (memberShip == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Membership profile not found");
 
-            // 2️⃣ Load associated agents
             var agents = await _context.MemberShipAgents
                 .AsNoTracking()
                 .Where(msa => msa.MemberShipId == memberShip.Id)
-                .Select(msa => msa.AgentId) // assumes navigation property exists
+                .Select(msa => msa.AgentId) 
                 .ToListAsync();
 
-            // 3️⃣ Map to MemberShipModel
             var profile = new MemberShipModel
             {
                 Id = memberShip.Id,
@@ -883,10 +880,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return null;
         }
         private async Task<(OnboardingRequestModel, bool status, string message)> HandleExistingUser(
-    User user,
-    OnboardingRequestModel model,
-    OnBoardingArgs args,
-    IdentityRole role)
+        User user,
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
             
             bool hasRole = await _context.UserRoles
@@ -912,9 +909,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             );
         }
         private async Task<(OnboardingRequestModel, bool, string)> CreateNewUser(
-    OnboardingRequestModel model,
-    OnBoardingArgs args,
-    IdentityRole role)
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
             var salt = EncryptionUtil.GetSalt();
 
@@ -1009,7 +1006,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                    HasDefaultPin = !string.IsNullOrEmpty(model.DefaultPin)
                };
            }**/
-
         private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
         {
             return new User
@@ -1057,7 +1053,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 });
             }
         }
-
         private OnboardingRequestModel MapUserResponse(User user, OnboardingRequestModel model)
         {
             return new OnboardingRequestModel
@@ -1307,7 +1302,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
               //  await NotifyUserOfOrganizationAddition(phoneNumber, organizationCode);
             }
         }
-
         public async Task<UserModel> FindByPhoneNumberAsync(string phoneNumber)
         {
             var user = new User();
@@ -1331,7 +1325,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.Map();
         }
-
         public async Task RemoveUserFromOrganization(string userId, string organizationCode)
         {
             var userOrg = await _context.UserOrganizations
@@ -1348,7 +1341,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             _log.LogInformation($"User {userId} removed from organization {organizationCode}.");
         }
-
         public async Task TrackUserRoleAssignment(string userId, string userType)
         {
             var model = await _userManager.FindByIdAsync(userId);
@@ -1368,7 +1360,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 _log.LogError(ex, $"Failed to track user role assignment for user {JsonConvert.SerializeObject(model)}");
             }
         }
-
         public async Task<List<string>> GetOrganizationsForUser(string userId)
         {
             return await _context.UserOrganizations
@@ -1382,7 +1373,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Where(u => u.UserOrganizations.Any(o => o.OrganizationCode == organizationCode))
                 .ToListAsync();
         }
-
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
         {
             var user = await _userManager.FindByIdAsync(userId);
@@ -1419,7 +1409,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             return (false, "Invalid username");
         }
-
         public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
         {
             var userExist = await _userManager.FindByEmailAsync(model.Username);
@@ -1440,7 +1429,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             return (false, "Invalid username");
         }
-
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
             var userExist = await _userManager.FindByEmailAsync(model.UserName);
@@ -1603,7 +1591,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
-
         public async Task<bool> OnNINBVNUpdate(UserModel model)
         {
             var user = await _context.Users.Where(x => x.Id == model.Id).FirstOrDefaultAsync();
@@ -1627,5 +1614,5 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
        
 
-        }
+    }
 }
