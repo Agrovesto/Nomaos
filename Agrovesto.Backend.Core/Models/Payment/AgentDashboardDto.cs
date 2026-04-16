@@ -51,16 +51,41 @@ namespace Agrovesto.Backend.Core.Models.Payment
 
         public DateTimeOffset Date { get; set; }
     }
+    public class MembershipDashboardFlatDto
+    {
+        public string UserId { get; set; }
+        public long MembershipId { get; set; }
+        public string Name { get; set; }
+        public string MembershipType { get; set; }
+        public string Status { get; set; }
+        public DateTime DateCreated { get; set; }
+        public string Location { get; set; }
 
+        public int TotalAgents { get; set; }
+        public int TotalFarmers { get; set; }
+        public int TotalFarms { get; set; }
+        public double TotalFarmSize { get; set; }
+
+        public int Completed { get; set; }
+        public int InProgress { get; set; }
+        public int NotStarted { get; set; }
+    }
     public class MembershipDashboardDto
     {
         public MembershipInfoDto Membership { get; set; }
         public MemberSummaryDto Summary { get; set; }
         public FarmMappingProgressDto MappingProgress { get; set; }
         public List<MonthlyFarmerLinkDto> FarmerLinkHistogram { get; set; }
+        public List<MonthlyInputDisbursementDto> FarmerInputDisbursedLinkHistogram { get; set; }
 
         public List<ActivityDto> RecentActivities { get; set; }
         public bool CanAddFarmer { get; set; }
+    }
+    public class MonthlyInputDisbursementDto
+    {
+        public int Year { get; set; }
+        public int Month { get; set; }
+        public int InputCount { get; set; }
     }
     public class MonthlyFarmerLinkDto
     {
@@ -78,6 +103,8 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public int TotalFarms { get; set; }
         public int FarmsMapped { get; set; }
         public int MappingProgressPercentage { get; set; }
+        public int TotalVerifiedFarmers { get; set; }
+        public int TotalUnverifiedFarmers { get; set; }
     }
 
     public class FarmMappingProgressDto
@@ -105,6 +132,7 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public string Status { get; set; }
         public DateTimeOffset DateCreated { get; set; }
         public string Location { get; set; }
+        public string LeaderName { get; set; }
     }
 
 }

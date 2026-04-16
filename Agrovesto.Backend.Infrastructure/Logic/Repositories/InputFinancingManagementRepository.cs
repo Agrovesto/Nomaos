@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -23,6 +24,318 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        #region inputfinancing
+        public async Task<LoanDetailDto> GetLoanDetailAsync(long inputAllocationId)
+        {
+            var allocation = await _context.InputAllocations
+                .Include(a => a.Input)
+                .Include(a => a.Farmer)
+                .FirstOrDefaultAsync(a => a.Id == inputAllocationId);
+
+            if (allocation == null)
+                return null;
+
+            var inputs = await _context.InputAllocations
+                .Where(a => a.Id == inputAllocationId)
+                .Select(a => new InputBreakdownDto
+                {
+                    InputName = a.Input.Name,
+                    Quantity = a.Quantity,
+                    UnitPrice = a.UnitPrice,
+                    TotalCost = a.TotalCost
+                })
+                .ToListAsync();
+
+            var loanAmount = allocation.TotalCost;
+
+            var installments = await _context.InputTransactions
+                .Where(t => t.FarmerId == allocation.FarmerId
+                            && t.TransactionType == InputTransactionType.Repayment
+                            && !t.IsDeleted)
+                .OrderBy(t => t.TransactionDate)
+                .Select(t => new InstallmentDto
+                {
+                    PaymentDate = t.TransactionDate,
+                    Amount = t.Amount,
+                    Reference = t.ReferenceNumber
+                })
+                .ToListAsync();
+
+            var totalRepaid = installments.Sum(x => x.Amount);
+
+            var interestRate = 0.05m; // default 5% (replace with DB field if available)
+            var interestAmount = loanAmount * interestRate;
+            var totalRepayable = loanAmount + interestAmount;
+
+            var dueDate = allocation.AllocatedDate.AddDays(90);
+
+            var installmentCount = 3;
+            var expectedInstallment = totalRepayable / installmentCount;
+
+            var schedule = new List<RepaymentScheduleDto>();
+
+            for (int i = 1; i <= installmentCount; i++)
+            {
+                var due = allocation.AllocatedDate.AddDays(30 * i);
+
+                var paidSoFar = totalRepaid >= (expectedInstallment * i);
+
+                schedule.Add(new RepaymentScheduleDto
+                {
+                    InstallmentNo = i,
+                    DueDate = due,
+                    ExpectedAmount = expectedInstallment,
+                    IsPaid = paidSoFar
+                });
+            }
+
+            return new LoanDetailDto
+            {
+                LoanName = allocation.Input.Name,
+                LoanAmount = loanAmount,
+                DateIssued = allocation.AllocatedDate,
+                DueDate = dueDate,
+                InterestRate = interestRate,
+
+                Inputs = inputs,
+                InstallmentsPaid = installments,
+                RepaymentSchedule = schedule
+            };
+        }
+      
+        public async Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams args)
+        {
+            var query = _context.InputAllocations
+                .AsNoTracking()
+                .Where(a => a.InputTransactionId != null);
+
+            if (args.Id > 0)
+                query = query.Where(a => a.FarmerId == args.Id);
+
+            var totalCount = await query.CountAsync();
+
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+            var pageSize = args.PageSize <= 0 ? 20 : args.PageSize;
+
+            var skip = (pageNumber - 1) * pageSize;
+
+            var data = await query
+                .OrderByDescending(a => a.AllocatedDate)
+                .Skip(skip)
+                .Take(pageSize)
+                .Select(a => new
+                {
+                    LoanName = a.Input.Name,
+                    Amount = a.TotalCost,
+                    DateIssued = a.AllocatedDate,
+
+                    TotalRepaid = _context.InputTransactions
+                        .Where(t => t.FarmerId == a.FarmerId
+                                    && t.TransactionType == InputTransactionType.Repayment
+                                    && !t.IsDeleted)
+                        .Sum(t => (decimal?)t.Amount) ?? 0,
+
+                    TotalDisbursed = _context.InputTransactions
+                        .Where(t => t.FarmerId == a.FarmerId
+                                    && t.TransactionType == InputTransactionType.Disbursement
+                                    && !t.IsDeleted)
+                        .Sum(t => (decimal?)t.Amount) ?? 0
+                })
+                .ToListAsync();
+
+            var items = data.Select(x =>
+            {
+                var repaymentPercentage = x.TotalDisbursed == 0
+                    ? 0
+                    : (x.TotalRepaid / x.TotalDisbursed) * 100;
+
+                string status =
+                    repaymentPercentage >= 100 ? "Paid" :
+                    repaymentPercentage > 0 ? "Partially Paid" :
+                    "Unpaid";
+
+                return new FinancingBreakdownDto
+                {
+                    LoanName = x.LoanName,
+                    Amount = x.Amount,
+                    DateIssued = x.DateIssued,
+                    DueDate = x.DateIssued.AddDays(90),
+                    RepaymentPercentage = Math.Round(repaymentPercentage, 2),
+                    Status = status
+                };
+            }).ToList();
+
+            return new PagedListResponse<List<FinancingBreakdownDto>>
+            {
+                Data = items,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args)
+        {
+            var totalLoansIssued = await _context.InputAllocations
+                .Where(x => x.InputTransactionId != null && x.FarmerId == args.Id)
+                .SumAsync(x => (decimal?)((x.Quantity * x.UnitPrice))) ?? 0;
+
+            var totalRepaid = await _context.InputTransactions
+                .Where(t => t.TransactionType == InputTransactionType.Repayment
+                            && t.FarmerId == args.Id
+                            && !t.IsDeleted)
+                .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+            var totalActiveLoans = await _context.InputTransactions
+                .Where(t => t.TransactionType == InputTransactionType.Disbursement
+                            && t.FarmerId == args.Id
+                            && t.PaymentStatus != PaymentStatus.Paid
+                            && !t.IsDeleted)
+                .SumAsync(t => (decimal?)t.Amount) ?? 0;
+
+            var outstanding = await _context.InputTransactions
+                .Where(t => !t.IsDeleted && t.FarmerId == args.Id)
+                .GroupBy(t => t.FarmerId)
+                .Select(g => new
+                {
+                    Disbursed = g.Where(x => x.TransactionType == InputTransactionType.Disbursement)
+                                 .Sum(x => (decimal?)x.Amount) ?? 0,
+
+                    Repaid = g.Where(x => x.TransactionType == InputTransactionType.Repayment)
+                              .Sum(x => (decimal?)x.Amount) ?? 0
+                })
+                .SumAsync(x => x.Disbursed - x.Repaid);
+
+            return new InputLoanSummaryDto
+            {
+                TotalLoansIssued = totalLoansIssued,
+                TotalActiveLoans = totalActiveLoans,
+                TotalRepaid = totalRepaid,
+                TotalOutstandingBalance = outstanding
+            };
+        }
+
+        public async Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(
+      long inputAllocationId,
+      ListQueryParams args)
+        {
+            var allocation = await _context.InputAllocations
+                .AsNoTracking()
+                .Include(a => a.Input)
+                .FirstOrDefaultAsync(a => a.Id == inputAllocationId);
+
+            if (allocation == null)
+            {
+                return new PagedListResponse<List<RepaymentBreakdownDto>>
+                {
+                    Data = new List<RepaymentBreakdownDto>(),
+                    Count = 0,
+                    PageNumber = args.PageNumber,
+                    PageSize = args.PageSize
+                };
+            }
+
+            var loanAmount = allocation.TotalCost;
+
+            var query = _context.InputTransactions
+                .AsNoTracking()
+                .Where(t => t.FarmerId == allocation.FarmerId
+                            && t.TransactionType == InputTransactionType.Repayment
+                            && !t.IsDeleted);
+
+            var totalCount = await query.CountAsync();
+
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+            var pageSize = args.PageSize <= 0 ? 20 : args.PageSize;
+
+            var skip = (pageNumber - 1) * pageSize;
+
+            var pagedRepayments = await query
+                .OrderBy(t => t.TransactionDate)
+                .Skip(skip)
+                .Take(pageSize)
+                .ToListAsync();
+
+            var allRepaymentsUpToPage = await query
+                .OrderBy(t => t.TransactionDate)
+                .Take(skip + pageSize)
+                .ToListAsync();
+
+            decimal runningTotal = 0;
+
+            var items = new List<RepaymentBreakdownDto>();
+
+            foreach (var payment in allRepaymentsUpToPage.Skip(skip))
+            {
+                runningTotal += payment.Amount;
+
+                var balanceRemaining = loanAmount - runningTotal;
+                if (balanceRemaining < 0)
+                    balanceRemaining = 0;
+
+                items.Add(new RepaymentBreakdownDto
+                {
+                    Date = payment.TransactionDate,
+                    LoanAmount = loanAmount,
+                    AmountPaid = payment.Amount,
+                    MethodOfPayment = string.IsNullOrWhiteSpace(payment.Description)
+                        ? payment.ReferenceNumber
+                        : payment.Description,
+                    BalanceRemaining = balanceRemaining
+                });
+            }
+
+            return new PagedListResponse<List<RepaymentBreakdownDto>>
+            {
+                Data = items,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(long inputAllocationId)
+        {
+            var allocation = await _context.InputAllocations
+                .AsNoTracking()
+                .Include(a => a.Input)
+                .FirstOrDefaultAsync(a => a.Id == inputAllocationId);
+
+            if (allocation == null)
+            {
+                return new FinancingRepaymentSummaryDto
+                {
+                    TotalExpectedRepaymentValue = 0m,
+                    TotalPaid = 0m,
+                    TotalOutstanding = 0m,
+                    RepaymentPercentage = 0m
+                };
+            }
+            var totalExpected = (allocation.Quantity * allocation.UnitPrice);
+
+            var totalPaid = await _context.InputTransactions
+                .Where(t => t.FarmerId == allocation.FarmerId
+                            && t.TransactionType == InputTransactionType.Repayment
+                            && !t.IsDeleted)
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            var totalOutstanding = totalExpected - totalPaid;
+            if (totalOutstanding < 0)
+                totalOutstanding = 0m;
+
+            var repaymentPercentage = totalExpected == 0
+                ? 0m
+                : (totalPaid / totalExpected) * 100m;
+
+            return new FinancingRepaymentSummaryDto
+            {
+                TotalExpectedRepaymentValue = totalExpected,
+                TotalPaid = totalPaid,
+                TotalOutstanding = totalOutstanding,
+                RepaymentPercentage = Math.Round(repaymentPercentage, 2)
+            };
+        }
+        #endregion inputfinancing
+
+
         public async Task<List<SubscriptionData>> FarmerBundleSubscriptions(ListQueryParams args)
         {
             var queryable = _context.BundleSubscriptionInterests

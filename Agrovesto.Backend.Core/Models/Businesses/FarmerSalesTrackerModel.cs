@@ -6,6 +6,25 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public class FarmerSalesSummaryDto
+    {
+        public decimal TotalVolumeSold { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public decimal AverageSalesValue { get; set; }
+    }
+    public class  FarmerSalesHistoryModel
+    {
+        public long Id { get; set; }
+        public string UserId { get; set; }
+        public long FarmerId { get; set; }
+        public string ProductSold { get; set; }
+        public double Quantity { get; set; }
+        public decimal UnitPrice { get; set; }
+        public DateTimeOffset Date { get; set; }
+        public decimal TotalAmount { get; set; }
+        public string PaymentStatus { get; set; }
+
+    }
     public class FarmerSalesTrackerRequestModel
     {
         public List<FarmerSalesTrackerModel> request {  get; set; }

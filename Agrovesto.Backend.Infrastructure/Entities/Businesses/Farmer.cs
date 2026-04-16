@@ -108,4 +108,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset? DeactivatedOn { get; set; }
     }
 
+
+    public class BulkRowAggregate
+    {
+        public User User { get; set; }
+        public Farmer Farmer { get; set; }
+        public List<ValueChainSelectionDto> ValueChains { get; set; }
+    }
 }

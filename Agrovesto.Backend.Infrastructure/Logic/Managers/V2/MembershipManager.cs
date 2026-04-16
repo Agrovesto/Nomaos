@@ -191,14 +191,14 @@ DateTimeOffset dateTime)
                 UserId = userId,
                 DateOfBirth = model.DateOfBirth,
                 CooperativeIds = args.CooperativeIds?
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList() ?? new List<long>(),
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList() ?? new List<long>(),
 
                 AgentIds = model.AgentIds?
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList() ?? new List<long>(),
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList() ?? new List<long>(),
 
                 Ward = model.Ward,
                 OrganizationCode = args.organizationCode,
@@ -367,11 +367,7 @@ OnboardingRequestModel user,
         }
         public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query)
         {
-           
-            var profile = await _membershipRepository.GetMembershipDetailByUserId(query.UserId);
-            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
-
-            return await _membershipRepository.GetMembershipDashboardAsync(profile.Id);
+            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

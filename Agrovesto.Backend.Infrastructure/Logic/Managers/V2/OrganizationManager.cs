@@ -1,23 +1,29 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+﻿using AfricasTalkingCS;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
+using EFCore.BulkExtensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using System;
@@ -31,7 +37,6 @@ using System.Threading.Tasks;
 using static ClosedXML.Excel.XLPredefinedFormat;
 using DateTime = System.DateTime;
 using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
-
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IOrganizationManager
@@ -56,18 +61,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams query);
         Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query);
+        Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams request, CancellationToken cancellationToken);
+        Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args);
+        Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
+        Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args);
         Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
         Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
         Task<OrganizationLocationModel> GetLocationById(ListQueryParams query);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
+        Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query);
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query);
         Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args);
+        Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args);
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams query);
+        Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args);
+        Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args, CancellationToken cancellationToken);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
+        Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(ListQueryParams query);
+        Task<Response<FarmerSalesSummaryDto?>> GetSalesSummary(ListQueryParams args);
         Task<bool> ReassignAgentToLocation(ProfileRequestModel model, OrganizationAgentArgs args);
+        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds);
         Task<OrganizationLocationModel> UpdateLocationAsync(OrganizationLocationModel model, ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
@@ -88,7 +104,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly ISalesRepository _salesRepository;
         private readonly RoleManager<Role> _roleManager;
         private readonly DataContext _context;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IBackgroundTaskQueue _taskQueue;
+        private readonly IAWSService _awsService;
+        private readonly IFarmerTransactionRepository _farmerTransactionRepository;
+        private readonly IConfiguration _configuration;
+        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         public OrganizationManager(
+            IInputFinancingManagementRepository inputFinancingManagementRepository,
+            IFarmerTransactionRepository farmerTransactionRepository,
             IExcelConverterService excelConverterService,
             IWalletManager walletManager,
             IBusinessRepository businessRepository,
@@ -104,8 +128,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             RoleManager<Role> roleManager,
             ISalesRepository salesRepository,
             DataContext context,
-              ILogger<OrganizationManager> log)
+              ILogger<OrganizationManager> log,
+              IBackgroundTaskQueue taskQueue,
+              IServiceScopeFactory scopeFactory,
+               IAWSService awsService,
+               IConfiguration configuration)
         {
+            _inputFinancingManagementRepository = inputFinancingManagementRepository;
+            _farmerTransactionRepository =farmerTransactionRepository;
             _context=context;
             _excelConverterService = excelConverterService;
             _walletManager = walletManager;
@@ -122,16 +152,92 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _membershipRepository = membershipRepository;
             _salesRepository = salesRepository;
             _roleManager = roleManager;
+            _taskQueue = taskQueue;
+            _scopeFactory=scopeFactory;
+            _awsService = awsService;
 
+            _configuration = configuration;
         }
 
+        #region salesTracker
+        public async Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(
+         ListQueryParams query)
+        {
+            try
+            {
+                var transactions = await _farmerTransactionRepository.GetSalesHistory(query);
+                if (transactions == null) return new PagedListResponse<List<FarmerSalesHistoryModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<FarmerSalesHistoryModel>>
+                {
+                    Succeeded = true,
+                    Data = transactions.Data,
+                    Count = transactions.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = query.PageSize,
+
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving sales: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<Response<FarmerSalesSummaryDto?>> GetSalesSummary(
+   ListQueryParams args)
+        {
+            try
+            {
+                var transactions = await _farmerTransactionRepository.GetSalesSummary(args);
+             
+                return new Response<FarmerSalesSummaryDto?>
+                {
+                    Succeeded = true,
+                    Data = transactions,
+
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving sales: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        #endregion salesTracker
         #region bulkupload
-        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
+
+        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+            Stream excelStream,
+            OnBoardingArgs args)
         {
             if (excelStream == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+            // Copy stream to memory so we can both inspect and save to disk for background processing
+            using var ms = new MemoryStream();
+            await excelStream.CopyToAsync(ms);
+            ms.Position = 0;
 
-            var rows = _excelConverterService.ParseExcel(excelStream);
+            var rows = _excelConverterService.BulkParseExcel(ms);
 
             if (!rows.Any())
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
@@ -139,222 +245,298 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var result = new BulkOnboardingResult
             {
                 Total = rows.Count,
-                Errors = new List<BulkOnboardingError>()
+                Errors = new List<BulkOnboardingError>(),
+                Successful = 0
             };
 
-            const int batchSize = 500;
-            int rowNumber = 2;
-
-            foreach (var batch in rows.Select((x, i) => new { x, i })
-                                      .GroupBy(x => x.i / batchSize)
-                                      .Select(g => g.Select(v => v.x).ToList()))
+            // Persist file to temp location for background worker
+            var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+            Directory.CreateDirectory(tempDir);
+            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+            ms.Position = 0;
+            await using (var fs = File.Create(tmpFile))
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var usersToCreate = new List<User>();
-                    var farmersToCreate = new List<Farmer>();
-
-                    // ---------------------------
-                    // STEP 1: VALIDATE + BUILD
-                    // ---------------------------
-                    foreach (var row in batch)
-                    {
-                        try
-                        {
-                            if (string.IsNullOrWhiteSpace(row.FirstName) || string.IsNullOrWhiteSpace(row.LastName))
-                                throw new Exception("FirstName and LastName are required.");
-
-                            if (!long.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
-                                throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
-
-                            if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
-                                throw new Exception("Either PhoneNumber or Email is required.");
-
-                            var valueChains = GetValueChains(row);
-
-                            var farmer = new Farmer
-                            {
-                                Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
-                                Email = row.Email,
-                                PhoneNumber = row.PhoneNumber,
-                                Gender = row.Gender,
-                                State = row.StateOfResidence,
-                                Lga = row.LGA,
-                                Ward = row.Ward,
-                                Location = row.ResidentialAddress,
-                                FarmerCategory = row.CategoryOfFarmer,
-                                YearsInAgric = years,
-                                Level = FarmerLevel.Level1,
-                                HighestLevelOfEducation = row.HighestLevelOfEducation,
-                                OnBoardedOn = DateTimeOffset.UtcNow,
-                                SelectedItems = valueChains
-                            };
-
-                            farmersToCreate.Add(farmer);
-
-                            var salt = EncryptionUtil.GetSalt();
-
-                            var user = BuildUserEntity(new OnboardingRequestModel
-                            {
-                                Email = row.Email,
-                                PhoneNumber = row.PhoneNumber,
-                                Password = "Admin123@",
-                                Pin = "0000",
-                                FirstName = row.FirstName,
-                                MiddleName = row.MiddleName,
-                                LastName = row.LastName
-                            }, args, salt);
-
-                            usersToCreate.Add(user);
-                        }
-                        catch (Exception ex)
-                        {
-                            result.Errors.Add(new BulkOnboardingError
-                            {
-                                RowNumber = rowNumber,
-                                Email = row.Email,
-                                Error = ex.Message
-                            });
-                        }
-
-                        rowNumber++;
-                    }
-
-                    // ---------------------------
-                    // STEP 2: HANDLE DUPLICATES
-                    // ---------------------------
-                    var emails = usersToCreate.Where(x => x.Email != null).Select(x => x.Email).ToList();
-                    var phones = usersToCreate.Where(x => x.PhoneNumber != null).Select(x => x.PhoneNumber).ToList();
-
-                    var existingUsers = await _context.Users
-                        .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
-                        .ToListAsync();
-
-                    foreach (var user in usersToCreate.ToList())
-                    {
-                        var existing = existingUsers.FirstOrDefault(x =>
-                            x.Email == user.Email || x.PhoneNumber == user.PhoneNumber);
-
-                        if (existing != null)
-                        {
-                            var farmer = farmersToCreate.First(f =>
-                                f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                            farmer.UserId = existing.Id;
-                            usersToCreate.Remove(user);
-                        }
-                    }
-
-                    // ---------------------------
-                    // STEP 3: SAVE USERS
-                    // ---------------------------
-                    if (usersToCreate.Any())
-                    {
-                        await _context.Users.AddRangeAsync(usersToCreate);
-                        await _context.SaveChangesAsync();
-
-                        foreach (var user in usersToCreate)
-                        {
-                            var farmer = farmersToCreate.First(f =>
-                                f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                            farmer.UserId = user.Id;
-                        }
-                    }
-
-                    // ---------------------------
-                    // STEP 4: SAVE FARMERS
-                    // ---------------------------
-                    if (farmersToCreate.Any())
-                    {
-                        await _context.Farmers.AddRangeAsync(farmersToCreate);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ---------------------------
-                    // STEP 5: VALUE CHAINS
-                    // ---------------------------
-                    var valueChainItems = new List<FarmerValueChainItem>();
-
-                    foreach (var farmer in farmersToCreate)
-                    {
-                        foreach (var vc in farmer.SelectedItems ?? new())
-                        {
-                            foreach (var item in vc.Items ?? new())
-                            {
-                                valueChainItems.Add(new FarmerValueChainItem
-                                {
-                                    FarmerId = farmer.Id,
-                                    ValueChainType = vc.ValueChainType,
-                                    ItemName = item
-                                });
-                            }
-                        }
-                    }
-
-                    if (valueChainItems.Any())
-                    {
-                        await _context.FarmerValueChainItems.AddRangeAsync(valueChainItems);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ---------------------------
-                    // STEP 6: FARMER ORGANIZATION
-                    // ---------------------------
-                    var farmerOrgMappings = farmersToCreate
-                        .Select(f => new FarmerOrganization
-                        {
-                            FarmerId = f.Id,
-                            OrganizationCode = args.organizationCode,
-                            OnboardedByUserId = args.OnboardedByUserId
-                        })
-                        .ToList();
-
-                    var farmerIds = farmerOrgMappings.Select(x => x.FarmerId).ToList();
-
-                    var existingMappings = await _context.FarmerOrganizations
-                        .Where(x => farmerIds.Contains(x.FarmerId) &&
-                                    x.OrganizationCode == args.organizationCode)
-                        .ToListAsync();
-
-                    var existingSet = new HashSet<string>(
-                        existingMappings.Select(x => $"{x.FarmerId}-{x.OrganizationCode}")
-                    );
-
-                    var newMappings = farmerOrgMappings
-                        .Where(m => !existingSet.Contains($"{m.FarmerId}-{m.OrganizationCode}"))
-                        .ToList();
-
-                    if (newMappings.Any())
-                    {
-                        await _context.FarmerOrganizations.AddRangeAsync(newMappings);
-                        await _context.SaveChangesAsync();
-                    }
-
-                    // ✅ COMMIT BATCH
-                    await transaction.CommitAsync();
-
-                    result.Successful += farmersToCreate.Count;
-                }
-                catch (Exception ex)
-                {
-                    await transaction.RollbackAsync();
-
-                    result.Errors.Add(new BulkOnboardingError
-                    {
-                        RowNumber = rowNumber,
-                        Error = "Batch failed: " + ex.Message
-                    });
-
-                    result.Failed += batch.Count;
-                }
+                ms.Position = 0;
+                await ms.CopyToAsync(fs);
+                await fs.FlushAsync();
             }
 
-            return result;
-        }  // --- Helpers ---
-        private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
+            // Validate background queue and scope factory to avoid NullReferenceException
+            if (_taskQueue == null || _scopeFactory == null)
+            {
+                // Fail fast with a clear message instead of allowing a NullReferenceException
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
+            }
+
+            // Queue background work item that calls processor
+            _taskQueue.QueueTask(async cancellationToken =>
+            {
+                try
+                {
+                    if (_scopeFactory == null)
+                    {
+                        // Should not happen due to the earlier check, but guard anyway
+                        return;
+                    }
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+
+                 
+                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
+                      }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        if (_scopeFactory != null)
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                        }
+                    }
+                    catch { }
+                }
+            });
+            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+
+            return result; 
+    }
+
+    /** public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
+     {
+         if (excelStream == null)
+             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+
+         var rows = _excelConverterService.BulkParseExcel(excelStream);
+
+         if (!rows.Any())
+             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+
+         var result = new BulkOnboardingResult
+         {
+             Total = rows.Count,
+             Errors = new List<BulkOnboardingError>()
+         };
+
+         const int batchSize = 500;
+         int rowNumber = 2;
+
+         foreach (var batch in rows.Select((x, i) => new { x, i })
+                                   .GroupBy(x => x.i / batchSize)
+                                   .Select(g => g.Select(v => v.x).ToList()))
+         {
+             using var transaction = await _context.Database.BeginTransactionAsync();
+
+             try
+             {
+                 var usersToCreate = new List<User>();
+                 var farmersToCreate = new List<Farmer>();
+
+                 // ---------------------------
+                 // STEP 1: VALIDATE + BUILD
+                 // ---------------------------
+                 foreach (var row in batch)
+                 {
+                     try
+                     {
+                         if (string.IsNullOrWhiteSpace(row.FirstName) || string.IsNullOrWhiteSpace(row.LastName))
+                             throw new Exception("FirstName and LastName are required.");
+
+                         if (!long.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
+                             throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
+
+                         if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
+                             throw new Exception("Either PhoneNumber or Email is required.");
+
+                         var valueChains = GetValueChains(row);
+
+                         var farmer = new Farmer
+                         {
+                             Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
+                             Email = row.Email,
+                             PhoneNumber = row.PhoneNumber,
+                             Gender = row.Gender,
+                             State = row.StateOfResidence,
+                             Lga = row.LGA,
+                             Ward = row.Ward,
+                             Location = row.ResidentialAddress,
+                             FarmerCategory = row.CategoryOfFarmer,
+                             YearsInAgric = years,
+                             Level = FarmerLevel.Level1,
+                             HighestLevelOfEducation = row.HighestLevelOfEducation,
+                             OnBoardedOn = DateTimeOffset.UtcNow,
+                             SelectedItems = valueChains
+                         };
+
+                         farmersToCreate.Add(farmer);
+
+                         var salt = EncryptionUtil.GetSalt();
+
+                         var user = BuildUserEntity(new OnboardingRequestModel
+                         {
+                             Email = row.Email,
+                             PhoneNumber = row.PhoneNumber,
+                             Password = "Admin123@",
+                             Pin = "0000",
+                             FirstName = row.FirstName,
+                             MiddleName = row.MiddleName,
+                             LastName = row.LastName
+                         }, args, salt);
+
+                         usersToCreate.Add(user);
+                     }
+                     catch (Exception ex)
+                     {
+                         result.Errors.Add(new BulkOnboardingError
+                         {
+                             RowNumber = rowNumber,
+                             Email = row.Email,
+                             Error = ex.Message
+                         });
+                     }
+
+                     rowNumber++;
+                 }
+
+                 // ---------------------------
+                 // STEP 2: HANDLE DUPLICATES
+                 // ---------------------------
+                 var emails = usersToCreate.Where(x => x.Email != null).Select(x => x.Email).ToList();
+                 var phones = usersToCreate.Where(x => x.PhoneNumber != null).Select(x => x.PhoneNumber).ToList();
+
+                 var existingUsers = await _context.Users
+                     .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
+                     .ToListAsync();
+
+                 foreach (var user in usersToCreate.ToList())
+                 {
+                     var existing = existingUsers.FirstOrDefault(x =>
+                         x.Email == user.Email || x.PhoneNumber == user.PhoneNumber);
+
+                     if (existing != null)
+                     {
+                         var farmer = farmersToCreate.First(f =>
+                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
+
+                         farmer.UserId = existing.Id;
+                         usersToCreate.Remove(user);
+                     }
+                 }
+
+                 // ---------------------------
+                 // STEP 3: SAVE USERS
+                 // ---------------------------
+                 if (usersToCreate.Any())
+                 {
+                     await _context.Users.AddRangeAsync(usersToCreate);
+                     await _context.SaveChangesAsync();
+
+                     foreach (var user in usersToCreate)
+                     {
+                         var farmer = farmersToCreate.First(f =>
+                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
+
+                         farmer.UserId = user.Id;
+                     }
+                 }
+
+                 // ---------------------------
+                 // STEP 4: SAVE FARMERS
+                 // ---------------------------
+                 if (farmersToCreate.Any())
+                 {
+                     await _context.Farmers.AddRangeAsync(farmersToCreate);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ---------------------------
+                 // STEP 5: VALUE CHAINS
+                 // ---------------------------
+                 var valueChainItems = new List<FarmerValueChainItem>();
+
+                 foreach (var farmer in farmersToCreate)
+                 {
+                     foreach (var vc in farmer.SelectedItems ?? new())
+                     {
+                         foreach (var item in vc.Items ?? new())
+                         {
+                             valueChainItems.Add(new FarmerValueChainItem
+                             {
+                                 FarmerId = farmer.Id,
+                                 ValueChainType = vc.ValueChainType,
+                                 ItemName = item
+                             });
+                         }
+                     }
+                 }
+
+                 if (valueChainItems.Any())
+                 {
+                     await _context.FarmerValueChainItems.AddRangeAsync(valueChainItems);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ---------------------------
+                 // STEP 6: FARMER ORGANIZATION
+                 // ---------------------------
+                 var farmerOrgMappings = farmersToCreate
+                     .Select(f => new FarmerOrganization
+                     {
+                         FarmerId = f.Id,
+                         OrganizationCode = args.organizationCode,
+                         OnboardedByUserId = args.OnboardedByUserId
+                     })
+                     .ToList();
+
+                 var farmerIds = farmerOrgMappings.Select(x => x.FarmerId).ToList();
+
+                 var existingMappings = await _context.FarmerOrganizations
+                     .Where(x => farmerIds.Contains(x.FarmerId) &&
+                                 x.OrganizationCode == args.organizationCode)
+                     .ToListAsync();
+
+                 var existingSet = new HashSet<string>(
+                     existingMappings.Select(x => $"{x.FarmerId}-{x.OrganizationCode}")
+                 );
+
+                 var newMappings = farmerOrgMappings
+                     .Where(m => !existingSet.Contains($"{m.FarmerId}-{m.OrganizationCode}"))
+                     .ToList();
+
+                 if (newMappings.Any())
+                 {
+                     await _context.FarmerOrganizations.AddRangeAsync(newMappings);
+                     await _context.SaveChangesAsync();
+                 }
+
+                 // ✅ COMMIT BATCH
+                 await transaction.CommitAsync();
+
+                 result.Successful += farmersToCreate.Count;
+             }
+             catch (Exception ex)
+             {
+                 await transaction.RollbackAsync();
+
+                 result.Errors.Add(new BulkOnboardingError
+                 {
+                     RowNumber = rowNumber,
+                     Error = "Batch failed: " + ex.Message
+                 });
+
+                 result.Failed += batch.Count;
+             }
+         }
+
+         return result;
+     }  // --- Helpers ---
+    
+     **/
+    private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
         {
             if (string.IsNullOrWhiteSpace(row.PartOfAgriculture))
                 return new List<ValueChainSelectionDto>();
@@ -870,14 +1052,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams query)
         {
-            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            if (string.IsNullOrEmpty(query.businessCode)) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
             await FetchOrganizationDetails(query);
             return await _organizationRepository.GetOrganizationAgents(query);
 
-
         }
+     
         public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
     ListQueryParams query)
         { 
@@ -921,7 +1102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<Response<OrganizationAgentDetailResponse>> GetAgentDetail(ListQueryParams query)
         {
-           await EnrichAgentAsync(query);
+          // await EnrichAgentAsync(query);
             var agent = await _organizationRepository.GetOrganizationAgentDetail(query);
 
             if (agent == null)
@@ -1154,7 +1335,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var registerUser = await _onboardingRepository.RegisterUser(onboardingRequest, args);
 
                 var agent = await CreateAgent(model, args, registerUser.model.Id);
-                
+
+                await SendDefaultCredentialChange(registerUser.model);
+
                 await AssignAgentToOrganization(model, args, registerUser.model.Id);
 
                 await EnsureWalletExists(registerUser.model, business);
@@ -1412,7 +1595,7 @@ DateTimeOffset dateTime)
                 await LogActivity(user, args);
                 await EnsureWalletExists(user, business);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
+                await SendDefaultCredentialChange(user);
             }
             catch (Exception ex)
             {
@@ -1436,38 +1619,90 @@ DateTimeOffset dateTime)
 
                                     });
         }
-        private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
         {
-            var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-                ? OtpTarget.Email
-                : OtpTarget.Phone;
+            var senderEmail = _configuration["Official:Email"];
 
-            var destination = otpTarget == OtpTarget.Email
-                ? model.Email
-                : model.PhoneNumber;
+            var loginUrl = _configuration["Official:LoginUrl"];
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
+            var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
+            var destination = otpTarget == OtpTarget.Email ? model.Email : model.PhoneNumber;
 
-            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
-            {
-                UserId = model.Id,
-                Target = otpTarget,
-                Destination = destination,
-                Purpose = OtpPurpose.Onboarding,
-                ExpiryMinutes = 5
-            });
-
-            // ------------------ Send OTP ------------------
             if (otpTarget == OtpTarget.Email)
             {
-                await _sMSService.SendEmailAsync(
+                var frontendUrl = $"{loginUrl}/login"; 
+                var year = DateTime.UtcNow.Year;
+
+                var email = EmailTemplateBuilder.BuildAccountCreatedEmail(
+                    model.Password,
+                    frontendUrl,
+                    year
+                );
+
+                await _awsService.SendEmailAsync(
+        senderEmail,
+        destination,
+        email.Subject,
+        email.BodyHtml,
+        email.BodyText
+    );
+            }
+            else
+            {
+                // SMS fallback
+                await _sMSService.SendSmsAsync(
                     destination,
-                    "Confirm your account",
-                    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                    $"Your default pin is {model.Pin}. Kindly login and change this."
+                );
             }
         }
+        //private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        //{
+        //    var senderEmail = _configuration["Official:Email"];
+        //    var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
+        //        ? OtpTarget.Email
+        //        : OtpTarget.Phone;
+
+        //    var destination = otpTarget == OtpTarget.Email
+        //        ? model.Email
+        //        : model.PhoneNumber;
+
+        //    await _otpService.InvalidateActiveOtps(
+        //        model.Id,
+        //        otpTarget);
+
+        //    var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+        //    {
+        //        UserId = model.Id,
+        //        Target = otpTarget,
+        //        Destination = destination,
+        //        Purpose = OtpPurpose.Onboarding,
+        //        ExpiryMinutes = 5
+        //    });
+
+        //    // ------------------ Send OTP ------------------
+        //    if (otpTarget == OtpTarget.Email)
+        //    {
+        //        //use aws
+        //        await _awsService.SendEmailAsync(
+        //            senderEmail,
+        //            destination,
+        //            "Confirm your account",
+        //            $"Your verification code is {model..Code}. It expires in 5 minutes.",
+        //            $"Your verification code is {otp.Code}. It expires in 5 minutes."
+        //            );
+        //        //await _sMSService.SendEmailAsync(
+        //        //    destination,
+        //        //    "Confirm your account",
+        //        //    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+        //    }
+        //    else
+        //    {
+        //        await _sMSService.SendSmsAsync(
+        //                otp.Destination,
+        //                $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+        //    }
+        //}
 
         private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterFarmerOrFail(
          CreateFarmerRequest model,
@@ -1586,8 +1821,25 @@ DateTimeOffset dateTime)
                     $"{fieldName} must contain only numbers."
                 );
         }
+        public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
+        {
 
-        public async Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query)
+            try
+            {
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (hasOrg != null)
+                {
+                    args.Id = hasOrg.OrganizaionId;
+                }
+                return await _organizationRepository.GetOrganizationFarmerDashboardAsync(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+         
+        }
+            public async Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query)
         {
             await EnrichFarmerAsync(query);
             var farmer = await _organizationRepository.GetFarmerDetailsAsync(query);
@@ -1615,9 +1867,115 @@ DateTimeOffset dateTime)
             args.Id = farmer.Id;
 
         }
+        public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
+        {
+            try
+            {
+
+                return await _organizationRepository.GetOrganizationFarmerSalesSummary(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<OrganizationFarmerSalesHistor>>> FarmerSalesHistory(
+     ListQueryParams request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                request.SalesContext = "Organization";
+                return await _salesRepository.FarmerSalesHistory(request, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message = null)
+        {
+
+            return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
+        }
+
         #endregion FarmerMgt
 
         #region MembershipMgt
+        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args)
+        {
+
+            try
+            {
+                return await _organizationRepository.GetOrganizationMembershipDashboard(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+
+        }
+        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeIds);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Remove Farmer failed.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
+
+        public async Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query)
+        {
+            try
+            {
+                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
+
+                var cooperative = await _organizationRepository.GetCooperativesByOrganization(query.organizationCode, query);
+                if (cooperative == null) return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
+                {
+                    Succeeded = true,
+                    Data = null,
+                    Count = 0,
+                    Message = "No Record Found"
+                };
+                return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
+                {
+                    Succeeded = true,
+                    Data = cooperative,
+                    Count = cooperative.Count,
+                    Message = "Retrieved Successfully"
+                };
+            }
+            catch (BaseException ex)
+            {
+                _log.LogError($"Error retrieving Membership: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
         public async Task<CreateMembershipResponseModel> CreateMembershipUser(
    MemberShipRequestModel model,
    OnBoardingArgs args)
@@ -1625,7 +1983,7 @@ DateTimeOffset dateTime)
             try
             {
 
-                var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (hasOrg != null)
                 {
                     model.OrganizationId = hasOrg.OrganizaionId;
@@ -1645,6 +2003,7 @@ DateTimeOffset dateTime)
                 var business = await GetBusinessOrFail(args.businessCode);
 
                 var user = await RegisterMembershipLeaderOrFail(model, args);
+                await SendDefaultCredentialChange(user.model);
 
                 var membership = await CreateMembershipOrFail(
                     model, args, business, user.model.Id, dateTime);
@@ -1673,41 +2032,37 @@ DateTimeOffset dateTime)
                     "Unable to complete onboarding at the moment.");
             }
         }
-        public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
-        {
-            try
-            {
-              
-                return await _organizationRepository.GetOrganizationFarmerSalesSummary(args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<OrganizationFarmerSalesHistor>>> FarmerSalesHistory(
-     ListQueryParams request, CancellationToken cancellationToken)
-        { 
-            try
-            {
-                request.SalesContext = "Organization";
-                return await _salesRepository.FarmerSalesHistory(request, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-
-        public async Task<bool> DeactivateFarmerFromOrganization(AssignmentArgs args, string? message =null)
-        {   
-
-            return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
-        }
+   
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args)
         {   
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
+        }
+        public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeId);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Could not remove farmer from this membership.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
         }
 
         private async Task RunMembershipNonCriticalSteps(
@@ -1722,7 +2077,7 @@ DateTimeOffset dateTime)
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
+               
             }
             catch (Exception ex)
             {
@@ -1828,6 +2183,87 @@ DateTimeOffset dateTime)
 
         #endregion MembershipMgt
 
+
+        #region input
+        public async Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args)
+        {
+            try
+            {
+                await EnrichFarmerQuery(args);
+
+                return await _inputFinancingManagementRepository.GetInputLoanSummaryAsync(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args)
+        {
+            try
+            {
+                
+                return await _inputFinancingManagementRepository.GetLoanDetailAsync(args.Id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args)
+        {
+            try
+            {
+
+                return await _inputFinancingManagementRepository.GetFinancingRepaymentSummaryAsync(args.Id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(
+     ListQueryParams request, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await EnrichFarmerQuery(request);
+
+                return await _inputFinancingManagementRepository.GetFinancingBreakdownAsync(request);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(
+       long inputAllocationId,
+       ListQueryParams args, CancellationToken cancellationToken)
+        {
+            try
+            {
+
+                return await _inputFinancingManagementRepository.GetRepaymentBreakdownAsync(inputAllocationId, args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        private async Task EnrichFarmerQuery(ListQueryParams request)
+        {
+            var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId);
+
+            if (farmer == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Farmer not found for the specified user.");
+
+            request.Id = farmer.Id;
+        }
+
+        #endregion input
     }
 
 }

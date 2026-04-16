@@ -2631,7 +2631,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("LgaId")
+                    b.Property<long?>("LgaId")
                         .HasColumnType("bigint");
 
                     b.Property<DateTimeOffset>("OnboardedOn")
@@ -2653,7 +2653,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("RoleInOrganization")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<long>("StateId")
+                    b.Property<long?>("StateId")
                         .HasColumnType("bigint");
 
                     b.Property<string>("UserId")
@@ -3062,9 +3062,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("CompletedOn")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<string>("FarmerUserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<long>("FarmerId")
+                        .HasColumnType("bigint");
 
                     b.Property<long>("InterestedBundleId")
                         .HasColumnType("bigint");
@@ -3704,6 +3703,56 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ActivityLogs");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ErrorMessage")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OnboardedByUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("OrganizationCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Successful")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalRows")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BulkUploadJobs");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
@@ -4950,15 +4999,11 @@ namespace Agrovesto.Backend.API.Migrations
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", "LGA")
                         .WithMany()
-                        .HasForeignKey("LgaId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("LgaId");
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.States", "State")
                         .WithMany()
-                        .HasForeignKey("StateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("StateId");
 
                     b.Navigation("LGA");
 

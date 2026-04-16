@@ -8,12 +8,16 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Runtime.Internal.Util;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using PhoneNumbers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
@@ -22,10 +26,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class MembershipRepository : IMembershipRepository
     {
         private readonly DataContext _context;
-
-        public MembershipRepository(DataContext context)
+        private readonly IDistributedCache _cache;
+        public MembershipRepository(DataContext context, IDistributedCache cache)
         {
             _context = context;
+            _cache = cache;
         }
         public async Task<MemberShipModel> AssignMembershipToAgents(AssignmentArgs args, long membershipId)
         {
@@ -77,75 +82,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
+        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId)
         {
-            // 1️⃣ Membership Info + Status
             var membership = await _context.MemberShips
-                .Where(m => m.Id == membershipId)
+                .AsNoTracking()
+                .Where(m => m.UserId == membershipuserId)
                 .Select(m => new MembershipInfoDto
                 {
-                    UserId=m.UserId,
+                    UserId = m.UserId,
                     MembershipId = m.Id,
                     Name = m.Name,
                     MembershipType = m.MemberShipType.Name,
                     Status = m.IsActive ? "Active" : "Inactive",
                     DateCreated = m.OnBoardedOn,
-                    Location = m.Location
+                    Location = m.Location,
+                    LeaderName = m.MembershipLeaderFirstName + " " + m.MembershipLeaderLastName
                 })
                 .FirstOrDefaultAsync();
 
             if (membership == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
 
-            // 2️⃣ Farmer IDs Linked to Membership
-            var farmerQuery = _context.FarmerCooperatives
-                .Where(fc => fc.CooperativeId == membershipId)
-                .Select(fc => fc.FarmerId)
-                .Distinct();
+            var membershipId = membership.MembershipId;
 
-            var totalFarmers = await farmerQuery.CountAsync();
+            var farmStats = await
+  (
+      from fc in _context.FarmerCooperatives.AsNoTracking()
+      where fc.CooperativeId == membershipId
 
-            // 3️⃣ Agent Overview
-            var membershipQuery = _context.MemberShipAgents
-               .Where(fc => fc.MemberShipId == membershipId)
-               .Select(fc => fc.AgentId)
-               .Distinct();
+      join f in _context.Farmers.AsNoTracking()
+          on fc.FarmerId equals f.Id
 
-            var totalAgents = await membershipQuery.CountAsync();
+      join fr in _context.Farms.AsNoTracking()
+          on f.Id equals fr.FarmerId into farmJoin
+      from fr in farmJoin.DefaultIfEmpty()
 
-            // 4️⃣ Farm Overview
-            var farmQuery = _context.Farms
-                .Where(f => farmerQuery.Contains(f.FarmerId));
+      group new { f, fr } by 1 into g
+      select new
+      {
+          TotalFarmers = g.Select(x => x.f.Id).Distinct().Count(),
 
-            var totalFarms = await farmQuery.CountAsync();
+          TotalVerifiedFarmers = g
+              .Select(x => new { x.f.Id, x.f.Level })
+              .Distinct()
+              .Count(x => x.Level != FarmerLevel.Level1),
 
-            var farmSizeTotal = await farmQuery
-                .SumAsync(f => (double?)f.FarmSizeInSqMetre) ?? 0;
+          TotalUnverifiedFarmers = g
+              .Select(x => new { x.f.Id, x.f.Level })
+              .Distinct()
+              .Count(x => x.Level == FarmerLevel.Level1),
 
-            // 5️⃣ Mapping Progress
-            var mappingStats = await farmQuery
-                .GroupBy(f => f.MappingStatus)
-                .Select(g => new
-                {
-                    Status = g.Key,
-                    Count = g.Count()
-                })
-                .ToListAsync();
+          TotalFarms = g.Count(x => x.fr != null),
 
-            var completed = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.Verified)?.Count ?? 0;
+          TotalFarmSize = g.Sum(x => x.fr != null
+              ? (double?)x.fr.FarmSizeInSqMetre
+              : 0) ?? 0,
 
-            var inProgress = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.Mapped)?.Count ?? 0;
+          Completed = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.Verified),
 
-            var notStarted = mappingStats
-                .FirstOrDefault(x => x.Status == MappingStatus.UnMapped)?.Count ?? 0;
+          InProgress = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.Mapped),
 
-            var mappingPercentage = totalFarms == 0
-                ? 0
-                : (int)Math.Round((double)completed / totalFarms * 100);
+          NotStarted = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.UnMapped)
+      }
+  )
+  .FirstOrDefaultAsync();
+
+            farmStats ??= new
+            {
+                TotalFarmers = 0,
+                TotalVerifiedFarmers = 0,
+                TotalUnverifiedFarmers = 0,
+                TotalFarms = 0,
+                TotalFarmSize = 0.0,
+                Completed = 0,
+                InProgress = 0,
+                NotStarted = 0
+            };
+            var totalAgents = await _context.MemberShipAgents
+                .AsNoTracking()
+                .Where(x => x.MemberShipId == membershipId)
+                .Select(x => x.AgentId)
+                .Distinct()
+                .CountAsync();
 
             var farmerLinkChart = await _context.FarmerCooperatives
+                .AsNoTracking()
                 .Where(fc => fc.CooperativeId == membershipId)
                 .GroupBy(fc => new
                 {
@@ -163,6 +184,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .ToListAsync();
 
             var recentActivities = await _context.ActivityLogs
+                .AsNoTracking()
                 .Where(a => a.PerformedByUserId == membership.UserId)
                 .OrderByDescending(a => a.CreatedOn)
                 .Take(5)
@@ -174,6 +196,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 })
                 .ToListAsync();
 
+         
+            // -----------------------------
+            var inputDisbursementChart = await
+            (
+                from fc in _context.FarmerCooperatives.AsNoTracking()
+                where fc.CooperativeId == membershipId
+
+                join ia in _context.InputAllocations.AsNoTracking()
+                    on fc.FarmerId equals ia.FarmerId
+
+                group ia by new
+                {
+                    ia.AllocatedDate.Year,
+                    ia.AllocatedDate.Month
+                }
+                into g
+
+                select new MonthlyInputDisbursementDto
+                {
+                    Year = g.Key.Year,
+                    Month = g.Key.Month,
+                    InputCount = g.Count()
+                }
+            )
+            .OrderBy(x => x.Year)
+            .ThenBy(x => x.Month)
+            .ToListAsync();
+
             return new MembershipDashboardDto
             {
                 Membership = membership,
@@ -181,28 +231,172 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 Summary = new MemberSummaryDto
                 {
                     TotalAgents = totalAgents,
-                    TotalFarmers = totalFarmers,
-                    TotalFarms = totalFarms,
-                    TotalFarmSize = farmSizeTotal,
-                    FarmsMapped = completed,
-                    MappingProgressPercentage = mappingPercentage
+                    TotalFarmers = farmStats.TotalFarmers,
+                    TotalVerifiedFarmers = farmStats.TotalVerifiedFarmers,
+                    TotalUnverifiedFarmers = farmStats.TotalUnverifiedFarmers,
+                    TotalFarms = farmStats.TotalFarms,
+                    TotalFarmSize = farmStats.TotalFarmSize,
+                    FarmsMapped = farmStats.Completed,
+                    MappingProgressPercentage = farmStats.TotalFarms == 0
+        ? 0
+        : (int)Math.Round((double)farmStats.Completed / farmStats.TotalFarms * 100)
                 },
 
                 MappingProgress = new FarmMappingProgressDto
                 {
-                    TotalFarms = totalFarms,
-                    Completed = completed,
-                    InProgress = inProgress,
-                    NotStarted = notStarted
+                    TotalFarms = farmStats.TotalFarms,
+                    Completed = farmStats.Completed,
+                    InProgress = farmStats.InProgress,
+                    NotStarted = farmStats.NotStarted
                 },
 
                 FarmerLinkHistogram = farmerLinkChart,
+
+                FarmerInputDisbursedLinkHistogram = inputDisbursementChart,
 
                 RecentActivities = recentActivities,
 
                 CanAddFarmer = membership.Status == "Active"
             };
         }
+
+        /// <summary>
+        /// TODO: REVERT TO THIS IF FAILED
+        /// </summary>
+        /// <param name="agentUserId"></param>
+        /// <returns></returns>
+
+        //public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId)
+        //{
+
+        //    var membership = await _context.MemberShips
+        //        .Where(m => m.UserId == membershipuserId)
+        //        .Select(m => new MembershipInfoDto
+        //        {
+        //            UserId=m.UserId,
+        //            MembershipId = m.Id,
+        //            Name = m.Name,
+        //            MembershipType = m.MemberShipType.Name,
+        //            Status = m.IsActive ? "Active" : "Inactive",
+        //            DateCreated = m.OnBoardedOn,
+        //            Location = m.Location
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    if (membership == null)
+        //        throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+
+        //    // 2️⃣ Farmer IDs Linked to Membership
+        //    var farmerQuery = _context.FarmerCooperatives
+        //        .Where(fc => fc.CooperativeId == membership.MembershipId)
+        //        .Select(fc => fc.FarmerId)
+        //        .Distinct();
+
+        //    var totalFarmers = await farmerQuery.CountAsync();
+
+        //    // 3️⃣ Agent Overview
+        //    var membershipQuery = _context.MemberShipAgents
+        //       .Where(fc => fc.MemberShipId == membership.MembershipId)
+        //       .Select(fc => fc.AgentId)
+        //       .Distinct();
+
+        //    var totalAgents = await membershipQuery.CountAsync();
+
+        //    // 4️⃣ Farm Overview
+        //    var farmQuery = _context.Farms
+        //        .Where(f => farmerQuery.Contains(f.FarmerId));
+
+        //    var totalFarms = await farmQuery.CountAsync();
+
+        //    var farmSizeTotal = await farmQuery
+        //        .SumAsync(f => (double?)f.FarmSizeInSqMetre) ?? 0;
+
+        //    // 5️⃣ Mapping Progress
+        //    var mappingStats = await farmQuery
+        //        .GroupBy(f => f.MappingStatus)
+        //        .Select(g => new
+        //        {
+        //            Status = g.Key,
+        //            Count = g.Count()
+        //        })
+        //        .ToListAsync();
+
+        //    var completed = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.Verified)?.Count ?? 0;
+
+        //    var inProgress = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.Mapped)?.Count ?? 0;
+
+        //    var notStarted = mappingStats
+        //        .FirstOrDefault(x => x.Status == MappingStatus.UnMapped)?.Count ?? 0;
+
+        //    var mappingPercentage = totalFarms == 0
+        //        ? 0
+        //        : (int)Math.Round((double)completed / totalFarms * 100);
+
+        //    var farmerLinkChart = await _context.FarmerCooperatives
+        //        .Where(fc => fc.CooperativeId == membership.MembershipId)
+        //        .GroupBy(fc => new
+        //        {
+        //            fc.JoinedOn.Year,
+        //            fc.JoinedOn.Month
+        //        })
+        //        .Select(g => new MonthlyFarmerLinkDto
+        //        {
+        //            Year = g.Key.Year,
+        //            Month = g.Key.Month,
+        //            FarmerCount = g.Count()
+        //        })
+        //        .OrderBy(x => x.Year)
+        //        .ThenBy(x => x.Month)
+        //        .ToListAsync();
+
+        //    var recentActivities = await _context.ActivityLogs
+        //        .Where(a => a.PerformedByUserId == membership.UserId)
+        //        .OrderByDescending(a => a.CreatedOn)
+        //        .Take(5)
+        //        .Select(a => new ActivityDto
+        //        {
+        //            Description = a.ActivityName,
+        //            PerformedBy = a.PerformedByUserId,
+        //            Date = a.CreatedOn
+        //        })
+        //        .ToListAsync();
+
+        //    var result= new MembershipDashboardDto
+        //    {
+        //        Membership = membership,
+
+        //        Summary = new MemberSummaryDto
+        //        {
+        //            TotalAgents = totalAgents,
+        //            TotalFarmers = totalFarmers,
+        //            TotalFarms = totalFarms,
+        //            TotalFarmSize = farmSizeTotal,
+        //            FarmsMapped = completed,
+        //            MappingProgressPercentage = mappingPercentage
+        //        },
+
+        //        MappingProgress = new FarmMappingProgressDto
+        //        {
+        //            TotalFarms = totalFarms,
+        //            Completed = completed,
+        //            InProgress = inProgress,
+        //            NotStarted = notStarted
+        //        },
+
+        //        FarmerLinkHistogram = farmerLinkChart,
+
+        //        RecentActivities = recentActivities,
+
+        //        CanAddFarmer = membership.Status == "Active"
+        //    };
+
+
+        //    return result;
+        //}
+
+
         /** public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(long membershipId)
          {
              //  Membership basic info
@@ -346,6 +540,112 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
         }
 
+        //public async Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data)
+        //{
+        //    try
+        //    {
+        //        var existingCooperative = await _context.MemberShips
+        //            .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+        //        var isModified = false;
+        //        if (existingCooperative != null)
+        //        {
+        //            if (data.IsLeaderAFarmer)
+        //            {
+        //                existingCooperative.IsLeaderAFarmer = data.IsLeaderAFarmer;
+        //            }
+        //            if (!string.IsNullOrWhiteSpace(data.Name))
+        //                existingCooperative.Name = data.Name;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Location))
+        //                existingCooperative.Location = data.Location;
+
+        //            if (!string.IsNullOrWhiteSpace(data.State))
+        //                existingCooperative.State = data.State;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Lga))
+        //                existingCooperative.Lga = data.Lga;
+
+        //            if (!string.IsNullOrWhiteSpace(data.ContactPerson))
+        //                existingCooperative.ContactPerson = data.ContactPerson;
+
+
+        //            if (!string.IsNullOrWhiteSpace(data.Ward))
+        //                existingCooperative.Ward = data.Ward;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Email))
+        //                existingCooperative.Email = data.Email;
+
+        //            if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
+        //                existingCooperative.PhoneNumber = data.PhoneNumber;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderFirstName))
+        //                existingCooperative.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderGender))
+        //                existingCooperative.MembershipLeaderGender = data.MembershipLeaderGender;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderMiddleName))
+        //                existingCooperative.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
+        //                existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;
+
+
+        //            if (data.MemberShipTypeId != 0)
+        //            {
+        //                existingCooperative.MemberShipTypeId = data.MemberShipTypeId;
+        //            }
+
+        //            if (data.OrganizationId.HasValue)
+        //            {
+        //                bool exists = await _context.OrganizationMemberships.AnyAsync(x =>
+        //                    x.MembershipId == existingCooperative.Id &&
+        //                    x.OrganizationId == data.OrganizationId.Value);
+
+        //                if (!exists)
+        //                {
+        //                    await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+        //                    {
+        //                        MembershipId = existingCooperative.Id,
+        //                        OrganizationId = data.OrganizationId.Value,
+        //                        AssignedByUserId = data.OnboardedById,
+        //                        AssignedOn = DateTimeOffset.Now,
+        //                        IsActive=true,
+        //                    });
+        //                }
+        //            }
+
+
+        //            //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
+        //            //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
+
+        //            isModified = await AssignAgentToMembership(data, existingCooperative, isModified);
+        //            _context.MemberShips.Update(existingCooperative);
+        //            await _context.SaveChangesAsync();
+
+        //            return (true, existingCooperative.Map());
+        //        }
+
+        //        var entity = data.Map();
+
+        //        await _context.MemberShips.AddAsync(entity);
+        //        await _context.SaveChangesAsync();
+
+        //        return (true, entity.Map());
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        throw new BaseException(
+        //            Core.Enums.ExceptionType.OPERATION_FAILED,
+        //            ex.Message);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new NotSuccessfulException(
+        //            $"Could not save agent details: {ex.Message}");
+        //    }
+        //}
         public async Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data)
         {
             try
@@ -353,88 +653,91 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 var existingCooperative = await _context.MemberShips
                     .FirstOrDefaultAsync(x => x.UserId == data.UserId);
 
-                var isModified = false;
-                if (existingCooperative != null)
+                bool isNew = existingCooperative == null;
+
+                MemberShip entity;
+
+                if (isNew)
                 {
+                    entity = data.Map();
+                    await _context.MemberShips.AddAsync(entity);
+                }
+                else
+                {
+                    entity = existingCooperative;
+
                     if (data.IsLeaderAFarmer)
-                    {
-                        existingCooperative.IsLeaderAFarmer = data.IsLeaderAFarmer;
-                    }
+                        entity.IsLeaderAFarmer = data.IsLeaderAFarmer;
+
                     if (!string.IsNullOrWhiteSpace(data.Name))
-                        existingCooperative.Name = data.Name;
+                        entity.Name = data.Name;
 
                     if (!string.IsNullOrWhiteSpace(data.Location))
-                        existingCooperative.Location = data.Location;
+                        entity.Location = data.Location;
 
                     if (!string.IsNullOrWhiteSpace(data.State))
-                        existingCooperative.State = data.State;
+                        entity.State = data.State;
 
                     if (!string.IsNullOrWhiteSpace(data.Lga))
-                        existingCooperative.Lga = data.Lga;
+                        entity.Lga = data.Lga;
 
                     if (!string.IsNullOrWhiteSpace(data.ContactPerson))
-                        existingCooperative.ContactPerson = data.ContactPerson;
-
+                        entity.ContactPerson = data.ContactPerson;
 
                     if (!string.IsNullOrWhiteSpace(data.Ward))
-                        existingCooperative.Ward = data.Ward;
+                        entity.Ward = data.Ward;
 
                     if (!string.IsNullOrWhiteSpace(data.Email))
-                        existingCooperative.Email = data.Email;
+                        entity.Email = data.Email;
 
                     if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
-                        existingCooperative.PhoneNumber = data.PhoneNumber;
+                        entity.PhoneNumber = data.PhoneNumber;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderFirstName))
-                        existingCooperative.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
+                        entity.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderGender))
-                        existingCooperative.MembershipLeaderGender = data.MembershipLeaderGender;
+                        entity.MembershipLeaderGender = data.MembershipLeaderGender;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderMiddleName))
-                        existingCooperative.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
+                        entity.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
 
                     if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
-                        existingCooperative.MembershipLeaderLastName = data.MembershipLeaderLastName;
-
+                        entity.MembershipLeaderLastName = data.MembershipLeaderLastName;
 
                     if (data.MemberShipTypeId != 0)
-                    {
-                        existingCooperative.MemberShipTypeId = data.MemberShipTypeId;
-                    }
-
-                    if (data.OrganizationId.HasValue)
-                    {
-                        bool exists = await _context.OrganizationMemberships.AnyAsync(x =>
-                            x.MembershipId == existingCooperative.Id &&
-                            x.OrganizationId == data.OrganizationId.Value);
-
-                        if (!exists)
-                        {
-                            await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
-                            {
-                                MembershipId = existingCooperative.Id,
-                                OrganizationId = data.OrganizationId.Value,
-                                AssignedByUserId = data.OnboardedById,
-                                AssignedOn = DateTimeOffset.Now
-                            });
-                        }
-                    }
-
-
-                    //if (!string.IsNullOrWhiteSpace(data.IsAssignedToAgentId))
-                    //    existingCooperative.IsAssignedToAgentId = data.IsAssignedToAgentId;
-
-                    isModified = await AssignAgentToMembership(data, existingCooperative, isModified);
-                    _context.MemberShips.Update(existingCooperative);
-                    await _context.SaveChangesAsync();
-
-                    return (true, existingCooperative.Map());
+                        entity.MemberShipTypeId = data.MemberShipTypeId;
                 }
 
-                var entity = data.Map();
+                await _context.SaveChangesAsync();
 
-                await _context.MemberShips.AddAsync(entity);
+                var membershipId = entity.Id;
+
+                if (data.OrganizationId.HasValue)
+                {
+                    var exists = await _context.OrganizationMemberships
+                        .AnyAsync(x =>
+                            x.MembershipId == membershipId &&
+                            x.OrganizationId == data.OrganizationId.Value);
+
+                    if (!exists)
+                    {
+                        await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+                        {
+                            MembershipId = membershipId,
+                            OrganizationId = data.OrganizationId.Value,
+                            AssignedByUserId = data.OnboardedById,
+                            AssignedOn = DateTimeOffset.UtcNow,
+                            IsActive = true
+                        });
+
+                        await _context.SaveChangesAsync();
+                    }
+                }
+
+                var isModified = false;
+                isModified = await AssignAgentToMembership(data, entity, isModified);
+
                 await _context.SaveChangesAsync();
 
                 return (true, entity.Map());
@@ -448,13 +751,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             catch (Exception ex)
             {
                 throw new NotSuccessfulException(
-                    $"Could not save agent details: {ex.Message}");
+                    $"Could not save membership details: {ex.Message}");
             }
         }
-
         private async Task<bool> AssignAgentToMembership(MemberShipModel data, MemberShip existingCooperative, bool isModified)
         {
-            if (data.AgentIds != null)
+            if (data.AgentIds.Count > 0)
             {
                 var existingAgents = _context.MemberShipAgents
                     .Where(fa => fa.MemberShipId == existingCooperative.Id);
@@ -465,7 +767,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     {
                         MemberShipId = existingCooperative.Id,
                         AgentId = agentId,
-                        AssignedOn = DateTimeOffset.Now
+                        AssignedOn = DateTimeOffset.Now,
+                        IsActive=true,
 
                     });
                 }

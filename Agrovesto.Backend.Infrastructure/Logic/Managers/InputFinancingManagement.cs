@@ -1177,7 +1177,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     repaymentModel.BelongToBusinessCode = args.businessCode;
                     repaymentModel.OrganizationCode = args.organizationCode;
                     repaymentModel.PaymentDueDate = hasBeenDisbursed.MaturityDate.Value;
-                    repaymentModel.FarmerUserId = args.UserId;
+                    repaymentModel.FarmerId = args.Id;
                     repaymentModel.InterestedBundleId = args.SubscribedBundleId;
 
                     repaymentModel.RepaymentBreakdown = repaymentModel.RepaymentBreakdown ?? new List<RepaymentBreakdownModel>();

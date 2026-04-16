@@ -82,5 +82,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int TotalActiveLocations { get; set; }
         public decimal TotalEquityPaid { get; set; }
         public decimal TotalProduceSold { get; set; }
+        public decimal TotalInputDisbursed { get; set; }
     }
 }

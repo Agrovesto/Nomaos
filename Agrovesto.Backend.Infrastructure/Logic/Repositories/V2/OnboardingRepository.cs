@@ -52,6 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfileResponse> GetUserProfile(string userId);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
+        Task<UsersProfile> FindUserById(string userId);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -70,8 +71,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
         }
+        public async Task<UsersProfile> FindUserById(string userId)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
 
-    
+            if (user == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+            var response = new UsersProfile
+            {
+                UserId = user.Id,
+                UserType = user.UserType,
+                Email = user.Email,
+                Phone = user.PhoneNumber,
+                Name=user.Name
+            };
+
+           
+
+            return response;
+        }
+
+
         //public async Task<TokenModel> RefreshAsync(string refreshToken, string deviceId)
         //{
         //    var stored = await _context.RefreshTokens
@@ -252,6 +275,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     LoginModel model,
     string businessCode)
         {
+            // Validate business quickly
             var business = await _context.Businesses
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.BusinessCode == businessCode);
@@ -259,39 +283,70 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (business == null || business.BusinessStatus == BusinessStatus.Deactivated.ToString())
                 return (false, "Business is inactive or not found", null);
 
+            // Resolve user (password path uses UserManager for normalized lookup; pin path uses a targeted query)
             var user = await ResolveUserAsync(model, businessCode);
             if (user == null)
                 return (false, "Invalid credentials", null);
 
+            // Validate credentials (password hashing is unavoidable)
             var credentialResult = await ValidateCredentialsAsync(user, model);
             if (!credentialResult.Success)
                 return (false, credentialResult.Message, null);
 
-            var roles = await _userManager.GetRolesAsync(user);
+            // Fetch roles with a single efficient DB query (avoids Identity internal overhead)
+            var roles = await (from ur in _context.UserRoles.AsNoTracking()
+                               join r in _context.Roles.AsNoTracking() on ur.RoleId equals r.Id
+                               where ur.UserId == user.Id
+                               select r.Name)
+                              .ToListAsync();
+
             if (!roles.Any())
                 return (false, "User has no assigned roles", null);
 
             var hasPendingOnboarding = HasPendingOnboarding(user);
 
-            user.LastLoginDate = DateTimeOffset.UtcNow;
-            await _context.SaveChangesAsync();
+            // Update LastLoginDate only when it is stale to reduce write volume
+            try
+            {
+                var needUpdate = !user.LastLoginDate.HasValue || (DateTimeOffset.UtcNow - user.LastLoginDate.Value) > TimeSpan.FromMinutes(1);
+                if (needUpdate)
+                {
+                    // Use ExecuteUpdateAsync to avoid loading/tracking entity for update
+                    await _context.Users
+                        .Where(u => u.Id == user.Id)
+                        .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginDate, u => DateTimeOffset.UtcNow));
+                }
+            }
+            catch (Exception ex)
+            {
+                // Don't fail login due to a non-critical write error
+                try { _log.LogWarning(ex, "Failed to update LastLoginDate for user {userId}", user.Id); } catch { }
+            }
 
-            var organizations = await GetUserOrganizationsAsync(user.Id);
+            // Load organizations in a single query joining user organizations to business organizations
+            var organizations = await (from uo in _context.UserOrganizations.AsNoTracking()
+                                       join bo in _context.BusinessOrganizations.AsNoTracking() on uo.OrganizationCode equals bo.OrganizationCode
+                                       where uo.UserId == user.Id
+                                       select new OrganizationDto
+                                       {
+                                           OrganizationCode = bo.OrganizationCode,
+                                           OrganizationName = bo.CompanyName
+                                       }).ToListAsync();
 
             var claims = BuildClaims(user, roles, organizations, hasPendingOnboarding);
 
             var token = GenerateJwtToken(claims);
             var time = DateTime.UtcNow.AddDays(1);
+
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
-                Email=user.Email,
-                Name=user.Name,
-                phone_number=user.PhoneNumber,
-             
+                Email = user.Email,
+                Name = user.Name,
+                phone_number = user.PhoneNumber,
                 Token = token,
                 TokenType = TokenType.AccessToken,
-                ExpiresOn = time,//DateTime.UtcNow.AddDays(1),
+                ExpiresOn = time,
                 Roles = roles.ToList(),
                 Organizations = organizations
             });
@@ -499,8 +554,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         private async Task<MemberShipModel> GetCooperativeProfile(string userId)
         {
-            // 1️⃣ Load membership along with MemberShipType, Lga, State, Ward
-            var memberShip = await _context.MemberShips
+             var memberShip = await _context.MemberShips
                 .AsNoTracking()
                 .Include(m => m.MemberShipType)
                 .Include(m => m.Lga)
@@ -511,14 +565,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (memberShip == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Membership profile not found");
 
-            // 2️⃣ Load associated agents
             var agents = await _context.MemberShipAgents
                 .AsNoTracking()
                 .Where(msa => msa.MemberShipId == memberShip.Id)
-                .Select(msa => msa.AgentId) // assumes navigation property exists
+                .Select(msa => msa.AgentId) 
                 .ToListAsync();
 
-            // 3️⃣ Map to MemberShipModel
             var profile = new MemberShipModel
             {
                 Id = memberShip.Id,
@@ -828,10 +880,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return null;
         }
         private async Task<(OnboardingRequestModel, bool status, string message)> HandleExistingUser(
-    User user,
-    OnboardingRequestModel model,
-    OnBoardingArgs args,
-    IdentityRole role)
+        User user,
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
             
             bool hasRole = await _context.UserRoles
@@ -857,9 +909,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             );
         }
         private async Task<(OnboardingRequestModel, bool, string)> CreateNewUser(
-    OnboardingRequestModel model,
-    OnBoardingArgs args,
-    IdentityRole role)
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
             var salt = EncryptionUtil.GetSalt();
 
@@ -899,7 +951,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _userManager.AddToRoleAsync(user, role.Name);
 
             await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-
+            user.Pin = pinToUse;
+            user.Password = passwordToUse;
+            model.Pin = pinToUse;
+            model.Password = passwordToUse;
             return (
                 MapUserResponse(user, model),
                 true,
@@ -951,7 +1006,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                    HasDefaultPin = !string.IsNullOrEmpty(model.DefaultPin)
                };
            }**/
-
         private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
         {
             return new User
@@ -966,7 +1020,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
                 CreatedBy = args.UserId,
-                Name = model.FullName
+                Name = model.FullName,
             };
         }
         private string GenerateUserId(OnBoardingArgs args)
@@ -999,7 +1053,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 });
             }
         }
-
         private OnboardingRequestModel MapUserResponse(User user, OnboardingRequestModel model)
         {
             return new OnboardingRequestModel
@@ -1249,7 +1302,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
               //  await NotifyUserOfOrganizationAddition(phoneNumber, organizationCode);
             }
         }
-
         public async Task<UserModel> FindByPhoneNumberAsync(string phoneNumber)
         {
             var user = new User();
@@ -1273,7 +1325,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.Map();
         }
-
         public async Task RemoveUserFromOrganization(string userId, string organizationCode)
         {
             var userOrg = await _context.UserOrganizations
@@ -1290,7 +1341,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             _log.LogInformation($"User {userId} removed from organization {organizationCode}.");
         }
-
         public async Task TrackUserRoleAssignment(string userId, string userType)
         {
             var model = await _userManager.FindByIdAsync(userId);
@@ -1310,7 +1360,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 _log.LogError(ex, $"Failed to track user role assignment for user {JsonConvert.SerializeObject(model)}");
             }
         }
-
         public async Task<List<string>> GetOrganizationsForUser(string userId)
         {
             return await _context.UserOrganizations
@@ -1324,7 +1373,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Where(u => u.UserOrganizations.Any(o => o.OrganizationCode == organizationCode))
                 .ToListAsync();
         }
-
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
         {
             var user = await _userManager.FindByIdAsync(userId);
@@ -1361,7 +1409,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             return (false, "Invalid username");
         }
-
         public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
         {
             var userExist = await _userManager.FindByEmailAsync(model.Username);
@@ -1382,7 +1429,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             return (false, "Invalid username");
         }
-
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
             var userExist = await _userManager.FindByEmailAsync(model.UserName);
@@ -1545,7 +1591,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
-
         public async Task<bool> OnNINBVNUpdate(UserModel model)
         {
             var user = await _context.Users.Where(x => x.Id == model.Id).FirstOrDefaultAsync();
@@ -1569,5 +1614,5 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
        
 
-        }
+    }
 }
