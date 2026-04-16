@@ -1202,16 +1202,16 @@ Operational Overview (e.g., farms in progress, completed, or active)
                 return new FarmerDashboardDto();
 
             var result = await _context.Database
-                .SqlQueryRaw<FarmerDashboardDto>(
-        @"
+     .SqlQueryRaw<FarmerDashboardDto>(
+ @"
 SELECT
     -- Total Farms
-    (SELECT COUNT(*) FROM Farms WHERE FarmerId = f.Id) AS TotalFarms,
+    (SELECT CAST(COUNT(*) AS BIGINT) FROM Farms WHERE FarmerId = f.Id) AS TotalFarms,
 
     -- Operational Stats
-    (SELECT COUNT(*) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 0) AS NotMapped,
-    (SELECT COUNT(*) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 1) AS InProgressFarms,
-    (SELECT COUNT(*) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 2) AS CompletedFarms,
+    (SELECT CAST(COUNT(*) AS BIGINT) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 0) AS NotMapped,
+    (SELECT CAST(COUNT(*) AS BIGINT) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 1) AS InProgressFarms,
+    (SELECT CAST(COUNT(*) AS BIGINT) FROM Farms WHERE FarmerId = f.Id AND MappingStatus = 2) AS CompletedFarms,
 
     -- Wallet Balance
     (SELECT ISNULL(SUM(WalletBalance), 0)
@@ -1225,10 +1225,9 @@ SELECT
 FROM Farmers f
 WHERE f.UserId = @userId
 ",
-                new SqlParameter("@userId", farmerUserId)
-                )
-                .FirstOrDefaultAsync();
-
+         new SqlParameter("@userId", farmerUserId)
+     )
+     .FirstOrDefaultAsync();
             return result ?? new FarmerDashboardDto();
         }
         public async Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId)
@@ -1237,15 +1236,15 @@ WHERE f.UserId = @userId
                 return new AgentDashboardDto();
 
             var result = await _context.Database
-                .SqlQueryRaw<AgentDashboardDto>(
-        @"
+     .SqlQueryRaw<AgentDashboardDto>(
+ @"
 SELECT
-    (SELECT COUNT(DISTINCT fa.FarmerId)
+    (SELECT COUNT_BIG(DISTINCT fa.FarmerId)
      FROM FarmerAgents fa
      INNER JOIN Agents a ON fa.AgentId = a.Id
      WHERE a.UserId = @userId) AS TotalFarmers,
 
-    (SELECT COUNT(*)
+    (SELECT COUNT_BIG(*)
      FROM Farms f
      INNER JOIN FarmerAgents fa ON f.FarmerId = fa.FarmerId
      INNER JOIN Agents a ON fa.AgentId = a.Id
@@ -1257,29 +1256,29 @@ SELECT
      INNER JOIN Agents a ON fa.AgentId = a.Id
      WHERE a.UserId = @userId) AS TotalFarmSizeHectares,
 
-    (SELECT COUNT(DISTINCT f.FarmerId)
+    (SELECT COUNT_BIG(DISTINCT f.FarmerId)
      FROM Farms f
      INNER JOIN FarmerAgents fa ON f.FarmerId = fa.FarmerId
      INNER JOIN Agents a ON fa.AgentId = a.Id
      WHERE a.UserId = @userId) AS MappedFarms,
 
-    (SELECT COUNT(DISTINCT fc.FarmerId)
+    (SELECT COUNT_BIG(DISTINCT fc.FarmerId)
      FROM FarmerCooperatives fc
      INNER JOIN FarmerAgents fa ON fc.FarmerId = fa.FarmerId
      INNER JOIN Agents a ON fa.AgentId = a.Id
      WHERE a.UserId = @userId) AS FarmersLinkedToCooperatives,
 
-    (SELECT COUNT(DISTINCT ma.MemberShipId)
+    (SELECT COUNT_BIG(DISTINCT ma.MemberShipId)
      FROM MemberShipAgents ma
      INNER JOIN Agents a ON ma.AgentId = a.Id
      WHERE a.UserId = @userId) AS TotalCooperatives,
 
-    0 AS UnmappedFarms,
-    0 AS FarmersNotLinkedToCooperatives
+    CAST(0 AS BIGINT) AS UnmappedFarms,
+    CAST(0 AS BIGINT) AS FarmersNotLinkedToCooperatives
 ",
-                new SqlParameter("@userId", agentUserId)
-                )
-                .FirstOrDefaultAsync();
+         new SqlParameter("@userId", agentUserId)
+     )
+     .FirstOrDefaultAsync();
 
             if (result == null)
                 return new AgentDashboardDto();
@@ -1289,7 +1288,9 @@ SELECT
                 result.TotalFarmers - result.FarmersLinkedToCooperatives;
 
             return result;
-        }  /// <summary>
+        } 
+        
+        /// <summary>
            /// TODO: REVERT
            /// </summary>
            /// <param name="agentUserId"></param>
