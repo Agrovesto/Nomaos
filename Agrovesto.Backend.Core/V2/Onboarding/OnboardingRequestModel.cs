@@ -12,10 +12,19 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
-   
 
+    public class UsersProfile
+    {
+        public string UserId { get; set; }
+        public string UserType { get; set; }
 
-    public class UsersProfileResponse
+        // Common
+        public string Email { get; set; }
+        public string Phone { get; set; }
+        public string Name { get; set; }
+    }
+
+        public class UsersProfileResponse
     {
         public string UserId { get; set; }
         public string UserType { get; set; }
@@ -77,8 +86,18 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string BVN { get; set; }
         public string NIN { get; set; }
     }
+    public class BulkUploadJob
+    {
+        public Guid Id { get; set; }
+        public string FilePath { get; set; }
+        public string Status { get; set; } // Pending, Processing, Completed, Failed
+        public string? ErrorMessage { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+    }
     public class BulkOnboardingResult
     {
+        public string Message { get; set; } = string.Empty;
         public int Total { get; set; }
         public int Successful { get; set; }
         public int Failed { get; set; }
@@ -175,6 +194,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Password { get; set; }
         public string? DefaultPassword { get; set; }
         public string? Email { get; set; }
+        public string? Bvn { get; set; }
+        public string? Nin { get; set; }
         public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;    
     }
@@ -318,7 +339,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? agentUserId { get; set; }
         public string? UserId { get; set; }
         public string? OnboardedByUserId { get; set; }
-        public string businessCode { get; set; }
+        public string? businessCode { get; set; }
         public string? organizationCode { get; set; }
         public List<long?>? CooperativeIds { get; set; }
         public List<long?>? MembershipIds { get; set; }

@@ -350,6 +350,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
         public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
+        public DbSet<Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob> BulkUploadJobs { get; set; }
 
 
 

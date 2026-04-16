@@ -24,8 +24,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         public AgentController(IHttpContextAccessor httpContextAccessor, IAgentManager agentManager,
             IBusinessManager businessManager,
-            IOnBoardingManager onBoardingManager
-            ) : base(httpContextAccessor)
+            IOnBoardingManager onBoardingManager) : base(httpContextAccessor)
         {
            _agentManager = agentManager;
             _onBoardingManager = onBoardingManager;
@@ -73,9 +72,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
-        //
-        [HttpPost("create-membership")]
-       
+        
+        [HttpPost("create-membership")]       
         public async Task<IActionResult> CreateMembershipUser([FromBody] MemberShipRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
@@ -155,7 +153,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = result.Succeeded,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    PageSize = query.PageSize,
                     Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -179,6 +177,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+        
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetAgentDashboardData([FromQuery] ListQueryParams query)
         {
@@ -303,5 +302,5 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-          }
+    }
 }

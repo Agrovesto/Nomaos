@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public long agentId { get; set; }
             public long membershipId { get; set; }
             public string? userId { get; set; }
+            public string? farmerUserId { get; set; }
             public string? googleDriveDocumentId { get; set; }
             public string? performedByUserId { get; set; }
             public string? performedByName { get; set; }
@@ -46,9 +47,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses
             public long FarmId { get; set; }
             public DateTimeOffset DateAdded { get; set; }
             public string AddedBy { get; set; }
+            public string AddedById { get; set; }
+            public string AddedByType { get; set; }
             public string MappingStatus { get; set; }
             public DateTimeOffset? CapturedOn { get; set; }
             public string CapturedBy { get; set; }
+            public string CapturedByType { get; set; }
+            public string CapturedById { get; set; }
             public string Accuracy { get; set; }
             public List<FarmLandDocumentDto> Documents { get; set; }
             public List<FarmCoordinateDto> Coordinates { get; set; }

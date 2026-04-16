@@ -25,10 +25,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactEmail { get; set; }
         public string? OrganizationEmail { get; set; }
         public string? OrganizationPhone { get; set; }
-        public long StateId { get; set; }
-        public States State { get; set; }
-        public long LgaId { get; set; }
-        public LGA LGA { get; set; }
+        public long? StateId { get; set; }
+        public States? State { get; set; }
+        public long? LgaId { get; set; }
+        public LGA? LGA { get; set; }
         public string? CompanyAddress { get; set; }
 
         public ICollection<OrganizationConfiguration> OrganizationConfigurations { get; set; } = new List<OrganizationConfiguration>();

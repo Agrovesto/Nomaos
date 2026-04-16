@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         // Backwards-compatible wrapper
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
+        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds);
         Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
@@ -68,6 +68,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
+        Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args);
+        Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
+        Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -687,7 +690,7 @@ OrganizationOnboardingArgs args)
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
 
-            var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
             if (hasOrg != null)
             {
                 model.OrganizationId = hasOrg.OrganizaionId;
@@ -800,7 +803,7 @@ OrganizationOnboardingArgs args)
     Core.Enums.ExceptionType.BAD_REQUEST,
     "Farmer Id is required.");
             }
-            ;
+            
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
         }
@@ -822,7 +825,47 @@ OrganizationOnboardingArgs args)
 
             return await _farmerRepository.AssignFarmerToAgents(args, args.Id);
         }
+        public async Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId)
+        {
+            if (args == null || args.AgentIds == null || !args.AgentIds.Any())
+                throw new ArgumentException("AgentIds are required");
 
+            var result = await _farmerRepository.ChangeFarmerAgents(args, farmerId);
+
+            return result; 
+        }
+        public async Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args)
+        {
+
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(args.UserId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+
+                var agentIds = args.AgentIds
+    .Where(x => x.HasValue)
+    .Select(x => x.Value)
+    .ToList();
+
+                var profile = await _farmerRepository.RemoveFarmerFromAgent(getFarmer.Id, agentIds);
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Could not remove farmer from this agent.");
+
+                return getFarmer;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", args.UserId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
         public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
             string message = "";
@@ -1090,10 +1133,13 @@ OrganizationOnboardingArgs args)
                 {
                     if (model.OtpTarget == OtpTarget.Email)
                     {
-                        await _sMSService.SendEmailAsync(
+                        await _awsService.SendEmailAsync(
+                            _configuration["Official:Email"],
                             otp.Destination,
                             "Confirm your account",
-                            $"Your verification code is {otp.Code}. It expires in 5 minutes.");
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes.",
+                            $"Your verification code is {otp.Code}. It expires in 5 minutes."
+                            );
                     }
                     else
                     {
@@ -1235,8 +1281,34 @@ OrganizationOnboardingArgs args)
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
                 var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
-
+              
                 var profile = await _farmerRepository.RemoveFarmerFromCooperative(getFarmer.Id, cooperativeId);
+
+                if (profile == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Remove Farmer failed.");
+
+                return profile;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Error fetching removing farmer from cooperative", userId);
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
+            }
+        }
+        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(userId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
+              
+                var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeIds);
 
                 if (profile == null)
                     throw new BaseException(ExceptionType.NOTFOUND, "Remove Farmer failed.");
@@ -1614,7 +1686,7 @@ OrganizationOnboardingArgs args)
             try
             {
 
-                var hasOrg = await _businessRepository.GetOrganizationAsync(args.organizationCode);
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (hasOrg != null)
                 {
                     model.OrganizationId = hasOrg.OrganizaionId;
@@ -1881,6 +1953,8 @@ OrganizationOnboardingArgs args)
             }
         }
     
+
+
 
     }
 

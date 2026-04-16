@@ -12,6 +12,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
     {
         Task<List<FarmerSalesTrackerModel>> FilterFarmerTransactionForDownload(string? businessCode, string? farmerId, string? state, string? marketDay, string? marketName, string? cropName, DateTime? startDate, DateTime? endDate);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerSalesTransactionsByCooperativeAsync(long cooperativeId, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
+        Task<PagedListResponse<List<FarmerSalesHistoryModel>>?> GetSalesHistory(ListQueryParams args);
+        Task<FarmerSalesSummaryDto?> GetSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByAgent(string agentId, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByBusiness(string businessCode, int pageNumber = 1, int pageSize = 10, string? transactionType = null, DateTimeOffset? startDate = null, DateTimeOffset? endDate = null, string? location = null);
 

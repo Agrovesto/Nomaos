@@ -118,16 +118,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class OrganizationFarmerSalesSummary
     {
-        public long TotalVolumeSold { get; set; }
-        public long TotalRevenue { get; set; }
-        public long AverageSalesValue { get; set; }
+        public decimal TotalVolumeSold { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public decimal AverageSalesValue { get; set; }
     }
 
     public class OrganizationFarmerSalesHistor
     {
 
         public DateTimeOffset Date { get; set; }
-        public decimal ProductSold { get; set; }
+        public string ProductSold { get; set; }
         public double Quantity { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalValue { get; set; }
