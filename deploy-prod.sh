@@ -1,8 +1,9 @@
 #!/bin/bash
 # Robust Deployment Script for Agrovesto.Backend.API
-# Author: Dolapo Fashina 
-set -euo pipefail  
-set -x 
+# Author: Dolapo Fashina
+
+set -euo pipefail
+set -x
 
 # ------------------------------------------------------------
 # Variables
@@ -17,7 +18,7 @@ ENV_FILE="/etc/default/$APP_NAME"
 USER_NAME="www-data"
 CI_USER="ubuntu"
 DOMAIN="noma-api.nomaos.com"
-NGINX_SITE="/etc/nginx/sites-available/$DOMAIN"
+
 PUBLISH_DIR="$APP_DIR/publish"
 CURRENT_DIR="$APP_DIR/current"
 
@@ -29,9 +30,7 @@ export NUGET_PACKAGES="/tmp/.nuget/packages"
 echo "Starting deployment for $APP_NAME → https://$DOMAIN"
 
 # ------------------------------------------------------------
-# 1. System update & prerequisites
-# ----------------------------------------------------------- ------------------------------------------------------------
-# 2. Install .NET 8 (only if missing)
+# 1. Install .NET 8 (only if missing)
 # ------------------------------------------------------------
 if ! dotnet --list-sdks | grep -q "8.0"; then
     echo "Installing .NET 8 SDK..."
@@ -43,47 +42,59 @@ if ! dotnet --list-sdks | grep -q "8.0"; then
 fi
 
 # ------------------------------------------------------------
-# 3. Firewall
+# 2. Firewall
 # ------------------------------------------------------------
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw --force enable
+sudo ufw allow 22/tcp || true
+sudo ufw allow 80/tcp || true
+sudo ufw allow 443/tcp || true
+sudo ufw --force enable || true
 
 # ------------------------------------------------------------
-# 4. Stop existing service
+# 3. Stop existing service
 # ------------------------------------------------------------
 sudo systemctl stop "$APP_NAME" || true
 
 # ------------------------------------------------------------
-# 5. Prepare publish folder
+# 4. Prepare directories
 # ------------------------------------------------------------
+sudo mkdir -p "$APP_DIR"
 sudo rm -rf "$PUBLISH_DIR"
 sudo mkdir -p "$PUBLISH_DIR"
-sudo chown -R "$CI_USER:$CI_USER" "$PUBLISH_DIR" "$SCRIPT_DIR"
+
+sudo chown -R "$CI_USER:$CI_USER" "$SCRIPT_DIR" "$APP_DIR"
 
 # ------------------------------------------------------------
-# 6. Build & Publish (.NET 8 self-contained)
+# 5. Build & Publish (.NET 8 self-contained)
 # ------------------------------------------------------------
-sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" --configuration Release
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache  --runtime linux-x64
+sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" -c Release
+
+sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" \
+  --runtime linux-x64 \
+  --no-cache
+
 sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
   -c Release \
   -r linux-x64 \
   --self-contained true \
-  /p:PublishTrimmed=false \
+  --no-restore \
   -o "$PUBLISH_DIR" \
-  --no-restore
+  /p:PublishTrimmed=false \
+  /p:PublishSingleFile=true \
+  /p:IncludeNativeLibrariesForSelfExtract=true
+
+# Ensure executable permission
+sudo chmod +x "$PUBLISH_DIR/$APP_NAME"
 
 # ------------------------------------------------------------
-# 7. Update symlink atomically
+# 6. Atomic symlink update
 # ------------------------------------------------------------
 sudo ln -sfn "$PUBLISH_DIR" "$CURRENT_DIR"
-sudo chown -R "$USER_NAME:$USER_NAME" "$PUBLISH_DIR" "$CURRENT_DIR"
+
+sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
 sudo chown -h "$USER_NAME:$USER_NAME" "$CURRENT_DIR"
 
 # ------------------------------------------------------------
-# 8. Environment file
+# 7. Environment file
 # ------------------------------------------------------------
 sudo tee "$ENV_FILE" > /dev/null <<EOF
 ASPNETCORE_ENVIRONMENT=Production
@@ -92,7 +103,7 @@ DOTNET_PRINT_TELEMETRY_MESSAGE=false
 EOF
 
 # ------------------------------------------------------------
-# 9. Systemd service
+# 8. Systemd service
 # ------------------------------------------------------------
 sudo tee "$SERVICE_FILE" > /dev/null <<EOF
 [Unit]
@@ -101,23 +112,26 @@ After=network.target
 
 [Service]
 WorkingDirectory=$CURRENT_DIR
-ExecStart=/usr/bin/dotnet $CURRENT_DIR/$APP_NAME.dll
+ExecStart=$CURRENT_DIR/$APP_NAME
 Restart=always
 RestartSec=10
 KillSignal=SIGINT
 User=$USER_NAME
+EnvironmentFile=$ENV_FILE
 SyslogIdentifier=$APP_NAME
-Environment=ASPNETCORE_ENVIRONMENT=Production
-Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
+# ------------------------------------------------------------
+# 9. Start service
+# ------------------------------------------------------------
 sudo systemctl daemon-reload
-sudo systemctl enable --now "$APP_NAME.service"
+sudo systemctl enable "$APP_NAME"
 sudo systemctl restart "$APP_NAME"
-sudo systemctl status $APP_NAME
 
- 
-
+# ------------------------------------------------------------
+# 10. Status check
+# ------------------------------------------------------------
+sudo systemctl status "$APP_NAME" --no-pager
