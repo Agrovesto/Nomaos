@@ -182,3 +182,4 @@ jobs:
       - name: Execute deployment script
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_PROD }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-prod.sh"
+
