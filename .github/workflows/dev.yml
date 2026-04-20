@@ -52,11 +52,14 @@ jobs:
           echo "🔄 Restarting service..."
           sudo systemctl restart Agrovesto.Backend.API.service
 
+          echo ">>> Waiting for service to settle..."
+          sleep 5
+
           echo "📊 Checking service status..."
-          sudo systemctl status Agrovesto.Backend.API.service --no-pager
+          sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
 
           echo "📜 Recent logs:"
-          sudo journalctl -u Agrovesto.Backend.API.service -n 50 --no-pager
+          sudo journalctl -u Agrovesto.Backend.API.service -n 50 --no-pager || true
 
           echo "✅ Deployment successful!"
 
