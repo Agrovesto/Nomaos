@@ -48,7 +48,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             var service = _factory.GetService(provider);
 
-            // Check if the service implements the optional interface
+         
             if (service is IMTNMomo registrationProvider)
             {
                 // Call the provider-specific method
@@ -62,30 +62,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 }
             }
 
-            // Feature not supported by this provider
+    
             return WalletResponseService<MomoPreApprovalResponse>.Failed("User registration not supported by this provider");
 
         }
-        public async Task<WalletResponseService<PaymentResponse>> CollectAsync(
-       WalletProviderType provider,
-       CollectionRequest request,
-        WalletProviderParameterModel[] parameters,
-         string env)
-        {
-            var service = _factory.GetService(provider);
-
-            var sendRequest= await service.CollectAsync(request,parameters,env);
-           // if (sendRequest is successful)
-            {
-                // return "Processing" status with the same data if the request was sent successfully
-
-                //then use background service to call the get requesttopay method to check if debit was successful or not and update the status accordingly
-                //request and update the status accordingly
-
-                //else, use another endpoint to check the status of the transaction and update the status accordingly
-            }
-
-            return sendRequest;
-        }
+        
     }
 }

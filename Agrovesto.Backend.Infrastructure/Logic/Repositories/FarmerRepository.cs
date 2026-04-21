@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -2311,20 +2312,28 @@ SELECT
 
             var farmerId = farmer.Id;
 
+            var farmerImage = await _context.FarmerImages
+                .AsNoTracking()
+                .Where(x => x.FarmerUserId == userId)
+                .Select(x => x.IMageKey)
+                .FirstOrDefaultAsync();
 
+            // Farms
             var farms = await _context.Farms
                 .AsNoTracking()
                 .Where(f => f.FarmerId == farmerId)
                 .ToListAsync();
 
+            var farmIds = farms.Select(f => f.Id).ToList();
+
             var coordinates = await _context.FarmCoordinates
                 .AsNoTracking()
-                .Where(c => farms.Select(f => f.Id).Contains(c.FarmId))
+                .Where(c => farmIds.Contains(c.FarmId))
                 .ToListAsync();
 
             var documents = await _context.FarmLandDocuments
                 .AsNoTracking()
-                .Where(d => farms.Select(f => f.Id).Contains(d.FarmId))
+                .Where(d => farmIds.Contains(d.FarmId))
                 .ToListAsync();
 
             var farmDtos = farms.Select(f =>
@@ -2385,6 +2394,34 @@ SELECT
                 })
                 .ToListAsync();
 
+            var agents = await (
+                from fa in _context.FarmerAgents
+                join a in _context.Agents on fa.AgentId equals a.Id
+                where fa.FarmerId == farmerId
+                select new OrganizationFarmerAgentDto
+                {
+                    AgentId = a.Id,
+                    AgentName = a.Name,
+                    AssignedOn = fa.AssignedOn,
+                    Active = a.IsActive,
+                    AgentUserId=a.UserId
+                })
+                .ToListAsync();
+
+            var memberships = await (
+                from fc in _context.FarmerCooperatives
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where fc.FarmerId == farmerId
+                select new OrganizationFarmerCooperativeDto
+                {
+                    MembershipId = c.Id,
+                    MembershipName = c.Name,
+                    JoinedOn = fc.JoinedOn,
+                    IsActive = c.IsActive,
+                    
+                })
+                .ToListAsync();
+
             return new FarmerProfileDto
             {
                 PersonalInformation = new FarmerPersonalInfoDto
@@ -2398,6 +2435,7 @@ SELECT
                     Email = farmer.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
+                    FarmerImage = farmerImage,
                     DateRegistered = farmer.OnBoardedOn,
                     FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level),
                     IsActive = user?.IsActive ?? false,
@@ -2419,10 +2457,13 @@ SELECT
                     Transactions = transactions
                 },
 
-                ActivityLogs = activities
+                ActivityLogs = activities,
+
+                Agents = agents,
+                Memberships = memberships
             };
         }
-         public async Task<FarmerDetailDto> GetFarmerDetails(string userId)
+        public async Task<FarmerDetailDto> GetFarmerDetails(string userId)
         {
              var farmer = await _context.Farmers
                 .FirstOrDefaultAsync(f => f.UserId == userId);

@@ -11,6 +11,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -47,19 +48,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
 
-                if (CurrentUserRole != "Farmer" && string.IsNullOrEmpty(query.UserId))
-                {
-                    return BadRequest(new Response<Dictionary<string, string>>()
-                    {
-                        Message = "Validation failed.",
-                        Succeeded = false,
-                        Data = new Dictionary<string, string>
-{
-    { "UserId", "Farmer UserId is required" }
-}
-
-                    });
-                }
+               
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmerDashboard(query);
                 return Ok(new Response<FarmerDashboardDto>()
@@ -350,6 +339,43 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+
+        [HttpPost("wallet-topup")]
+        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, 
+            [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.TopUpWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+           
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
 
         [HttpGet("farms")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
