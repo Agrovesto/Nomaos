@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService;
@@ -129,6 +130,15 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IGenericWalletService, MTNMomo>();
             services.AddScoped<IAWSService, AWSService>();
             services.AddScoped<ISalesRepository, SalesRepository>();
+
+            services.AddScoped<IWebhookRouter, WebhookRouter>();
+
+            services.AddScoped<IProviderWebhookHandler, PaystackWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FlutterwaveWebhookHandler>();
+
+            services.AddScoped<IProviderWebhookHandler, MtnMomoWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, SterlingWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FcmbWebhookHandler>();
         }
     }
 }

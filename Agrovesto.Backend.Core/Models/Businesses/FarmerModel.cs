@@ -260,6 +260,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public List<FarmerFarmDto> Farms { get; set; }
         public FarmerWalletDto Wallet { get; set; }
         public List<FarmerActivityLogDto> ActivityLogs { get; set; }
+        public List<OrganizationFarmerAgentDto> Agents { get; set; } = new();
+
+        // Memberships (Cooperatives)
+        public List<OrganizationFarmerCooperativeDto> Memberships { get; set; } = new();
+
 
         // Cooperatives
         public List<FarmerMembershipProfileDto> CooperativeInformation { get; set; } = new List<FarmerMembershipProfileDto>();

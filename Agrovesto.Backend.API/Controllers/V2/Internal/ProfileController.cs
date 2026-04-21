@@ -282,18 +282,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
                 // determine target user id
-                var targetUserId = !string.IsNullOrEmpty(CurrentUserId) && CurrentUserRole == "Farmer"
-                    ? CurrentUserId
-                    : userId;
+              
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
 
-                if (string.IsNullOrEmpty(targetUserId))
-                {
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "User Id is required.",
-                        Succeeded = false
-                    });
-                }
+                //if (string.IsNullOrEmpty(targetUserId))
+                //{
+                //    return BadRequest(new Response<string>
+                //    {
+                //        Message = "User Id is required.",
+                //        Succeeded = false
+                //    });
+                //}
 
                 var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
 

@@ -104,20 +104,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                
-                if (CurrentUserRole != "MemberShip" && string.IsNullOrEmpty(query.UserId))
-                {
-                    return BadRequest(new Response<Dictionary<string, string>>()
-                    {
-                        Message = "Validation failed.",
-                        Succeeded = false,
-                        Data = new Dictionary<string, string>
-{
-    { "UserId", "Membership UserId is required" }
-}
-
-                    });
-                }
+              
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _membershipManager.GetMembershipDashboardAsync(query);
                 return Ok(new Response<MembershipDashboardDto>()
