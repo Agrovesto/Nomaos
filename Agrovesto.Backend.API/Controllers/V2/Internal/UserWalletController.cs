@@ -3,7 +3,9 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,10 +16,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     public class UserWalletController : BaseController
     {
         private readonly INomaOSWalletService _walletManager;
+        private readonly IWebhookRouter _router;
 
-        public UserWalletController(IHttpContextAccessor httpContextAccessor, INomaOSWalletService walletManager) : base(httpContextAccessor)
+        public UserWalletController(IHttpContextAccessor httpContextAccessor, IWebhookRouter router, INomaOSWalletService walletManager) : base(httpContextAccessor)
         {
-       
+            _router = router;
             _walletManager = walletManager;
         }
         [HttpGet("user-wallet")]
@@ -186,7 +189,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            
 
         }
-
+        [HttpPost("{provider}/top-up")]
+        public async Task<IActionResult> HandleWebhook(string provider)
+        {
+            try
+            {
+                await _router.RouteAsync(provider, Request);
+                return Ok();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return Unauthorized();
+            }
+            catch (Exception ex)
+            {
+                // log error
+                return Ok(); // still return 200 to avoid retries storm
+            }
+        }
         ///// <summary>
         ///// Get all wallets for a user
         ///// </summary>
@@ -211,7 +231,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //        return StatusCode(500, new { success = false, message = $"Internal server error: {ex.Message}" });
         //    }
         //}
-   
-    
+       
     }
 }

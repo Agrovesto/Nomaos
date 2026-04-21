@@ -21,10 +21,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     {
         // Define methods that the UserWalletRepository should implement
         Task<bool> CloseUserWallet(long walletId, string closedByUserId, string reason = "User requested wallet closure");
+        Task CompleteWalletTopUp(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
+        Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
+        Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference);
+        Task<string> InitiateWalletTopUp(long userWalletId, decimal amount, string? description = "Wallet Top-up");
+        Task UpdateTransaction(UserWalletTransactions transaction);
+        Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
+        Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
+        Task UpdateWalletBalance(UserWallet wallet);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -492,5 +500,224 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.PinEncrypt == hashedPin;
         }
+
+
+        public async Task<string> InitiateWalletTopUp(
+    long userWalletId,
+    decimal amount,
+    string? description = "Wallet Top-up")
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than zero");
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == userWalletId && !x.IsDeleted);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            var transactionReference = Guid.NewGuid().ToString();
+
+            var transaction = new UserWalletTransactions
+            {
+                UserWalletId = wallet.Id,
+                WalletTransactionType = WalletTransactionType.Credit,
+                TransactionAmount = amount,
+                CommissionFee = 0,
+                TransactionFee = 0,
+                Currency = wallet.Currency,
+                TransactionDescription = description,
+                TransactionDate = DateTimeOffset.UtcNow,
+                WalletTransactionStatus = WalletTransactionStatus.Pending,
+                TransactionReference = transactionReference,
+                BalanceBefore = wallet.WalletBalance,
+                BalanceAfter = wallet.WalletBalance, // unchanged for now
+                ProviderStatus = "INITIATED"
+            };
+
+            _context.UserWalletTransactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return transactionReference;
+        }
+
+        public async Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference)
+        {
+            var transaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+            if (transaction == null)
+                return null;
+            return transaction;
+        }
+
+        public async Task CompleteWalletTopUp(
+    string transactionReference,
+    bool isSuccessful,
+    string? providerReference,
+    string? providerStatus)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var transaction = await _context.UserWalletTransactions
+                        .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+                    if (transaction == null)
+                        throw new Exception("Transaction not found");
+
+                    if (transaction.WalletTransactionStatus != WalletTransactionStatus.Pending)
+                        throw new Exception("Transaction already processed");
+
+                    var wallet = await _context.UserWallets
+                        .FirstOrDefaultAsync(x => x.Id == transaction.UserWalletId);
+
+                    if (wallet == null)
+                        throw new Exception("Wallet not found");
+
+                    transaction.ProviderReference = providerReference;
+                    transaction.ProviderStatus = providerStatus;
+
+                    if (!isSuccessful)
+                    {
+                        transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+                        return;
+                    }
+
+                 
+                    var balanceBefore = wallet.WalletBalance;
+                    var netAmount = transaction.TransactionAmount
+                                    - transaction.TransactionFee
+                                    - transaction.CommissionFee;
+
+                    wallet.WalletBalance += netAmount;
+
+                    transaction.BalanceBefore = balanceBefore;
+                    transaction.BalanceAfter = wallet.WalletBalance;
+                    transaction.WalletTransactionStatus = WalletTransactionStatus.Successful;
+
+                    _context.UserWallets.Update(wallet);
+                    _context.UserWalletTransactions.Update(transaction);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+
+
+        public async Task UpdateTransactionProviderInfo(
+    string transactionReference,
+    string? providerReference,
+    string providerStatus,
+    string? rawPayload)
+        {
+            var transaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+            if (transaction == null)
+                return;
+
+            transaction.ProviderReference = providerReference;
+            transaction.ProviderStatus = providerStatus;
+            transaction.TransactionDate = DateTimeOffset.UtcNow;
+
+            if (!string.IsNullOrWhiteSpace(rawPayload))
+            {
+                // If you later add a column for it:
+                // transaction.RawWebhookPayload = rawPayload;
+            }
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+        public async Task UpdateTransactionStatus(
+    string transactionReference,
+    WalletTransactionStatus status)
+        {
+            var transaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+            if (transaction == null)
+                return;
+
+            if (transaction.WalletTransactionStatus == status)
+                return;
+
+            if (transaction.WalletTransactionStatus == WalletTransactionStatus.Successful &&
+                status != WalletTransactionStatus.Reversed)
+            {
+                return;
+            }
+
+            transaction.WalletTransactionStatus = status;
+            transaction.TransactionDate = DateTimeOffset.UtcNow;
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task UpdateWalletBalance(UserWallet wallet)
+        {
+            var existingWallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == wallet.Id && !x.IsDeleted);
+
+            if (existingWallet == null)
+                return;
+
+            if (wallet.WalletBalance < 0)
+                throw new Exception("Wallet balance cannot be negative");
+
+            existingWallet.WalletBalance = wallet.WalletBalance;
+            existingWallet.IsActive = wallet.IsActive;
+
+            _context.Entry(existingWallet).OriginalValues["RowVersion"] = existingWallet.RowVersion;
+
+            _context.UserWallets.Update(existingWallet);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task UpdateTransaction(UserWalletTransactions transaction)
+        {
+            var existingTransaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.Id == transaction.Id);
+
+            if (existingTransaction == null)
+                return;
+
+            if (existingTransaction.WalletTransactionStatus == WalletTransactionStatus.Successful)
+                return;
+
+            existingTransaction.TransactionAmount = transaction.TransactionAmount;
+            existingTransaction.TransactionFee = transaction.TransactionFee;
+            existingTransaction.CommissionFee = transaction.CommissionFee;
+
+            existingTransaction.BalanceBefore = transaction.BalanceBefore;
+            existingTransaction.BalanceAfter = transaction.BalanceAfter;
+
+            existingTransaction.ProviderReference = transaction.ProviderReference;
+            existingTransaction.ProviderStatus = transaction.ProviderStatus;
+
+            existingTransaction.TransactionDescription = transaction.TransactionDescription;
+
+            existingTransaction.TransactionDate = DateTimeOffset.UtcNow;
+
+            _context.UserWalletTransactions.Update(existingTransaction);
+            await _context.SaveChangesAsync();
+        }
+
+
     }
 }

@@ -171,6 +171,10 @@ namespace Agrovesto.Backend.Core.Models.Common
         public List<FarmerValueChainItemDto> ValueChainItems { get; set; } = new();
         public double FarmSize { get; set; }
         public long YearsInAgric { get; set; }
+        public string Dob { get; set; }
+        public string NIN { get; set; }
+        public string BVN { get; set; }
+        public string FarmerImage { get; set; }
         // Agents
         public List<OrganizationFarmerAgentDto> Agents { get; set; } = new();
 

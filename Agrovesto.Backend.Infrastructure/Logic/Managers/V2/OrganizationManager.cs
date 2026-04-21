@@ -1844,6 +1844,12 @@ DateTimeOffset dateTime)
             await EnrichFarmerAsync(query);
             var farmer = await _organizationRepository.GetFarmerDetailsAsync(query);
 
+
+            if (farmer != null  && !string.IsNullOrEmpty(farmer.FarmerImage))
+            {
+              
+                farmer.FarmerImage = await _faceManager.GetImageUrlAsync(image);
+            }
             if (farmer == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Farmer Detail not found");
 

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Wallets;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -17,7 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Collect money from user (RequestToPay)
-        Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<PaymentResponse>> InitiateTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Send money to user
         Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env);
