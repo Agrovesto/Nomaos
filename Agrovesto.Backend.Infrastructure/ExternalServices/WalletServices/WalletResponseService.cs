@@ -15,7 +15,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
     public class WalletResponseService<T>
     {
         public int StatusCode { get; set; }
-        public bool IsSucess { get; set; } 
+        public bool IsSuccess { get; set; } 
         public string Status { get; set; } // Success, Failed, Pending
         public string Message { get; set; }
         public T Data { get; set; }
@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
-                IsSucess = true,
+                IsSuccess = true,
                 StatusCode = code,
                 Status = "Success",
                 Message = message,
@@ -37,7 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
-                IsSucess= true,
+                IsSuccess= true,
                 StatusCode = code,
                 Status = "Pending",
                 Message = message,
@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             return new WalletResponseService<T>
             {
-                IsSucess = false,
+                IsSuccess = false,
                 StatusCode = code,
                 Status = "Failed",
                 Message = message,

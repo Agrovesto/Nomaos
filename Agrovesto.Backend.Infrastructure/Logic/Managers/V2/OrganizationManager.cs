@@ -110,7 +110,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IFarmerTransactionRepository _farmerTransactionRepository;
         private readonly IConfiguration _configuration;
         private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
-        public OrganizationManager(
+        private readonly IAWSRekognitionManager _faceManager;
+        public OrganizationManager(IAWSRekognitionManager faceManager,
             IInputFinancingManagementRepository inputFinancingManagementRepository,
             IFarmerTransactionRepository farmerTransactionRepository,
             IExcelConverterService excelConverterService,
@@ -134,6 +135,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                IAWSService awsService,
                IConfiguration configuration)
         {
+            _faceManager = faceManager;
             _inputFinancingManagementRepository = inputFinancingManagementRepository;
             _farmerTransactionRepository =farmerTransactionRepository;
             _context=context;
@@ -1844,6 +1846,12 @@ DateTimeOffset dateTime)
             await EnrichFarmerAsync(query);
             var farmer = await _organizationRepository.GetFarmerDetailsAsync(query);
 
+
+            if (farmer != null  && !string.IsNullOrEmpty(farmer.FarmerImage))
+            {
+              
+                farmer.FarmerImage = await _faceManager.GetImageUrlAsync(farmer.FarmerImage);
+            }
             if (farmer == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Farmer Detail not found");
 

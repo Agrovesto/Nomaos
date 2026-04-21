@@ -2269,63 +2269,71 @@ SELECT
         //        };
         //    }
 
-        public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(
-  ListQueryParams query)
+        public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query)
         {
             if (string.IsNullOrWhiteSpace(query.organizationCode))
                 throw new ValidationException("Organization code is required");
 
-            // ===========================
-            // VALIDATE FARMER IN ORG
-            // ===========================
-            var farmer = await (from fo in _context.FarmerOrganizations
-                                join f in _context.Farmers on fo.FarmerId equals f.Id
-                                where fo.OrganizationCode == query.organizationCode
-                                      && f.Id == query.Id
-                                select f)
-                                .FirstOrDefaultAsync();
+            var farmerData = await (
+                from fo in _context.FarmerOrganizations
+                join f in _context.Farmers on fo.FarmerId equals f.Id
+                join u in _context.Users on f.UserId equals u.Id into userJoin
+                from u in userJoin.DefaultIfEmpty()
+                where fo.OrganizationCode == query.organizationCode
+                      && f.Id == query.Id
+                select new { Farmer = f, User = u }
+            ).FirstOrDefaultAsync();
 
-            if (farmer == null)
+            if (farmerData == null)
                 throw new NotFoundException("Farmer not found in this organization");
 
+            var farmer = farmerData.Farmer;
+            var user = farmerData.User;
+
+            var farmerImage = await _context.FarmerImages
+                .Where(x => x.FarmerUserId == farmer.UserId)
+                .Select(x => x.IMageKey)
+                .FirstOrDefaultAsync();
+
             var valueChainItems = await _context.FarmerValueChainItems
-       .Where(x => x.FarmerId == query.Id)
-       .Select(x => new FarmerValueChainItemDto
-       {
-           ValueChainType = x.ValueChainType,
-           ItemName = x.ItemName
-       })
-       .ToListAsync();
+                .Where(x => x.FarmerId == farmer.Id)
+                .Select(x => new FarmerValueChainItemDto
+                {
+                    ValueChainType = x.ValueChainType,
+                    ItemName = x.ItemName
+                })
+                .ToListAsync();
 
-            var farmsQuery = _context.Farms
-                .Where(f => f.FarmerId == query.Id);
-            var farms = await farmsQuery.ToListAsync();
+            var farms = await _context.Farms
+                .Where(f => f.FarmerId == farmer.Id)
+                .ToListAsync();
 
-           
-            var agents = await (from fa in _context.FarmerAgents
-                                join a in _context.Agents on fa.AgentId equals a.Id
-                                where fa.FarmerId == query.Id
-                                select new OrganizationFarmerAgentDto
-                                {
-                                    AgentId = a.Id,
-                                    AgentName = a.Name,
-                                    AgentUserId = a.UserId,
-                                    AssignedOn = fa.AssignedOn,
-                                    Active= a.IsActive
-                                })
-                                .ToListAsync();
+            var agents = await (
+                from fa in _context.FarmerAgents
+                join a in _context.Agents on fa.AgentId equals a.Id
+                where fa.FarmerId == farmer.Id
+                select new OrganizationFarmerAgentDto
+                {
+                    AgentId = a.Id,
+                    AgentName = a.Name,
+                    AgentUserId = a.UserId,
+                    AssignedOn = fa.AssignedOn,
+                    Active = a.IsActive
+                })
+                .ToListAsync();
 
-            var memberships = await (from fc in _context.FarmerCooperatives
-                                     join c in _context.MemberShips on fc.CooperativeId equals c.Id
-                                     where fc.FarmerId == query.Id
-                                     select new OrganizationFarmerCooperativeDto
-                                     {
-                                         MembershipId = c.Id,
-                                         MembershipName = c.Name,
-                                         JoinedOn = fc.JoinedOn,
-                                         IsActive=c.IsActive
-                                     })
-                                     .ToListAsync();
+            var memberships = await (
+                from fc in _context.FarmerCooperatives
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where fc.FarmerId == farmer.Id
+                select new OrganizationFarmerCooperativeDto
+                {
+                    MembershipId = c.Id,
+                    MembershipName = c.Name,
+                    JoinedOn = fc.JoinedOn,
+                    IsActive = c.IsActive
+                })
+                .ToListAsync();
 
             return new OrganizationFarmerDetailResponse
             {
@@ -2335,15 +2343,23 @@ SELECT
                 PhoneNumber = farmer.PhoneNumber,
                 Email = farmer.Email,
                 Gender = farmer.Gender,
+                Dob = farmer.DateOfBirth,
+                BVN = user?.BVN,
+                NIN = user?.NIN,
+                FarmerImage = farmerImage,
+
                 State = farmer.State,
                 Lga = farmer.Lga,
                 Ward = farmer.Ward,
                 Location = farmer.Location,
+
                 FarmerCategory = farmer.FarmerCategory,
                 Level = EnumExtensions.GetDisplayName(farmer.Level),
                 CreatedOn = farmer.OnBoardedOn,
-                YearsInAgric=farmer.YearsInAgric,
-                FarmSize=farms.Sum(x=>x.FarmSize),
+
+                YearsInAgric = farmer.YearsInAgric,
+                FarmSize = farms.Sum(x => x.FarmSize),
+
                 ValueChainItems = valueChainItems,
                 Agents = agents,
                 Memberships = memberships

@@ -2206,9 +2206,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 await EnrichFarmerAsync(args);
                 args.CooperativeIds = model.MembershipIds;
                 var CooperativeIds = args.CooperativeIds
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList();
+                                    .Where(x => x.HasValue)
+                                    .Select(x => x.Value)
+                                    .ToList();
                 var updateDetail = await _organizationManager.RemoveFarmerFromCooperatives(args.farmerUserId, CooperativeIds);
 
 
@@ -2602,6 +2602,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
+                args.UserId = args.farmerUserId;
                 args.AgentIds = model.AgentIds;
                 var request = await _onboardingManager.RemoveFarmerToAgents(args);
 
