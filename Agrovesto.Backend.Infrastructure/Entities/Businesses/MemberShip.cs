@@ -66,7 +66,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
 
         public long AgentId { get; set; }
+        public Agent Agent { get; set; }
         public long MemberShipId { get; set; }
+        public MemberShip MemberShip { get; set; }
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; }
@@ -93,7 +95,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
 
         public long OrganizationId { get; set; }
+        public Organization Organization { get; set; }
         public long MembershipId { get; set; }
+        public MemberShip MemberShip { get; set; }
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? AssignedByUserId { get; set; }
