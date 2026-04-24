@@ -330,20 +330,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                var targetUserId = !string.IsNullOrEmpty(CurrentUserId) && CurrentUserRole == "Farmer"
-                    ? CurrentUserId
-                    : userId;
+                userId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;            
 
-                if (string.IsNullOrEmpty(targetUserId))
-                {
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "User Id is required.",
-                        Succeeded = false
-                    });
-                }
-
-                var profile = await _onBoardingManager.GetFarmerProfile(targetUserId);
+                var profile = await _onBoardingManager.GetFarmerProfile(userId);
 
                 return Ok(new Response<FarmerProfileDto>()
                 {

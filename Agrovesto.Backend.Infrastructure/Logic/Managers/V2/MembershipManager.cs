@@ -367,7 +367,7 @@ OnboardingRequestModel user,
         }
         public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query)
         {
-            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId);
+            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId, query.organizationCode);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

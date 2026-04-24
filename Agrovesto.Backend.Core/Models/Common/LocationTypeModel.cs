@@ -64,26 +64,100 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     }
 
-    public class OrganizationLocationModel
+    public class CreateSubLocationDto
     {
-        public string? LocationType { get; set; }
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public long Id { get; set; }
-        public long OrganizationId { get; set; }
         public string LocationName { get; set; }
+        public long ParentLocationId { get; set; }
+        public string LocationStatus { get; set; }
         public long LocationTypeId { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public double Capacity { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
+
         public long StateId { get; set; }
         public long LgaId { get; set; }
         public string? Address { get; set; }
-        public bool IsActive { get; set; }
+
+        public DateTime? DateOfCommissioning { get; set; }
+
+        public bool HasTemperatureControl { get; set; }
+        public long? TemperatureControlTypeId { get; set; }
+
+        public List<long> ModuleIds { get; set; } = new();
+        public List<long> StorageCategoryIds { get; set; } = new();
+        public string? CreatedByUserId { get; set; }
+    }
+    public class OrganizationLocationModel
+    {
+        public long Id { get; set; }
+
+        public long OrganizationId { get; set; }
+        public string BusinessCode { get; set; }
+
+        public string LocationName { get; set; }
+
         public double Capacity { get; set; }
-        public double StockLevel { get; set; }
         public string? CapacityType { get; set; } = "Bag";
-        public string? BusinessCode { get; set; }
+
+        public double StockLevel { get; set; }
+
+        public long LocationTypeId { get; set; }
+        public string? LocationTypeName { get; set; } // for response only
+
+        public long StateId { get; set; }
+        public string? StateName { get; set; }
+
+        public long LgaId { get; set; }
+        public string? LgaName { get; set; }
+
+        public string? Address { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public long? ParentLocationId { get; set; } // 👈 important
+
+        public DateTimeOffset CreatedOn { get; set; }
+
+        public string? CreatedByUserId { get; set; }
         public double Used { get; set; }
         public double Available { get; set; }
+    }
+    public class LocationCreateResponse
+    {
+        public OrganizationLocationModel Location { get; set; }
 
+        public bool AgentAssigned { get; set; }
+        public string? AgentWarning { get; set; }
+    }
+    public class CreateLocationDto
+    {
+        public string LocationName { get; set; }
+        public long? OrganizationId { get; set; }
+        public string? BusinessCode { get; set; }
+        public string LocationStatus { get; set; }
+        public long LocationTypeId { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public double Capacity { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
+
+        public long StateId { get; set; }
+        public long LgaId { get; set; }
+        public string? Address { get; set; }
+
+        public DateTime? DateOfCommissioning { get; set; }
+
+        public bool HasTemperatureControl { get; set; }
+        public long? TemperatureControlTypeId { get; set; }
+
+        public List<long> ModuleIds { get; set; } = new();
+        public List<long> StorageCategoryIds { get; set; } = new();
+
+        public string? CreatedByUserId { get; set; }
+
+        public string? MainAgentUserId { get; set; }
+        public string? SupportinAgentUserId { get; set; }
     }
     public class OrganizationRoleModel
     {
@@ -123,6 +197,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public int AgentCount { get; set; }
         public int MembershipCount { get; set; }
     }
+    public class BaseUserDto
+    {
+        public string UserId { get; set; } = default!;
+        public DateTimeOffset CreatedOn { get; set; }
+    }
     public class OrganizationFarmerResponse
     {
         public string FarmerOnboardingStatus { get; set; }
@@ -149,6 +228,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public int TotalFarmers { get; set; }
         public int ActiveFarmers { get; set; }
+        public int PendingFarmers { get; set; }
         public int FarmersWithLoans { get; set; }
         public decimal RecoveryRate { get; set; }
     }
@@ -202,5 +282,191 @@ namespace Agrovesto.Backend.Core.Models.Common
         public DateTimeOffset JoinedOn { get; set; }
         public bool IsActive { get; set; }
     }
-   
+
+    public class EditLocationDto
+    {
+        public long Id { get; set; }
+
+        public string LocationName { get; set; }
+
+        public double Capacity { get; set; }
+        public string? CapacityType { get; set; }
+
+        public long StateId { get; set; }
+        public long LgaId { get; set; }
+        public string? Address { get; set; }
+
+        public DateTime? DateOfCommissioning { get; set; }
+
+        public bool HasTemperatureControl { get; set; }
+        public long? TemperatureControlTypeId { get; set; }
+
+        public List<long> ModuleIds { get; set; } = new();
+        public List<long> StorageCategoryIds { get; set; } = new();
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+    public class EditSubLocationDto : EditLocationDto
+    {
+        public long? NewParentLocationId { get; set; } // optional move
+    }
+    public class DeleteLocationDto
+    {
+        public long Id { get; set; }
+        public bool ForceDelete { get; set; } = false;
+        public string? Reason { get; set; }
+        public string? UserId { get; set; }
+    }
+
+    public class LocationResponseDto
+    {
+        public long Id { get; set; }
+        public string LocationName { get; set; }
+
+        public long LocationTypeId { get; set; }
+        public string LocationTypeName { get; set; }
+
+        public double Capacity { get; set; }
+        public string CapacityType { get; set; }
+        public double StockLevel { get; set; }
+
+        public string? Address { get; set; }
+
+        public bool HasTemperatureControl { get; set; }
+        public string? TemperatureControlType { get; set; }
+
+        public DateTime? DateOfCommissioning { get; set; }
+
+        public List<string> Modules { get; set; }
+        public List<string> StorageCategories { get; set; }
+        public List<AgentDto> Agents { get; set; } = new();
+        public AgentDto PrimaryAgent { get; set; }
+        public string LocationStatus { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string OwnerShip { get; set; }
+        public long? ParentLocationId { get; set; }
+        public List<LocationResponseDto> Children { get; set; } = new();
+    }
+    public class AgentDto
+    {
+        public long AgentId { get; set; }
+        public string UserId { get; set; }
+        public string? Name { get; set; }
+        public bool IsPrimary { get; set; }
+    }
+
+    public class SubLocationListDto
+    {
+        public long Id { get; set; }
+        public string LocationName { get; set; }
+        public string LocationType { get; set; }
+
+        public string? AssignedAgentName { get; set; } // Primary agent
+        public string? AssignedAgentUserId { get; set; }
+
+        public double Capacity { get; set; }
+        public string? CapacityType { get; set; }
+
+        public bool IsActive { get; set; }
+    }
+
+    public class LocationAgentsResponseDto
+    {
+        public PrimaryAgentDto? PrimaryAgent { get; set; }
+        public List<OtherAgentDto> OtherAgents { get; set; } = new();
+    }
+
+    public class PrimaryAgentDto
+    {
+        public long AgentId { get; set; }
+        public string UserId { get; set; }
+        public string Name { get; set; }
+
+        public DateTimeOffset AssignedOn { get; set; }
+
+        public string? AgentLevel { get; set; } // e.g. Senior, Junior
+        public string Status { get; set; }      // Active / Inactive in location
+    }
+
+    public class OtherAgentDto
+    {
+        public long AgentId { get; set; }
+        public string Name { get; set; }
+
+        public DateTimeOffset AssignedOn { get; set; }
+        public string Status { get; set; }
+    }
+
+    public class ReassignPrimaryAgentDto
+    {
+        public long LocationId { get; set; }
+        public string NewPrimaryUserId { get; set; }
+        public string? PerformedByUserId { get; set; }
+    }
+
+    public class RemoveAgentFromLocationDto
+    {
+        public long LocationId { get; set; }
+        public string UserId { get; set; }
+        public string? RemovedByUserId { get; set; }
+    }
+
+    public class CreateInventoryDto
+    {
+        public long LocationId { get; set; }
+
+        public string? InventoryCode { get; set; }
+        public string? BatchNumber { get; set; }
+
+        public string InventoryOwner { get; set; }
+
+        public double Quantity { get; set; }
+        public string? QuantityType { get; set; }
+
+        public string? Description { get; set; }
+
+        public DateTimeOffset? StorageDate { get; set; }
+        public DateTimeOffset? ExpiryDate { get; set; }
+
+        public string? QualityGrade { get; set; }
+        public string? BusinessCode { get; set; }
+
+        public string? RecordedByUserId { get; set; }
+    }
+
+    public class EditInventoryDto
+    {
+        public long Id { get; set; }
+
+        public double Quantity { get; set; }
+        public string? QuantityType { get; set; }
+
+        public string InventoryOwner { get; set; }
+
+        public string? Description { get; set; }
+
+        public DateTimeOffset? StorageDate { get; set; }
+        public DateTimeOffset? ExpiryDate { get; set; }
+
+        public string? QualityGrade { get; set; }
+        public string? BusinessCode { get; set; }
+    }
+    public class InventoryListDto
+    {
+        public long Id { get; set; }
+
+        public string? InventoryCode { get; set; }
+        public string? BatchNumber { get; set; }
+
+        public string InventoryOwner { get; set; }
+
+        public double Quantity { get; set; }
+        public string? QuantityType { get; set; }
+
+        public DateTimeOffset? StorageDate { get; set; }
+        public DateTimeOffset? ExpiryDate { get; set; }
+
+        public string? QualityGrade { get; set; }
+    }
 }
