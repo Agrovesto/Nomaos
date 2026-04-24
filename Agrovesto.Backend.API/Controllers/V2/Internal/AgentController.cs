@@ -40,6 +40,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetMembershipsByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<MemberShipResponseModel>>()
                 {
@@ -96,11 +104,19 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-              //  ResolveUserContext(args);
-                if (CurrentUserId != null && CurrentUserRole != args.userType)
+                //  ResolveUserContext(args);
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Agent"))
                 {
-                    await EnrichArgsByRoleAsync(args);
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
                 }
+                await EnrichAgentAsync(args);
+              
 
                 var request = await _onBoardingManager.CreateMembershipUser(model, args);
 
@@ -145,6 +161,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetFarmersByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
@@ -188,6 +212,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetAgentDashboardData(query);
                 return Ok(new Response<AgentDashboardDto>()
                 {

@@ -347,5 +347,15 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         //public string? env { get; set; }
     }
-
+    public class FarmerFilter
+    {
+        public long CooperativeId { get; set; }
+        public long AgentId { get; set; }
+        public string BusinessCode { get; set; }
+        public string OrganizationCode { get; set; }
+        public string State { get; set; }
+        public long? Id { get; set; }
+        public DateTimeOffset? StartDate { get; set; }
+        public DateTimeOffset? EndDate { get; set; }
+    }
 }

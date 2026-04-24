@@ -96,6 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<LocationInventory> AddInventoryAsync(CreateInventoryDto model, ListQueryParams query);
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto model, ListQueryParams query);
         Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(ListQueryParams query);
+        Task<LocationDashboardFullDto> GetFullDashboardAsync(ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -1100,7 +1101,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _organizationRepository.GetLocationAgentsAsync(query.Id);
 
         }
+        public async Task<LocationDashboardFullDto> GetFullDashboardAsync(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            await FetchOrganizationDetails(query);
+            return await _organizationRepository.GetFullDashboardAsync(query.Id);
 
+        }
         public async Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto)
         {
             
@@ -1346,7 +1354,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var agent = await _organizationRepository.GetAgentActivityLogs(query);
 
             if (agent == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Agent activities not found");
+               return null;
 
             return agent;
         }
@@ -1357,7 +1365,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var agent = await _organizationRepository.GetAgentTransactionHistory(query);
 
             if (agent == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Agent transaction not found");
+                return null;
 
             return agent;
         }
@@ -1368,7 +1376,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var agent = await _organizationRepository.GetOrganizationAgentPerformanceSummary(args);
 
             if (agent == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Performance summary not found");
+                return null;
 
             return agent;
         }
@@ -1378,7 +1386,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var agent = await _organizationRepository.GetAgentSubscribers(args);
 
             if (agent == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Agent subscribers not found");
+                return null;
 
             return agent;
         }
@@ -1388,7 +1396,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var agent = await _organizationRepository.GetAgentInputAllocations(args);
 
             if (agent == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Input allocation not found");
+               return null;
 
             return agent;
         }

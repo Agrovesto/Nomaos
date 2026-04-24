@@ -53,6 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
+        Task<bool> IsUserInRoleAsync(string userId, string role);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -71,6 +72,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
         }
+
+
+        public async Task<bool> IsUserInRoleAsync(string userId, string role)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return false;
+
+            var roles = await _userManager.GetRolesAsync(user);
+            return roles.Contains(role, StringComparer.OrdinalIgnoreCase);
+        }
+
         public async Task<UsersProfile> FindUserById(string userId)
         {
             var user = await _context.Users
