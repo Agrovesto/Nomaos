@@ -1789,6 +1789,12 @@ namespace Agrovesto.Backend.Infrastructure
                 Capacity = entity.Capacity,
                 CapacityType=entity.CapacityType,
                 StockLevel=entity.StockLevel,
+               
+
+                ParentLocationId = entity.ParentLocationId,
+
+                CreatedOn = entity.CreatedOn,
+                CreatedByUserId = entity.CreatedByUserId
             };
         }
 
@@ -1812,6 +1818,10 @@ namespace Agrovesto.Backend.Infrastructure
                 Capacity= model.Capacity,
                 CapacityType= model.CapacityType,
                 StockLevel=model.StockLevel,
+
+                ParentLocationId = model.ParentLocationId,
+
+                CreatedByUserId = model.CreatedByUserId
             };
         }
 

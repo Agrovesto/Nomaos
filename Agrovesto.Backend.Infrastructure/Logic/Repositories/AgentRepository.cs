@@ -27,6 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<bool> UpdateOrganizationAgentLocation(OrganizationAgentArgs data)
         {
+            
             var agent = await _context.Agents
                 .FirstOrDefaultAsync(x => x.UserId == data.UserId);
 
@@ -39,8 +40,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var existingAssignment = await _context.OrganizationAgents
                 .FirstOrDefaultAsync(x =>
                     x.AgentId == agent.Id &&
-                    x.OrganizationId == data.OrganizationId &&
+                    x.LocationId == data.LocationId &&
                     x.IsActive);
+
+            if (data.IsPrimary)
+            {
+                var existingPrimary = await _context.OrganizationAgents
+                    .FirstOrDefaultAsync(x =>
+                        x.LocationId == data.LocationId &&
+                        x.IsPrimary &&
+                        x.IsActive);
+
+                if (existingPrimary != null && existingPrimary.AgentId != agent.Id)
+                {
+                    existingPrimary.IsPrimary = false;
+                    _context.OrganizationAgents.Update(existingPrimary);
+                }
+            }
 
             if (existingAssignment == null)
             {
@@ -48,17 +64,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 {
                     AgentId = agent.Id,
                     OrganizationId = data.OrganizationId.Value,
+                    LocationId = data.LocationId,
                     AssignedByUserId = data.OnboardedById,
                     AssignedOn = DateTimeOffset.Now,
-                    LocationId = data.LocationId,
-                    IsActive = true
+                    IsActive = true,
+                    IsPrimary = data.IsPrimary
                 });
             }
             else
             {
-                existingAssignment.LocationId = data.LocationId;
                 existingAssignment.AssignedOn = DateTimeOffset.Now;
                 existingAssignment.AssignedByUserId = data.OnboardedById;
+                existingAssignment.IsPrimary = data.IsPrimary;
 
                 _context.OrganizationAgents.Update(existingAssignment);
             }

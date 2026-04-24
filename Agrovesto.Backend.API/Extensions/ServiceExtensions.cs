@@ -139,6 +139,10 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IProviderWebhookHandler, MtnMomoWebhookHandler>();
             services.AddScoped<IProviderWebhookHandler, SterlingWebhookHandler>();
             services.AddScoped<IProviderWebhookHandler, FcmbWebhookHandler>();
+
+            services.AddScoped<IStorageCategoryRepository, StorageCategoryRepository>();
+            services.AddScoped<ITemperatureControlType, TemperatureControlTypeRepository>();
+            services.AddScoped<IModuleRepository, ModuleRepository>();
         }
     }
 }

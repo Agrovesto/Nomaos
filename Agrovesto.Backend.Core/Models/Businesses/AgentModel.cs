@@ -47,7 +47,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? OnboardedById { get; set; }
         public string UserId { get; set; }
         public long? OrganizationId { get; set; }
-
+        public bool IsPrimary { get; set; }
     }
     public class LocationAgentDetailResponse
     {
