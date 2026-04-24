@@ -72,6 +72,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args);
         Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
         Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
+        Task<bool> IsUserInRoleAsync(string userId, string role);
+        Task EnsureFarmerIdIsValidAsync(long farmerId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -450,7 +452,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
             }
         }
+        public async Task<bool> IsUserInRoleAsync(string userId, string role)
+        {
+            var login = await _onboardingRepository.IsUserInRoleAsync(userId, role);
 
+            return login;
+        }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
         LoginModel model,
         string businessCode
@@ -1663,6 +1670,15 @@ OrganizationOnboardingArgs args)
             {
                 throw new Exception($"{ex.Message}", ex);
             }
+        }
+        public async Task EnsureFarmerIdIsValidAsync(long farmerId)
+        {
+            var farmer = await _context.Farmers
+                .FirstOrDefaultAsync(f => f.Id == farmerId);
+
+            if (farmer == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Farmer not found.");
+
         }
         public async Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args)
         {

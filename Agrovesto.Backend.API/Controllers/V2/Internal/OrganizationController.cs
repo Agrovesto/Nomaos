@@ -244,6 +244,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+          
                 var type = await _organizationManager.CreateLocation(model, args);
 
                 return Ok(new Response<LocationCreateResponse>()
@@ -289,6 +290,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+            
                 var type = await _organizationManager.GetLocationAsync(args);
                 return Ok(new PagedListResponse<List<LocationResponseDto>> ()
                 {
@@ -323,6 +325,52 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+
+        [HttpGet("location-overview")]
+        public async Task<IActionResult> LocationOverview([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+
+                var type = await _organizationManager.GetFullDashboardAsync(args);
+                return Ok(new Response<LocationDashboardFullDto>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
 
         [HttpGet("location")]
         public async Task<IActionResult> GetLocation([FromQuery] ListQueryParams query)
@@ -1745,11 +1793,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentActivityLogs(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>()
+               
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentActivityLog>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1801,11 +1864,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentTransactionHistory(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>()
+              
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentTransactionHistory>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1832,36 +1910,51 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-      
+
         [HttpGet("agent-performance-summary")]
         public async Task<IActionResult> GetOrganizationAgentPerformanceSummary([FromQuery] ListQueryParams args)
         {
             try
             {
                 args.organizationCode = args.organizationCode ?? OrganizationCode;
+
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+
                 if (string.IsNullOrEmpty(args.UserId))
                 {
-                    return BadRequest(new Response<Dictionary<string, string>>()
+                    return BadRequest(new Response<Dictionary<string, string>>
                     {
                         Message = "Validation failed.",
                         Succeeded = false,
                         Data = new Dictionary<string, string>
-{
-    { "UserId", "UserId is required" }
-}
-
+                {
+                    { "UserId", "UserId is required" }
+                }
                     });
                 }
+
                 var response = await _organizationManager.GetOrganizationAgentPerformanceSummary(args);
-                return Ok(new Response<OrganizationAgentPerformanceSummary>()
+
+               
+                if (response == null)
+                {
+                    return Ok(new Response<OrganizationAgentPerformanceSummary>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = null
+                    });
+                }
+
+                return Ok(new Response<OrganizationAgentPerformanceSummary>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response
                 });
             }
@@ -1870,21 +1963,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return StatusCode(400, new Response<string>
                 {
                     Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
+                    Succeeded = false
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(400, new Response<string>
+                return StatusCode(500, new Response<string>
                 {
                     Message = ex.Message,
-                    Succeeded = false,
+                    Succeeded = false
                 });
             }
-
         }
-
         [HttpGet("agent-subscribers")]
         public async Task<IActionResult> GetAgentSubscribers([FromQuery] ListQueryParams args)
         {
@@ -1909,11 +1999,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentSubscribers(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>()
+              
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentSubscriberModel>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1965,16 +2070,30 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentInputAllocations(args);
-             
-                return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>()
+
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentInputAllocationModel>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
-                    Count=response.Count,   
-                    PageSize=args.PageSize,
-                    PageNumber=args.PageNumber
+                    Count = response.Count,
+                    PageSize = args.PageSize,
+                    PageNumber = args.PageNumber
                 });
             }
             catch (BaseException ex)

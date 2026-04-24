@@ -8,6 +8,42 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class LocationUtilizationDto
+    {
+        public long LocationId { get; set; }
+        public string LocationName { get; set; }
+        public double Capacity { get; set; }
+        public double StockLevel { get; set; }
+        public double UtilizationRate { get; set; }
+    }
+    public class LocationDashboardFullDto
+    {
+        // LOCATION
+        public int TotalWarehouses { get; set; }
+        public int TotalSubWarehouses { get; set; }
+
+        // CAPACITY
+        public double TotalCapacity { get; set; }
+        public double TotalStockLevel { get; set; }
+        public double OccupancyRate { get; set; }
+        public double AvailableCapacity { get; set; }
+
+        // AGENTS
+        public int ActiveAgents { get; set; }
+        public int InactiveAgents { get; set; }
+        public int PrimaryAgents { get; set; }
+        public int SupportingAgents { get; set; }
+
+        // INVENTORY HEALTH
+        public int ExpiringSoonCount { get; set; }
+        public int ExpiredCount { get; set; }
+
+        // ALERTS
+        public int OverCapacityLocations { get; set; }
+
+        // TOP LOCATIONS
+        public List<LocationUtilizationDto> TopUtilizedLocations { get; set; } = new();
+    }
     public class LocationTypeModel
     {
         public long Id { get; set; }

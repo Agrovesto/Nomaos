@@ -70,6 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     ListQueryParams query);
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto dto);
         Task<LocationInventory> AddInventoryAsync(CreateInventoryDto dto);
+        Task<LocationDashboardFullDto> GetFullDashboardAsync(long organizationId);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -1561,6 +1562,88 @@ SELECT
 
             return location;
         }
+
+        public async Task<LocationDashboardFullDto> GetFullDashboardAsync(long organizationId)
+        {
+            var now = DateTimeOffset.Now;
+            var soon = now.AddDays(30);
+
+            var locations = _context.OrganizationLocations
+                .Where(x => x.OrganizationId == organizationId && x.IsActive);
+
+            // LOCATION COUNTS
+            var totalWarehouses = await locations.CountAsync(x => x.ParentLocationId == x.Id);
+            var totalSubWarehouses = await locations.CountAsync(x => x.ParentLocationId != x.Id);
+
+            // CAPACITY
+            var totalCapacity = await locations.SumAsync(x => (double?)x.Capacity) ?? 0;
+            var totalStock = await locations.SumAsync(x => (double?)x.StockLevel) ?? 0;
+
+            var occupancyRate = totalCapacity == 0 ? 0 : (totalStock / totalCapacity) * 100;
+            var availableCapacity = totalCapacity - totalStock;
+
+            // AGENTS
+            var agents = _context.OrganizationAgents
+                .Where(x => x.OrganizationId == organizationId && x.LocationId != null);
+
+            var activeAgents = await agents.CountAsync(x => x.IsActive);
+            var inactiveAgents = await agents.CountAsync(x => !x.IsActive);
+            var primaryAgents = await agents.CountAsync(x => x.IsPrimary && x.IsActive);
+            var supportingAgents = await agents.CountAsync(x => !x.IsPrimary && x.IsActive);
+
+            // INVENTORY HEALTH
+            var inventories = _context.LocationInventories
+                .Where(x => x.Location.OrganizationId == organizationId && x.IsActive);
+
+            var expiringSoon = await inventories.CountAsync(x =>
+                x.ExpiryDate != null && x.ExpiryDate <= soon && x.ExpiryDate > now);
+
+            var expired = await inventories.CountAsync(x =>
+                x.ExpiryDate != null && x.ExpiryDate <= now);
+
+            // OVER CAPACITY
+            var overCapacity = await locations.CountAsync(x => x.StockLevel > x.Capacity);
+
+            // TOP UTILIZED LOCATIONS
+            var topLocations = await locations
+                .Select(x => new LocationUtilizationDto
+                {
+                    LocationId = x.Id,
+                    LocationName = x.LocationName,
+                    Capacity = x.Capacity,
+                    StockLevel = x.StockLevel,
+                    UtilizationRate = x.Capacity == 0
+                        ? 0
+                        : (x.StockLevel / x.Capacity) * 100
+                })
+                .OrderByDescending(x => x.UtilizationRate)
+                .Take(5)
+                .ToListAsync();
+
+            return new LocationDashboardFullDto
+            {
+                TotalWarehouses = totalWarehouses,
+                TotalSubWarehouses = totalSubWarehouses,
+
+                TotalCapacity = totalCapacity,
+                TotalStockLevel = totalStock,
+                OccupancyRate = Math.Round(occupancyRate, 2),
+                AvailableCapacity = availableCapacity,
+
+                ActiveAgents = activeAgents,
+                InactiveAgents = inactiveAgents,
+                PrimaryAgents = primaryAgents,
+                SupportingAgents = supportingAgents,
+
+                ExpiringSoonCount = expiringSoon,
+                ExpiredCount = expired,
+
+                OverCapacityLocations = overCapacity,
+
+                TopUtilizedLocations = topLocations
+            };
+        }
+
         public async Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query)
         {
             var agentLocations = await _context.Set<OrganizationAgent>()
@@ -1610,7 +1693,10 @@ SELECT
             {
                 baseQuery = baseQuery.Where(x => x.LocationName.Contains(query.Location));
             }
-
+            if (!string.IsNullOrEmpty(query.LocationStatus))
+            {
+                baseQuery = baseQuery.Where(x => x.LocationStatus.ToLower().Contains(query.LocationStatus.ToLower()));
+            }
             if (query.LocationTypeId.HasValue)
             {
                 baseQuery = baseQuery.Where(x => x.LocationTypeId == query.LocationTypeId);
@@ -3045,6 +3131,9 @@ SELECT
                 Data = data
             };
         }
+     
+        
+        
         //public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
         //    ListQueryParams args)
         //{
@@ -3396,117 +3485,9 @@ SELECT
                 RecoveryRate = 0
             };
         }      /// <param name="args"></param>
-               /// <returns></returns>
-        //public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
-        //{
-        //    if (args == null)
-        //        throw new ArgumentNullException(nameof(args));
-
-        //    if (string.IsNullOrWhiteSpace(args.organizationCode))
-        //        throw new ValidationException("Invalid Organization");
-
-        //    try
-        //    {
-        //        var cacheKey = $"organization-farmer-dashboard:{args.organizationCode}";
-
-        //        string cachedData = null;
-        //        try
-        //        {
-        //            if (_cache != null)
-        //                cachedData = await _cache.GetStringAsync(cacheKey);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            // Redis/Distributed cache timeout or connection issue — degrade gracefully
-        //            try { Console.WriteLine($"Cache read failed for {cacheKey}: {ex.Message}"); } catch { }
-        //            cachedData = null;
-        //        }
-
-        //        if (!string.IsNullOrEmpty(cachedData))
-        //        {
-        //            return JsonSerializer.Deserialize<OrganizationFarmerDashboardResponse>(cachedData);
-        //        }
-        //        // ✅ Base Query (VERY IMPORTANT: reuse this)
-        //        var farmerOrgQuery = _context.FarmerOrganizations
-        //            .AsNoTracking()
-        //            .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive);
-
-        //        // ✅ TOTAL FARMERS
-        //        var totalFarmers = await farmerOrgQuery
-        //            .Select(x => x.FarmerId)
-        //            .Distinct()
-        //            .CountAsync();
-
-        //        // ✅ ACTIVE FARMERS (Completed onboarding)
-        //        var activeFarmers = await (
-        //            from fo in farmerOrgQuery
-        //            join f in _context.Farmers on fo.FarmerId equals f.Id
-        //            join u in _context.Users on f.UserId equals u.Id
-        //            where u.FarmerOnboardingStatus == FarmerOnboardingStatus.Completed
-        //            select f.Id
-        //        ).Distinct().CountAsync();
-
-        //        // ✅ FARMERS WITH LOANS
-        //        //var farmersWithLoans = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-        //        //    where l.IsActive
-        //        //    select l.FarmerId
-        //        //).Distinct().CountAsync();
-
-        //        //// ✅ RECOVERY RATE
-        //        //// Assumption: LoanRepayments table exists
-        //        //var totalLoanAmount = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-        //        //    where l.IsActive
-        //        //    select l.Amount
-        //        //).SumAsync() ?? 0;
-
-        //        //var totalRecoveredAmount = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join r in _context.Repayments on fo.FarmerId equals r.FarmerId
-        //        //    where r.IsSuccessful
-        //        //    select r.Amount
-        //        //).SumAsync() ?? 0;
-
-        //        //var recoveryRate = totalLoanAmount == 0
-        //        //    ? 0
-        //        //    : (totalRecoveredAmount / totalLoanAmount) * 100;
-
-        //        var result= new OrganizationFarmerDashboardResponse
-        //        {
-        //            TotalFarmers = totalFarmers,
-        //            ActiveFarmers = activeFarmers,
-        //            FarmersWithLoans = 0,//farmersWithLoans,
-        //            RecoveryRate = 0//Math.Round(recoveryRate, 2)
-        //        };
-        //        var cacheOptions = new DistributedCacheEntryOptions
-        //        {
-        //            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-        //        };
-
-        //        var serialized = JsonSerializer.Serialize(result);
-
-        //        try
-        //        {
-        //            if (_cache != null)
-        //                await _cache.SetStringAsync(cacheKey, serialized, cacheOptions);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            // Swallow cache set exceptions to avoid failing the request when Redis is down
-        //            try { Console.WriteLine($"Cache write failed for {cacheKey}: {ex.Message}"); } catch { }
-        //        }
-
-        //        return result;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new Exception("Error retrieving organization farmer dashboard", ex);
-        //    }
-        //}
-
+              
+        
+     
         public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
         {
             var query = _context.FarmerSalesTracker

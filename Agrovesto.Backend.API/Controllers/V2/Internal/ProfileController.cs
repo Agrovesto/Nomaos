@@ -29,12 +29,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("face-upload")]
         [AllowAnonymous]
-        public async Task<IActionResult> SaveFarmerImage([FromForm] ProfileImageModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> SaveFarmerImage(
+     [FromForm] ProfileImageModel model,
+     [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
             {
-
                 return BadRequest(new Response<Dictionary<string, string>>()
                 {
                     Message = "Validation failed.",
@@ -47,34 +47,45 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         )
                 });
             }
+
             try
             {
-                //if user to be created is a farmer, args.userId has to be cooperative user Id
-                if (CurrentUserRole != "Farmer" && string.IsNullOrEmpty(args.UserId))
-                {
-                    return BadRequest(new Response<Dictionary<string, string>>()
-                    {
-                        Message = "Validation failed, Id missing.",
-                        Succeeded = false,
-                        Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                    });
-                }
-                if (CurrentUserRole == "Farmer")
+                var isCurrentUserFarmer = CurrentUserRoles
+                    .Contains("Farmer", StringComparer.OrdinalIgnoreCase);
+
+                if (isCurrentUserFarmer)
                 {
                     args.UserId = CurrentUserId;
                 }
+                else
+                {
+                    if (string.IsNullOrWhiteSpace(args.UserId))
+                    {
+                        return BadRequest(new Response<string>()
+                        {
+                            Message = "Farmer User Id is required.",
+                            Succeeded = false
+                        });
+                    }
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                    if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Farmer"))
+                    {
+                        return StatusCode(400, new Response<string>
+                        {
+                            Message = "The supplied user is not a Farmer.",
+                            Succeeded = false
+                        });
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(OrganizationCode) &&
+                    string.IsNullOrWhiteSpace(args.organizationCode))
                 {
                     args.organizationCode = OrganizationCode;
                 }
-                var saveFarmerFace = await _onBoardingManager.SaveFarmerImage(model, args);
 
+                var saveFarmerFace = await _onBoardingManager
+                    .SaveFarmerImage(model, args);
 
                 return Ok(new Response<object>()
                 {
@@ -83,29 +94,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = "Successful",
                     Data = saveFarmerFace
                 });
-
-
             }
             catch (BaseException ex)
             {
                 return StatusCode(400, new Response<string>
                 {
                     Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
+                    Succeeded = false
                 });
             }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
                 {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
+                    Message = ex.Message,
+                    Succeeded = false
                 });
             }
-
         }
-
         [HttpPost("map-farm")]
         public async Task<IActionResult> CreateFarmMap([FromBody] CreateFarmDto dto, [FromQuery] BusinessRegistrationArgs args)
         {
@@ -149,7 +155,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                       )
                     });
                 }
-
+               
                 var updateDetail = await _onBoardingManager.UpdateFarmDetails(dto, args);
 
 
@@ -210,7 +216,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     args.organizationCode = OrganizationCode;
                 }
 
-
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+             
                 if (string.IsNullOrEmpty(args.UserId))
                 {
                     return BadRequest(new Response<Dictionary<string, string>>()
@@ -225,7 +232,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                       )
                     });
                 }
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Farmer"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Farmer.",
+                        Succeeded = false
+                    });
+                }
                 var updateDetail = await _onBoardingManager.RemoveFarmerFromCooperative(args.UserId, args.Id);
 
 
@@ -293,7 +307,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 //        Succeeded = false
                 //    });
                 //}
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "Farmer"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Farmer.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
 
                 return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
@@ -330,8 +351,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                userId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;            
-
+                userId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(userId, "Farmer"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Farmer.",
+                        Succeeded = false
+                    });
+                }
                 var profile = await _onBoardingManager.GetFarmerProfile(userId);
 
                 return Ok(new Response<FarmerProfileDto>()
