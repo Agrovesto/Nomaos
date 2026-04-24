@@ -16,6 +16,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Core.Models.Payment;
 using Microsoft.AspNetCore.Authorization;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -32,6 +33,9 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly ISettingsManager _settingsManager;
         private readonly IBusinessManager _businessManager;
         private readonly IAWSService _aWSService;
+        private readonly IStorageCategoryRepository _storageCategoryRepository;
+        private readonly ITemperatureControlType _temperatureControlType;
+        private readonly IModuleRepository _moduleRepository;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
@@ -40,16 +44,23 @@ namespace Agrovesto.Backend.API.Controllers
             IInputFinancingManagement inputFinancingManagement,
             IBusinessManager businessManager,
             ISettingsManager settingsManager,
-            IAWSService aWSService) : base(httpContextAccessor)
+            IAWSService aWSService,
+            IStorageCategoryRepository storageCategoryRepository,
+            ITemperatureControlType temperatureControlType,
+            IModuleRepository moduleRepository
+            ) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
             _providerManager = providerManager;
             _authenticationRepository = authenticationRepository;
             _walletProvider = walletProvider;
+            _storageCategoryRepository = storageCategoryRepository;
             _inputFinancingManagement = inputFinancingManagement;
             _settingsManager = settingsManager;
             _businessManager = businessManager;
             _aWSService = aWSService;
+            _temperatureControlType = temperatureControlType;
+            _moduleRepository = moduleRepository;
         }
         [AllowAnonymous]
         [HttpPost("create-email-template")]
@@ -69,6 +80,182 @@ namespace Agrovesto.Backend.API.Controllers
                     Succeeded = true,
                     Message = "Successful",
                     Data = true
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [AllowAnonymous]
+        [HttpPost("create-storage-category")]
+        public async Task<IActionResult> StorageCategory([FromBody] StorageCategory model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                model.CreatedByUserId = CurrentUserId;
+                model.BusinessCode = args.businessCode;
+                await _storageCategoryRepository.AddAsync(model);
+
+                return Ok(new Response<StorageCategory>()
+                {
+                    Code =  Core.CoreUtils.Constants.ResponseCodes.Success ,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = model
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("create-temperature-control-type")]
+        public async Task<IActionResult> TemperaturControlType([FromBody] TemperatureControlType model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                model.CreatedByUserId = CurrentUserId;
+                model.BusinessCode = args.businessCode;
+                await _temperatureControlType.AddAsync(model);
+
+                return Ok(new Response<TemperatureControlType>()
+                {
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = model
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [AllowAnonymous]
+        [HttpPost("create-system-module")]
+        public async Task<IActionResult> CreateSystemModules([FromBody] Module model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                model.CreatedByUserId = CurrentUserId;
+                model.BusinessCode = args.businessCode;
+                await _moduleRepository.AddAsync(model);
+
+                return Ok(new Response<Module>()
+                {
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = model
                 });
 
 

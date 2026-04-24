@@ -82,7 +82,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
 
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId)
+        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
+      string membershipuserId,
+      string organizationCode = null)
         {
             var membership = await _context.MemberShips
                 .AsNoTracking()
@@ -105,47 +107,61 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var membershipId = membership.MembershipId;
 
-            var farmStats = await
-  (
-      from fc in _context.FarmerCooperatives.AsNoTracking()
-      where fc.CooperativeId == membershipId
+            var baseFarmers =
+                from fc in _context.FarmerCooperatives.AsNoTracking()
+                join f in _context.Farmers.AsNoTracking()
+                    on fc.FarmerId equals f.Id
+                where fc.CooperativeId == membershipId
+                select new { fc.FarmerId, f };
 
-      join f in _context.Farmers.AsNoTracking()
-          on fc.FarmerId equals f.Id
+            if (!string.IsNullOrWhiteSpace(organizationCode))
+            {
+                baseFarmers =
+                    from x in baseFarmers
+                    join fo in _context.FarmerOrganizations.AsNoTracking()
+                        on x.FarmerId equals fo.FarmerId
+                    where fo.OrganizationCode == organizationCode
+                    select x;
+            }
 
-      join fr in _context.Farms.AsNoTracking()
-          on f.Id equals fr.FarmerId into farmJoin
-      from fr in farmJoin.DefaultIfEmpty()
+            var farmerIdsQuery = baseFarmers.Select(x => x.FarmerId).Distinct();
 
-      group new { f, fr } by 1 into g
-      select new
-      {
-          TotalFarmers = g.Select(x => x.f.Id).Distinct().Count(),
+            var farmStats = await (
+                from f in _context.Farmers
+                where farmerIdsQuery.Contains(f.Id)
+                group f by 1 into g
+                select new
+                {
+                    TotalFarmers = g.Count(),
 
-          TotalVerifiedFarmers = g
-              .Select(x => new { x.f.Id, x.f.Level })
-              .Distinct()
-              .Count(x => x.Level != FarmerLevel.Level1),
+                    TotalVerifiedFarmers = g.Count(x => x.Level != FarmerLevel.Level1),
 
-          TotalUnverifiedFarmers = g
-              .Select(x => new { x.f.Id, x.f.Level })
-              .Distinct()
-              .Count(x => x.Level == FarmerLevel.Level1),
+                    TotalUnverifiedFarmers = g.Count(x => x.Level == FarmerLevel.Level1),
 
-          TotalFarms = g.Count(x => x.fr != null),
+                    TotalFarms =
+                        _context.Farms.Count(fr => g.Select(x => x.Id).Contains(fr.FarmerId)),
 
-          TotalFarmSize = g.Sum(x => x.fr != null
-              ? (double?)x.fr.FarmSizeInSqMetre
-              : 0) ?? 0,
+                    TotalFarmSize =
+                        _context.Farms
+                            .Where(fr => g.Select(x => x.Id).Contains(fr.FarmerId))
+                            .Sum(fr => (double?)fr.FarmSizeInSqMetre) ?? 0,
 
-          Completed = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.Verified),
+                    Completed =
+                        _context.Farms.Count(fr =>
+                            g.Select(x => x.Id).Contains(fr.FarmerId) &&
+                            fr.MappingStatus == MappingStatus.Verified),
 
-          InProgress = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.Mapped),
+                    InProgress =
+                        _context.Farms.Count(fr =>
+                            g.Select(x => x.Id).Contains(fr.FarmerId) &&
+                            fr.MappingStatus == MappingStatus.Mapped),
 
-          NotStarted = g.Count(x => x.fr != null && x.fr.MappingStatus == MappingStatus.UnMapped)
-      }
-  )
-  .FirstOrDefaultAsync();
+                    NotStarted =
+                        _context.Farms.Count(fr =>
+                            g.Select(x => x.Id).Contains(fr.FarmerId) &&
+                            fr.MappingStatus == MappingStatus.UnMapped)
+                }
+            ).FirstOrDefaultAsync();
 
             farmStats ??= new
             {
@@ -158,71 +174,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 InProgress = 0,
                 NotStarted = 0
             };
+
             var totalAgents = await _context.MemberShipAgents
                 .AsNoTracking()
                 .Where(x => x.MemberShipId == membershipId)
                 .Select(x => x.AgentId)
                 .Distinct()
                 .CountAsync();
-
-            var farmerLinkChart = await _context.FarmerCooperatives
-                .AsNoTracking()
-                .Where(fc => fc.CooperativeId == membershipId)
-                .GroupBy(fc => new
-                {
-                    fc.JoinedOn.Year,
-                    fc.JoinedOn.Month
-                })
-                .Select(g => new MonthlyFarmerLinkDto
-                {
-                    Year = g.Key.Year,
-                    Month = g.Key.Month,
-                    FarmerCount = g.Count()
-                })
-                .OrderBy(x => x.Year)
-                .ThenBy(x => x.Month)
-                .ToListAsync();
-
-            var recentActivities = await _context.ActivityLogs
-                .AsNoTracking()
-                .Where(a => a.PerformedByUserId == membership.UserId)
-                .OrderByDescending(a => a.CreatedOn)
-                .Take(5)
-                .Select(a => new ActivityDto
-                {
-                    Description = a.ActivityName,
-                    PerformedBy = a.PerformedByUserId,
-                    Date = a.CreatedOn
-                })
-                .ToListAsync();
-
-         
-            // -----------------------------
-            var inputDisbursementChart = await
-            (
-                from fc in _context.FarmerCooperatives.AsNoTracking()
-                where fc.CooperativeId == membershipId
-
-                join ia in _context.InputAllocations.AsNoTracking()
-                    on fc.FarmerId equals ia.FarmerId
-
-                group ia by new
-                {
-                    ia.AllocatedDate.Year,
-                    ia.AllocatedDate.Month
-                }
-                into g
-
-                select new MonthlyInputDisbursementDto
-                {
-                    Year = g.Key.Year,
-                    Month = g.Key.Month,
-                    InputCount = g.Count()
-                }
-            )
-            .OrderBy(x => x.Year)
-            .ThenBy(x => x.Month)
-            .ToListAsync();
 
             return new MembershipDashboardDto
             {
@@ -238,25 +196,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     TotalFarmSize = farmStats.TotalFarmSize,
                     FarmsMapped = farmStats.Completed,
                     MappingProgressPercentage = farmStats.TotalFarms == 0
-        ? 0
-        : (int)Math.Round((double)farmStats.Completed / farmStats.TotalFarms * 100)
-                },
-
-                MappingProgress = new FarmMappingProgressDto
-                {
-                    TotalFarms = farmStats.TotalFarms,
-                    Completed = farmStats.Completed,
-                    InProgress = farmStats.InProgress,
-                    NotStarted = farmStats.NotStarted
-                },
-
-                FarmerLinkHistogram = farmerLinkChart,
-
-                FarmerInputDisbursedLinkHistogram = inputDisbursementChart,
-
-                RecentActivities = recentActivities,
-
-                CanAddFarmer = membership.Status == "Active"
+                        ? 0
+                        : (int)Math.Round((double)farmStats.Completed / farmStats.TotalFarms * 100)
+                }
             };
         }
 

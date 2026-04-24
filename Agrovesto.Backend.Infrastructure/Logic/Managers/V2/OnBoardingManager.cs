@@ -39,6 +39,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
@@ -1441,6 +1442,10 @@ OrganizationOnboardingArgs args)
 
         public async Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
         {
+            if (string.IsNullOrEmpty(args.Env))
+            {
+                throw new ValidationException("Environment is required.");
+            }
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
             {
