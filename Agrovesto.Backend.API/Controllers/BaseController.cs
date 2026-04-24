@@ -96,7 +96,25 @@ namespace Agrovesto.Backend.API.Controllers
                 return roleClaim?.Value;
             }
         }
+        public IEnumerable<string> CurrentUserRoles
+        {
+            get
+            {
+                var jwt = TryReadJwt();
+                if (jwt == null) return Enumerable.Empty<string>();
 
+                var roles = jwt.Claims
+                    .Where(c =>
+                        c.Type.Equals("http://schemas.microsoft.com/ws/2008/06/identity/claims/role",
+                                      StringComparison.OrdinalIgnoreCase) ||
+                        c.Type.Equals("Roles", StringComparison.OrdinalIgnoreCase))
+                    .Select(c => c.Value)
+                    .Distinct()
+                    .ToList();
+
+                return roles;
+            }
+        }
         public string? OrganizationCode
         {
             get
