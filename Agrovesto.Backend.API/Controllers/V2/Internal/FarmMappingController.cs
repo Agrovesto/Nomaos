@@ -20,6 +20,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
         private readonly IFarmMappingManager _farmMappingManager;
         private readonly IBusinessManager _businessManager;
+        private readonly IOnBoardingManager _onBoardingManager;
         //POST /api/farms
         //POST /api/farms/{farmId}/map
         //POST /api/farms/{farmId}/documents
@@ -30,10 +31,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //unflag farm
         public FarmMappingController(IHttpContextAccessor httpContextAccessor, 
             IFarmMappingManager farmMappingManager,
-            IBusinessManager businessManager) : base(httpContextAccessor)
+            IBusinessManager businessManager, IOnBoardingManager onBoardingManager) : base(httpContextAccessor)
         {
             _farmMappingManager = farmMappingManager;
             _businessManager = businessManager;
+            _onBoardingManager = onBoardingManager;
         }
         [HttpGet("by-membership")]
         public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAMembership([FromQuery] FarmMappingArgs query)
@@ -44,13 +46,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
-
-
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
                 if(string.IsNullOrEmpty(query.userId))
                 {
                     throw new BaseException(ExceptionType.ACCESS_DENIED, "Access Denied");
+                }
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.userId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
                 }
                 var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAMembership(query);
                 return Ok(new Response<List<FarmListRespopnseObject>>()
@@ -91,10 +98,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
               
 
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.userId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not an Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAnAgent(query);
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
@@ -134,19 +149,36 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                if (CurrentUserId != null && CurrentUserRole == "Farmer")
+                var isFarmer = CurrentUserRoles
+             .Contains("Farmer", StringComparer.OrdinalIgnoreCase);
+
+                if (isFarmer)
                 {
                     await EnrichFarmerAsync(query);
-                }
-                if (query.farmerId <= 0)
-                {
 
-                    return BadRequest(new Response<string>
+                    if (query.farmerId <= 0)
                     {
-                        Message = "Farmer Id is required.",
-                        Succeeded = false
-                    });
+                        return BadRequest(new Response<string>
+                        {
+                            Message = "Unable to resolve farmer profile for current user.",
+                            Succeeded = false
+                        });
+                    }
                 }
+                else
+                {
+                    if (query.farmerId <= 0)
+                    {
+                        return BadRequest(new Response<string>
+                        {
+                            Message = "Farmer Id is required.",
+                            Succeeded = false
+                        });
+                    }
+
+                    await _onBoardingManager.EnsureFarmerIdIsValidAsync(query.farmerId);
+                }
+
 
 
 
@@ -189,7 +221,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
              if(query.farmId <= 0)
                 {
 
@@ -234,13 +265,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         [HttpPost("submit-farm")]
-        [AllowAnonymous]
-        public async Task<IActionResult> CreateFarm([FromForm] SubmitFarmRequest model, [FromQuery] FarmMappingArgs args)
+        [Authorize]
+        public async Task<IActionResult> CreateFarm(
+      [FromForm] SubmitFarmRequest model,
+      [FromQuery] FarmMappingArgs args)
         {
-
             if (!ModelState.IsValid)
             {
-
                 return BadRequest(new Response<Dictionary<string, string>>()
                 {
                     Message = "Validation failed.",
@@ -253,26 +284,43 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         )
                 });
             }
+
             try
             {
                 args.performedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-                if (CurrentUserId != null && CurrentUserRole == "Farmer")
+
+                var isFarmer = CurrentUserRoles
+                    .Contains("Farmer", StringComparer.OrdinalIgnoreCase);
+
+                if (isFarmer)
                 {
                     await EnrichFarmerAsync(args);
-                }
-                if (args.farmerId <= 0)
-                {
 
-                    return BadRequest(new Response<string>
+                    if (args.farmerId <= 0)
                     {
-                        Message = "Farmer Id is required.",
-                        Succeeded = false
-                    });
+                        return BadRequest(new Response<string>
+                        {
+                            Message = "Unable to resolve farmer profile for current user.",
+                            Succeeded = false
+                        });
+                    }
+                }
+                else
+                {
+                    if (args.farmerId <= 0)
+                    {
+                        return BadRequest(new Response<string>
+                        {
+                            Message = "Farmer Id is required.",
+                            Succeeded = false
+                        });
+                    }
+
+                    await _onBoardingManager.EnsureFarmerIdIsValidAsync(args.farmerId);
                 }
 
                 var request = await _farmMappingManager.SubmitFarmAsync(model, args);
-
 
                 return Ok(new Response<long>()
                 {
@@ -281,31 +329,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = request != null ? "Successful" : "Failed",
                     Data = request
                 });
-
-
             }
             catch (BaseException ex)
             {
                 return StatusCode(400, new Response<string>
                 {
                     Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
+                    Succeeded = false
                 });
             }
             catch (Exception ex)
             {
                 return StatusCode(400, new Response<string>
                 {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
+                    Message = ex.Message,
+                    Succeeded = false
                 });
             }
-
-        }
-        //private async Task EnrichArgsByRoleAsync(FarmMappingArgs args)
-        //{
-        //    var currentRole = CurrentUserRole;
+        }  //private async Task EnrichArgsByRoleAsync(FarmMappingArgs args)
+           //{
+           //    var currentRole = CurrentUserRole;
 
         //    switch (currentRole)
         //    {
@@ -342,7 +385,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //}
         //private async Task EnrichCooperativeAsync(FarmMappingArgs args)
         //{
-           
+
         //    var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
 
         //    if (coop == null)
@@ -376,7 +419,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //    if (!args.AgentIds.Contains(agent.Id))
         //        args.AgentIds.Add(agent.Id);
         //}
-       
+
         private void NormalizeOrganizationCode(FarmMappingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
