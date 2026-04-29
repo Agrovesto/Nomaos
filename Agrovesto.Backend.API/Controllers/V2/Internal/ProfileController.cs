@@ -724,6 +724,74 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        [HttpPut("update-agent-profile")]
+        public async Task<IActionResult> UpdateAgentProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                // determine target user id
+
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+
+                //if (string.IsNullOrEmpty(targetUserId))
+                //{
+                //    return BadRequest(new Response<string>
+                //    {
+                //        Message = "User Id is required.",
+                //        Succeeded = false
+                //    });
+                //}
+                if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "Farmer"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Farmer.",
+                        Succeeded = false
+                    });
+                }
+                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
+
+                return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result.Success,
+                    Message = result.Message,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
 
     }
 }

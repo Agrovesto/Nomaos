@@ -6,6 +6,8 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using BCrypt.Net;
+using Core.Models.Payment;
 using Microsoft.EntityFrameworkCore;
 using Org.BouncyCastle.Crypto.Generators;
 using System;
@@ -13,7 +15,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using BCrypt.Net;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -25,6 +26,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
         Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference);
@@ -718,6 +720,64 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
 
+        public async Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args)
+        {
+            var pageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
 
+            var query = _context.UserWalletTransactions
+                .AsNoTracking()
+                .Where(x => x.UserWalletId == args.Id);
+
+            if (!string.IsNullOrWhiteSpace(args.TransactionReference))
+            {
+                query = query.Where(x =>
+                    x.TransactionReference.Contains(args.TransactionReference));
+            }
+
+            if (args.TransactionDate.HasValue)
+            {
+                var date = args.TransactionDate.Value.Date;
+
+                query = query.Where(x =>
+                    x.TransactionDate.Date == date);
+            }
+
+            var totalCount = await query.CountAsync();
+
+            if (totalCount == 0)
+            {
+                return new PagedListResponse<List<FarmerTransactionDto>>
+                {
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    Count = 0,
+                    Data = new List<FarmerTransactionDto>()
+                };
+            }
+
+            var pagedData = await query
+                .OrderByDescending(x => x.TransactionDate)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(t => new FarmerTransactionDto
+                 {
+                     TransactionId = t.Id,
+                     Amount = t.TransactionAmount,
+                     BalanceAfter = t.BalanceAfter,
+                     TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
+                     Timestamp = t.TransactionDate,
+                     Description = t.TransactionDescription
+                 })
+                .ToListAsync();
+
+            return new PagedListResponse<List<FarmerTransactionDto>>
+            {
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Count = totalCount,
+                Data = pagedData
+            };
+        }
     }
 }

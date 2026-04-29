@@ -25,6 +25,101 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
         }
         #region inputfinancing
+
+
+        public async Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(
+            ListQueryParams args)
+        {
+            var allocations = await _context.InputAllocations
+                .AsNoTracking()
+                .Include(a => a.Input)
+                .Where(a => a.FarmerId == args.farmerId)
+                .ToListAsync();
+
+            if (!allocations.Any())
+            {
+                return new PagedListResponse<List<FarmerInputObligationDto>>
+                {
+                    Data = new List<FarmerInputObligationDto>(),
+                    Count = 0,
+                    PageNumber = args.PageNumber,
+                    PageSize = args.PageSize
+                };
+            }
+
+            var allocationIds = allocations.Select(a => a.Id).ToList();
+
+            var query = _context.InputTransactions
+                .AsNoTracking()
+                .Where(t =>
+                    t.FarmerId == args.farmerId &&
+                    t.TransactionType == InputTransactionType.Repayment &&
+                    !t.IsDeleted);
+
+            var totalCount = await query.CountAsync();
+
+            var pageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+            var pageSize = args.PageSize <= 0 ? 20 : args.PageSize;
+
+            var skip = (pageNumber - 1) * pageSize;
+
+            var allRepaymentsUpToPage = await query
+                .OrderBy(t => t.TransactionDate)
+                .Take(skip + pageSize)
+                .ToListAsync();
+
+            var items = new List<FarmerInputObligationDto>();
+
+            foreach (var allocation in allocations)
+            {
+                var loanAmount = allocation.TotalCost;
+
+                decimal runningTotal = allRepaymentsUpToPage
+                    .Take(skip)
+                    .Sum(x => x.Amount);
+
+                foreach (var payment in allRepaymentsUpToPage.Skip(skip))
+                {
+                    runningTotal += payment.Amount;
+
+                    var balanceRemaining = loanAmount - runningTotal;
+
+                    if (balanceRemaining < 0)
+                        balanceRemaining = 0;
+
+                    decimal repaymentProgress = 0;
+
+                    if (loanAmount > 0)
+                    {
+                        repaymentProgress = (runningTotal / loanAmount) * 100;
+                    }
+
+                    if (repaymentProgress > 100)
+                        repaymentProgress = 100;
+
+                    items.Add(new FarmerInputObligationDto
+                    {
+                        Date = payment.TransactionDate,
+                        TotalCost = loanAmount,
+                        AmountPaid = payment.Amount,
+                        RemainigBalance = balanceRemaining,
+                        Name = allocation.Input?.Name,
+                        RepaymentProgress = Math.Round(repaymentProgress, 2)
+                    });
+                }
+            }
+
+            return new PagedListResponse<List<FarmerInputObligationDto>>
+            {
+                Data = items
+                    .OrderByDescending(x => x.Date)
+                    .ToList(),
+
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
         public async Task<LoanDetailDto> GetLoanDetailAsync(long inputAllocationId)
         {
             var allocation = await _context.InputAllocations
@@ -333,6 +428,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 RepaymentPercentage = Math.Round(repaymentPercentage, 2)
             };
         }
+      
+        
         #endregion inputfinancing
 
 

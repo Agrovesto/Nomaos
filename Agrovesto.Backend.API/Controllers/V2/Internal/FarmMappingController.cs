@@ -265,7 +265,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         [HttpPost("submit-farm")]
-        [Authorize]
+   
         public async Task<IActionResult> CreateFarm(
       [FromForm] SubmitFarmRequest model,
       [FromQuery] FarmMappingArgs args)
