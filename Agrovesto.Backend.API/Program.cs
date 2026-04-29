@@ -22,6 +22,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
+using Serilog;
 using System;
 using System.Reflection;
 using System.Text;
@@ -30,6 +31,18 @@ using System.Text.Json;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+// =====================
+// SERILOG CONFIG
+// =====================
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console()
+    .WriteTo.File(
+        "/var/log/Nomaos/app.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
@@ -340,6 +353,16 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 //    await SeedData.EnsureSeededAsync(db);
 //}
 
+// =====================
+// SERVICES
+// =====================
+builder.Services.AddControllers();
+
+var app = builder.Build();
+
+app.MapControllers();
+
+app.Run();
 
 app.UseCors();
 app.UseRouting();
