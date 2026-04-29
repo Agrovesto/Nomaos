@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -26,11 +27,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<FarmerTransactionManager> _log;
         private readonly IAgentRepository _agentRepository;
         private readonly IFarmerRepository _farmerRepository;
-
+        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IConfiguration _configuration;
         public FarmerTransactionManager(IFarmerTransactionRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
            ILogger<FarmerTransactionManager> log,
            IConfiguration configuration,
+           IInputFinancingManagementRepository inputFinancingManagementRepository,
             IAgentRepository agentRepository, DataContext context, IFarmerRepository farmerRepository)
         {
             _businessRepository = businessRepository;
@@ -41,8 +43,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _configuration = configuration;
             _agentRepository = agentRepository;
             _farmerRepository = farmerRepository;
+            _inputFinancingManagementRepository = inputFinancingManagementRepository;
         }
+        public async Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(
+            ListQueryParams args)
+        {
+            try
+            {
+                var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                if (farmer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Farmer not found");
 
+                args.farmerId = farmer.Id;
+                return await _inputFinancingManagementRepository.GetFarmerInputObligations(args);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmerByUserId(
          TransactionQueryParams query)
         {

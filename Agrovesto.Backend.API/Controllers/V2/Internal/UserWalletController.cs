@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Components.Routing;
@@ -40,6 +41,44 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                     //PageNumber = query.PageNumber,
                     //PageSize = 10,
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpGet("user-wallet-transaction")]
+        public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+               
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _walletManager.GetUserWalletTransaction(query);
+                return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count> 0? "Successful": "Failed",
+                    Succeeded = true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }

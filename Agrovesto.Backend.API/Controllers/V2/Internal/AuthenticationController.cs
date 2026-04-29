@@ -1015,8 +1015,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
-
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
 
             if (agent == null)
                 throw new BaseException(

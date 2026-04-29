@@ -10,6 +10,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
 {
     public interface IFarmerTransactionManager
     {
+        Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(ListQueryParams args);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerSalesTransactionsByCooperativeAsync(TransactionQueryParams query);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmersTransactionByAgent(TransactionQueryParams query);
 

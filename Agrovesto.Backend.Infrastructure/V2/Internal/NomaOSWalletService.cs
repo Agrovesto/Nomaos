@@ -27,6 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         // Define methods that the NomaOSWalletService should implement
         Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task HandleTopUpWebhook(ProviderWebhookRequest request);
         Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
@@ -91,6 +92,25 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
 
                 var wallet = await _userWalletRepository.GetUserWallletsByUserId(args);
+                return wallet;
+            }
+            catch (BaseException ex)
+            {
+                //  _log.LogError($"Error retrieving Agents: {ex.Message}");
+
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+        public async Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args)
+        {
+            try
+            {
+                if(args.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid wallet ID");
+                var wallet = await _userWalletRepository.GetUserWalletTransaction(args);
                 return wallet;
             }
             catch (BaseException ex)
