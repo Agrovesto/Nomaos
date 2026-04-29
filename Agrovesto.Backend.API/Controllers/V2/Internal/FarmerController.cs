@@ -26,20 +26,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
+        private readonly IFarmerTransactionManager _farmerTransactionManager;
         public FarmerController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
             INomaOSWalletService walletService,
             IFarmMappingManager farmMappingManager,
-            IMembershipManager membershipManager, IBusinessManager businessManager) : base(httpContextAccessor)
+            IMembershipManager membershipManager,
+            IFarmerTransactionManager farmerTransactionManager,
+            IBusinessManager businessManager) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
             _farmMappingManager = farmMappingManager;
             _walletService = walletService;
+            _farmerTransactionManager=farmerTransactionManager;
         }
         [HttpGet("dashboard")]
-        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
+        public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
             try
             {
@@ -567,6 +571,93 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result.Data,
                     Message = result.Message,
                     Succeeded = result.Succeeded,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("user-wallet-transaction")]
+        public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _walletService.GetUserWalletTransaction(query);
+                return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count > 0 ? "Successful" : "No record found",
+                    Succeeded = true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("input-obligations")]
+        public async Task<IActionResult> GetFarmerInputObligations([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+
+
+                var result = await _farmerTransactionManager.GetFarmerInputObligations(query);
+                return Ok(new PagedListResponse<List<FarmerInputObligationDto>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count > 0 ? "Successful" : "No record found",
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
