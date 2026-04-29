@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses.Input
 {
+  
     public class RepaymentBreakdownDto
     {
         public DateTime Date { get; set; }

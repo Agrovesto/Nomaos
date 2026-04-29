@@ -51,5 +51,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
         Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(long inputAllocationId);
         Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args);
+        Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(ListQueryParams args);
     }
 }
