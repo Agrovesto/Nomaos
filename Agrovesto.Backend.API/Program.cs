@@ -10,6 +10,8 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
 using AWS.Logger.SeriLog;
+using AWS.Logger;
+using AWS.Logger.AspNetCore;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
