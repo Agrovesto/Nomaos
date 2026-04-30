@@ -358,7 +358,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 // =====================
 builder.Services.AddControllers();
 
-var app = builder.Build();
+// var app = builder.Build();
 
 app.MapControllers();
 
