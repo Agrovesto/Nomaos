@@ -9,21 +9,32 @@
     <AspNetCoreHostingModel>OutOfProcess</AspNetCoreHostingModel>
   </PropertyGroup>
 
-    <ItemGroup>
+  <ItemGroup>
+    <!-- Logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="7.0.0" />
-    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
     <PackageReference Include="AWS.Logger.SeriLog" Version="4.0.2" />
     <PackageReference Include="AWS.Logger.AspNetCore" Version="4.0.2" />
+
+    <!-- Health Checks -->
     <PackageReference Include="AspNetCore.HealthChecks.Aws.S3" Version="8.0.1" />
     <PackageReference Include="AspNetCore.HealthChecks.SqlServer" Version="8.0.1" />
     <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
-    <PackageReference Include="AWSSDK.Core" Version="4.0.0.32" />
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="4.0.0.32" />
-    <PackageReference Include="AWSSDK.Rekognition" Version="4.0.0.32" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.0.32" />
+
+    <!-- AWS SDK (Stable 3.7.x to fix NU1608 & NU1901) -->
+    <PackageReference Include="AWSSDK.Core" Version="3.7.400.31" />
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.300" />
+    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.31" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
+
+    
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.1" />
+    
+    
+    
+
+    <!-- Database -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -33,10 +44,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-
-<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
-     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.1" />
+
+    <!-- Miscellaneous -->
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.2" />
