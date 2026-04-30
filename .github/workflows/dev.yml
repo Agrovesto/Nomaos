@@ -40,11 +40,11 @@ jobs:
           git checkout staging
           git reset --hard origin/staging
 
-          echo "🧹 Cleaning project..."
-          dotnet clean
-
           echo "📦 Restoring dependencies..."
           dotnet restore
+          
+          echo "🧹 Cleaning project..."
+          dotnet clean --no-restore
 
           echo "🏗️ Publishing application..."
           dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
