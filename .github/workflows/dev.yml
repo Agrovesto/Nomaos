@@ -47,7 +47,14 @@ jobs:
           dotnet clean
 
           echo "🏗️ Publishing application..."
-          dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
+          dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore 2>&1 | tee /tmp/publish.log
+          PUBLISH_EXIT=${PIPESTATUS[0]}
+          if [ $PUBLISH_EXIT -ne 0 ]; then
+            echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
+            echo "--- Error summary ---"
+            grep -i "error" /tmp/publish.log | grep -v "warning"
+            exit $PUBLISH_EXIT
+          fi
 
           echo "🔄 Restarting service..."
           sudo systemctl restart Agrovesto.Backend.API.service
