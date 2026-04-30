@@ -34,7 +34,7 @@
     <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
     <PackageReference Include="EPPlus" Version="8.0.6" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
-    <PackageReference Include="iTextSharp" Version="8.0.5" />
+    <PackageReference Include="itext" Version="8.0.5" />
     <PackageReference Include="libphonenumber-csharp" Version="8.13.56" />
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.3.0" />
