@@ -364,13 +364,11 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 // =====================
 // SERVICES
 // =====================
-builder.Services.AddControllers();
+// builder.Services.AddControllers();
 
-// var app = builder.Build();
+// app.MapControllers();
 
-app.MapControllers();
-
-app.Run();
+// app.Run();
 
 app.UseCors();
 app.UseRouting();
