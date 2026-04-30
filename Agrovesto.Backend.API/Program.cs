@@ -40,6 +40,11 @@ Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .WriteTo.File(
         "/var/log/Nomaos/app.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.AWSSeriLog(new AWSLoggerConfig
+    {
+        LogGroup = "/nomaos/staging/api",
+        Region = "eu-west-1",
+    })
     .CreateLogger();
 
 builder.Host.UseSerilog();
