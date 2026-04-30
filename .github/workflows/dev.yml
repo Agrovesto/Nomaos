@@ -44,7 +44,7 @@ jobs:
           dotnet restore
           
           echo "🧹 Cleaning project..."
-          dotnet clean --no-restore
+          dotnet clean
 
           echo "🏗️ Publishing application..."
           dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
