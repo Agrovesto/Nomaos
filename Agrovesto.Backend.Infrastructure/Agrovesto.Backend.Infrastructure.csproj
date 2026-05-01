@@ -23,14 +23,18 @@
   <ItemGroup>
     <PackageReference Include="AfricasTalking.NET" Version="1.2.4" />
     
-    <!-- AWS SDK: Unified to stable 3.7 to resolve NU1608 and NU1901 -->
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
+    <!-- AWS SDK: Unified to stable 3.7.x -->
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.300" />
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.401" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.416" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
     <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.47" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.401" />
     <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.47" />
     
+    
+    
+    
+
     <!-- Document & Data Processing -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
@@ -39,14 +43,9 @@
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
     <PackageReference Include="itext" Version="8.0.5" />
     <PackageReference Include="libphonenumber-csharp" Version="9.0.0" />
-
-    
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.1" />
-    
-    
-    
-    
     <PackageReference Include="MimeKit" Version="4.15.1" />
+
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.1" />
 
     <!-- Database: EF Core 8.0.x -->
     <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
@@ -62,7 +61,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
 
-    <!-- Caching & Search: Aligned with TargetFramework -->
+    <!-- Caching & Search -->
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.1" />
     <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="9.0.3" />
 
