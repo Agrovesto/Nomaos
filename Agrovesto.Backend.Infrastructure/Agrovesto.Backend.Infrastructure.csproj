@@ -41,7 +41,7 @@
     <PackageReference Include="libphonenumber-csharp" Version="9.0.0" />
     <PackageReference Include="MimeKit" Version="4.15.1" />
 
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.4" />
 
     <!-- Database: EF Core 8.0.x -->
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.4" />
