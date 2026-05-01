@@ -29,11 +29,7 @@
     <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
     <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.47" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.401" />
-    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.47" />
-    
-    
-    
-    
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.47" />    
 
     <!-- Document & Data Processing -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
@@ -48,6 +44,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.1" />
 
     <!-- Database: EF Core 8.0.x -->
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.4" />
     <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
