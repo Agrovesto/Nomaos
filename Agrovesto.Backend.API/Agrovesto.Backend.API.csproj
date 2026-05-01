@@ -23,10 +23,10 @@
     <PackageReference Include="AspNetCore.HealthChecks.Uris" Version="8.0.1" />
 
     <!-- AWS SDK (Stable 3.7.x to fix NU1608 & NU1901) -->
-    <PackageReference Include="AWSSDK.Core" Version="3.7.400.47" />
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.300" />
-    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.47" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
+    <!-- <PackageReference Include="AWSSDK.Core" Version="3.7.400.47" /> -->
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
+    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.401" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.416" />
 
     
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />
