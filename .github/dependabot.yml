@@ -3,9 +3,23 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
-  version: 2
-  updates:
-    - package-ecosystem: "" # See documentation for possible values
-      directory: "/" # Location of package manifests
-      schedule:
-        interval: "weekly"
+version: 2
+updates:
+  # 1. NuGet packages for your .NET Solution
+  - package-ecosystem: "nuget"
+    directory: "/" # Root directory where your .sln file lives
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    # Optional: Groups updates to reduce PR noise
+    groups:
+      dotnet-dependencies:
+        patterns:
+          - "*"
+
+  # 2. GitHub Actions (to keep your build/deploy scripts updated)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

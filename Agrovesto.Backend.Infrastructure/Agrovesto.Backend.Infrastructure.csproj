@@ -64,7 +64,7 @@
 
     <!-- Caching & Search -->
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.1" />
-    <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="9.0.3" />
+    <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="8.4.1" />
 
     <!-- Geospatial -->
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
