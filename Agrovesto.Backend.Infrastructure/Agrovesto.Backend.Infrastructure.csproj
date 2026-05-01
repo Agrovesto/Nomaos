@@ -21,6 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AfricasTalking.NET" Version="1.2.4" />
     
     <!-- AWS SDK: Unified to stable 3.7.x -->
