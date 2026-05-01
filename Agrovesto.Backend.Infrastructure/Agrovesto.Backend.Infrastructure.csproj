@@ -25,11 +25,11 @@
     
     <!-- AWS SDK: Unified to stable 3.7 to resolve NU1608 and NU1901 -->
     <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.300" />
-    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.31" />
+    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.47" />
     <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
-    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.31" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.47" />
     <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.401" />
-    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.31" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.47" />
     
     <!-- Document & Data Processing -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
