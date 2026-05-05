@@ -73,7 +73,7 @@ if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.
             reloadOnChange: true,
             reloadCheckIntervalSeconds: 60
         ),
-        "nomaos/staging/api", // Path in Vault: secret/nomaos/staging/api
+        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
         "kv"              // Your KV engine name
     );
     
