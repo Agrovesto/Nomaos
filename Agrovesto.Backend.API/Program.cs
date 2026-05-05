@@ -22,6 +22,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
+using Agrovesto.Backend.Infrastructure.DB;
 using Serilog;
 using System;
 using System.Reflection;
@@ -37,11 +38,15 @@ var builder = WebApplication.CreateBuilder(args);
 // =====================
 // SERILOG CONFIG
 // =====================
-Log.Logger = new LoggerConfiguration()
+var logConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
-    .WriteTo.Console()
-    .WriteTo.File(
-        "/var/log/Nomaos/app.log", rollingInterval: RollingInterval.Day)
+    .WriteTo.Console();
+var logFilePath = Environment.GetEnvironmentVariable("LOG_FILE_PATH");
+if (!string.IsNullOrEmpty(logFilePath))
+{
+    logConfig.WriteTo.File(logFilePath, rollingInterval: RollingInterval.Day);
+}
+Log.Logger = logConfig
     .WriteTo.AWSSeriLog(new AWSLoggerConfig
     {
         LogGroup = "/nomaos/staging/api",
@@ -51,23 +56,30 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Add Vault config only in Staging/Production
-if (!builder.Environment.IsDevelopment())
-{
-    var vaultAddr  = Environment.GetEnvironmentVariable("VAULT_ADDR");
-    var roleId     = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
-    var secretId   = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+// =====================
+// VAULT CONFIGURATION
+// =====================
+var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
 
-    builder.Configuration.AddVaultConfiguration(
+if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
+{
+    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
+    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
         () => new VaultOptions(
-            vaultAddress: vaultAddr,
-            authMethodInfo: new AppRoleAuthMethodInfo(roleId, secretId),
-            secretsEngine: SecretsEngine.KeyValueV2
+            vaultUrl,
+            new AppRoleAuthMethodInfo(roleId, secretId),
+            reloadOnChange: true,
+            reloadCheckIntervalSeconds: 60
         ),
-        "nomaos/staging/appsettings",
-        "kv"
+        "nomaos/staging/api", // Path in Vault: secret/nomaos/staging/api
+        "secret"              // Your KV engine name
     );
-}
+    
+    Log.Information("Vault configuration provider added.");
+}  
+
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
