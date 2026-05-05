@@ -74,7 +74,7 @@ if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.
             reloadCheckIntervalSeconds: 60
         ),
         "nomaos/staging/api", // Path in Vault: secret/nomaos/staging/api
-        "secret"              // Your KV engine name
+        "kv"              // Your KV engine name
     );
     
     Log.Information("Vault configuration provider added.");
