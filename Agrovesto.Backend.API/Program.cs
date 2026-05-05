@@ -2,8 +2,6 @@
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
-using Agrovesto.Backend.Infrastructure.DB;
-using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
@@ -15,7 +13,6 @@ using AWS.Logger.AspNetCore;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -30,7 +27,9 @@ using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json;
+using VaultSharp;
+using VaultSharp.V1.AuthMethods.AppRole;
+using VaultSharp.Extensions.Configuration;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -51,6 +50,24 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Host.UseSerilog();
+
+// Add Vault config only in Staging/Production
+if (!builder.Environment.IsDevelopment())
+{
+    var vaultAddr  = Environment.GetEnvironmentVariable("VAULT_ADDR");
+    var roleId     = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+    var secretId   = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+
+    builder.Configuration.AddVaultConfiguration(
+        () => new VaultOptions(
+            vaultAddress: vaultAddr,
+            authMethodInfo: new AppRoleAuthMethodInfo(roleId, secretId),
+            secretsEngine: SecretsEngine.KeyValueV2
+        ),
+        "nomaos/staging/appsettings",
+        "kv"
+    );
+}
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
