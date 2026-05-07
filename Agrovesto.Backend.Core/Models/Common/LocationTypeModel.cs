@@ -8,6 +8,44 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class EditOrganizationProductDto
+    {
+        public string? ProductName { get; set; }
+        public string? ProductCode { get; set; }
+        public string? BusinessCode { get; set; }
+        public long? ProductCategoryId { get; set; }
+        public string? Season { get; set; }
+        public string? UnitType { get; set; }
+        public double MinimumOrderQuantity { get; set; }
+        public double MaximumOrderQuantity { get; set; }
+        public string? Description { get; set; }
+    }
+    public class OrganizationProductDto
+    {
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        public long ProductCategoryId { get; set; }
+        public string ProductName { get; set; }
+        public string ProductCode { get; set; }
+        public string? Season { get; set; }
+        public string? UnitType { get; set; }
+        public string? BusinessCode { get; set; }
+        public bool IsActive { get; set; }
+         public DateTimeOffset CreatedOn { get; set; }
+        public string? ProductCategory { get; set; } // for response only
+        public double MinimumOrderQuantity { get; set; }
+        public double MaximumOrderQuantity { get; set; }
+        public string? Description { get; set; }
+
+    }
+    public class ProductCategoryDto
+    {
+        public long Id { get; set; }
+        public string CategoryName { get; set; }
+        public string? BusinessCode { get; set; }
+       
+    }
+
     public class LocationUtilizationDto
     {
         public long LocationId { get; set; }
@@ -452,7 +490,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long LocationId { get; set; }
 
-        public string? InventoryCode { get; set; }
+        public long ProductId { get; set; }
         public string? BatchNumber { get; set; }
 
         public string InventoryOwner { get; set; }
@@ -492,7 +530,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long Id { get; set; }
 
-        public string? InventoryCode { get; set; }
+        public string? ProductCode { get; set; }
         public string? BatchNumber { get; set; }
 
         public string InventoryOwner { get; set; }

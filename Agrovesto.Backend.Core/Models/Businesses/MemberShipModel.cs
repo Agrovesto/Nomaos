@@ -63,6 +63,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Tier { get; set; }
  }
 
+
+    public class MemberShipUpdateResultDto
+    {
+        public bool Success { get; set; }
+        public List<string> UpdatedFields { get; set; } = new List<string>();
+        public MemberShipModel UpdatedMembership { get; set; }
+        public string Message { get; set; }
+    }
     public class MemberShipModel
     {
         public bool IsLeaderAFarmer { get; set; }
@@ -75,6 +83,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string State { get; set; }
         public string Lga { get; set; }
         public string? Ward { get; set; }
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
         public string ContactPerson { get; set; }
         public string Email { get; set; }
         public string PhoneNumber { get; set; }

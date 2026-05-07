@@ -246,7 +246,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
            
         }
 
-        public async Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletWithdrawalAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.DisbursementApiKey);

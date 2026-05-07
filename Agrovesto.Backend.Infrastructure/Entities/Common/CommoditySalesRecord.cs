@@ -182,12 +182,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         Trader = 3
     }
 
-    public enum TransactionStatus
-    {
-        Pending = 1,
-        Verified = 2,
-        Disputed = 3
-    }
+
 
  
      public enum BuyerType

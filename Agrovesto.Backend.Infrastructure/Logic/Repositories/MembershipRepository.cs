@@ -483,8 +483,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         await _context.SaveChangesAsync();
                     }
                 }
-
                 var isModified = false;
+                if (!string.IsNullOrWhiteSpace(data.NIN) || !string.IsNullOrWhiteSpace(data.BVN))
+                {
+                  
+                    var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == entity.UserId);
+                    if (user != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(data.NIN) && data.NIN != user.NIN)
+                        {
+                            user.NIN = data.NIN;
+                            _context.Users.Update(user);
+                            isModified = true;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(data.BVN) && data.BVN != user.BVN)
+                        {
+                            user.BVN = data.BVN;
+                            _context.Users.Update(user);
+                            isModified = true;
+                        }
+                    }
+                }
+
+             
                 isModified = await AssignAgentToMembership(data, entity, isModified);
 
                 await _context.SaveChangesAsync();
