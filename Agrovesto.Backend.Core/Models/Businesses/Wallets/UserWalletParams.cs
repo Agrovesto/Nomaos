@@ -20,6 +20,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? Signature { get; set; }
         public DateTimeOffset? EventTime { get; set; }
     }
+    public class WithdrawWalletRequest
+    {
+        public long UserWalletId { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string WalletProviderCode { get; set; }
+
+        public string? Description { get; set; }
+
+        public string? RecipientAccount { get; set; }
+
+        public string? RecipientName { get; set; }
+
+        public string? TransactionPin { get; set; }
+    }
     public class ProviderResponse
     {
         public bool IsSuccess { get; set; }

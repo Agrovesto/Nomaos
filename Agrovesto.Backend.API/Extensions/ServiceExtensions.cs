@@ -143,6 +143,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IStorageCategoryRepository, StorageCategoryRepository>();
             services.AddScoped<ITemperatureControlType, TemperatureControlTypeRepository>();
             services.AddScoped<IModuleRepository, ModuleRepository>();
+            services.AddScoped<IInputFinancingManager, InputFinancingManager>();
+            services.AddScoped<IInputFinancingRepository, InputFinancingRepository>();
         }
     }
 }

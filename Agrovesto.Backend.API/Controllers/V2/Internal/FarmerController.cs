@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _walletService = walletService;
             _farmerTransactionManager=farmerTransactionManager;
         }
+
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
@@ -132,6 +133,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+      
         [HttpGet("membership-detail")]
         public async Task<IActionResult> GetMembershipDetail([FromQuery] ListQueryParams query)
         {
@@ -183,7 +185,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-
         [HttpGet("wallets")]
         public async Task<IActionResult> GetWallets([FromQuery] UserWalletParams query)
         {
@@ -223,7 +224,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
-
 
         [HttpPost("create-wallet")]
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
@@ -345,8 +345,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("wallet-topup")]
-        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, 
-            [FromQuery] WalletQueryParams args)
+        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, [FromQuery] WalletQueryParams args)
         {
             try
             {
@@ -380,7 +379,41 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+        [HttpPost("wallet-withdraw")]
+        public async Task<IActionResult> WithdrawWallet([FromBody] WithdrawWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.WithdrawWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
 
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+      
         [HttpGet("farms")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
@@ -597,6 +630,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+      
         [HttpGet("user-wallet-transaction")]
         public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
         {

@@ -322,6 +322,11 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .HasFilter("[IsPrimary] = 1")
     .IsUnique();
 
+            modelBuilder.Entity<InputPackageItem>()
+    .HasOne(x => x.OrganizationProduct)
+    .WithMany()
+    .HasForeignKey(x => x.OrganizationProductId)
+    .OnDelete(DeleteBehavior.NoAction);
             //modelBuilder.Entity<Farm>()
             //    .HasIndex(f => f.FarmPolygon)
             //    .HasDatabaseName("IX_Farm_Polygon")
@@ -434,7 +439,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
         public DbSet<InputTransaction> InputTransactions { get; set; }
         public DbSet<InputAllocation> InputAllocations { get; set; }
-        public DbSet<Input> Inputs { get; set; }
+        public DbSet<InputPackage> InputPackages { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<StorageCategory> StorageCategories { get; set; }
         public DbSet<TemperatureControlType> TemperatureControlTypes { get; set; }
@@ -442,6 +447,11 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<LocationModule> LocationModules { get; set; }
         public DbSet<LocationStorageCategory> LocationStorageCategories { get; set; }
         public DbSet<LocationInventory> LocationInventories { get; set; }
+        public DbSet<OrganizationProduct> OrganizationProducts { get; set; }
+        public DbSet<OrganizationProductCategory> OrganizationProductCategories { get; set; }
+        public DbSet<AdditionalInputPackageCost> AdditionalInputPackageCosts { get; set; }
+        public DbSet<EconomicsOfProduction> EconomicsOfProductions { get; set; }
+        public DbSet<EopCostItem> EopCostItems { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>
