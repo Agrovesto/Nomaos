@@ -9,6 +9,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -34,6 +35,8 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IStorageCategoryRepository _storageCategoryRepository;
         private readonly ITemperatureControlType _temperatureControlType;
         private readonly IModuleRepository _moduleRepository;
+
+        private readonly IOrganizationManager _organizationManager;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
         //    IGoogleDriveService googleDriveService,
             IIdentityVerificationManager verificationManager,
@@ -44,6 +47,8 @@ namespace Agrovesto.Backend.API.Controllers
              ISettingsManager settingsManager, IWalletProviderManager walletProvider, IBusinessManager businessManager,
                 IStorageCategoryRepository storageCategoryRepository,
             ITemperatureControlType temperatureControlType,
+
+            IOrganizationManager organizationManager,
             IModuleRepository moduleRepository)
         {
             _cafeOneWalletService = cafeOneWalletService;
@@ -60,7 +65,47 @@ namespace Agrovesto.Backend.API.Controllers
             _moduleRepository = moduleRepository;
             _storageCategoryRepository = storageCategoryRepository;
 
+            _organizationManager = organizationManager;
         }
+
+        [HttpGet("organization-product-categories")]
+        public async Task<IActionResult> OrganizationProductCategory([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _organizationManager.GetCategories(args);
+                return Ok(new Response<List<ProductCategoryDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
         [HttpGet("storage-categories")]
         public async Task<IActionResult> StorageCategories([FromQuery] ListQueryParams args)
         {

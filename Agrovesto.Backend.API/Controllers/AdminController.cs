@@ -17,6 +17,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Microsoft.AspNetCore.Authorization;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -36,6 +37,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IStorageCategoryRepository _storageCategoryRepository;
         private readonly ITemperatureControlType _temperatureControlType;
         private readonly IModuleRepository _moduleRepository;
+        private readonly IOrganizationManager _organizationManager;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
@@ -47,7 +49,8 @@ namespace Agrovesto.Backend.API.Controllers
             IAWSService aWSService,
             IStorageCategoryRepository storageCategoryRepository,
             ITemperatureControlType temperatureControlType,
-            IModuleRepository moduleRepository
+            IModuleRepository moduleRepository,
+            IOrganizationManager organizationManager
             ) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
@@ -61,10 +64,104 @@ namespace Agrovesto.Backend.API.Controllers
             _aWSService = aWSService;
             _temperatureControlType = temperatureControlType;
             _moduleRepository = moduleRepository;
+            _organizationManager = organizationManager;
         }
+        [HttpGet("organization-product-categories")]
+        public async Task<IActionResult> OrganizationProductCategory([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _organizationManager.GetCategories(args);
+                return Ok(new Response<List<ProductCategoryDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [AllowAnonymous]
+        [HttpPost("organization-product-category")]
+        public async Task<IActionResult> CreateProductCategoryAsync([FromBody] ProductCategoryDto model, 
+            [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                model.BusinessCode = args.businessCode;
+                await _organizationManager.CreateProductCategoryAsync(model, args);
+
+                return Ok(new Response<ProductCategoryDto>()
+                {
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = model
+                });
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
         [AllowAnonymous]
         [HttpPost("create-email-template")]
-        public async Task<IActionResult> LocationType()
+        public async Task<IActionResult> EmailTemplate()
         {
             
             try

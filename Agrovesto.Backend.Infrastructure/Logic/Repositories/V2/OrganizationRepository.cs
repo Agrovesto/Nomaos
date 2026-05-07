@@ -71,6 +71,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto dto);
         Task<LocationInventory> AddInventoryAsync(CreateInventoryDto dto);
         Task<LocationDashboardFullDto> GetFullDashboardAsync(long organizationId);
+        Task<ProductCategoryDto> GetCategoryById(long id);
+        Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query);
+        Task<OrganizationProductCategory> CreateCategory(ProductCategoryDto dto);
+        Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto dto);
+        Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query);
+        Task<OrganizationProductDto> GetorganizationProductById(long id);
+        Task<bool> EditProductAsync(long id, EditOrganizationProductDto request);
+        Task<bool> DeactivateProductAsync(long id);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -411,6 +419,257 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
         #endregion agentviews
+
+        #region OrganizationProduct
+        public async Task<OrganizationProductCategory> CreateCategory(ProductCategoryDto dto)
+        {
+            var exists = await _context.OrganizationProductCategories.AnyAsync(x =>
+                x.CategoryName == dto.CategoryName &&
+                x.BusinessCode == dto.BusinessCode);
+
+            if (exists)
+                throw new Exception("Product Category already exists.");
+
+
+            var cat = new OrganizationProductCategory
+            {
+                BusinessCode = dto.BusinessCode,
+
+                CategoryName = dto.CategoryName,
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now,
+            };
+
+            _context.OrganizationProductCategories.Add(cat);
+            await _context.SaveChangesAsync();
+
+            return cat;
+        }
+        public async Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query)
+        {
+            var baseQuery = _context.OrganizationProductCategories
+                .Where(x => x.BusinessCode == query.businessCode && x.IsActive)
+                .AsQueryable();
+
+           
+            var totalCount = await baseQuery.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ProductCategoryDto
+                {
+                    Id = x.Id,
+                    CategoryName = x.CategoryName,
+                    BusinessCode=x.BusinessCode
+                  
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<ProductCategoryDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<ProductCategoryDto> GetCategoryById(long id)
+        {
+            var cat = await _context.OrganizationProductCategories
+                           .Where(x => x.IsActive && x.Id == id)
+                          
+                           .FirstOrDefaultAsync();
+
+            if (cat == null)
+                throw new Exception("Product Category not found.");
+
+            return new ProductCategoryDto
+            {
+                Id = cat.Id,
+                CategoryName = cat.CategoryName,
+                BusinessCode = cat.BusinessCode
+            };
+        }
+
+        public async Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto dto)
+        {
+            var location = await _context.OrganizationProductCategories
+               .FirstOrDefaultAsync(x => x.Id == dto.ProductCategoryId && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Category not found.");
+
+            var exists = await _context.OrganizationProducts.AnyAsync(x =>
+                x.ProductName == dto.ProductName &&
+                x.ProductCode == dto.ProductCode
+                && x.OrganizationId == dto.OrganizationId
+                && x.Season == dto.Season
+                && x.OrganizationProductCategoryId == dto.ProductCategoryId
+                && x.BusinessCode == dto.BusinessCode);
+
+            if (exists)
+                throw new Exception("Product already exists.");
+
+            var prod = new OrganizationProduct
+            {
+                CreatedOn = DateTimeOffset.Now,
+                OrganizationId = dto.OrganizationId,
+                OrganizationProductCategoryId=dto.ProductCategoryId,
+                ProductName=dto.ProductName,
+                ProductCode=dto.ProductCode,
+                Season= dto.Season,
+                BusinessCode = dto.BusinessCode,
+                IsActive = true,
+                UnitType=dto.UnitType,
+                MaximumOrderQuantity=dto.MaximumOrderQuantity,
+                MinimumOrderQuantity=dto.MinimumOrderQuantity,
+                Description=dto.Description
+            };
+
+            _context.OrganizationProducts.Add(prod);
+            await _context.SaveChangesAsync();
+
+            return prod;
+        }
+        public async Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(
+        ListQueryParams query)
+        {
+            var baseQuery = _context.OrganizationProducts
+    .Where(li => li.OrganizationId == query.Id && li.IsActive);
+
+
+            var totalCount = await baseQuery.CountAsync();
+
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 50 : query.PageSize;
+
+            var data = await baseQuery
+     .OrderByDescending(li => li.CreatedOn)
+     .Skip((pageNumber - 1) * pageSize)
+     .Take(pageSize)
+     .Select(li => new OrganizationProductDto
+     {
+         Id = li.Id,
+         ProductCategory=li.OrganizationProductCategory.CategoryName,
+         ProductCode = li.ProductCode,
+         BusinessCode=li.BusinessCode,
+         CreatedOn=li.CreatedOn,
+         IsActive=li.IsActive,
+         ProductCategoryId=li.OrganizationProductCategoryId,
+         ProductName=li.ProductName,
+         Season=li.Season,
+         UnitType=li.UnitType,
+         Description=li.Description,
+         MaximumOrderQuantity=li.MaximumOrderQuantity,
+         MinimumOrderQuantity=li.MinimumOrderQuantity
+     })
+     .ToListAsync();
+
+            return new PagedListResponse<List<OrganizationProductDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<OrganizationProductDto> GetorganizationProductById(long id)
+        {
+            var product = await _context.OrganizationProducts
+                .Where(p => p.Id == id && p.IsActive)
+                .Select(p => new OrganizationProductDto
+                {
+                    Id = p.Id,
+                    ProductCategory = p.OrganizationProductCategory.CategoryName,
+                    ProductCode = p.ProductCode,
+                    BusinessCode = p.BusinessCode,
+                    CreatedOn = p.CreatedOn,
+                    IsActive = p.IsActive,
+                    ProductCategoryId = p.OrganizationProductCategoryId,
+                    ProductName = p.ProductName,
+                    Season = p.Season,
+                    UnitType = p.UnitType,
+                    Description=p.Description,
+                    MaximumOrderQuantity=p.MaximumOrderQuantity,
+                    MinimumOrderQuantity=p.MinimumOrderQuantity
+                })
+                .FirstOrDefaultAsync();
+
+            return product;
+        }
+
+        public async Task<bool> EditProductAsync(long id, EditOrganizationProductDto request)
+        {
+            var product = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
+
+            if (product == null)
+            {
+                throw new KeyNotFoundException("Product not found or has been deactivated.");
+            }
+
+
+            if (!string.IsNullOrWhiteSpace(request.ProductName))
+                product.ProductName = request.ProductName;
+
+            if (!string.IsNullOrWhiteSpace(request.ProductCode))
+                product.ProductCode = request.ProductCode;
+
+            if (!string.IsNullOrWhiteSpace(request.BusinessCode))
+                product.BusinessCode = request.BusinessCode;
+
+            if (request.ProductCategoryId.HasValue)
+                product.OrganizationProductCategoryId = request.ProductCategoryId.Value;
+
+            if (!string.IsNullOrWhiteSpace(request.Season))
+                product.Season = request.Season;
+
+            if (!string.IsNullOrWhiteSpace(request.UnitType))
+                product.UnitType = request.UnitType;
+            if(request.MinimumOrderQuantity > 0)
+            {
+                product.MinimumOrderQuantity = request.MinimumOrderQuantity;
+            }
+            if(request.MaximumOrderQuantity > 0)
+            {
+                product.MaximumOrderQuantity = request.MaximumOrderQuantity;
+            }
+            if (!string.IsNullOrEmpty(request.Description))
+                product.Description = request.Description;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> DeactivateProductAsync(long id)
+        {
+            var product = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null)
+            {
+                throw new KeyNotFoundException("Product not found.");
+            }
+
+            if (!product.IsActive)
+            {
+                return false;
+            }
+
+            product.IsActive = false;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        
+        #endregion OrganizationProduct
 
         public async Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args)
         {
@@ -2398,14 +2657,18 @@ SELECT
 
             if (location.StockLevel + dto.Quantity > location.Capacity)
                 throw new Exception("Exceeds location capacity.");
-            var inventoryCode = dto.InventoryCode ?? $"INV-{Guid.NewGuid().ToString().Substring(0, 8)}";
+            var productExist = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(x => x.Id == dto.ProductId && x.IsActive);
+            
+            if (productExist == null)
+                throw new Exception("Product not found.");
+
             var batchNumber = dto.BatchNumber ?? $"BATCH-{DateTime.UtcNow.Ticks}";
 
             var inventory = new LocationInventory
             {
                 LocationId = dto.LocationId,
-
-                InventoryCode = inventoryCode,
+                OrganizationProductId = dto.ProductId,
                 BatchNumber = batchNumber,
 
                 InventoryOwner = dto.InventoryOwner,
@@ -2465,39 +2728,23 @@ SELECT
             return inventory;
         }
         public async Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(
-    long locationId,
-    ListQueryParams query)
+      long locationId,
+      ListQueryParams query)
         {
             var baseQuery = _context.LocationInventories
-                .Where(x => x.LocationId == locationId && x.IsActive)
-                .AsQueryable();
-
-
-            //if (!string.IsNullOrWhiteSpace(query.Search))
-            //{
-            //    baseQuery = baseQuery.Where(x =>
-            //        x.InventoryCode.Contains(query.Search) ||
-            //        x.BatchNumber.Contains(query.Search));
-            //}
-
-            //if (!string.IsNullOrWhiteSpace(query.Owner))
-            //{
-            //    baseQuery = baseQuery.Where(x => x.InventoryOwner == query.Owner);
-            //}
-
-            //if (!string.IsNullOrWhiteSpace(query.QualityGrade))
-            //{
-            //    baseQuery = baseQuery.Where(x => x.QualityGrade == query.QualityGrade);
-            //}
+                .Where(li =>
+                    li.LocationId == locationId &&
+                    li.IsActive &&
+                    li.OrganizationProduct.IsActive);
 
             if (query.startDate.HasValue)
             {
-                baseQuery = baseQuery.Where(x => x.StorageDate >= query.startDate);
+                baseQuery = baseQuery.Where(li => li.StorageDate >= query.startDate.Value);
             }
 
             if (query.endDate.HasValue)
             {
-                baseQuery = baseQuery.Where(x => x.StorageDate <= query.endDate);
+                baseQuery = baseQuery.Where(li => li.StorageDate <= query.endDate.Value);
             }
 
             var totalCount = await baseQuery.CountAsync();
@@ -2506,23 +2753,20 @@ SELECT
             var pageSize = query.PageSize < 1 ? 50 : query.PageSize;
 
             var data = await baseQuery
-                .OrderByDescending(x => x.RecordedOn)
+                .OrderByDescending(li => li.RecordedOn)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new InventoryListDto
+                .Select(li => new InventoryListDto
                 {
-                    Id = x.Id,
-                    InventoryCode = x.InventoryCode,
-                    BatchNumber = x.BatchNumber,
-                    InventoryOwner = x.InventoryOwner,
-
-                    Quantity = x.Quantity,
-                    QuantityType = x.QuantityType,
-
-                    StorageDate = x.StorageDate,
-                    ExpiryDate = x.ExpiryDate,
-
-                    QualityGrade = x.QualityGrade
+                    Id = li.Id,
+                    ProductCode = li.OrganizationProduct.ProductCode,
+                    BatchNumber = li.BatchNumber,
+                    InventoryOwner = li.InventoryOwner,
+                    Quantity = li.Quantity,
+                    QuantityType = li.QuantityType,
+                    StorageDate = li.StorageDate,
+                    ExpiryDate = li.ExpiryDate,
+                    QualityGrade = li.QualityGrade
                 })
                 .ToListAsync();
 

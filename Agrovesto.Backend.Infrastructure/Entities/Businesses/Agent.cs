@@ -93,10 +93,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long LocationId { get; set; }
         public OrganizationLocation Location { get; set; }
         public DateTimeOffset RecordedOn { get; set; } = DateTimeOffset.Now;
-        public string? InventoryCode { get; set; } //can be auto generated or provided by user
+          public long OrganizationProductId { get; set; }
+        public OrganizationProduct OrganizationProduct { get; set; }
         public string? BatchNumber { get; set; } //can be auto generated or provided by user
         public string InventoryOwner { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
-
         public double Quantity { get; set; }
         public string? QuantityType { get; set; } = "Bag";
          public string? Description { get; set; }
@@ -202,5 +202,39 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? Description { get; set; }
 
         public DateTimeOffset CreatedOn { get; set; }
+    }
+
+    public class OrganizationProduct //input types, commodities etc that the organization deals with
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        public Organization Organization { get; set; }
+        public long OrganizationProductCategoryId { get; set; }
+        public OrganizationProductCategory OrganizationProductCategory { get; set; }
+        public string ProductName { get; set; }
+        public string ProductCode { get; set; }
+        public string? Season { get; set; }
+        public string BusinessCode { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+        public string? UnitType { get; set; } //kg, bag, litre etc
+        public double MinimumOrderQuantity { get; set; }
+        public double MaximumOrderQuantity { get; set; }
+        public string? Description { get; set; }
+
+    }
+
+    public class  OrganizationProductCategory
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public string CategoryName { get; set; }
+        public string BusinessCode { get; set; }
+        public bool IsActive { get; set; } = true;
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
+
     }
 }

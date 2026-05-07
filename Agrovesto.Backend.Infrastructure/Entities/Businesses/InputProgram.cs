@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using DocumentFormat.OpenXml.Bibliography;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
@@ -169,8 +170,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public ReceiptStatus Status { get; set; } = ReceiptStatus.Partial;// "Partial", "Full"
     }
 
-    public enum SubscriptionStatus { Pending, Approved, Rejected, Cancelled, Completed }
-    public enum InvoiceStatus { Pending, Approved, Collected, Cancelled }
+     public enum InvoiceStatus { Pending, Approved, Collected, Cancelled }
     public enum DistributionStatus { Pending, Distributed, Confirmed, Cancelled }
     public enum DistributionMode { Input, Cash }
     public enum RepaymentMode { Cash, Produce, Hybrid, None }
