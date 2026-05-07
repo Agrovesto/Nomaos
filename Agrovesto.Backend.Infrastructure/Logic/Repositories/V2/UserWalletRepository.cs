@@ -31,6 +31,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
         Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference);
         Task<string> InitiateWalletTopUp(long userWalletId, decimal amount, string? description = "Wallet Top-up");
+        Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal");
+        Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
+        Task ValidateTransactionPin(long walletId, string inputPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
@@ -541,6 +544,113 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
 
             return transactionReference;
+        }
+
+        public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal")
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than zero");
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == userWalletId && !x.IsDeleted);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            if (wallet.WalletBalance < amount)
+                throw new Exception("Insufficient balance");
+
+            var transactionReference = Guid.NewGuid().ToString();
+
+            var transaction = new UserWalletTransactions
+            {
+                UserWalletId = wallet.Id,
+                WalletTransactionType = WalletTransactionType.Debit,
+                TransactionAmount = amount,
+                CommissionFee = 0,
+                TransactionFee = 0,
+                Currency = wallet.Currency,
+                TransactionDescription = description,
+                TransactionDate = DateTimeOffset.UtcNow,
+                WalletTransactionStatus = WalletTransactionStatus.Pending,
+                TransactionReference = transactionReference,
+                BalanceBefore = wallet.WalletBalance,
+                BalanceAfter = wallet.WalletBalance, // unchanged until processed
+                ProviderStatus = "INITIATED"
+            };
+
+            _context.UserWalletTransactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return transactionReference;
+        }
+
+        public async Task CompleteWalletWithdrawal(
+            string transactionReference,
+            bool isSuccessful,
+            string? providerReference,
+            string? providerStatus)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var transaction = await _context.UserWalletTransactions
+                        .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+                    if (transaction == null)
+                        throw new Exception("Transaction not found");
+
+                    if (transaction.WalletTransactionStatus != WalletTransactionStatus.Pending)
+                        throw new Exception("Transaction already processed");
+
+                    var wallet = await _context.UserWallets
+                        .FirstOrDefaultAsync(x => x.Id == transaction.UserWalletId);
+
+                    if (wallet == null)
+                        throw new Exception("Wallet not found");
+
+                    transaction.ProviderReference = providerReference;
+                    transaction.ProviderStatus = providerStatus;
+
+                    if (!isSuccessful)
+                    {
+                        transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+                        return;
+                    }
+
+                    var balanceBefore = wallet.WalletBalance;
+                    var netAmount = transaction.TransactionAmount
+                                    + transaction.TransactionFee
+                                    + transaction.CommissionFee;
+
+                    if (wallet.WalletBalance < netAmount)
+                        throw new Exception("Insufficient balance");
+
+                    wallet.WalletBalance -= netAmount;
+
+                    transaction.BalanceBefore = balanceBefore;
+                    transaction.BalanceAfter = wallet.WalletBalance;
+                    transaction.WalletTransactionStatus = WalletTransactionStatus.Successful;
+
+                    _context.UserWallets.Update(wallet);
+                    _context.UserWalletTransactions.Update(transaction);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
 
         public async Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference)

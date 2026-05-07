@@ -97,6 +97,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto model, ListQueryParams query);
         Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(ListQueryParams query);
         Task<LocationDashboardFullDto> GetFullDashboardAsync(ListQueryParams query);
+        Task<OrganizationProductCategory> CreateProductCategoryAsync(ProductCategoryDto model, ListQueryParams query);
+        Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query);
+        Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto model, ListQueryParams query);
+        Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query);
+        Task<OrganizationProductDto> GetorganizationProductById(ListQueryParams query);
+        Task<bool> EditProductAsync(ListQueryParams query, EditOrganizationProductDto request);
+        Task<bool> DeactivateProductAsync(ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -960,6 +967,108 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
+        #region product
+        public async Task<OrganizationProductCategory> CreateProductCategoryAsync(ProductCategoryDto model, ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+                model.BusinessCode = business.BusinessCode;
+                var response = await _organizationRepository.CreateCategory(model);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+                return await _organizationRepository.GetCategories(query);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<ProductCategoryDto> GetCategoryById(long id)
+        {
+            try
+            {
+                return await _organizationRepository.GetCategoryById(id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+
+        #endregion product
+        #region organization product
+        public async Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto model, ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null)
+                    throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found");
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                model.BusinessCode = business.BusinessCode;
+
+                return await _organizationRepository.CreateOrganizationProduct(model);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public async Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            await FetchOrganizationDetails(query);
+            return await _organizationRepository.GetOrganizationProductList(query);
+        }
+
+        public async Task<OrganizationProductDto> GetorganizationProductById(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+
+            return await _organization_repository_compat_GetById(query.Id);
+        }
+
+        // small compatibility shim to call repository (keeps logic readable in one place)
+        private async Task<OrganizationProductDto> _organization_repository_compat_GetById(long id)
+        {
+            return await _organizationRepository.GetorganizationProductById(id);
+        }
+
+        public async Task<bool> EditProductAsync(ListQueryParams query, EditOrganizationProductDto request)
+        {
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+            return await _organizationRepository.EditProductAsync(query.Id, request);
+        }
+
+        public async Task<bool> DeactivateProductAsync(ListQueryParams query)
+        {
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+            return await _organizationRepository.DeactivateProductAsync(query.Id);
+        }
+        #endregion organization product
         #region location
         public async Task<LocationCreateResponse> CreateLocation(
         CreateLocationDto model,
