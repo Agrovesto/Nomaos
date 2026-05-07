@@ -21,24 +21,35 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AfricasTalking.NET" Version="1.2.4" />
-    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.400" />
-    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.400.107" />
-    <PackageReference Include="AWSSDK.S3" Version="3.7.415.12" />
-    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.2" />
-    <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.502" />
-    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.502" />
+    
+    <!-- AWS SDK: Unified to stable 3.7.x -->
+    <PackageReference Include="AWSSDK.Extensions.NETCore.Setup" Version="3.7.300" />
+    <PackageReference Include="AWSSDK.Rekognition" Version="3.7.401" />
+    <PackageReference Include="AWSSDK.S3" Version="3.7.405.11" />
+    <PackageReference Include="AWSSDK.SecretsManager" Version="3.7.400.47" />
+    <PackageReference Include="AWSSDK.SimpleEmail" Version="3.7.401" />
+    <PackageReference Include="AWSSDK.SimpleNotificationService" Version="3.7.400.47" />    
+
+    <!-- Document & Data Processing -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.1.0" />
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
-    <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
     <PackageReference Include="EPPlus" Version="8.0.6" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
     <PackageReference Include="iTextSharp" Version="5.5.13.4" />
-    <PackageReference Include="libphonenumber-csharp" Version="8.13.56" />
-    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity" Version="2.3.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.1" />
+    <PackageReference Include="libphonenumber-csharp" Version="8.13.12" />
+    <PackageReference Include="MimeKit" Version="4.15.1" />
+
+    <PackageReference Include="Microsoft.AspNetCore.Cryptography.KeyDerivation" Version="8.0.4" />
+
+    <!-- Database: EF Core 8.0.x -->
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.4" />
+    <PackageReference Include="EFCore.BulkExtensions" Version="8.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.4">
       <PrivateAssets>all</PrivateAssets>
@@ -50,17 +61,19 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Identity.Stores" Version="9.0.0" />
-<PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.0.1" />
-<PackageReference Include="MimeKit" Version="4.15.1" />
-     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.1" />
+
+    <!-- Caching & Search -->
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.1" />
+    <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="8.4.1" />
+
+    <!-- Geospatial -->
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="NetTopologySuite.IO.GeoJSON" Version="4.0.0" />
+    
+    <!-- Utilities -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SendGrid" Version="9.29.3" />
-    <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="10.0.0" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.9" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
   </ItemGroup>
 
   <ItemGroup>

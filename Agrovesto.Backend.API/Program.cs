@@ -2,17 +2,17 @@
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
-using Agrovesto.Backend.Infrastructure.DB;
-using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
+using AWS.Logger.SeriLog;
+using AWS.Logger;
+using AWS.Logger.AspNetCore;
 using Amazon.Rekognition;
 using Amazon.S3;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -22,14 +22,64 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
+using Agrovesto.Backend.Infrastructure.DB;
+using Serilog;
 using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json;
+using VaultSharp;
+using VaultSharp.V1.AuthMethods.AppRole;
+using VaultSharp.Extensions.Configuration;
 
 
 var builder = WebApplication.CreateBuilder(args);
+
+// =====================
+// SERILOG CONFIG
+// =====================
+var logConfig = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console();
+var logFilePath = Environment.GetEnvironmentVariable("LOG_FILE_PATH");
+if (!string.IsNullOrEmpty(logFilePath))
+{
+    logConfig.WriteTo.File(logFilePath, rollingInterval: RollingInterval.Day);
+}
+Log.Logger = logConfig
+    .WriteTo.AWSSeriLog(new AWSLoggerConfig
+    {
+        LogGroup = "/nomaos/staging/api",
+        Region = "eu-west-1",
+    })
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// =====================
+// VAULT CONFIGURATION
+// =====================
+var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+
+if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
+{
+    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
+    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+        () => new VaultOptions(
+            vaultUrl,
+            new AppRoleAuthMethodInfo(roleId, secretId),
+            reloadOnChange: true,
+            reloadCheckIntervalSeconds: 60
+        ),
+        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
+        "kv"              // Your KV engine name
+    );
+    
+    Log.Information("Vault configuration provider added.");
+}  
+
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
@@ -340,6 +390,14 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 //    await SeedData.EnsureSeededAsync(db);
 //}
 
+// =====================
+// SERVICES
+// =====================
+// builder.Services.AddControllers();
+
+// app.MapControllers();
+
+// app.Run();
 
 app.UseCors();
 app.UseRouting();
