@@ -14,9 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.1.2" />
-    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.1.2" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.1.2" />
     <PackageReference Include="VaultSharp" Version="1.17.5.1" />
     <PackageReference Include="VaultSharp.Extensions.Configuration" Version="1.1.5" />
   </ItemGroup>
@@ -46,7 +43,7 @@
     <PackageReference Include="AWSSDK.Rekognition" Version="3.7.401" />
 
     
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.1" />  
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />  
     
 
     <!-- Database -->
