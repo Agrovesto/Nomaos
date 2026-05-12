@@ -310,6 +310,7 @@ builder.Services.AddCors(options =>
         });
 });
 
+
 var app = builder.Build();
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
@@ -350,54 +351,6 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
     });
 }
 
-
-
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-//    db.Database.Migrate();
-//}
-
-//using (var scope = app.Services.CreateScope())
-//{
-//    var services = scope.ServiceProvider;
-//    var logger = services.GetRequiredService<ILogger<Program>>();
-
-//    try
-//    {
-//        //await DbInitializer.SeedRolesAndSuperAdminAsync(services);
-//        await DbInitializer.SeedWeight(services);
-//    }
-//    catch (Exception ex)
-//    {
-//        logger.LogError($"Database seeding encountered an error but will not stop application: {ex.Message}");
-//    }
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
-//    await importer.ImportLocationsFromJsonAsync();
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var importer = scope.ServiceProvider.GetRequiredService<IFarmerCategoryService>();
-//    await importer.ImportFarmerValuesFromJsonAsync();
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-//    db.Database.Migrate();
-//    await SeedData.EnsureSeededAsync(db);
-//}
-
-// =====================
-// SERVICES
-// =====================
-// builder.Services.AddControllers();
-
-// app.MapControllers();
-
-// app.Run();
 
 app.UseCors();
 app.UseRouting();

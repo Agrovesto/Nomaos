@@ -75,6 +75,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         // INVENTORY HEALTH
         public int ExpiringSoonCount { get; set; }
         public int ExpiredCount { get; set; }
+        public int TotalIncomingInventory { get; set; }
+        public int TotalOutgoingInventory { get; set; }
 
         // ALERTS
         public int OverCapacityLocations { get; set; }
@@ -215,7 +217,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public double Longitude { get; set; }
         public double Capacity { get; set; }
         public string? CapacityType { get; set; } = "Bag";
-
+        public string OwnerShip { get; set; }
         public long StateId { get; set; }
         public long LgaId { get; set; }
         public string? Address { get; set; }
@@ -396,7 +398,6 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long Id { get; set; }
         public string LocationName { get; set; }
-
         public long LocationTypeId { get; set; }
         public string LocationTypeName { get; set; }
 
@@ -511,6 +512,9 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class EditInventoryDto
     {
+        public string? Reason { get; set; }
+
+        public string UpdatedByUserId { get; set; }
         public long Id { get; set; }
 
         public double Quantity { get; set; }
@@ -525,6 +529,26 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public string? QualityGrade { get; set; }
         public string? BusinessCode { get; set; }
+    }
+    public class InventoryTransactionDto
+    {
+        public long Id { get; set; }
+
+        public string ProductName { get; set; }
+
+        public string TransactionType { get; set; }
+
+        public double Quantity { get; set; }
+
+        public double QuantityBefore { get; set; }
+
+        public double QuantityAfter { get; set; }
+
+        public string BatchNumber { get; set; }
+
+        public string Reason { get; set; }
+
+        public DateTimeOffset TransactionDate { get; set; }
     }
     public class InventoryListDto
     {
