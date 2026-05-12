@@ -512,7 +512,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("update-membership-profile")]
-        public async Task<IActionResult> CreateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> UpdateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)
