@@ -1361,6 +1361,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Inventory Id is required");
                 model.Id = query.Id;
+                model.UpdatedByUserId = query.UserId;
                 var response = await _organizationRepository.EditInventoryAsync(model);
 
                 return response;

@@ -1,14 +1,77 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Agrovesto.Backend.Infrastructure.Entities.Common;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
+    public class InventoryTransaction
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+
+        // Inventory affected
+        public long LocationInventoryId { get; set; }
+        public LocationInventory LocationInventory { get; set; }
+
+        // Product
+        public long OrganizationProductId { get; set; }
+        public OrganizationProduct OrganizationProduct { get; set; }
+
+        // Source and destination locations
+        public long? FromLocationId { get; set; }
+        public OrganizationLocation? FromLocation { get; set; }
+
+        public long? ToLocationId { get; set; }
+        public OrganizationLocation? ToLocation { get; set; }
+
+        // IN or OUT
+        public InventoryTransactionType TransactionType { get; set; }
+        // STOCK_IN
+        // STOCK_OUT
+        // TRANSFER
+        // ADJUSTMENT
+        // DAMAGE
+        // RETURN
+        // SALES
+
+        // Quantity moved
+        public double Quantity { get; set; }
+
+        public string QuantityType { get; set; } = "Bag";
+
+        // Before & after balances
+        public double QuantityBefore { get; set; }
+        public double QuantityAfter { get; set; }
+
+        // Batch tracking
+        public string? BatchNumber { get; set; }
+
+        // Why movement happened
+        public string? Reason { get; set; }
+
+        // Optional reference
+        public string? ReferenceNumber { get; set; }
+
+        // User auditing
+        public string PerformedByUserId { get; set; }
+
+        public DateTimeOffset TransactionDate { get; set; }
+            = DateTimeOffset.Now;
+
+        public string BusinessCode { get; set; }
+
+        // Optional status
+        public string Status { get; set; } = "Completed";
+        public long OrganizationId { get; set; }
+        public Organization Organization { get; set; }
+    }
     public class Agent
     {
         [Key]

@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
@@ -79,6 +80,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationProductDto> GetorganizationProductById(long id);
         Task<bool> EditProductAsync(long id, EditOrganizationProductDto request);
         Task<bool> DeactivateProductAsync(long id);
+        Task<List<InventoryTransactionDto>> GetInventoryTransactionsAsync(long inventoryId);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -1795,7 +1797,8 @@ SELECT
                 StateId = dto.StateId,
                 LgaId = dto.LgaId,
                 Address = dto.Address,
-
+                OwnershipType=dto.OwnerShip,
+                
                 DateOfCommissioning = dto.DateOfCommissioning,
 
                 HasTemperatureControl = dto.HasTemperatureControl,
@@ -1831,17 +1834,18 @@ SELECT
                 .Where(x => x.OrganizationId == organizationId && x.IsActive);
 
             // LOCATION COUNTS
-            var totalWarehouses = await locations.CountAsync(x => x.ParentLocationId == x.Id);
-            var totalSubWarehouses = await locations.CountAsync(x => x.ParentLocationId != x.Id);
-
+            var totalWarehouses = await locations
+      .CountAsync(x => x.ParentLocationId == null);
+            var totalSubWarehouses = await locations
+    .CountAsync(x => x.ParentLocationId != null);
             // CAPACITY
             var totalCapacity = await locations.SumAsync(x => (double?)x.Capacity) ?? 0;
             var totalStock = await locations.SumAsync(x => (double?)x.StockLevel) ?? 0;
 
             var occupancyRate = totalCapacity == 0 ? 0 : (totalStock / totalCapacity) * 100;
             var availableCapacity = totalCapacity - totalStock;
-
-            // AGENTS
+           
+                  // AGENTS
             var agents = _context.OrganizationAgents
                 .Where(x => x.OrganizationId == organizationId && x.LocationId != null);
 
@@ -1862,6 +1866,28 @@ SELECT
 
             // OVER CAPACITY
             var overCapacity = await locations.CountAsync(x => x.StockLevel > x.Capacity);
+
+            var transactions = _context.InventoryTransactions
+        .Where(x => x.OrganizationId == organizationId);
+
+            var totalIncomingInventory = await transactions
+    .Where(x =>
+        x.TransactionType == InventoryTransactionType.StockIn ||
+        x.TransactionType == InventoryTransactionType.TransferIn ||
+        x.TransactionType == InventoryTransactionType.AdjustmentIncrease ||
+        x.TransactionType == InventoryTransactionType.Returned)
+    .SumAsync(x => (double?)x.Quantity) ?? 0;
+
+            var totalOutgoingInventory = await transactions
+    .Where(x =>
+        x.TransactionType == InventoryTransactionType.StockOut ||
+        x.TransactionType == InventoryTransactionType.TransferOut ||
+        x.TransactionType == InventoryTransactionType.AdjustmentDecrease ||
+        x.TransactionType == InventoryTransactionType.Damaged ||
+        x.TransactionType == InventoryTransactionType.Expired ||
+        x.TransactionType == InventoryTransactionType.Sold ||
+        x.TransactionType == InventoryTransactionType.Consumed)
+    .SumAsync(x => (double?)x.Quantity) ?? 0;
 
             // TOP UTILIZED LOCATIONS
             var topLocations = await locations
@@ -1899,7 +1925,9 @@ SELECT
 
                 OverCapacityLocations = overCapacity,
 
-                TopUtilizedLocations = topLocations
+                TopUtilizedLocations = topLocations,
+                TotalIncomingInventory= (int)totalIncomingInventory,
+                TotalOutgoingInventory= (int)totalOutgoingInventory
             };
         }
 
@@ -2059,7 +2087,7 @@ SELECT
 
                     LocationTypeId = x.LocationTypeId,
                     LocationTypeName = x.LocationType.Type,
-
+                    
 
                     HasTemperatureControl = x.HasTemperatureControl,
                     TemperatureControlType = x.TemperatureControlType != null
@@ -2657,38 +2685,87 @@ SELECT
 
             if (location.StockLevel + dto.Quantity > location.Capacity)
                 throw new Exception("Exceeds location capacity.");
+
             var productExist = await _context.OrganizationProducts
                 .FirstOrDefaultAsync(x => x.Id == dto.ProductId && x.IsActive);
-            
+
             if (productExist == null)
                 throw new Exception("Product not found.");
 
             var batchNumber = dto.BatchNumber ?? $"BATCH-{DateTime.UtcNow.Ticks}";
 
-            var inventory = new LocationInventory
-            {
-                LocationId = dto.LocationId,
-                OrganizationProductId = dto.ProductId,
-                BatchNumber = batchNumber,
+            // Check if inventory already exists
+            var inventory = await _context.LocationInventories
+                .FirstOrDefaultAsync(x =>
+                    x.LocationId == dto.LocationId &&
+                    x.OrganizationProductId == dto.ProductId &&
+                    x.BatchNumber == batchNumber &&
+                    x.IsActive);
 
-                InventoryOwner = dto.InventoryOwner,
+            double quantityBefore = 0;
+
+            if (inventory == null)
+            {
+                inventory = new LocationInventory
+                {
+                    LocationId = dto.LocationId,
+                    OrganizationProductId = dto.ProductId,
+                    BatchNumber = batchNumber,
+                    InventoryOwner = dto.InventoryOwner,
+                    Quantity = dto.Quantity,
+                    QuantityType = dto.QuantityType,
+                    Description = dto.Description,
+                    StorageDate = dto.StorageDate,
+                    ExpiryDate = dto.ExpiryDate,
+                    QualityGrade = dto.QualityGrade,
+                    BusinessCode = dto.BusinessCode,
+                    RecordedOn = DateTimeOffset.UtcNow,
+                    RecordByUserId = dto.RecordedByUserId,
+                    IsActive = true
+                };
+
+                _context.LocationInventories.Add(inventory);
+            }
+            else
+            {
+                quantityBefore = inventory.Quantity;
+
+                inventory.Quantity += dto.Quantity;
+            }
+
+            var quantityAfter = quantityBefore + dto.Quantity;
+
+            // CREATE TRANSACTION HERE
+            var transaction = new InventoryTransaction
+            {
+                LocationInventory = inventory,
+                OrganizationProductId = dto.ProductId,
+
+                ToLocationId = dto.LocationId,
+
+                TransactionType = InventoryTransactionType.StockIn,
 
                 Quantity = dto.Quantity,
                 QuantityType = dto.QuantityType,
 
-                Description = dto.Description,
+                QuantityBefore = quantityBefore,
+                QuantityAfter = quantityAfter,
 
-                StorageDate = dto.StorageDate,
-                ExpiryDate = dto.ExpiryDate,
-                QualityGrade = dto.QualityGrade,
-                BusinessCode=dto.BusinessCode,
-                RecordedOn = DateTimeOffset.UtcNow,
-                RecordByUserId = dto.RecordedByUserId,
+                BatchNumber = batchNumber,
 
-                IsActive = true
+                Reason = "New stock added",
+
+                PerformedByUserId = dto.RecordedByUserId,
+
+                BusinessCode = dto.BusinessCode,
+
+                TransactionDate = DateTimeOffset.UtcNow
             };
+
+            _context.InventoryTransactions.Add(transaction);
+
+            // UPDATE LOCATION STOCK
             location.StockLevel += dto.Quantity;
-            _context.LocationInventories.Add(inventory);
 
             await _context.SaveChangesAsync();
 
@@ -2701,16 +2778,42 @@ SELECT
 
             if (inventory == null)
                 throw new Exception("Inventory not found.");
-            var location = await _context.OrganizationLocations
-     .FirstOrDefaultAsync(x => x.Id == inventory.LocationId);
 
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == inventory.LocationId && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            var quantityBefore = inventory.Quantity;
+
+            // difference between old and new quantity
             var diff = dto.Quantity - inventory.Quantity;
 
+            // validate capacity
             if (location.StockLevel + diff > location.Capacity)
                 throw new Exception("Exceeds location capacity.");
 
-            location.StockLevel += diff;
+            // update location stock
+            await UpdateLocationStockLevel(location.Id);
 
+            // determine transaction type
+            InventoryTransactionType transactionType;
+
+            if (diff > 0)
+            {
+                transactionType = InventoryTransactionType.AdjustmentIncrease;
+            }
+            else if (diff < 0)
+            {
+                transactionType = InventoryTransactionType.AdjustmentDecrease;
+            }
+            else
+            {
+                transactionType = InventoryTransactionType.Edit;
+            }
+
+            // update inventory
             inventory.Quantity = dto.Quantity;
             inventory.QuantityType = dto.QuantityType;
 
@@ -2723,9 +2826,53 @@ SELECT
 
             inventory.QualityGrade = dto.QualityGrade;
 
+            // CREATE TRANSACTION
+            var transaction = new InventoryTransaction
+            {
+                LocationInventoryId = inventory.Id,
+
+                OrganizationProductId = inventory.OrganizationProductId,
+
+                ToLocationId = inventory.LocationId,
+
+                TransactionType = transactionType,
+
+                Quantity = Math.Abs(diff),
+
+                QuantityType = inventory.QuantityType,
+
+                QuantityBefore = quantityBefore,
+
+                QuantityAfter = dto.Quantity,
+
+                BatchNumber = inventory.BatchNumber,
+
+                Reason = dto.Reason ?? "Inventory edited",
+
+                PerformedByUserId = dto.UpdatedByUserId,
+
+                BusinessCode = inventory.BusinessCode,
+
+                TransactionDate = DateTimeOffset.UtcNow
+            };
+
+            _context.InventoryTransactions.Add(transaction);
+
             await _context.SaveChangesAsync();
 
             return inventory;
+        }
+        private async Task UpdateLocationStockLevel(long locationId)
+        {
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (location == null)
+                return;
+
+            location.StockLevel = await _context.LocationInventories
+                .Where(x => x.LocationId == locationId && x.IsActive)
+                .SumAsync(x => x.Quantity);
         }
         public async Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(
       long locationId,
@@ -2777,6 +2924,26 @@ SELECT
                 PageNumber = pageNumber,
                 PageSize = pageSize
             };
+        }
+
+        public async Task<List<InventoryTransactionDto>>
+    GetInventoryTransactionsAsync(long inventoryId)
+        {
+            return await _context.InventoryTransactions
+                .Where(x => x.LocationInventoryId == inventoryId)
+                .OrderByDescending(x => x.TransactionDate)
+                .Select(x => new InventoryTransactionDto
+                {
+                    Id = x.Id,
+                    TransactionType =EnumExtensions.GetDisplayName(x.TransactionType),
+                    Quantity = x.Quantity,
+                    QuantityBefore = x.QuantityBefore,
+                    QuantityAfter = x.QuantityAfter,
+                    BatchNumber = x.BatchNumber,
+                    Reason = x.Reason,
+                    TransactionDate = x.TransactionDate
+                })
+                .ToListAsync();
         }
         #endregion Location
 
