@@ -1,53 +1,50 @@
 name: CI/CD Deploy Agrovesto.Backend.API
-
 on:
   push:
     branches:
       - staging
-
+      
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-
+          
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
-
+          
       - name: SSH and Deploy
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} << 'EOF'
-
           set -e
-
           echo "🚀 Starting deployment..."
-
           cd /var/www/Nomaos
-
           echo "📥 Pulling latest code..."
           git fetch origin
           git checkout staging
           git reset --hard origin/staging
-
           echo "📦 Restoring dependencies..."
-          dotnet restore
+          dotnet restore --force
           
           echo "🧹 Cleaning project..."
           dotnet clean
 
+          echo "🗑️ Wiping stale publish folder..."
+          rm -rf /var/www/Nomaos/publish/*
+
           echo "🏗️ Publishing application..."
-          dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore 2>&1 | tee /tmp/publish.log
+          dotnet publish -c Release -f net8.0 -o /var/www/Nomaos/publish 2>&1 | tee /tmp/publish.log
           PUBLISH_EXIT=${PIPESTATUS[0]}
           if [ $PUBLISH_EXIT -ne 0 ]; then
             echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
@@ -55,19 +52,13 @@ jobs:
             grep -i "error" /tmp/publish.log | grep -v "warning"
             exit $PUBLISH_EXIT
           fi
-
           echo "🔄 Restarting service..."
           sudo systemctl restart Agrovesto.Backend.API.service
-
           echo ">>> Waiting for service to settle..."
           sleep 2
-
           echo "📊 Checking service status..."
           sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
-
           echo "📜 Recent logs:"
           sudo journalctl -u Agrovesto.Backend.API.service -n 50 --no-pager || true
-
           echo "✅ Deployment successful!"
-
           EOF
