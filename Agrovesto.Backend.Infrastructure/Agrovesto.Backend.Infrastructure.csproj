@@ -43,7 +43,7 @@
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.68.0.3508" />
     <PackageReference Include="iTextSharp" Version="5.5.13.4" />
     <PackageReference Include="libphonenumber-csharp" Version="8.13.12" />
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="7.0.14" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.4" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="7.1.2" />
     <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="7.1.2" />
     <PackageReference Include="MimeKit" Version="4.15.1" />
