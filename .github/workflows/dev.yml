@@ -35,6 +35,7 @@ jobs:
           git checkout staging
           git reset --hard origin/staging
           echo "📦 Restoring dependencies..."
+          sudo systemctl stop Agrovesto.Backend.API.service
           dotnet restore --force
           
           echo "🧹 Cleaning project..."
