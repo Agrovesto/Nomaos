@@ -2759,7 +2759,8 @@ SELECT
 
                 BusinessCode = dto.BusinessCode,
 
-                TransactionDate = DateTimeOffset.UtcNow
+                TransactionDate = DateTimeOffset.UtcNow,
+                OrganizationId = location.OrganizationId
             };
 
             _context.InventoryTransactions.Add(transaction);
