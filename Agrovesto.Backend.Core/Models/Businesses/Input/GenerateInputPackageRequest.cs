@@ -31,7 +31,53 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public bool AutoApprove { get; set; } = false;
     }
 
+    public class EopResponseDto
+    {
+        public long Id { get; set; }
 
+        public string Name { get; set; }
+
+        public string Crop { get; set; }
+
+        public decimal LandSize { get; set; }
+
+        public string UnitOfMeasure { get; set; }
+
+        public decimal ExpectedYield { get; set; }
+
+        public decimal ExpectedMarketPrice { get; set; }
+
+        public decimal TotalCostOfProduction { get; set; }
+
+        public decimal ExpectedRevenue { get; set; }
+
+        public decimal ExpectedProfit { get; set; }
+
+        public string Season { get; set; }
+
+        public long OrganizationId { get; set; }
+
+        public bool IsActive { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; }
+
+        public List<EopCostItemResponseDto> CostItems { get; set; } = new();
+    }
+
+    public class EopCostItemResponseDto
+    {
+        public long Id { get; set; }
+
+        public string Name { get; set; }
+
+        public decimal Quantity { get; set; }
+
+        public decimal UnitCost { get; set; }
+
+        public decimal TotalCost { get; set; }
+
+        public long? OrganizationProductId { get; set; }
+    }
     public class CreateEopRequest
     {
         public string Name { get; set; }
@@ -60,13 +106,17 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class CreateInputPackageRequest
     {
+        public long PaybackWalletId { get; set; } // wallet type
+        public long UserWalletId { get; set; }
+        public  decimal TotalPackageValue { get; set; }
+        public decimal RepaymentValue { get; set; }
         public string Name { get; set; }
         public long OrganizationId { get; set; }
-        public long CategoryId { get; set; }
-
+        public long InputFinancingCategoryId { get; set; }
+        public InputSubScriptionType SubScriptionType { get; set; }
         public InputPackageStructure Structure { get; set; }
 
-        public List<CreateInputPackageItemRequest> Items { get; set; }
+        public List<CreateInputPackageItemRequest> InputPackageItems { get; set; }
 
         public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; }
 

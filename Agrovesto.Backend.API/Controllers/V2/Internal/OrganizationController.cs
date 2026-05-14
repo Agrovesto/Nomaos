@@ -2,14 +2,17 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -31,14 +34,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
         private readonly IMembershipManager _membershipManager;
 
+        private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
             IBusinessManager businessManager,
+             INomaOSWalletService walletService,
              IOrganizationManager organizationManager,
              IInputFinancingManager inputFinancingManager,
              IMembershipManager membershipManager,
              IOnBoardingManager onboardingManager, IFarmMappingManager farmMappingManager) : base(httpContextAccessor)
         {
+            _walletService = walletService;
             _farmMappingManager = farmMappingManager;
             _organizationManager = organizationManager;
             _inputFinancingManager = inputFinancingManager;
@@ -47,6 +53,211 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _membershipManager = membershipManager;
             _context = (Agrovesto.Backend.Infrastructure.DB.DataContext)httpContextAccessor.HttpContext.RequestServices.GetService(typeof(Agrovesto.Backend.Infrastructure.DB.DataContext));
         }
+
+        #region OrganizationWallet
+        [HttpPost("create-wallet")]
+        public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            (bool flowControl, IActionResult value) = ParameterValidator(request, query);
+            if (!flowControl)
+            {
+                return value;
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
+                var wallet = await _walletService.CreateWallet(request, query);
+
+                return Ok(new Response<(bool status, string message)>()
+                {
+                    Data = wallet,
+
+
+                    Message = wallet.message,
+                    Succeeded = wallet.status,
+
+                    Code = wallet.status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("wallets")]
+        public async Task<IActionResult> GetWallets([FromQuery] UserWalletParams query)
+        {
+            try
+            {
+
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _walletService.GetUserWallletsByUserId(query);
+                return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count > 0 ? "Successful" : "Failed",
+                    Succeeded = true,
+                    Count = result.Count,
+                    //PageNumber = query.PageNumber,
+                    //PageSize = 10,
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpPost("wallet-topup")]
+        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.TopUpWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("wallet-withdraw")]
+        public async Task<IActionResult> WithdrawWallet([FromBody] WithdrawWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.WithdrawWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        private (bool flowControl, IActionResult value) ParameterValidator(CreateWalletRequest request, WalletQueryParams query)
+        {
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(query.env))
+                return (flowControl: false, value: BadRequest("Environment is required"));
+
+            if (string.IsNullOrWhiteSpace(request.WalletProviderCode))
+                return (flowControl: false, value: BadRequest("WalletProviderCode is required"));
+
+            if (string.IsNullOrWhiteSpace(query.businessCode))
+                return (flowControl: false, value: BadRequest("BusinessCode is required"));
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return (flowControl: false, value: BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = new Dictionary<string, string>
+                    {
+                            { "UserId", "UserId is required" }
+                    }
+
+                }));
+            }
+
+            return (flowControl: true, value: null);
+        }
+
+        #endregion OrganizationWallet
 
 
         #region InputFinancing
@@ -63,7 +274,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
 
                 var result = await _inputFinancingManager.CreateEopAsync(model,args);
-                return Ok(new Response<EconomicsOfProduction> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+                return Ok(new Response<EopResponseDto> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
             }
             catch (BaseException ex)
             {
@@ -86,8 +297,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.organizationCode = args.organizationCode ?? OrganizationCode;
                 if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
 
+                args.UserId = string.IsNullOrEmpty(args.UserId) ? CurrentUserId : args.UserId;
                 var result = await _inputFinancingManager.CreateManualInputPackageAsync(model, args);
-                return Ok(new Response<InputPackage> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
             }
             catch (BaseException ex)
             {
@@ -111,7 +323,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
 
                 var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
-                return Ok(new Response<InputPackage> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
             }
             catch (BaseException ex)
             {

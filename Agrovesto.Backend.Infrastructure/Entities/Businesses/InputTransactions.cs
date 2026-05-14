@@ -29,7 +29,9 @@ RepaymentTransaction
         public string Name { get; set; } // e.g. Crop, Livestock, Equipment, Mixed
         public string Description { get; set; }
         public bool IsActive { get; set; } = true;
-       // public ICollection<Input> Inputs { get; set; }
+        public string BusinessCode { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        // public ICollection<Input> Inputs { get; set; }
     }
   
     public class InputPackageItem
@@ -70,7 +72,7 @@ RepaymentTransaction
         public InputPackageRepaymentMode RepaymentMode { get; set; } // Low, Medium, High
        
         public int RepaymentPeriodInMonths { get; set; } //how long does the farmer have to repay, in months
-        public long UserWalletId { get; set; } // if package structure is monetary, this is the wallet the money will be disbursed to
+        public long? UserWalletId { get; set; } // if package structure is monetary, this is the wallet the money will be disbursed to
         public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
         public decimal RepaymentValue { get; set; } // amount farmer has to repay, if repayment mode is cash or hybrid, this is the cash amount, if repayment mode is produce, this is the value of the produce to be repaid
         public string? Season { get; set; } // e.g. "Wet Season 2024"
@@ -95,6 +97,7 @@ RepaymentTransaction
         public bool IsGeneratedFromEop { get; set; } =false;
         public bool IsEditable { get; set; } = true;
         public DateTimeOffset? PublishedOn { get; set; }
+ 
     }
   public class AdditionalInputPackageCost
     {
