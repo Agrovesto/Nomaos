@@ -31,13 +31,32 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
         private const float SimilarityThreshold = 70F;
         private readonly ILogger<AWSRekgnitionManager> _log;
         private readonly string _bucketName;
-        public AWSRekgnitionManager(IConfiguration configuration, ILogger<AWSRekgnitionManager> log, IFarmerRepository farmerRepository)
+
+
+        public AWSRekgnitionManager(
+    IConfiguration configuration,
+    ILogger<AWSRekgnitionManager> log,
+    IFarmerRepository farmerRepository)
         {
             _log = log;
+
+            Console.WriteLine("========== AWS CONFIG DEBUG ==========");
+
+            foreach (var item in configuration.AsEnumerable())
+            {
+                if (item.Key.StartsWith("AWS"))
+                {
+                    Console.WriteLine($"{item.Key} = {item.Value}");
+                }
+            }
+
             _bucketName = configuration["AWS:BucketName"];
+
             var awsAccessKey = configuration["AWS:AccessKey"];
             var awsSecretKey = configuration["AWS:SecretKey"];
-            var region = configuration["AWS:Region"]; // Ensure this is set in appsettings.json
+            var region = configuration["AWS:Region"];
+
+            Console.WriteLine($"Region = {region}");
 
             if (string.IsNullOrEmpty(region))
             {
@@ -45,13 +64,40 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition
             }
 
             var credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
-            _rekognitionClient = new AmazonRekognitionClient(credentials, RegionEndpoint.GetBySystemName(region));
 
-            _s3Client = new AmazonS3Client(credentials, RegionEndpoint.GetBySystemName(region));
+            _rekognitionClient = new AmazonRekognitionClient(
+                credentials,
+                RegionEndpoint.GetBySystemName(region));
+
+            _s3Client = new AmazonS3Client(
+                credentials,
+                RegionEndpoint.GetBySystemName(region));
 
             _configuration = configuration;
             _farmerRepository = farmerRepository;
         }
+        //public AWSRekgnitionManager(IConfiguration configuration, ILogger<AWSRekgnitionManager> log, IFarmerRepository farmerRepository)
+        //{
+        //    _log = log;
+        //    _bucketName = configuration["AWS:BucketName"];
+        //    var awsAccessKey = configuration["AWS:AccessKey"];
+        //    var awsSecretKey = configuration["AWS:SecretKey"];
+        //    var region = configuration["AWS:Region"]; // Ensure this is set in appsettings.json
+
+        //    if (string.IsNullOrEmpty(region))
+        //    {
+        //        throw new AmazonClientException("AWS Region is not configured properly.");
+        //    }
+
+        //    var credentials = new BasicAWSCredentials(awsAccessKey, awsSecretKey);
+        //    _rekognitionClient = new AmazonRekognitionClient(credentials, RegionEndpoint.GetBySystemName(region));
+
+        //    _s3Client = new AmazonS3Client(credentials, RegionEndpoint.GetBySystemName(region));
+
+        //    _configuration = configuration;
+        //    _farmerRepository = farmerRepository;
+        //}
+
         public async Task<(byte[] FileBytes, string ContentType, string FileName)> GetFileAsync(string fileKey)
         {
             if (string.IsNullOrEmpty(fileKey))

@@ -476,7 +476,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class ReassignPrimaryAgentDto
     {
         public long LocationId { get; set; }
-        public string NewPrimaryUserId { get; set; }
+        public string NewPrimaryAgentUserId { get; set; }
         public string? PerformedByUserId { get; set; }
     }
 

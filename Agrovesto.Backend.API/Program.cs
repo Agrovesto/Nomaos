@@ -35,6 +35,8 @@ using VaultSharp.Extensions.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+
 // =====================
 // SERILOG CONFIG
 // =====================
@@ -60,8 +62,13 @@ builder.Host.UseSerilog();
 // VAULT CONFIGURATION
 // =====================
 var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+
+//var vaultUrl = "https://dev-vault.agrovesto.com"; //local
+
 var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+//var roleId = "69d8526c-0bf6-56c8-40cd-8e8b37c213b4"; //local
 var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+//var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
 if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
 {
@@ -78,9 +85,12 @@ if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.
     );
     
     Log.Information("Vault configuration provider added.");
-}  
+}
 
-
+foreach (var item in builder.Configuration.AsEnumerable())
+{
+    Console.WriteLine($"Vault {item.Key} = {item.Value}");
+}
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
 //await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
@@ -129,9 +139,13 @@ builder.Services.AddDbContext<DataContext>(options =>
     )
 );
 
-builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+//builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+builder.Services.Configure<IdentitypassOptions>(
+    builder.Configuration.GetSection("IdentityPass"));
 
-builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+//builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+builder.Services.Configure<AesOptions>(
+    builder.Configuration.GetSection("AesOptions"));
 
 builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 builder.Services.AddHostedService<BulkUploadBgService>();
@@ -210,6 +224,7 @@ builder.Services.AddHealthChecks()
     .AddCheck<SendGridHealthCheck>("SendGrid API", tags: new[] { "external" })
     .AddS3(options =>
     {
+
         options.BucketName = builder.Configuration["AWS:BucketName"];
         options.AccessKey = builder.Configuration["AWS:AccessKey"];
         options.SecretKey = builder.Configuration["AWS:SecretKey"];
@@ -294,7 +309,11 @@ builder.Logging.AddConsole();
 
 builder.Services.AddHealthChecks();
 
-var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+//var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+var corsOrigins = builder.Configuration
+    .GetValue<string>("CorsOrigins")?
+    .Split(",") ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(

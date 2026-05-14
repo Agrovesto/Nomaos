@@ -453,6 +453,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<AdditionalInputPackageCost> AdditionalInputPackageCosts { get; set; }
         public DbSet<EconomicsOfProduction> EconomicsOfProductions { get; set; }
         public DbSet<EopCostItem> EopCostItems { get; set; }
+        public DbSet<InputFinancingCategory> InputFinancingCategories { get; set; }
+        public DbSet<InputPackageItem> InputPackageItems { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

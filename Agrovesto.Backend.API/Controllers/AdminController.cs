@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly ITemperatureControlType _temperatureControlType;
         private readonly IModuleRepository _moduleRepository;
         private readonly IOrganizationManager _organizationManager;
+        private readonly IInputFinancingRepository _inputFinancingRepository;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
@@ -50,7 +51,8 @@ namespace Agrovesto.Backend.API.Controllers
             IStorageCategoryRepository storageCategoryRepository,
             ITemperatureControlType temperatureControlType,
             IModuleRepository moduleRepository,
-            IOrganizationManager organizationManager
+            IOrganizationManager organizationManager,
+            IInputFinancingRepository inputFinancingRepository
             ) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
@@ -65,7 +67,105 @@ namespace Agrovesto.Backend.API.Controllers
             _temperatureControlType = temperatureControlType;
             _moduleRepository = moduleRepository;
             _organizationManager = organizationManager;
+            _inputFinancingRepository = inputFinancingRepository;
         }
+        [HttpGet("inputfinancing-categories")]
+        public async Task<IActionResult> GetInputFinancingCategory([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _inputFinancingRepository.GetInputFinancingCategories(args);
+                return Ok(new Response<List<ProductCategoryDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [AllowAnonymous]
+        [HttpPost("inputfinancing-category")]
+        public async Task<IActionResult> CreateInputFinancingCategory([FromBody] ProductCategoryDto model,
+
+        [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                model.BusinessCode = args.businessCode;
+                await _inputFinancingRepository.CreateInputFinancingCategory(model);
+
+                return Ok(new Response<ProductCategoryDto>()
+                {
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = model
+                });
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+
+
+
         [HttpGet("organization-product-categories")]
         public async Task<IActionResult> OrganizationProductCategory([FromQuery] ListQueryParams args)
         {
@@ -106,8 +206,9 @@ namespace Agrovesto.Backend.API.Controllers
 
         [AllowAnonymous]
         [HttpPost("organization-product-category")]
-        public async Task<IActionResult> CreateProductCategoryAsync([FromBody] ProductCategoryDto model, 
-            [FromQuery] ListQueryParams args)
+        public async Task<IActionResult> CreateProductCategoryAsync([FromBody] ProductCategoryDto model,
+
+        [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -163,15 +264,15 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-email-template")]
         public async Task<IActionResult> EmailTemplate()
         {
-            
+
             try
             {
 
-               await _aWSService.CreateTemplateAsync();
+                await _aWSService.CreateTemplateAsync();
 
                 return Ok(new Response<bool>()
                 {
-                    Code =Core.CoreUtils.Constants.ResponseCodes.Success,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
 
 
                     Succeeded = true,
@@ -229,7 +330,7 @@ namespace Agrovesto.Backend.API.Controllers
 
                 return Ok(new Response<StorageCategory>()
                 {
-                    Code =  Core.CoreUtils.Constants.ResponseCodes.Success ,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success,
 
 
                     Succeeded = true,
@@ -437,7 +538,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         [AllowAnonymous]
         [HttpPost("create-membership-type")]
-        public async Task<IActionResult> MemberShipType([FromBody]MemberShipTypeModel model,[FromQuery] BusinessRegistrationArgs args)
+        public async Task<IActionResult> MemberShipType([FromBody] MemberShipTypeModel model, [FromQuery] BusinessRegistrationArgs args)
         {
             var isAdmin = CurrentUserRole;
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -460,19 +561,19 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
-                var type = await _settingsManager.CreateUpdateMemberShipType(model,args);
+                var type = await _settingsManager.CreateUpdateMemberShipType(model, args);
 
-                    return Ok(new Response<(bool status, MemberShipTypeModel data)>()
-                    {
-                        Code = (type.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+                return Ok(new Response<(bool status, MemberShipTypeModel data)>()
+                {
+                    Code = (type.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
 
-                        Succeeded = true,
-                        Message = "Successful",
-                        Data = type
-                    });
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
 
-               
+
 
             }
             catch (BaseException ex)
@@ -502,7 +603,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 var isAdmin = CurrentUserRole;
-                 if (isAdmin == null  || !isAdmin.Equals("Business")) throw new Exception("Forbidden");
+                if (isAdmin == null || !isAdmin.Equals("Business")) throw new Exception("Forbidden");
 
                 var result = await _reportManager.GetCoreBusinessMetrics();
                 return Ok(new Response<AdminBusinessEntitiesMetrics>()
@@ -534,7 +635,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        
+
         #endregion FarmerActivities
 
         [HttpPost("input-subscription-settlement")]
@@ -667,7 +768,7 @@ namespace Agrovesto.Backend.API.Controllers
         public async Task<IActionResult> CreateAgrovestoUser([FromBody] UserModel model, [FromQuery] string roleName)
         {
             var isAdmin = CurrentUserRole;
-            if (isAdmin == null || !isAdmin.Equals("Super Admin")) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden"); 
+            if (isAdmin == null || !isAdmin.Equals("Super Admin")) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden");
 
 
             if (!ModelState.IsValid)
@@ -941,11 +1042,11 @@ namespace Agrovesto.Backend.API.Controllers
                 var result = await _walletProvider.UpdateProviderParameter(model);
 
 
-            return Ok(new Response<WalletProviderModel>()
-            {
-                Succeeded = true,
-                Data = result
-            });
+                return Ok(new Response<WalletProviderModel>()
+                {
+                    Succeeded = true,
+                    Data = result
+                });
             }
             catch (BaseException ex)
             {

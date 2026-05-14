@@ -1844,6 +1844,13 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1857,7 +1864,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InputFinancingCategory");
+                    b.ToTable("InputFinancingCategories");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputFinancingConfiguration", b =>
@@ -2100,7 +2107,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("UpdatedOn")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<long>("UserWalletId")
+                    b.Property<long?>("UserWalletId")
                         .HasColumnType("bigint");
 
                     b.Property<int>("Version")
@@ -2157,7 +2164,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationProductId");
 
-                    b.ToTable("InputPackageItem");
+                    b.ToTable("InputPackageItems");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputSubscription", b =>
@@ -5693,9 +5700,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", "UserWallet")
                         .WithMany()
-                        .HasForeignKey("UserWalletId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("UserWalletId");
 
                     b.Navigation("EconomicsOfProduction");
 
