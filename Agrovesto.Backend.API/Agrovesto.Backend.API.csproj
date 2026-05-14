@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
     <PackageReference Include="VaultSharp" Version="1.17.5.1" />
     <PackageReference Include="VaultSharp.Extensions.Configuration" Version="1.1.5" />
   </ItemGroup>
