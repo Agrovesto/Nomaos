@@ -38,6 +38,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
         Task UpdateWalletBalance(UserWallet wallet);
+        Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -46,6 +47,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
 
+        }
+        public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
+        {
+
+            var query = _context.UserWallets
+                .Where(uw =>
+                    uw.UserId == args.UserId &&
+                    uw.WalletProviderId == args.Id &&
+                    uw.BelongToBusinessCode == args.businessCode &&
+                    !uw.IsDeleted);
+
+
+
+            var wallet = await query
+                .Select(uw => new UserWalletDetailResponseModel
+                {
+                    Id = uw.Id,
+                    UserId = uw.UserId,
+                    WalletProviderId = uw.WalletProviderId,
+                    ProviderName = uw.WalletProvider.Name,
+                    WalletNumber = uw.WalletNumber,
+                    WalletBalance = uw.WalletBalance,
+                    Currency = uw.Currency,
+                    IsActive = uw.IsActive,
+                    BelongToBusinessCode = uw.BelongToBusinessCode,
+
+                    Contexts = uw.WalletContexts
+                        .Select(c => new UserWalletContextModel
+                        {
+                            ContextType = c.ContextType.ToString(),
+                            ContextReferenceId = c.ContextReferenceId,
+                            IsDefault = c.IsDefault
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            return wallet;
         }
 
         public async Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args)

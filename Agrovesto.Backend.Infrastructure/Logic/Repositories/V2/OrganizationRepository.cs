@@ -423,6 +423,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         #endregion agentviews
 
         #region OrganizationProduct
+
+       
         public async Task<OrganizationProductCategory> CreateCategory(ProductCategoryDto dto)
         {
             var exists = await _context.OrganizationProductCategories.AnyAsync(x =>
@@ -2499,7 +2501,7 @@ SELECT
                     throw new Exception("Location not found.");
 
                 var agent = await _context.Agents
-                    .FirstOrDefaultAsync(x => x.UserId == dto.NewPrimaryUserId);
+                    .FirstOrDefaultAsync(x => x.UserId == dto.NewPrimaryAgentUserId);
 
                 if (agent == null)
                     throw new Exception("Agent not found.");

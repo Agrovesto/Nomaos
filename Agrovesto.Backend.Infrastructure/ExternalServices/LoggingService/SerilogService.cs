@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Services;
+using Microsoft.Extensions.Options;
 using Serilog;
 using Serilog.Context;
 using Serilog.Core;
@@ -15,12 +16,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
     {
         private readonly Logger _log;
 
-        public SerilogService(SerilogServiceOptions options)
+        public SerilogService(IOptions<SerilogServiceOptions> options)
         {
-            var elasticUrls = (options.ElasticUrls ?? "").Split(',').Select(s => new Uri(s));
+            var elasticUrls = (options.Value.ElasticUrls ?? "").Split(',').Select(s => new Uri(s));
             var elasticOptions = new ElasticsearchSinkOptions(elasticUrls)
             {
-                IndexFormat = options.ElasticIndex
+                IndexFormat = options.Value.ElasticIndex
             };
 
             LogContext.PushProperty("App", "AgrovestoBackend");
@@ -31,7 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
                 //.WriteTo.File();
              .WriteTo.Elasticsearch(elasticOptions); //TODO: rewrite to file
 
-            if (options.LogToFile)
+            if (options.Value.LogToFile)
             {
                 logConfig = logConfig.WriteTo.File(@"logs/log-{Date}.txt", rollingInterval: RollingInterval.Day);
             }

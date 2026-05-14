@@ -1600,7 +1600,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 LocationId = model.LocationId!.Value,
                 OnboardedById = args.OnboardedById,
                 OrganizationId = model.OrganizationId,
-                UserId = args.UserId
+                UserId = args.UserId,
+                IsPrimary= args.IsPrimary,
+                RoleId= model.RoleId.HasValue ? model.RoleId.Value : 0,
             };
 
             await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);

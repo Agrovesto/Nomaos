@@ -7,15 +7,16 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Security.Cryptography;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Microsoft.Extensions.Options;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices
 {
     public class EncryptionService : IEncryptionService
     {
         private readonly AesOptions _aesOptions;
-        public EncryptionService(AesOptions aesOptions)
+        public EncryptionService(IOptions<AesOptions> aesOptions)
         {
-            _aesOptions = aesOptions;
+            _aesOptions = aesOptions.Value;
         }
 
         public string DecryptAes(string encrypttextbase64)

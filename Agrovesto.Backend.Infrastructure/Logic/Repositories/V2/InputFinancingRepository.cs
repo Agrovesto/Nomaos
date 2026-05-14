@@ -1,4 +1,7 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
@@ -13,11 +16,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
     public interface IInputFinancingRepository
     {
-        Task<EconomicsOfProduction> CreateEopAsync(CreateEopRequest request);
-        Task<InputPackage> CreateManualInputPackageAsync(CreateInputPackageRequest request);
-        Task<InputPackage> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
+        Task<EopResponseDto> CreateEopAsync(CreateEopRequest request);
+        Task<bool> CreateInputFinancingCategory(ProductCategoryDto dto);
+        Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request);
+        Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
         Task<EopDto> GetEopByIdAsync(long id);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request);
+        Task<PagedListResponse<List<ProductCategoryDto>>> GetInputFinancingCategories(ListQueryParams query);
+        Task<ProductCategoryDto> GetInputFinancingCategoryById(long id);
         Task<InputPackageDto> GetPackageByIdAsync(long id);
         Task<PagedResult<InputPackageDto>> GetPackagesAsync(InputPackageFilterRequest request);
     }
@@ -29,7 +35,85 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
         }
-        public async Task<EconomicsOfProduction> CreateEopAsync(CreateEopRequest request)
+
+        public async Task<bool> CreateInputFinancingCategory(ProductCategoryDto dto)
+        {
+            var exists = await _context.InputFinancingCategories.AnyAsync(x =>
+                x.Name == dto.CategoryName &&
+                x.BusinessCode == dto.BusinessCode);
+
+            if (exists)
+                throw new Exception("Product Category already exists.");
+
+
+            var cat = new InputFinancingCategory
+            {
+                BusinessCode = dto.BusinessCode,
+
+                Name = dto.CategoryName,
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now,
+            };
+
+            _context.InputFinancingCategories.Add(cat);
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<PagedListResponse<List<ProductCategoryDto>>> GetInputFinancingCategories(ListQueryParams query)
+        {
+            var baseQuery = _context.InputFinancingCategories
+                .Where(x => x.BusinessCode == query.businessCode && x.IsActive)
+                .AsQueryable();
+
+
+            var totalCount = await baseQuery.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ProductCategoryDto
+                {
+                    Id = x.Id,
+                    CategoryName = x.Name,
+                    BusinessCode = x.BusinessCode
+
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<ProductCategoryDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<ProductCategoryDto> GetInputFinancingCategoryById(long id)
+        {
+            var cat = await _context.InputFinancingCategories
+                           .Where(x => x.IsActive && x.Id == id)
+
+                           .FirstOrDefaultAsync();
+
+            if (cat == null)
+                throw new Exception("Product Category not found.");
+
+            return new ProductCategoryDto
+            {
+                Id = cat.Id,
+                CategoryName = cat.Name,
+                BusinessCode = cat.BusinessCode
+            };
+        }
+
+
+
+        public async Task<EopResponseDto> CreateEopAsync(CreateEopRequest request)
         {
             if (request.CostItems == null || !request.CostItems.Any())
                 throw new Exception("EOP must have at least one cost item");
@@ -63,15 +147,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context.EconomicsOfProductions.Add(eop);
             await _context.SaveChangesAsync();
 
-            return eop;
+            return new EopResponseDto
+            {
+                Id = eop.Id,
+                Name = eop.Name,
+                Crop = eop.Crop,
+                TotalCostOfProduction = eop.TotalCostOfProduction,
+
+                CostItems = eop.CostItems.Select(c => new EopCostItemResponseDto
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    Quantity = c.Quantity,
+                    UnitCost = c.UnitCost,
+                    TotalCost = c.TotalCost
+                }).ToList()
+            };
         }
-        public async Task<InputPackage> CreateManualInputPackageAsync(CreateInputPackageRequest request)
+        public async Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request)
         {
             if (request.Structure == InputPackageStructure.Physical &&
-                (request.Items == null || !request.Items.Any()))
+                (request.InputPackageItems == null || !request.InputPackageItems.Any()))
                 throw new Exception("Physical package must have items");
 
-            var items = request.Items?.Select(x => new InputPackageItem
+            var items = request.InputPackageItems?.Select(x => new InputPackageItem
             {
                 OrganizationProductId = x.OrganizationProductId,
                 Quantity = x.Quantity,
@@ -106,20 +205,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 Name = request.Name,
                 OrganizationId = request.OrganizationId,
-                InputFinancingCategoryId = request.CategoryId,
+                InputFinancingCategoryId = request.InputFinancingCategoryId,
+                SubScriptionType= request.SubScriptionType,
                 PackageStructure = request.Structure,
 
                 InputPackageItems = items,
-                AdditionalCosts = additionalCosts,
-
-                TotalPackageValue = totalValue,
-                RepaymentValue = repaymentValue,
-
+               
                 CommitmentRequired = request.CommitmentRequired,
                 CommitmentType = request.CommitmentType,
-                CommitmentValue = commitment,
+                CommitmentValue =request.CommitmentValue > 0 ? request.CommitmentValue : commitment,
+
+                TotalPackageValue = request.TotalPackageValue > 0 ? request.TotalPackageValue : totalValue, // if totalvalue is supplied, TotalPackageValue = dto.TotalPackageValue, else calculate from items and additional costs
+                UserWalletId = request.UserWalletId,
+
+                AdditionalCosts = additionalCosts,                
+          
 
                 RepaymentMode = request.RepaymentMode,
+                RepaymentValue = request.RepaymentValue > 0 ? request.RepaymentValue : repaymentValue,
                 RepaymentPeriodInMonths = request.RepaymentPeriodInMonths,
 
                 InterestRatePercentage = request.InterestRate,
@@ -136,9 +239,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context.InputPackages.Add(package);
             await _context.SaveChangesAsync();
 
-            return package;
+            return true;
         }
-        public async Task<InputPackage> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
+        public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
         {
             var eop = await _context.EconomicsOfProductions
                 .Include(x => x.CostItems)
@@ -243,7 +346,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context.InputPackages.Add(package);
             await _context.SaveChangesAsync();
 
-            return package;
+            return true;
         }
 
         public async Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request)

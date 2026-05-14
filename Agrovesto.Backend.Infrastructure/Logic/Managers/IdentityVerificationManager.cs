@@ -11,6 +11,7 @@ using Agrovesto.Backend.Core.Interfaces.Services;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Exceptions;
+using Microsoft.Extensions.Options;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
@@ -20,10 +21,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IHttpService _httpService;
         private readonly IdentitypassOptions _idPassOption;
         private readonly IEncryptionService _encryptionService;
-        public IdentityVerificationManager(IHttpService httpService, IdentitypassOptions idPassOption, IEncryptionService encryptionService)
+        public IdentityVerificationManager(IHttpService httpService,
+            IOptions<IdentitypassOptions> idPassOption, IEncryptionService encryptionService)
         {
             _httpService = httpService;
-            _idPassOption = idPassOption;
+            _idPassOption = idPassOption.Value;
             _encryptionService = encryptionService;
         }
     
