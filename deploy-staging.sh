@@ -50,16 +50,20 @@ fi
 echo "🔄 Restarting service..."
 sudo systemctl restart Agrovesto.Backend.API.service
 echo ">>> Waiting for service to start..."
+SERVICE_ACTIVE=0
 for i in {1..30}; do
     if sudo systemctl is-active --quiet Agrovesto.Backend.API.service; then
         echo "✅ Service is active"
+        SERVICE_ACTIVE=1
         break
     fi
     sleep 1
 done
 
-echo "📊 Checking service status..."
-if ! sudo systemctl is-active --quiet Agrovesto.Backend.API.service; then
+if [ $SERVICE_ACTIVE -eq 0 ]; then
+    echo "❌ Service did not become active after 30s"
+    echo "📊 Checking service status for debugging..."
+    sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
     echo "❌ Service failed to start! Rolling back..."
     git reset --hard HEAD@{1}
     dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
