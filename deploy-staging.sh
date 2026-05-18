@@ -40,24 +40,38 @@ PUBLISH_EXIT=${PIPESTATUS[0]}
 
 if [ $PUBLISH_EXIT -ne 0 ]; then
   echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
-  echo "--- Error summary ---"
 
-  grep -i "error" /tmp/publish.log | grep -v "warning" || true
-
-  echo "=== LAST 200 LINES OF PUBLISH LOG ==="
-  tail -200 /tmp/publish.log || true
+  echo "=== FULL PUBLISH LOG ==="
+  cat /tmp/publish.log || true
 
   exit $PUBLISH_EXIT
 fi
 
 echo "🔄 Restarting service..."
 sudo systemctl restart Agrovesto.Backend.API.service
+echo ">>> Waiting for service to start..."
+SERVICE_ACTIVE=0
+for i in {1..30}; do
+    if sudo systemctl is-active --quiet Agrovesto.Backend.API.service; then
+        echo "✅ Service is active"
+        SERVICE_ACTIVE=1
+        break
+    fi
+    sleep 1
+done
 
-echo "⏳ Waiting for service to settle..."
-sleep 5
+if [ $SERVICE_ACTIVE -eq 0 ]; then
+    echo "❌ Service did not become active after 30s"
+    echo "📊 Checking service status for debugging..."
+    sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
+    echo "❌ Service failed to start! Rolling back..."
+    git reset --hard HEAD@{1}
+    dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
+    sudo systemctl restart Agrovesto.Backend.API.service
+    exit 1
+fi
 
-echo "📊 Checking service status..."
-sudo systemctl status Agrovesto.Backend.API.service --no-pager -l || true
+sudo systemctl status Agrovesto.Backend.API.service --no-pager
 
 echo "📜 Recent logs..."
 sudo journalctl \
@@ -66,7 +80,7 @@ sudo journalctl \
   --no-pager \
   -o cat || true
 
-echo "=== LAST 200 LINES OF PUBLISH LOG ==="
-tail -200 /tmp/publish.log || true
+echo "=== FULL PUBLISH LOG ==="
+cat /tmp/publish.log || true
 
 echo "✅ Deployment successful!"
