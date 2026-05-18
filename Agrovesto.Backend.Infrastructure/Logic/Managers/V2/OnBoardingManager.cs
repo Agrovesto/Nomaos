@@ -1059,13 +1059,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     await _onboardingRepository.TrackUserRoleAssignment(
                         createUser.model.Id,
                         args.userType);
-
-                    if(env == Env.Live.ToString())
+                    createUser.model.Env = env;
+                    if (env == Env.Live.ToString())
                     {
                         if (createUser.model.HasDefaultPassword)
                         {
                             await SendDefaultCredentialChange(createUser.model);
                         }
+                     
                         await GenerateAndSendOtp(createUser.model);
                     }
                     else
@@ -1226,6 +1227,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     $"Your verification code is {otp.Code}. It expires in 5 minutes.",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes."
                     );
+                
                 //await _sMSService.SendEmailAsync(
                 //    destination,
                 //    "Confirm your account",
@@ -1237,6 +1239,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         otp.Destination,
                         $"Your verification code is {otp.Code}. Expires in 5 minutes.");
             }
+            await _awsService.SendEmailAsync(
+                  senderEmail,
+                  "agrovesto@gmail.com",
+                  $"New Registration Alert on NomaOS {model.Env} environment",
+                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details.",
+                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details."
+                  );
         }
 
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
@@ -1384,6 +1393,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.NOTFOUND,
                     "User not found.");
             }
+            user.model.Env = args.Env;
             if (args.Env == Env.Live.ToString())
             {
                 await GenerateAndSendOtp(user.model.ToEntity());
