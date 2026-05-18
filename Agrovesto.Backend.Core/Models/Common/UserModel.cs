@@ -149,6 +149,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Pin { get; set; }
         public string? Password { get; set; }
         public string? Email { get; set; }
+        public string? Env { get; set; }
         //public UserType UserType { get; set; }
         public string UserType { get; set; }
         public string? OTP { get; set; }

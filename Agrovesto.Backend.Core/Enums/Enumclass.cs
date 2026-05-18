@@ -46,6 +46,9 @@ namespace Agrovesto.Backend.Core.Enums
         Consumed,
 
         [Display(Name = "Inventory Edit")]
-        Edit
+        Edit,
+
+        [Display(Name = "Inventory Deleted")]
+        Delete
     }
 }
