@@ -71,7 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
         Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args);
         Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
-        Task<PagedListResponse<List<LocationResponseDto>>> GetLocationAsync(ListQueryParams query);
+        Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationAsync(ListQueryParams query);
         Task<LocationResponseDto> GetLocationById(ListQueryParams query);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query);
@@ -104,6 +104,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationProductDto> GetorganizationProductById(ListQueryParams query);
         Task<bool> EditProductAsync(ListQueryParams query, EditOrganizationProductDto request);
         Task<bool> DeactivateProductAsync(ListQueryParams query);
+        Task<(bool Success, string Message)> AssignAgentToLocation(LocationAgentAssignment model, ListQueryParams query);
+        Task DeleteInventory(DeleteLocationDto model, ListQueryParams query);
+        Task SyncLocationStockLevels(ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -1074,60 +1077,73 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         CreateLocationDto model,
         ListQueryParams query)
         {
-            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-            if (business == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+      ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
 
-            var locationType = await _businessRepository.GetLocationByIAsync(model.LocationTypeId);
-            if (locationType == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Invalid location type");
+            var locationType = await _businessRepository.GetLocationByIAsync(model.LocationTypeId)
+          ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Invalid location type");
 
             var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-            if (organization != null)
-                model.OrganizationId = organization.OrganizaionId;
-
+            model.OrganizationId = organization?.OrganizaionId;
             model.BusinessCode = business.BusinessCode;
             model.CreatedByUserId = query.UserId;
 
             var location = await _organizationRepository.CreateLocationAsync(model);
 
-            var agentResult = await TryAssignAgentsSafe(location.Id, model, query);
+            //var agentResult = await TryAssignAgentsSafe(location.Id, model, query);
 
-            return new LocationCreateResponse
-            {
-                Location = location.ViewMap(),
-                AgentAssigned = agentResult.Success,
-                AgentWarning = agentResult.Message
-            };
+            return location.CreateViewMap();
+               // AgentAssigned = agentResult.Success,
+                //AgentWarning = agentResult.Message
+          
         }
+        public async Task<(bool Success, string Message)> AssignAgentToLocation(
+        LocationAgentAssignment model,
+        ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+      ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
+
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            model.OrganizationId = organization?.OrganizaionId;
+
+            var assignAgent = await TryAssignAgentsSafe(query.Id, model, query);
+
+            return assignAgent;
+               // AgentAssigned = agentResult.Success,
+                //AgentWarning = agentResult.Message
+          
+        }
+
         private async Task<(bool Success, string Message)> TryAssignAgentsSafe(
         long locationId,
-        CreateLocationDto model,
+        LocationAgentAssignment model,
         ListQueryParams query)
         {
             try
             {
                 bool assignedAny = false;
 
-                if (!string.IsNullOrWhiteSpace(model.MainAgentUserId))
+
+                if (!string.IsNullOrWhiteSpace(model.AgentUserId))
                 {
-                    var mainAgent = await _agentRepository.GetAgentDetailByUserId(model.MainAgentUserId);
+                    var mainAgent = await _agentRepository.GetAgentDetailByUserId(model.AgentUserId);
                     if (mainAgent != null)
                     {
-                        await AssignAgent(locationId, model.OrganizationId.Value, model.MainAgentUserId, query.UserId, true);
+                        await AssignAgent(locationId, model.OrganizationId.Value, model.AgentUserId, query.UserId, model.IsPrimary);
                         assignedAny = true;
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(model.SupportinAgentUserId))
-                {
-                    var supportAgent = await _agentRepository.GetAgentDetailByUserId(model.SupportinAgentUserId);
-                    if (supportAgent != null)
-                    {
-                        await AssignAgent(locationId, model.OrganizationId.Value, model.SupportinAgentUserId, query.UserId, false);
-                        assignedAny = true;
-                    }
-                }
+                //if (!string.IsNullOrWhiteSpace(model.SupportinAgentUserId))
+                //{
+                //    var supportAgent = await _agentRepository.GetAgentDetailByUserId(model.SupportinAgentUserId);
+                //    if (supportAgent != null)
+                //    {
+                //        await AssignAgent(locationId, model.OrganizationId.Value, model.SupportinAgentUserId, query.UserId, false);
+                //        assignedAny = true;
+                //    }
+                //}
 
                 return assignedAny
                     ? (true, "Agent(s) assigned successfully.")
@@ -1138,6 +1154,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return (false, $"Location created but agent assignment failed: {ex.Message}");
             }
         }
+
+
         private async Task AssignAgent(
             long locationId,
             long organizationId,
@@ -1193,7 +1211,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw;
             }
         }
-        public async Task<PagedListResponse<List<LocationResponseDto>>> GetLocationAsync(ListQueryParams query)
+        public async Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationAsync(ListQueryParams query)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
@@ -1216,6 +1234,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
             await FetchOrganizationDetails(query);
             return await _organizationRepository.GetFullDashboardAsync(query.Id);
+
+        }
+        public async Task SyncLocationStockLevels(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            await FetchOrganizationDetails(query);
+             await _organizationRepository.SyncLocationStockLevels();
 
         }
         public async Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto)
@@ -1365,6 +1391,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var response = await _organizationRepository.EditInventoryAsync(model);
 
                 return response;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task DeleteInventory(DeleteLocationDto model, ListQueryParams query)
+        {
+            try
+            {
+                if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Inventory Id is required");
+                model.Id = query.Id;
+                model.UserId = query.UserId;
+                 await _organizationRepository.DeleteInventory(model);
+
             }
             catch (Exception ex)
             {

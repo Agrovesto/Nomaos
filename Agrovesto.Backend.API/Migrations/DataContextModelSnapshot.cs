@@ -2474,6 +2474,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DeletedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedOn")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
@@ -2481,7 +2490,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("InventoryOwner")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("IsActive")
@@ -3380,7 +3388,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("LocationStatus")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<long>("LocationTypeId")
@@ -3408,6 +3415,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long?>("TemperatureControlTypeId")
                         .HasColumnType("bigint");
 
+                    b.Property<long?>("WardId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("LgaId");
@@ -3421,6 +3431,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("StateId");
 
                     b.HasIndex("TemperatureControlTypeId");
+
+                    b.HasIndex("WardId");
 
                     b.ToTable("OrganizationLocations");
                 });
@@ -6056,6 +6068,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasForeignKey("TemperatureControlTypeId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Ward", "Ward")
+                        .WithMany()
+                        .HasForeignKey("WardId");
+
                     b.Navigation("LGA");
 
                     b.Navigation("LocationType");
@@ -6067,6 +6083,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("State");
 
                     b.Navigation("TemperatureControlType");
+
+                    b.Navigation("Ward");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationMembership", b =>

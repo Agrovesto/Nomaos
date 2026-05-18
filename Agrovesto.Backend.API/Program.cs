@@ -61,67 +61,61 @@ builder.Host.UseSerilog();
 // =====================
 // VAULT CONFIGURATION
 // =====================
-var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
 
 //var vaultUrl = "https://dev-vault.agrovesto.com"; //local
 
-var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
 //var roleId = "69d8526c-0bf6-56c8-40cd-8e8b37c213b4"; //local
-var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
 //var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
-if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
-{
-    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
-    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
-        () => new VaultOptions(
-            vaultUrl,
-            new AppRoleAuthMethodInfo(roleId, secretId),
-            reloadOnChange: true,
-            reloadCheckIntervalSeconds: 60
-        ),
-        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
-        "kv"              // Your KV engine name
-    );
-    
-    Log.Information("Vault configuration provider added.");
-}
 
-foreach (var item in builder.Configuration.AsEnumerable())
-{
-    Console.WriteLine($"Vault {item.Key} = {item.Value}");
-}
-// Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
-// Prefer awaiting the async implementation to avoid blocking threads
-//await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
+// ONLY LOAD VAULT OUTSIDE DEVELOPMENT
+//if (!builder.Environment.IsDevelopment())
+//{
+    var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+    var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+    var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
 
-// Add services to the container.
-//builder.Services.AddDbContext<DataContext>(options =>
-
-//              options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
-//                  b => b.MigrationsAssembly("Agrovesto.Backend.API"))
-
-//              );
-
-//builder.Services.AddDbContext<DataContext>(options =>
-//    options.UseSqlServer(
-//        builder.Configuration.GetConnectionString("DefaultConnection"),
-//        sqlOptions =>
-//        {
-//            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-//            sqlOptions.EnableRetryOnFailure(
-//                maxRetryCount: 5,
-//                maxRetryDelay: TimeSpan.FromSeconds(10),
-//                errorNumbersToAdd: null);
-//            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-//        },
-//        c=>c.UseNetTopologySuite())
+    if (!string.IsNullOrEmpty(roleId) &&
+        !string.IsNullOrEmpty(secretId) &&
+        !string.IsNullOrEmpty(vaultUrl))
+    {
+        ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+            () => new VaultOptions(
+                vaultUrl,
+                new AppRoleAuthMethodInfo(roleId, secretId),
+                reloadOnChange: true,
+                reloadCheckIntervalSeconds: 60
+            ),
+            "nomaos/staging/appsettings",
+            "kv"
+        );
+    }
+//}
+//if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
+//{
+//    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
+//    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+//        () => new VaultOptions(
+//            vaultUrl,
+//            new AppRoleAuthMethodInfo(roleId, secretId),
+//            reloadOnChange: true,
+//            reloadCheckIntervalSeconds: 60
+//        ),
+//        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
+//        "kv"              // Your KV engine name
 //    );
+
+//    Log.Information("Vault configuration provider added.");
+//}
+
+// Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
+
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration["Redis:ConnectionString"];
 });
+
 
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(

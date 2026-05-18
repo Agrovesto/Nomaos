@@ -159,7 +159,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
           public long OrganizationProductId { get; set; }
         public OrganizationProduct OrganizationProduct { get; set; }
         public string? BatchNumber { get; set; } //can be auto generated or provided by user
-        public string InventoryOwner { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
+        public string? InventoryOwner { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
         public double Quantity { get; set; }
         public string? QuantityType { get; set; } = "Bag";
          public string? Description { get; set; }
@@ -169,6 +169,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool IsActive { get; set; } = true;
         public string RecordByUserId { get; set; }
         public string BusinessCode { get; set; }
+        public string? DeletedByUserId { get; set; }
+        public DateTimeOffset? DeletedOn { get; set; }
+        public string? DeleteReason { get; set; }
     }
     public class OrganizationLocation
     {
@@ -190,6 +193,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public States State { get; set; }
         public long LgaId   { get; set; }
         public LGA LGA { get; set; }
+
+        public long? WardId { get; set; }
+        public Ward Ward { get; set; }
         public string? Address { get; set; }
         public bool IsActive { get; set; }
         public string BusinessCode { get; set; }
@@ -201,7 +207,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public OrganizationLocation? ParentLocation { get; set; }
         public ICollection<OrganizationLocation> SubLocations { get; set; } = new List<OrganizationLocation>();
         public DateTime? DateOfCommissioning { get; set; }
-        public string LocationStatus { get; set; } = "Active";//Active, Inactive, under construction, suspended
+        public string? LocationStatus { get; set; } //= "Active";//Active, Inactive, under construction, suspended
         public bool HasTemperatureControl { get; set; }
         public long? TemperatureControlTypeId { get; set; }
         public TemperatureControlType? TemperatureControlType { get; set; }
