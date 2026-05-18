@@ -23,24 +23,32 @@ namespace Agrovesto.Backend.Infrastructure.DB
     {
         public DataContext CreateDbContext(string[] args)
         {
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.Development.json")
+                .AddJsonFile("appsettings.json", optional: false)
+                .AddJsonFile($"appsettings.{environment}.json", optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
             optionsBuilder.UseSqlServer(
-              config.GetConnectionString("DefaultConnection"),
-        sqlOptions =>
-        {
-            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(300);
-            sqlOptions.UseNetTopologySuite();
-        });
+            config.GetConnectionString("DefaultConnection"),
+            sqlOptions =>
+            {
+                sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+
+                sqlOptions.UseNetTopologySuite();
+
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorNumbersToAdd: null);
+
+                sqlOptions.CommandTimeout(300);
+            });
+
 
             return new DataContext(optionsBuilder.Options);
         }

@@ -181,6 +181,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
+        public string? Env { get; set; }
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
         public string? ActivityName { get; set; }
