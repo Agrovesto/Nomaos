@@ -2072,10 +2072,18 @@ SELECT
         }
         public async Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationsAsync(ListQueryParams query)
         {
+            //var baseQuery = _context.OrganizationLocations
+            //    .Where(x => x.OrganizationId == query.Id && x.IsActive)
+            //    .AsQueryable();
             var baseQuery = _context.OrganizationLocations
-                .Where(x => x.OrganizationId == query.Id && x.IsActive)
-                .AsQueryable();
-
+    .Where(x =>
+        x.OrganizationId == query.Id &&
+        x.IsActive &&
+        (
+            x.ParentLocationId == null ||
+            x.ParentLocationId == x.Id
+        ))
+    .AsQueryable();
             if (!string.IsNullOrWhiteSpace(query.Location))
             {
                 baseQuery = baseQuery.Where(x => x.LocationName.Contains(query.Location));
@@ -2615,70 +2623,74 @@ SELECT
         }
         public async Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            try
+            return await strategy.ExecuteAsync(async () =>
             {
-                var locationExists = await _context.OrganizationLocations
-                    .AnyAsync(x => x.Id == dto.LocationId && x.IsActive);
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                if (!locationExists)
-                    throw new Exception("Location not found.");
-
-                var agent = await _context.Agents
-                    .FirstOrDefaultAsync(x => x.UserId == dto.NewPrimaryAgentUserId);
-
-                if (agent == null)
-                    throw new Exception("Agent not found.");
-
-                var assignments = await _context.OrganizationAgents
-                    .Where(x => x.LocationId == dto.LocationId && x.IsActive)
-                    .ToListAsync();
-
-                var currentPrimary = assignments
-                    .FirstOrDefault(x => x.IsPrimary);
-
-                var newAgentAssignment = assignments
-                    .FirstOrDefault(x => x.AgentId == agent.Id);
-
-                if (newAgentAssignment == null)
+                try
                 {
-                    newAgentAssignment = new OrganizationAgent
+                    var locationExists = await _context.OrganizationLocations
+                        .AnyAsync(x => x.Id == dto.LocationId && x.IsActive);
+
+                    if (!locationExists)
+                        throw new Exception("Location not found.");
+
+                    var agent = await _context.Agents
+                        .FirstOrDefaultAsync(x => x.UserId == dto.NewPrimaryAgentUserId);
+
+                    if (agent == null)
+                        throw new Exception("Agent not found.");
+
+                    var assignments = await _context.OrganizationAgents
+                        .Where(x => x.LocationId == dto.LocationId && x.IsActive)
+                        .ToListAsync();
+
+                    var currentPrimary = assignments
+                        .FirstOrDefault(x => x.IsPrimary);
+
+                    var newAgentAssignment = assignments
+                        .FirstOrDefault(x => x.AgentId == agent.Id);
+
+                    if (newAgentAssignment == null)
                     {
-                        AgentId = agent.Id,
-                        LocationId = dto.LocationId,
-                        OrganizationId = assignments.First().OrganizationId, 
-                        AssignedByUserId = dto.PerformedByUserId,
-                        AssignedOn = DateTimeOffset.UtcNow,
-                        IsActive = true,
-                        IsPrimary = true
-                    };
+                        newAgentAssignment = new OrganizationAgent
+                        {
+                            AgentId = agent.Id,
+                            LocationId = dto.LocationId,
+                            OrganizationId = assignments.First().OrganizationId,
+                            AssignedByUserId = dto.PerformedByUserId,
+                            AssignedOn = DateTimeOffset.UtcNow,
+                            IsActive = true,
+                            IsPrimary = true
+                        };
 
-                    await _context.OrganizationAgents.AddAsync(newAgentAssignment);
+                        await _context.OrganizationAgents.AddAsync(newAgentAssignment);
+                    }
+                    else
+                    {
+                        newAgentAssignment.IsPrimary = true;
+                        newAgentAssignment.AssignedOn = DateTimeOffset.UtcNow;
+                    }
+
+                    if (currentPrimary != null && currentPrimary.AgentId != agent.Id)
+                    {
+                        currentPrimary.IsPrimary = false;
+                        _context.OrganizationAgents.Update(currentPrimary);
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return true;
                 }
-                else
+                catch
                 {
-                    newAgentAssignment.IsPrimary = true;
-                    newAgentAssignment.AssignedOn = DateTimeOffset.UtcNow;
+                    await transaction.RollbackAsync();
+                    throw;
                 }
-
-                if (currentPrimary != null && currentPrimary.AgentId != agent.Id)
-                {
-                    currentPrimary.IsPrimary = false;
-                    _context.OrganizationAgents.Update(currentPrimary);
-                }
-
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                return true;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+            });
         }
         public async Task<LocationAgentsResponseDto> GetLocationAgentsAsync(long locationId)
         {
@@ -2741,67 +2753,75 @@ SELECT
         }
         public async Task<bool> RemoveAgentFromLocationAsync(RemoveAgentFromLocationDto dto)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            try
+            return await strategy.ExecuteAsync(async () =>
             {
-                var agent = await _context.Agents
-                    .FirstOrDefaultAsync(x => x.UserId == dto.UserId);
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                if (agent == null)
-                    throw new Exception("Agent not found.");
-
-                var assignment = await _context.OrganizationAgents
-                    .Where(x =>
-                        x.AgentId == agent.Id &&
-                        x.LocationId == dto.LocationId &&
-                        x.IsActive)
-                    .FirstOrDefaultAsync();
-
-                if (assignment == null)
-                    throw new Exception("Agent is not assigned to this location.");
-
-                var allAgents = await _context.OrganizationAgents
-                    .Where(x => x.LocationId == dto.LocationId && x.IsActive)
-                    .ToListAsync();
-
-                if (assignment.IsPrimary)
+                try
                 {
-                    var otherAgent = allAgents
-                        .Where(x => x.AgentId != agent.Id)
-                        .OrderByDescending(x => x.AssignedOn) 
-                        .FirstOrDefault();
+                    var agent = await _context.Agents
+                        .FirstOrDefaultAsync(x => x.UserId == dto.UserId);
 
-                    if (otherAgent != null)
+                    if (agent == null)
+                        throw new Exception("Agent not found.");
+
+                    var assignment = await _context.OrganizationAgents
+                        .Where(x =>
+                            x.AgentId == agent.Id &&
+                            x.LocationId == dto.LocationId &&
+                            x.IsActive)
+                        .FirstOrDefaultAsync();
+
+                    if (assignment == null)
+                        throw new Exception("Agent is not assigned to this location.");
+
+                    var allAgents = await _context.OrganizationAgents
+                        .Where(x =>
+                            x.LocationId == dto.LocationId &&
+                            x.IsActive)
+                        .ToListAsync();
+
+                    if (assignment.IsPrimary)
                     {
-                        otherAgent.IsPrimary = true;
-                        _context.OrganizationAgents.Update(otherAgent);
+                        var otherAgent = allAgents
+                            .Where(x => x.AgentId != agent.Id)
+                            .OrderByDescending(x => x.AssignedOn)
+                            .FirstOrDefault();
+
+                        if (otherAgent != null)
+                        {
+                            otherAgent.IsPrimary = true;
+
+                            _context.OrganizationAgents.Update(otherAgent);
+                        }
+                        else
+                        {
+                            throw new Exception(
+                                "Cannot remove the only primary agent. Assign another agent first.");
+                        }
                     }
-                    else
-                    {
-                        throw new Exception("Cannot remove the only primary agent. Assign another agent first.");
-                    }
+                    assignment.IsActive = false;
+                    assignment.IsPrimary = false;
+                    assignment.DeactivatedByUserId = dto.RemovedByUserId;
+                    assignment.DeactivatedOn = DateTimeOffset.UtcNow;
+
+                    _context.OrganizationAgents.Update(assignment);
+
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    return true;
                 }
-
-                assignment.IsActive = false;
-                assignment.IsPrimary = false;
-                assignment.DeactivatedByUserId = dto.RemovedByUserId;
-                assignment.DeactivatedOn = DateTimeOffset.UtcNow;
-
-                _context.OrganizationAgents.Update(assignment);
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return true;
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
-
         public async Task<LocationInventory> AddInventoryAsync(CreateInventoryDto dto)
         {
             var location = await _context.OrganizationLocations
