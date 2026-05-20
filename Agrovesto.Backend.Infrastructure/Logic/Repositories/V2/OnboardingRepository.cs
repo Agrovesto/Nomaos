@@ -56,6 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
+        Task UpdateUserDetails(OnboardingRequestModel model, OnBoardingArgs args);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -908,7 +909,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             bool updated = false;
 
-            // ✅ Update PIN
+         
             if (!string.IsNullOrWhiteSpace(model.Pin))
             {
                 var salt = EncryptionUtil.GetSalt();
@@ -916,16 +917,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 existingUser.PinEncrypt = model.Pin.EncryptTransactionPin(salt);
                 existingUser.Salt = Convert.ToBase64String(salt);
 
-                // ✅ Remove default flag
                 existingUser.HasDefaultPin = false;
 
                 updated = true;
             }
 
-            // ✅ Update Password (USE IDENTITY)
             if (!string.IsNullOrWhiteSpace(model.Password))
             {
-                // Remove old password
                 var removeResult = await _userManager.RemovePasswordAsync(existingUser);
 
                 if (!removeResult.Succeeded)
@@ -933,7 +931,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     throw new Exception("Failed to remove old password");
                 }
 
-                // Add new password (this hashes it properly)
                 var addResult = await _userManager.AddPasswordAsync(existingUser, model.Password);
 
                 if (!addResult.Succeeded)
@@ -941,7 +938,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     throw new Exception("Failed to set new password");
                 }
 
-                // ✅ Remove default flag
                 existingUser.HasDefaultPassword = false;
 
                 updated = true;
@@ -1017,7 +1013,50 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return null;
         }
+        public async Task UpdateUserDetails(
+         OnboardingRequestModel model,
+         OnBoardingArgs args)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(x => x.Id == args.UserId);
 
+            if (user == null)
+                throw new BaseException(
+                    ExceptionType.NO_RECORD_FOUND,
+                    "User record not found");
+            var fullName = string.Join(" ", new[]
+            {
+    model.FirstName,
+    model.MiddleName,
+    model.LastName
+}
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            if (!string.IsNullOrWhiteSpace(fullName))
+            {
+                user.Name = fullName;
+            }
+
+            if (!string.IsNullOrWhiteSpace(model.FullName))
+                user.Name = model.FullName;
+
+            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+                user.PhoneNumber = model.PhoneNumber;
+
+            if (!string.IsNullOrWhiteSpace(model.Email))
+                user.Email = model.Email;
+
+            if (!string.IsNullOrWhiteSpace(model.Bvn))
+                user.BVN = model.Bvn;
+
+            if (!string.IsNullOrWhiteSpace(model.Nin))
+                user.NIN = model.Nin;
+
+            user.DateModified = DateTimeOffset.UtcNow;
+            user.ModifiedBy = args.UserId;
+
+            await _context.SaveChangesAsync();
+        }
         private async Task<(OnboardingRequestModel model, bool status, string message, bool IsExisting)>
 HandleExistingUser(
     User user,
