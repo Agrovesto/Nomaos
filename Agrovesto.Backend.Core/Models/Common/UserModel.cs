@@ -240,10 +240,12 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Name { get; set; }
         public string Email { get; set; }
         public List<OrganizationDto> Organizations { get; set; }
+        public List<BusinessModel> Businesses { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
-      //  public UserObject User { get; set; }
+        public string BusinessCode { get; set; }
+        //  public UserObject User { get; set; }
     }
     public class OrganizationDto
     {

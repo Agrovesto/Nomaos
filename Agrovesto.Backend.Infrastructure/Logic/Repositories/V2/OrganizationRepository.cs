@@ -1084,7 +1084,7 @@ SELECT
                 join om in _context.OrganizationMemberships.AsNoTracking()
                     on m.Id equals om.MembershipId
 
-                join o in _context.BusinessOrganizations.AsNoTracking()
+                join o in _context.Organizations.AsNoTracking()
                     on om.OrganizationId equals o.OrganizationId
 
                 join fc in _context.FarmerCooperatives.AsNoTracking()
@@ -1103,7 +1103,7 @@ SELECT
                     TotalMemberships =
                         (from m2 in _context.MemberShips
                          join om2 in _context.OrganizationMemberships on m2.Id equals om2.MembershipId
-                         join o2 in _context.BusinessOrganizations on om2.OrganizationId equals o2.OrganizationId
+                         join o2 in _context.Organizations on om2.OrganizationId equals o2.OrganizationId
                          where o2.OrganizationCode == query.organizationCode
                          select m2.Id).Distinct().Count(),
 
@@ -1130,7 +1130,7 @@ SELECT
                 join om in _context.OrganizationMemberships.AsNoTracking()
                     on m.Id equals om.MembershipId
 
-                join o in _context.BusinessOrganizations.AsNoTracking()
+                join o in _context.Organizations.AsNoTracking()
                     on om.OrganizationId equals o.OrganizationId
 
                 join mt in _context.MemberShipTypes.AsNoTracking()
@@ -1532,6 +1532,7 @@ SELECT
         {
             return new LocationResponseDto
             {
+                IsActive = x.LocationStatus == "Active",
                 Id = x.Id,
                 LocationName = x.LocationName,
 
@@ -1722,8 +1723,8 @@ SELECT
             if (location == null)
                 throw new Exception("Location not found.");
 
-            if (location.ParentLocationId != null)
-                throw new Exception("Use EditSubLocation for sublocations.");
+            if (location.ParentLocationId != location.Id)
+                throw new Exception("Sub location can only be edited inside its parent location.");
 
 
             var locationType = await _context.LocationTypes
@@ -1732,11 +1733,11 @@ SELECT
             if (!locationType.Type.Equals("Warehouse", StringComparison.OrdinalIgnoreCase))
                 throw new Exception("Only warehouse can be edited here.");
 
-            if (dto.HasTemperatureControl.HasValue || dto.TemperatureControlTypeId.HasValue)
+            if (dto.HasTemperatureControl || dto.TemperatureControlTypeId > 0)
             {
                 ValidateTemperature(
-                    dto.HasTemperatureControl ?? location.HasTemperatureControl,
-                    dto.TemperatureControlTypeId ?? location.TemperatureControlTypeId
+                    dto.HasTemperatureControl ,
+                    dto.TemperatureControlTypeId > 0 ? dto.TemperatureControlTypeId : location.TemperatureControlTypeId
                 );
             }
 
@@ -1778,17 +1779,17 @@ SELECT
             if (dto.DateOfCommissioning.HasValue)
                 location.DateOfCommissioning = dto.DateOfCommissioning.Value;
 
-            if (dto.HasTemperatureControl.HasValue)
+            if (dto.HasTemperatureControl)
             {
-                location.HasTemperatureControl = dto.HasTemperatureControl.Value;
+                location.HasTemperatureControl = dto.HasTemperatureControl;
 
-                if (!dto.HasTemperatureControl.Value)
+                if (!dto.HasTemperatureControl)
                 {
                     location.TemperatureControlTypeId = null;
                 }
             }
 
-            if (dto.TemperatureControlTypeId.HasValue)
+            if (dto.TemperatureControlTypeId > 0)
             {
                 location.TemperatureControlTypeId = dto.TemperatureControlTypeId;
             }
@@ -1823,6 +1824,7 @@ SELECT
             var exists = await _context.OrganizationLocations.AnyAsync(x =>
                 x.LocationName == dto.LocationName &&
                 x.OrganizationId == dto.OrganizationId &&
+                x.IsActive &&
                 x.ParentLocationId == null);
 
             if (exists)
@@ -1844,7 +1846,7 @@ SELECT
                 Capacity = dto.Capacity,
                 CapacityType = dto.CapacityType,
                 StockLevel = 0,
-                //LocationStatus = dto.LocationStatus,
+                LocationStatus = dto.LocationStatus,
                 StateId = dto.StateId,
                 LgaId = dto.LgaId,
                 Address = dto.Address,
@@ -1887,10 +1889,10 @@ SELECT
             
 
             var totalWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId == null);
+                .CountAsync(x => x.ParentLocationId == x.Id);
 
             var totalSubWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId != null);
+                .CountAsync(x => x.ParentLocationId !=x.Id);
 
 
             var totalCapacity = await locations
@@ -2117,6 +2119,8 @@ SELECT
                 .Take(pageSize)
                 .Select(x => new LocationListResponseDto
                 {
+                    IsActive = x.LocationStatus == "Active",
+                    // IsActive= x.IsActive,
                     Id = x.Id,
                     LocationName = x.LocationName,
                     Address = x.Address,
@@ -2126,7 +2130,6 @@ SELECT
                     LocationStatus=x.LocationStatus,
                     LocationTypeId = x.LocationTypeId,
                     LocationTypeName = x.LocationType.Type,
-
                     Agents = x.OrganizationAgents
                         .Where(a => a.IsActive)
                         .Select(a => new AgentDto
@@ -2262,7 +2265,7 @@ SELECT
                     Capacity = x.Capacity,
                     CapacityType = x.CapacityType,
 
-                    IsActive = x.IsActive,
+                    IsActive = x.LocationStatus == "Active",
 
                     AssignedAgentName = x.OrganizationAgents
                         .Where(a => a.IsPrimary && a.IsActive)
@@ -2329,6 +2332,7 @@ SELECT
             var exists = await _context.OrganizationLocations.AnyAsync(x =>
                 x.LocationName == dto.LocationName &&
                 x.OrganizationId == parent.OrganizationId &&
+                x.IsActive && 
                 x.ParentLocationId == dto.ParentLocationId);
 
             if (exists)
@@ -2411,11 +2415,11 @@ SELECT
                 location.ParentLocationId = newParent.Id;
             }
 
-            if (dto.HasTemperatureControl.HasValue || dto.TemperatureControlTypeId.HasValue)
+            if (dto.HasTemperatureControl || dto.TemperatureControlTypeId > 0)
             {
                 ValidateTemperature(
-                    dto.HasTemperatureControl ?? location.HasTemperatureControl,
-                    dto.TemperatureControlTypeId ?? location.TemperatureControlTypeId
+                    dto.HasTemperatureControl,
+                    dto.TemperatureControlTypeId > 0 ? dto.TemperatureControlTypeId : location.TemperatureControlTypeId
                 );
             }
 
@@ -2443,6 +2447,9 @@ SELECT
             if (!string.IsNullOrWhiteSpace(dto.Address))
                 location.Address = dto.Address;
 
+            if (!string.IsNullOrWhiteSpace(dto.LocationName))
+                location.LocationName = dto.LocationName;
+
             if (dto.Latitude.HasValue)
                 location.Latitude = dto.Latitude.Value;
 
@@ -2453,17 +2460,17 @@ SELECT
                 location.DateOfCommissioning = dto.DateOfCommissioning.Value;
 
 
-            if (dto.HasTemperatureControl.HasValue)
+            if (dto.HasTemperatureControl)
             {
-                location.HasTemperatureControl = dto.HasTemperatureControl.Value;
+                location.HasTemperatureControl = dto.HasTemperatureControl;
 
-                if (!dto.HasTemperatureControl.Value)
+                if (!dto.HasTemperatureControl)
                 {
                     location.TemperatureControlTypeId = null;
                 }
             }
 
-            if (dto.TemperatureControlTypeId.HasValue)
+            if (dto.TemperatureControlTypeId > 0)
             {
                 location.TemperatureControlTypeId = dto.TemperatureControlTypeId;
             }
@@ -2509,7 +2516,7 @@ SELECT
                 await DeactivateChildren(location.Id, dto.UserId, dto.Reason);
             }
 
-
+            location.LocationStatus = "Suspended";
             location.IsActive = false;
             location.DeactivatedByUserId = dto.UserId;
             location.DeactivationReason = dto.Reason;
@@ -2521,7 +2528,7 @@ SELECT
         {
             var location = await _context.OrganizationLocations
                 .Include(x => x.SubLocations)
-                .FirstOrDefaultAsync(x => x.Id == dto.Id);
+                .FirstOrDefaultAsync(x => x.Id == dto.Id && x.ParentLocationId != dto.Id);
 
             if (location == null)
                 throw new Exception("Location not found.");
@@ -2539,7 +2546,7 @@ SELECT
             {
                 await DeactivateChildren(location.Id, dto.UserId, dto.Reason);
             }
-
+            location.LocationStatus = "Suspended";
             location.IsActive = false;
             location.DeactivatedByUserId = dto.UserId;
             location.DeactivationReason = dto.Reason;
@@ -2747,7 +2754,7 @@ SELECT
                            .FirstOrDefaultAsync();
 
             if (location == null)
-                throw new Exception("Sub Location not found.");
+                throw new Exception("Sub Location not found or has been deleted.");
 
             return MapToDto(location);
         }

@@ -1183,7 +1183,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Location Id is required");
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
-
+                model.Id = query.Id;
                 var response = await _organizationRepository.EditLocationAsync(model);
 
                 return response.ViewMap();
@@ -1292,7 +1292,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Location Id is required");
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
-
+                model.Id = query.Id;
                 var response = await _organizationRepository.EditSubLocationAsync(model);
 
                 return response.ViewMap();
@@ -1310,6 +1310,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
                 model.UserId = query.UserId;
+                model.Id = query.Id;
                 await _organizationRepository.DeleteSubLocationAsync(model);
                 return true;
 
@@ -1734,8 +1735,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     AgentId = agent.data.Id,
                     AgentUserId = registerUser.model.Id,
                     RequiresProfileCompletion = true,
-                    Message= registerUser.message
+                    Message= registerUser.message,
+                    IsExisting=registerUser.IsExisting
                 };
+               
             }
             catch (BaseException)
             {
@@ -1952,8 +1955,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 {
                     UserId = user.model.Id,
                     RequiresProfileCompletion = true,
-                    Message = user.message
+                    
+                    IsExisting = user.isExisting,
+                    Message = user.isExisting
+      ? user.message
+      : $"User created successfully."
                 };
+               
             }
             catch (BaseException)
             {
@@ -2088,11 +2096,11 @@ DateTimeOffset dateTime)
         //    }
         //}
 
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterFarmerOrFail(
+        private async Task<(OnboardingRequestModel model, bool status, string message, bool isExisting)> RegisterFarmerOrFail(
          CreateFarmerRequest model,
          OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+            var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -2407,7 +2415,11 @@ DateTimeOffset dateTime)
                     UserId = user.model.Id,
                     MembershipId = membership.data.Id,
                     RequiresProfileCompletion = true,
-                    Message = user.message,
+                    Message = user.isExisting
+      ? user.message
+      : $"User created successfully.",
+                    IsExisting =user.isExisting,
+
                 };
             }
             catch (BaseException)
@@ -2549,11 +2561,11 @@ DateTimeOffset dateTime)
                 ContactPerson = $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}"
             });
         }
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterMembershipLeaderOrFail(
+        private async Task<(OnboardingRequestModel model, bool status, string message, bool isExisting)> RegisterMembershipLeaderOrFail(
            MemberShipRequestModel model,
            OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+            var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,

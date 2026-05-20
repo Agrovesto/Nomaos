@@ -130,11 +130,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _businessRepository.GetBusinessByCodeAsync(businessCode)
                 ?? throw new BaseException(ExceptionType.NOTFOUND, "Business does not exist");
         }
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterFarmerOrFail(
+        private async Task<(OnboardingRequestModel model, bool status, string message, bool IsExisting)> RegisterFarmerOrFail(
           CreateFarmerRequest model,
           OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+            var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
