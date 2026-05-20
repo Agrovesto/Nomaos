@@ -148,7 +148,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         public long ParentLocationId { get; set; }
         public string LocationName { get; set; }
         public long LocationTypeId { get; set; }
-        public string? OwnerShipType { get; set; }
+        [Required(ErrorMessage = "Ownership type is required")]
+        public string OwnerShipType { get; set; }
         public List<long> ModuleIds { get; set; } = new();
         public long StateId { get; set; }
         public long LgaId { get; set; }
@@ -248,7 +249,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 
 
 
-        //public string LocationStatus { get; set; }     
+        public string? LocationStatus { get; set; }     
        
         public string? CreatedByUserId { get; set; }
 
@@ -278,6 +279,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string UserId { get; set; }
         public string Message { get; set; }
         public bool RequiresProfileCompletion { get; set; }
+        public bool IsExisting { get; set; }
     }
     public class FarmerFlatRow
     {
@@ -401,8 +403,8 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTime? DateOfCommissioning { get; set; }
 
-        public bool? HasTemperatureControl { get; set; }
-        public long? TemperatureControlTypeId { get; set; }
+        public bool HasTemperatureControl { get; set; }
+        public long TemperatureControlTypeId { get; set; }
 
         public List<long>? ModuleIds { get; set; }
 
@@ -424,6 +426,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class LocationListResponseDto
     {
+        public bool IsActive { get; set; }
         public long Id { get; set; }
         public string LocationName { get; set; }
         public string? Address { get; set; }
@@ -454,7 +457,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public double StockLevel { get; set; }
 
         public string? Address { get; set; }
-
+        public bool IsActive { get; set; }
         public bool HasTemperatureControl { get; set; }
         public string? TemperatureControlType { get; set; }
 
