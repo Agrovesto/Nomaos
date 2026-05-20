@@ -608,7 +608,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             )
         {
             ValidateLoginModel(model);
-            var login= await _onboardingRepository.Login(model, businessCode);
+           // var login= await _onboardingRepository.Login(model, businessCode);
+            var login= await _onboardingRepository.Login(model);
 
             return login;
         }
@@ -1086,13 +1087,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 }
 
                 model.Id = createUser.model.Id;
-                
                 return new OnboardingResponseModel
                 {
                     Id = model.Id,
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber,
-                    Message = !string.IsNullOrEmpty(createUser.message) ? $"{createUser.message} {message}" : $"User created successfully. Some post-registration steps may need manual completion {message}."
+                    IsExisting = createUser.IsExisting,
+                    Message = createUser.IsExisting
+           ? createUser.message
+           : $"User created successfully. {message}"
                 };
             }
             catch (BaseException)
@@ -1874,12 +1877,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await RunNonCriticalSteps(
                     model, args, business, user.model, dateTime);
 
+                //return new CreateMembershipResponseModel
+                //{
+                //    UserId = user.model.Id,
+                //    MembershipId = membership.data.Id,
+                //    RequiresProfileCompletion = true,
+                //    Message= user.message,
+                //};
                 return new CreateMembershipResponseModel
                 {
                     UserId = user.model.Id,
                     MembershipId = membership.data.Id,
                     RequiresProfileCompletion = true,
-                    Message= user.message,
+                    IsExisting = user.IsExisting,
+                    Message = user.IsExisting
+        ? user.message
+        : $"User created successfully."
                 };
             }
             catch (BaseException)
@@ -1916,11 +1929,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _businessRepository.GetBusinessByCodeAsync(businessCode)
                 ?? throw new BaseException(ExceptionType.NOTFOUND, "Business does not exist");
         }
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterMembershipLeaderOrFail(
+        private async Task<(OnboardingRequestModel model, bool status, string message, bool IsExisting)> RegisterMembershipLeaderOrFail(
             MemberShipRequestModel model,
             OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+      var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -2050,7 +2063,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 var business = await GetBusinessOrFail(args.businessCode);
 
-                (OnboardingRequestModel model, bool status, string message) registerUser = await _onboardingRepository.RegisterUser(
+               var registerUser = await _onboardingRepository.RegisterUser(
                new OnboardingRequestModel
                {
                    Email = model.Email,
@@ -2098,13 +2111,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
              //   await GenerateAndSendOtp(registerUser.model);
               
 
+                //return new CreateAgentResponseModel
+                //{
+                //    UserId = args.UserId,
+                //    AgentId = agent.data.Id,
+                //    AgentUserId= registerUser.model.Id,
+                //    RequiresProfileCompletion = true,
+                //    Message= registerUser.message
+                //};
                 return new CreateAgentResponseModel
                 {
                     UserId = args.UserId,
                     AgentId = agent.data.Id,
-                    AgentUserId= registerUser.model.Id,
+                    AgentUserId = registerUser.model.Id,
                     RequiresProfileCompletion = true,
-                    Message= registerUser.message
+                    IsExisting = registerUser.IsExisting,
+                    Message = registerUser.IsExisting
+        ? registerUser.message
+        : $"User created successfully."
                 };
             }
             catch (BaseException)

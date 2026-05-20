@@ -17,6 +17,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 
@@ -149,6 +150,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IModuleRepository, ModuleRepository>();
             services.AddScoped<IInputFinancingManager, InputFinancingManager>();
             services.AddScoped<IInputFinancingRepository, InputFinancingRepository>();
+
+            services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
+            services.AddScoped<ILicenseService, LicenseService>();
+            services.AddScoped<IModuleAccessService, SystemModuleAccessService>();
+            services.AddScoped<IMigrationService, MigrationService>();
         }
     }
 }

@@ -6,6 +6,74 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.CoreUtils
 {
+    public class ApiResponse<T>
+    {
+        public bool Succeeded { get; set; }
+        public string Message { get; set; }
+        public T Data { get; set; }
+        public string TraceId { get; set; }
+        public Dictionary<string, string[]> Errors { get; set; }
+        public static ApiResponse<T> Success(T data, string message = "Success", string traceId = null)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = true,
+                Message = message,
+                Data = data,
+                TraceId = traceId
+            };
+        }
+
+        public static ApiResponse<T> Fail(string message, string traceId = null, T data = default)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = false,
+                Message = message,
+                Data = data,
+                TraceId = traceId
+            };
+        }
+        public static ApiResponse<T> ValidationFail(
+       string message,
+       Dictionary<string, string[]> errors,
+       string traceId = null)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = false,
+                Message = message,
+                Errors = errors,
+                TraceId = traceId
+            };
+        }
+    }
+    public class ApiResponse
+    {
+        public bool Succeeded { get; set; }
+        public string Message { get; set; }
+        public string TraceId { get; set; }
+
+        public static ApiResponse Success(string message = "Success", string traceId = null)
+        {
+            return new ApiResponse
+            {
+                Succeeded = true,
+                Message = message,
+                TraceId = traceId
+            };
+        }
+
+        public static ApiResponse Fail(string message, string traceId = null)
+        {
+            return new ApiResponse
+            {
+                Succeeded = false,
+                Message = message,
+                TraceId = traceId
+            };
+        }
+    }
     public class ResponseDto
     {
         public bool Status { get; set; }

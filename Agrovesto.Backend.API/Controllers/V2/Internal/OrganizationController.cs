@@ -505,77 +505,101 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+
         [HttpPost("create-sublocation")]
-        public async Task<IActionResult> CreateSubLocationAsync([FromBody] CreateSubLocationDto model, [FromQuery] ListQueryParams args)
+        public async Task<IActionResult> CreateSubLocationAsync(
+    [FromBody] CreateSubLocationDto model,
+    [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-            if (!ModelState.IsValid)
-            {
+            // enrich request context
+            args.organizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-            try
-            {
+            if (string.IsNullOrWhiteSpace(args.organizationCode))
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
 
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                args.UserId = CurrentUserId;
-                if (string.IsNullOrEmpty(args.organizationCode))
-                {
-                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
-                }
-                var type = await _organizationManager.CreateSubLocationAsync(model, args);
+            var result = await _organizationManager.CreateSubLocationAsync(model, args);
 
-                return Ok(new Response<OrganizationLocationModel>()
-                {
-                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
-
-
-                    Succeeded = true,
-                    Message = "Successful",
-                    Data = type
-                });
-
-
-
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (DbUpdateException ex) when
-       (ex.InnerException is SqlException sqlEx && sqlEx.Number == 547)
-            {
-                return BadRequest(new Response<string>
-                {
-                    Succeeded = false,
-                    Message = "Unable to save the record because some related data is invalid or missing"
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
+            return Ok(ApiResponse<OrganizationLocationModel>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
         }
+        // [HttpPost("create-sublocation")]
+        // public async Task<IActionResult> CreateSubLocationAsync([FromBody] CreateSubLocationDto model, [FromQuery] ListQueryParams args)
+        // {
+        //     var isAdmin = CurrentUserRole;
+        //     // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+        //     if (!ModelState.IsValid)
+        //     {
+
+        //         return BadRequest(new Response<Dictionary<string, string>>()
+        //         {
+        //             Message = "Validation failed.",
+        //             Succeeded = false,
+        //             Data = ModelState
+        //                 .Where(ms => ms.Value.Errors.Any())
+        //                 .ToDictionary(
+        //                     ms => ms.Key,
+        //                     ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+        //                 )
+        //         });
+        //     }
+        //     try
+        //     {
+
+        //         args.organizationCode = args.organizationCode ?? OrganizationCode;
+        //         args.UserId = CurrentUserId;
+        //         if (string.IsNullOrEmpty(args.organizationCode))
+        //         {
+        //             throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+        //         }
+        //         var type = await _organizationManager.CreateSubLocationAsync(model, args);
+
+        //         return Ok(new Response<OrganizationLocationModel>()
+        //         {
+        //             Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+        //             Succeeded = true,
+        //             Message = "Successful",
+        //             Data = type
+        //         });
+
+
+
+        //     }
+        //     catch (BaseException ex)
+        //     {
+        //         return StatusCode(400, new Response<string>
+        //         {
+        //             Message = ex.ExceptionMessage,
+        //             Succeeded = false,
+
+        //         });
+        //     }
+        //     catch (DbUpdateException ex) when
+        //(ex.InnerException is SqlException sqlEx && sqlEx.Number == 547)
+        //     {
+        //         return BadRequest(new Response<string>
+        //         {
+        //             Succeeded = false,
+        //             Message = "Unable to save the record because some related data is invalid or missing"
+        //         });
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return StatusCode(400, new Response<string>
+        //         {
+        //             Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+        //             Succeeded = false,
+        //         });
+        //     }
+        // }
 
         [HttpGet("sublocations/by-parent")]
         public async Task<IActionResult> GetSubLocationsByParentAsync([FromQuery] ListQueryParams args)

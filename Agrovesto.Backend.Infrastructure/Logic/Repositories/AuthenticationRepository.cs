@@ -123,7 +123,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     .ToListAsync();
 
                 // 🔹 Fetch organization details (name + code)
-                var organizations = await _context.BusinessOrganizations
+                var organizations = await _context.Organizations
                     .Where(o => userOrganizations.Contains(o.OrganizationCode))
                     .Select(o => new OrganizationDto{ OrganizationCode= o.OrganizationCode, OrganizationName= o.CompanyName })
                     .ToListAsync();
