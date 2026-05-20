@@ -107,6 +107,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Success, string Message)> AssignAgentToLocation(LocationAgentAssignment model, ListQueryParams query);
         Task DeleteInventory(DeleteLocationDto model, ListQueryParams query);
         Task SyncLocationStockLevels(ListQueryParams query);
+        Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -1701,6 +1702,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
+        public async Task<bool> EditAgentUser(
+            ProfileRequestModel model,
+            OnBoardingArgs args)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(args.UserId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+                ValidateRequest(model, args);
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                var onboardingRequest = BuildOnboardingRequest(model);
+
+                await _onboardingRepository.UpdateUserDetails(onboardingRequest, args);
+
+                var agent = await CreateAgent(model, args, args.UserId);
+
+                return true;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+      
         public async Task<CreateAgentResponseModel> CreateAgentUser(
             ProfileRequestModel model,
             OnBoardingArgs args)
@@ -1751,6 +1788,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Unable to complete onboarding at the moment.");
             }
         }
+      
+        
         private async Task EnsureWalletExists(OnboardingRequestModel model, BusinessModel business)
         {
             var subAccount =
