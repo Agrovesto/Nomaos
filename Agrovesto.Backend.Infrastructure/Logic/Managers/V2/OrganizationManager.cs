@@ -1326,7 +1326,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
-            query.Id = query.Id <= 0 ? throw new BaseException(ExceptionType.BAD_REQUEST, "Parent Location Id is required") : query.Id;
+            //query.Id = query.Id <= 0 ? throw new BaseException(ExceptionType.BAD_REQUEST, "Parent Location Id is required") : query.Id;
             return await _organizationRepository.GetSubLocationsAsync(query);
 
         }

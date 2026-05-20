@@ -2584,7 +2584,7 @@ SELECT
         public async Task<PagedListResponse<List<LocationResponseDto>>> GetSubLocationsAsync(ListQueryParams query)
         {
             var result = _context.OrganizationLocations
-                .Where(x => x.ParentLocationId == query.Id && x.IsActive)
+                .Where(x => x.Id != x.ParentLocationId && x.IsActive)
                 .Include(x => x.LocationType)
                 .Include(x => x.TemperatureControlType)
                 .Include(x => x.LocationModules)
