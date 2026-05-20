@@ -162,7 +162,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string AgentUserId { get; set; }
         public long AgentId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
-
+        public bool IsExisting { get; set; } = false;
         public string Message { get; set; }
     }
     public class CreateMembershipResponseModel
@@ -171,6 +171,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long MembershipId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
         public string Message { get; set; }
+        public bool IsExisting { get; set; } = false;
     }
     public class OnboardingResponseModel
     {
@@ -178,6 +179,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? Message { get; set; }
+        public bool IsExisting { get; set; }
     }
     public class OnboardingRequestModel
     {

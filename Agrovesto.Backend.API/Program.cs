@@ -2,16 +2,19 @@
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
-using AWS.Logger.SeriLog;
-using AWS.Logger;
-using AWS.Logger.AspNetCore;
 using Amazon.Rekognition;
 using Amazon.S3;
+using AWS.Logger;
+using AWS.Logger.AspNetCore;
+using AWS.Logger.SeriLog;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
@@ -22,15 +25,14 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
-using Agrovesto.Backend.Infrastructure.DB;
 using Serilog;
 using System;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using VaultSharp;
-using VaultSharp.V1.AuthMethods.AppRole;
 using VaultSharp.Extensions.Configuration;
+using VaultSharp.V1.AuthMethods.AppRole;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -365,6 +367,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 }
 
 
+
 app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
@@ -373,6 +376,9 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 app.UseAuthentication();
+app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
+app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
 
 // The health check endpoints are now handled by the HealthController

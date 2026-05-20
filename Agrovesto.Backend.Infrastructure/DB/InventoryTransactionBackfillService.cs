@@ -21,7 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public async Task BackfillInventoryTransactionsAsync()
         {
-            var validOrganizationIds = (await _context.BusinessOrganizations
+            var validOrganizationIds = (await _context.Organizations
        .Select(x => x.OrganizationId)
        .ToListAsync())
        .ToHashSet();
