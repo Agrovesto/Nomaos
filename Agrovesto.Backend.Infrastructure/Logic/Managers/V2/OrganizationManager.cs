@@ -1723,6 +1723,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await _onboardingRepository.UpdateUserDetails(onboardingRequest, args);
 
                 var agent = await CreateAgent(model, args, args.UserId);
+                await AssignAgentToOrganization(model, args, args.UserId);
 
                 return true;
             }
