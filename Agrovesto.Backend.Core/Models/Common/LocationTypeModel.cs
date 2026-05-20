@@ -332,7 +332,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public int TotalFarmers { get; set; }
         public int ActiveFarmers { get; set; }
-        public int PendingFarmers { get; set; }
+       // public int IncompleteProfile { get; set; }
         public int FarmersWithLoans { get; set; }
         public decimal RecoveryRate { get; set; }
     }
