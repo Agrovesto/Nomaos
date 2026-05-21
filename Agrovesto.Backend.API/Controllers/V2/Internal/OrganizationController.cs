@@ -3340,7 +3340,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 using var stream = file.OpenReadStream();
                 var response = await _organizationManager.BulkOnboardFarmersBatchAsync(stream, args);
 
-                return Ok(new Response<BulkOnboardingResult>()
+                return Ok(new Response<BulkOnboardingQueueResponse>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,

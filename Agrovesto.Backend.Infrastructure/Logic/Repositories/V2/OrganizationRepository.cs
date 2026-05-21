@@ -4011,7 +4011,7 @@ SELECT
 
             return new OrganizationFarmerDashboardResponse
             {
-                TotalFarmers = totalFarmers,
+                TotalFarmers = activeFarmers,//totalFarmers,
 
                 ActiveFarmers = activeFarmers,
 

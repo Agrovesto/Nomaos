@@ -361,4 +361,21 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public DateTimeOffset? StartDate { get; set; }
         public DateTimeOffset? EndDate { get; set; }
     }
+
+    public class BulkOnboardingQueueResponse
+    {
+        public Guid JobId { get; set; }
+
+        public string Status { get; set; }
+
+        public string Message { get; set; }
+    }
+
+    public class CreateUserResult
+    {
+        public OnboardingRequestModel model { get; set; }
+        public bool status { get; set; }
+        public string message { get; set; }
+        public bool IsExisting { get; set; }
+    }
 }

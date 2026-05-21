@@ -120,6 +120,7 @@ namespace Agrovesto.Backend.API.Extensions
             //services.AddHttpClient<FCMBWalletService>();
             //services.AddHttpClient<CafeOneWalletService>();
             //  services.AddHttpClient<CredoService>();
+            services.AddScoped<IFarmerQueryService, FarmerQueryService>();
             services.AddScoped<IUserWalletRepository, UserWalletRepository>();
             services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
 

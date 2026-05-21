@@ -67,7 +67,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
                 var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
 
-                return Ok(new Response<BulkOnboardingResult>()
+                return Ok(new Response<BulkOnboardingQueueResponse>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -319,6 +319,67 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+        [HttpPost("update-profile")]
+        [AllowAnonymous]
+        public async Task<IActionResult> EditAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        {
+
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = args.UserId;
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+
+                var request = await _onBoardingManager.EditAgentUser(model, args);
+
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
 
         private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
         {

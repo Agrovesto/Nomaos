@@ -15,6 +15,7 @@ using Amazon.S3;
 using AWS.Logger;
 using AWS.Logger.AspNetCore;
 using AWS.Logger.SeriLog;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
@@ -38,10 +39,6 @@ using VaultSharp.V1.AuthMethods.AppRole;
 var builder = WebApplication.CreateBuilder(args);
 
 
-
-// =====================
-// SERILOG CONFIG
-// =====================
 var logConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console();
@@ -60,9 +57,7 @@ Log.Logger = logConfig
 
 builder.Host.UseSerilog();
 
-// =====================
-// VAULT CONFIGURATION
-// =====================
+
 
 //var vaultUrl = "https://dev-vault.agrovesto.com"; //local
 
@@ -70,7 +65,6 @@ builder.Host.UseSerilog();
 //var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
 
-// ONLY LOAD VAULT OUTSIDE DEVELOPMENT
 //if (!builder.Environment.IsDevelopment())
 //{
     var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
@@ -134,6 +128,11 @@ builder.Services.AddDbContext<DataContext>(options =>
         }
     )
 );
+builder.Services.AddHangfire(config =>
+    config.UseSqlServerStorage(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddHangfireServer();
 
 //builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 builder.Services.Configure<IdentitypassOptions>(
@@ -146,7 +145,6 @@ builder.Services.Configure<AesOptions>(
 builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
-// Register the bulk onboarding processor so scoped resolution from background tasks works
 builder.Services.AddScoped<BulkOnboardingProcessor>();
 
 
@@ -224,13 +222,11 @@ builder.Services.AddHealthChecks()
         options.BucketName = builder.Configuration["AWS:BucketName"];
         options.AccessKey = builder.Configuration["AWS:AccessKey"];
         options.SecretKey = builder.Configuration["AWS:SecretKey"];
-       // options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
     }, name: "AWS S3", tags: new[] { "external", "storage" })
     
     .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
     .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
 
-// Register health check classes
 builder.Services.AddScoped<IdentityPassHealthCheck>();
 builder.Services.AddScoped<TermiiSmsHealthCheck>();
 builder.Services.AddScoped<CountryStateCityApiHealthCheck>();
@@ -374,7 +370,7 @@ app.UseHttpsRedirection();
 
 // Enable static files for health dashboard
 app.UseStaticFiles();
-
+app.UseHangfireDashboard("/hangfire");
 app.UseAuthentication();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
