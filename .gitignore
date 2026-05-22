@@ -368,3 +368,4 @@ deploy-staging.sh
 /Agrovesto.Backend.API/appsettings.json
 /Agrovesto.Backend.API/appsettings.Staging.json
 /Agrovesto.Backend.API/aws-logger-errors.txt
+/Agrovesto.Backend.API/aws-logger-errors.txt
