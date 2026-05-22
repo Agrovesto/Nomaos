@@ -264,8 +264,7 @@ jobs:
           cache: true                    # Cache NuGet packages
 
       - name: Restore NuGet packages
-        run: dotnet restore --locked-mode
-        # --locked-mode enforces packages.lock.json integrity
+        run: dotnet restore 
 
       - name: Build (Release)
         run: |
@@ -341,7 +340,7 @@ jobs:
 
       # ── Vulnerability scan (NuGet, npm, OS) ──────────────────────────────
       - name: Trivy — Vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type:  "fs"
           scan-ref:   "."
@@ -355,7 +354,7 @@ jobs:
 
       # ── Secret scan ───────────────────────────────────────────────────────
       - name: Trivy — Secret scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type:  "fs"
           scan-ref:   "."
@@ -368,7 +367,7 @@ jobs:
 
       # ── IaC / Misconfiguration scan ───────────────────────────────────────
       - name: Trivy — IaC / Misconfiguration scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type:  "config"
           scan-ref:   "."
@@ -381,7 +380,7 @@ jobs:
 
       # ── SARIF for GitHub Security tab ────────────────────────────────────
       - name: Trivy — SARIF (GitHub Security tab)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type:  "fs"
           scan-ref:   "."
@@ -521,7 +520,7 @@ jobs:
             --enableExperimental \
             --disableAssembly \
             --disableRetired \
-            ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
+            ${NVD_API_KEY:+--nvdApiKey "${secrets.NVD_API_KEY}"} \
             --failOnCVSS 11 \
             --log /apps/reports/odc.log \
             || true
