@@ -255,13 +255,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # Full history for SonarQube new-code analysis
-
-      - name: Setup .NET ${{ env.DOTNET_VERSION }}
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-          cache: true                    # Cache NuGet packages
+          fetch-depth: 0   # Full history for SonarQube new-code analysis                 # Cache NuGet packages
 
       - name: Restore NuGet packages
         run: dotnet restore 
@@ -520,11 +514,14 @@ jobs:
             --enableExperimental \
             --disableAssembly \
             --disableRetired \
-            ${NVD_API_KEY:+--nvdApiKey "${secrets.NVD_API_KEY}"} \
+            --exclude "**/.git/**" \
+            --exclude "**/bin/**" \
+            --exclude "**/obj/**" \
+            ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
             --failOnCVSS 11 \
             --log /apps/reports/odc.log \
-            || true
-          # failOnCVSS 11 = never fail here; enforced below via Python
+          || true
+          # failOnCVSS 11 = never fail here; enforced below via Python threshold check
 
       - name: Convert Dependency-Check → SonarQube format
         run: |
