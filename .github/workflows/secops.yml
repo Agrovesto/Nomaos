@@ -717,6 +717,9 @@ jobs:
             ${{ needs.validate-pipeline.outputs.sonar-branch-args }} \
             ${EXT_PARAM}
 
+      - name: Restore NuGet packages
+        run: dotnet restore 
+        
       - name: Build for SonarQube analysis
         run: |
           dotnet build \
