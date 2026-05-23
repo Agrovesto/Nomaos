@@ -1406,73 +1406,73 @@ jobs:
             }
 
 # ───────────────────────────────────────────────────────────────────────────────
-# JOB 8 — Notifications
-# ───────────────────────────────────────────────────────────────────────────────
-  notify:
-    name: "Notify | Slack / Teams Alert"
-    runs-on: ubuntu-latest
-    needs:
-      - validate-pipeline
-      - security-gate
-    if: |
-      always() &&
-      needs.validate-pipeline.outputs.is-pr == 'false' &&
-      (github.ref_name == 'master' || github.ref_name == 'staging')
-    timeout-minutes: 5
+# # JOB 8 — Notifications
+# # ───────────────────────────────────────────────────────────────────────────────
+#   notify:
+#     name: "Notify | Slack / Teams Alert"
+#     runs-on: ubuntu-latest
+#     needs:
+#       - validate-pipeline
+#       - security-gate
+#     if: |
+#       always() &&
+#       needs.validate-pipeline.outputs.is-pr == 'false' &&
+#       (github.ref_name == 'master' || github.ref_name == 'staging')
+#     timeout-minutes: 5
 
-    steps:
-      - name: Notify Slack on failure
-        if: needs.security-gate.outputs.gate-passed == 'false'
-        uses: slackapi/slack-github-action@v1.27.0
-        with:
-          payload: |
-            {
-              "text": "🔴 *AppSec Gate FAILED* on `${{ github.ref_name }}`",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": { "type": "plain_text", "text": "🔴 Security Gate Failed" }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
-                    { "type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`" },
-                    { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
-                    { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": { "type": "mrkdwn", "text": "*Action required:* Review security findings before this can be deployed." }
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-        continue-on-error: true
+#     steps:
+#       - name: Notify Slack on failure
+#         if: needs.security-gate.outputs.gate-passed == 'false'
+#         uses: slackapi/slack-github-action@v1.27.0
+#         with:
+#           payload: |
+#             {
+#               "text": "🔴 *AppSec Gate FAILED* on `${{ github.ref_name }}`",
+#               "blocks": [
+#                 {
+#                   "type": "header",
+#                   "text": { "type": "plain_text", "text": "🔴 Security Gate Failed" }
+#                 },
+#                 {
+#                   "type": "section",
+#                   "fields": [
+#                     { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
+#                     { "type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`" },
+#                     { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
+#                     { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
+#                   ]
+#                 },
+#                 {
+#                   "type": "section",
+#                   "text": { "type": "mrkdwn", "text": "*Action required:* Review security findings before this can be deployed." }
+#                 }
+#               ]
+#             }
+#         env:
+#           SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+#           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+#         continue-on-error: true
 
-      - name: Notify Slack on success
-        if: needs.security-gate.outputs.gate-passed == 'true'
-        uses: slackapi/slack-github-action@v1.27.0
-        with:
-          payload: |
-            {
-              "text": "✅ *AppSec Gate PASSED* on `${{ github.ref_name }}`",
-              "blocks": [
-                {
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
-                    { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
-                    { "type": "mrkdwn", "text": "*Status:*\n✅ All security checks passed" },
-                    { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
-        continue-on-error: true
+#       - name: Notify Slack on success
+#         if: needs.security-gate.outputs.gate-passed == 'true'
+#         uses: slackapi/slack-github-action@v1.27.0
+#         with:
+#           payload: |
+#             {
+#               "text": "✅ *AppSec Gate PASSED* on `${{ github.ref_name }}`",
+#               "blocks": [
+#                 {
+#                   "type": "section",
+#                   "fields": [
+#                     { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
+#                     { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
+#                     { "type": "mrkdwn", "text": "*Status:*\n✅ All security checks passed" },
+#                     { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
+#                   ]
+#                 }
+#               ]
+#             }
+#         env:
+#           SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+#           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+#         continue-on-error: true
