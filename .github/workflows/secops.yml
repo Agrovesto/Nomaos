@@ -1,0 +1,1393 @@
+# .github/workflows/secops.yml
+name: "SecOps Pipeline"
+
+on:
+  pull_request:
+    branches:
+      - master
+      - staging
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+      - "LICENSE"
+      - ".editorconfig"
+
+  push:
+    branches:
+      - master
+      - staging
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".gitignore"
+      - "LICENSE"
+      - ".editorconfig"
+
+  schedule:
+    - cron: "0 2 * * 0"   # Weekly full scan — Sunday 02:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      scan_mode:
+        description: "Scan mode override"
+        required: false
+        default: "full"
+        type: choice
+        options:
+          - full
+          - sast-only
+          - sca-only
+          - dast-only
+      target_environment:
+        description: "DAST target environment"
+        required: false
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+      fail_on_findings:
+        description: "Fail pipeline on security findings"
+        required: false
+        default: true
+        type: boolean
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cancel superseded runs on the same branch/PR
+# ─────────────────────────────────────────────────────────────────────────────
+concurrency:
+  group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Minimal permissions — elevated only where required
+# ─────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents:        read
+  security-events: write   # SARIF upload → GitHub Security tab
+  pull-requests:   write   # PR comments
+  actions:         read    # Artifact download between jobs
+  checks:          write   # Check run status updates
+  statuses:        write   # Commit status updates
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Global environment
+# ─────────────────────────────────────────────────────────────────────────────
+env:
+  DOTNET_VERSION:        "8.0.x"
+  JAVA_VERSION:          "17"
+  SONAR_PROJECT_KEY:     "agrovesto_nomaos"
+  REPORTS_DIR:           "security-reports"
+  DOTNET_NOLOGO:         "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # Pipeline behavior flags (resolved in validate-pipeline job)
+  RUN_DAST:              ${{ (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
+  IS_PR:                 ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+  TARGET_BRANCH:         ${{ github.base_ref || github.ref_name }}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+jobs:
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 0 — Pipeline Validation & Context Resolution
+# Runs first, cheaply. Resolves all flags downstream jobs need.
+# ───────────────────────────────────────────────────────────────────────────────
+  validate-pipeline:
+    name: "Pipeline | Validate & Resolve Context"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      run-sast:          ${{ steps.resolve.outputs.run-sast }}
+      run-sca:           ${{ steps.resolve.outputs.run-sca }}
+      run-dast:          ${{ steps.resolve.outputs.run-dast }}
+      dast-environment:  ${{ steps.resolve.outputs.dast-environment }}
+      fail-on-findings:  ${{ steps.resolve.outputs.fail-on-findings }}
+      pipeline-run-id:   ${{ steps.resolve.outputs.pipeline-run-id }}
+      sonar-branch-args: ${{ steps.resolve.outputs.sonar-branch-args }}
+      is-pr:             ${{ steps.resolve.outputs.is-pr }}
+      target-branch:     ${{ steps.resolve.outputs.target-branch }}
+
+    steps:
+      - name: Resolve pipeline context
+        id: resolve
+        run: |
+          # ── Event type flags ───────────────────────────────────────────────
+          EVENT="${{ github.event_name }}"
+          REF="${{ github.ref_name }}"
+          BASE_REF="${{ github.base_ref }}"
+          SCAN_MODE="${{ inputs.scan_mode || 'full' }}"
+          FAIL_ON="${{ inputs.fail_on_findings || 'true' }}"
+          TARGET_ENV="${{ inputs.target_environment || 'staging' }}"
+
+          # ── Determine which jobs to run ────────────────────────────────────
+          RUN_SAST="true"
+          RUN_SCA="true"
+          RUN_DAST="false"
+
+          case "$SCAN_MODE" in
+            sast-only) RUN_SCA="false";  RUN_DAST="false" ;;
+            sca-only)  RUN_SAST="false"; RUN_DAST="false" ;;
+            dast-only) RUN_SAST="false"; RUN_SCA="false"; RUN_DAST="true" ;;
+            full)
+              # DAST only on push to staging/master, schedule, or manual
+              if [[ "$EVENT" == "push" || "$EVENT" == "schedule" || "$EVENT" == "workflow_dispatch" ]]; then
+                RUN_DAST="true"
+              fi
+              ;;
+          esac
+
+          # ── Draft PR — run SCA only (fastest feedback) ─────────────────────
+          if [[ "${{ github.event.pull_request.draft }}" == "true" ]]; then
+            echo "Draft PR detected — running SCA only"
+            RUN_SAST="false"
+            RUN_DAST="false"
+          fi
+
+          # ── Resolve DAST environment URLs ──────────────────────────────────
+          if [[ "$TARGET_ENV" == "production" || "$REF" == "master" ]]; then
+            DAST_ENV="production"
+            DAST_API_URL="${{ secrets.PROD_API_URL }}"
+            DAST_WEB_URL="${{ secrets.PROD_WEB_URL }}"
+            DAST_OPENAPI_URL="${{ secrets.PROD_API_URL }}/swagger/v1/swagger.json"
+          else
+            DAST_ENV="staging"
+            DAST_API_URL="${{ secrets.STAGING_API_URL }}"
+            DAST_WEB_URL="${{ secrets.STAGING_WEB_URL }}"
+            DAST_OPENAPI_URL="${{ secrets.STAGING_API_URL }}/swagger/v1/swagger.json"
+          fi
+
+          # ── SonarQube branch analysis args ────────────────────────────────
+          if [[ "$EVENT" == "pull_request" ]]; then
+            SONAR_BRANCH_ARGS="/d:sonar.pullrequest.key=${{ github.event.number }} \
+              /d:sonar.pullrequest.branch=${{ github.head_ref }} \
+              /d:sonar.pullrequest.base=${BASE_REF}"
+          else
+            SONAR_BRANCH_ARGS="/d:sonar.branch.name=${REF}"
+          fi
+
+          # ── Unique run identifier for artifact namespacing ─────────────────
+          PIPELINE_RUN_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          IS_PR="false"
+          [[ "$EVENT" == "pull_request" ]] && IS_PR="true"
+
+          # ── Write outputs ──────────────────────────────────────────────────
+          {
+            echo "run-sast=${RUN_SAST}"
+            echo "run-sca=${RUN_SCA}"
+            echo "run-dast=${RUN_DAST}"
+            echo "dast-environment=${DAST_ENV}"
+            echo "fail-on-findings=${FAIL_ON}"
+            echo "pipeline-run-id=${PIPELINE_RUN_ID}"
+            echo "sonar-branch-args=${SONAR_BRANCH_ARGS}"
+            echo "is-pr=${IS_PR}"
+            echo "target-branch=${BASE_REF:-$REF}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Print pipeline context
+        run: |
+          echo "══════════════════════════════════════════"
+          echo "  AppSec Pipeline — Context Summary"
+          echo "══════════════════════════════════════════"
+          echo "  Event:           ${{ github.event_name }}"
+          echo "  Branch/Ref:      ${{ github.ref_name }}"
+          echo "  Target Branch:   ${{ github.base_ref || github.ref_name }}"
+          echo "  PR Number:       ${{ github.event.number || 'N/A' }}"
+          echo "  Actor:           ${{ github.actor }}"
+          echo "  Run ID:          ${{ github.run_id }}"
+          echo "──────────────────────────────────────────"
+          echo "  Run SAST:        ${{ steps.resolve.outputs.run-sast }}"
+          echo "  Run SCA:         ${{ steps.resolve.outputs.run-sca }}"
+          echo "  Run DAST:        ${{ steps.resolve.outputs.run-dast }}"
+          echo "  DAST Env:        ${{ steps.resolve.outputs.dast-environment }}"
+          echo "  Fail on Findings:${{ steps.resolve.outputs.fail-on-findings }}"
+          echo "══════════════════════════════════════════"
+
+      - name: Validate required secrets
+        run: |
+          MISSING=""
+
+          # Core secrets — always required
+          [[ -z "${{ secrets.SONAR_TOKEN_DOTNET }}" ]] && MISSING="${MISSING} SONAR_TOKEN_DOTNET"
+          [[ -z "${{ secrets.SONAR_HOST_URL }}"    ]] && MISSING="${MISSING} SONAR_HOST_URL"
+
+          # DAST secrets — only required when DAST runs
+          if [[ "${{ steps.resolve.outputs.run-dast }}" == "true" ]]; then
+            [[ -z "${{ secrets.STAGING_API_URL }}" ]] && MISSING="${MISSING} STAGING_API_URL"
+            [[ -z "${{ secrets.STAGING_WEB_URL }}" ]] && MISSING="${MISSING} STAGING_WEB_URL"
+          fi
+
+          if [[ -n "$MISSING" ]]; then
+            echo "::error::Missing required secrets:${MISSING}"
+            echo "::error::Add them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+
+          echo "✅ All required secrets present"
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 1 — Build & Test
+# ───────────────────────────────────────────────────────────────────────────────
+  build-and-test:
+    name: "Build | .NET Build & Test"
+    runs-on: ubuntu-latest
+    needs: [validate-pipeline]
+    timeout-minutes: 20
+
+    outputs:
+      test-outcome:    ${{ steps.run-tests.outcome }}
+      coverage-path:   ${{ steps.locate-coverage.outputs.path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Full history for SonarQube new-code analysis                 # Cache NuGet packages
+
+      - name: Restore NuGet packages
+        run: dotnet restore 
+
+      - name: Build (Release)
+        run: |
+          dotnet build \
+            --no-restore \
+            --configuration Release \
+            --verbosity minimal \
+            -p:TreatWarningsAsErrors=false \
+            -p:RunAnalyzers=false
+
+      - name: Run tests with coverage
+        id: run-tests
+        run: |
+          dotnet test \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --logger "console;verbosity=minimal" \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover \
+               DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.ExcludeByFile="**/Migrations/**"
+        continue-on-error: true   # Collect results; fail via gate
+
+      - name: Locate coverage files
+        id: locate-coverage
+        run: |
+          COVERAGE_PATH=$(find ./TestResults -name "coverage.opencover.xml" | head -1)
+          echo "path=${COVERAGE_PATH}" >> "$GITHUB_OUTPUT"
+          echo "Coverage file: ${COVERAGE_PATH:-NOT FOUND}"
+
+      - name: Upload test artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: |
+            TestResults/**/*.trx
+            TestResults/**/coverage.opencover.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail if tests failed
+        if: steps.run-tests.outcome == 'failure'
+        run: |
+          echo "::error::Unit tests failed. Review test output above."
+          exit 1
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 2 — Trivy SCA (NuGet + Secrets + IaC)
+# ───────────────────────────────────────────────────────────────────────────────
+  trivy-sca:
+    name: "SCA | Trivy (NuGet + Secrets + IaC)"
+    runs-on: ubuntu-latest
+    needs: [validate-pipeline]
+    timeout-minutes: 20
+    if: needs.validate-pipeline.outputs.run-sca == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create reports directory
+        run: mkdir -p ${{ env.REPORTS_DIR }}
+
+      - name: Cache Trivy DB
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-db-${{ github.run_id }}
+          restore-keys: |
+            trivy-db-
+
+      # ── Vulnerability scan (NuGet, npm, OS) ──────────────────────────────
+      - name: Trivy — Vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type:  "fs"
+          scan-ref:   "."
+          format:     "json"
+          output:     "${{ env.REPORTS_DIR }}/trivy-vuln.json"
+          severity:   "CRITICAL,HIGH,MEDIUM,LOW"
+          scanners:   "vuln"
+          cache-dir:  "~/.cache/trivy"
+          timeout:    "10m0s"
+        continue-on-error: true
+
+      # ── Secret scan ───────────────────────────────────────────────────────
+      - name: Trivy — Secret scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type:  "fs"
+          scan-ref:   "."
+          format:     "json"
+          output:     "${{ env.REPORTS_DIR }}/trivy-secrets.json"
+          scanners:   "secret"
+          cache-dir:  "~/.cache/trivy"
+          timeout:    "5m0s"
+        continue-on-error: true
+
+      # ── IaC / Misconfiguration scan ───────────────────────────────────────
+      - name: Trivy — IaC / Misconfiguration scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type:  "config"
+          scan-ref:   "."
+          format:     "json"
+          output:     "${{ env.REPORTS_DIR }}/trivy-iac.json"
+          severity:   "CRITICAL,HIGH,MEDIUM"
+          cache-dir:  "~/.cache/trivy"
+          timeout:    "5m0s"
+        continue-on-error: true
+
+      # ── SARIF for GitHub Security tab ────────────────────────────────────
+      - name: Trivy — SARIF (GitHub Security tab)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type:  "fs"
+          scan-ref:   "."
+          format:     "sarif"
+          output:     "${{ env.REPORTS_DIR }}/trivy.sarif"
+          severity:   "CRITICAL,HIGH"
+          scanners:   "vuln,secret,config"
+          cache-dir:  "~/.cache/trivy"
+        continue-on-error: true
+
+      - name: Upload Trivy SARIF → GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: ${{ env.REPORTS_DIR }}/trivy.sarif
+          category:   "trivy"
+        continue-on-error: true
+
+      # ── Merge and convert ─────────────────────────────────────────────────
+      - name: Merge Trivy reports
+        run: |
+          python3 scripts/merge-trivy-reports.py \
+            --inputs \
+              ${{ env.REPORTS_DIR }}/trivy-vuln.json \
+              ${{ env.REPORTS_DIR }}/trivy-secrets.json \
+              ${{ env.REPORTS_DIR }}/trivy-iac.json \
+            --output ${{ env.REPORTS_DIR }}/trivy-merged.json
+
+      - name: Convert Trivy → SonarQube format
+        run: |
+          python3 scripts/convert-reports-to-sonar.py \
+            --trivy    ${{ env.REPORTS_DIR }}/trivy-merged.json \
+            --output-dir ${{ env.REPORTS_DIR }}
+
+      - name: Validate Trivy SonarQube report
+        run: |
+          python3 scripts/validate-sonar-reports.py \
+            ${{ env.REPORTS_DIR }}/trivy-sonar-report.json
+
+      # ── Upload artifacts ──────────────────────────────────────────────────
+      - name: Upload Trivy SonarQube report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: ${{ env.REPORTS_DIR }}/trivy-sonar-report.json
+          retention-days: 3
+
+      - name: Upload Trivy raw reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-raw-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: ${{ env.REPORTS_DIR }}/trivy-*.json
+          retention-days: 14
+
+      # ── Enforce critical threshold ────────────────────────────────────────
+      - name: Evaluate critical findings
+        run: |
+          python3 - <<'EOF'
+          import json, sys, os
+
+          report_path = "${{ env.REPORTS_DIR }}/trivy-vuln.json"
+          fail_on     = "${{ needs.validate-pipeline.outputs.fail-on-findings }}" == "true"
+
+          if not os.path.exists(report_path):
+              print("[WARN] Trivy vulnerability report not found")
+              sys.exit(0)
+
+          with open(report_path) as f:
+              data = json.load(f)
+
+          counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+          for result in data.get("Results", []):
+              for vuln in result.get("Vulnerabilities") or []:
+                  sev = vuln.get("Severity", "UNKNOWN").upper()
+                  if sev in counts:
+                      counts[sev] += 1
+
+          print("Trivy Finding Summary:")
+          for sev, count in counts.items():
+              level = "error" if sev == "CRITICAL" and count > 0 else "warning"
+              print(f"  {sev}: {count}")
+              if count > 0 and sev in ("CRITICAL", "HIGH"):
+                  print(f"::{'error' if sev == 'CRITICAL' else 'warning'}::"
+                        f"Trivy found {count} {sev} vulnerability/ies")
+
+          if fail_on and counts["CRITICAL"] > 0:
+              print(f"\n[FAIL] {counts['CRITICAL']} CRITICAL vulnerabilities detected.")
+              print("[INFO] Remediate or add to .trivyignore with justification.")
+              sys.exit(1)
+
+          print("\n[OK] Trivy threshold check passed")
+          EOF
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 3 — OWASP Dependency-Check SCA
+# ───────────────────────────────────────────────────────────────────────────────
+  depcheck-sca:
+    name: "SCA | OWASP Dependency-Check"
+    runs-on: ubuntu-latest
+    needs: [validate-pipeline]
+    timeout-minutes: 30
+    if: needs.validate-pipeline.outputs.run-sca == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create reports directory
+        run: mkdir -p ${{ env.REPORTS_DIR }}
+
+      - name: Cache NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.odc-data
+          # Bust cache daily — NVD updates daily
+          key: odc-nvd-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}-${{ github.run_id }}
+          restore-keys: |
+            odc-nvd-${{ hashFiles('**/packages.lock.json', '**/*.csproj') }}-
+            odc-nvd-
+
+      - name: Run OWASP Dependency-Check
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          docker run --rm \
+            -v "$(pwd):/apps/src:ro" \
+            -v "$HOME/.odc-data:/usr/share/dependency-check/data" \
+            -v "$(pwd)/${{ env.REPORTS_DIR }}:/apps/reports" \
+            --memory="2g" \
+            owasp/dependency-check:10.0.4 \
+            --project "dotnet-backend" \
+            --scan "/apps/src" \
+            --out "/apps/reports" \
+            --format JSON \
+            --format HTML \
+            --enableExperimental \
+            --disableAssembly \
+            --exclude "**/.git/**" \
+            --exclude "**/bin/**" \
+            --exclude "**/obj/**" \
+            ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
+            --failOnCVSS 11 \
+            --log /apps/reports/odc.log \
+          || true
+          # failOnCVSS 11 = never fail here; enforced below via Python threshold check
+
+      - name: Convert Dependency-Check → SonarQube format
+        run: |
+          REPORT="${{ env.REPORTS_DIR }}/dependency-check-report.json"
+
+          if [[ -f "$REPORT" ]]; then
+            python3 scripts/convert-reports-to-sonar.py \
+              --depcheck "$REPORT" \
+              --output-dir ${{ env.REPORTS_DIR }}
+          else
+            echo "::warning::Dependency-Check report not generated (NVD connectivity?)"
+            echo '{"issues":[]}' > ${{ env.REPORTS_DIR }}/dependency-check-sonar-report.json
+          fi
+
+      - name: Validate Dependency-Check SonarQube report
+        run: |
+          python3 scripts/validate-sonar-reports.py \
+            ${{ env.REPORTS_DIR }}/dependency-check-sonar-report.json
+
+      - name: Upload Dependency-Check SonarQube report
+        uses: actions/upload-artifact@v4
+        with:
+          name: depcheck-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: ${{ env.REPORTS_DIR }}/dependency-check-sonar-report.json
+          retention-days: 3
+
+      - name: Upload Dependency-Check full reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: depcheck-raw-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: |
+            ${{ env.REPORTS_DIR }}/dependency-check-report.html
+            ${{ env.REPORTS_DIR }}/dependency-check-report.json
+            ${{ env.REPORTS_DIR }}/odc.log
+          retention-days: 14
+
+      - name: Evaluate CVSS thresholds
+        run: |
+          python3 - <<'EOF'
+          import json, sys, os
+
+          report_path = "${{ env.REPORTS_DIR }}/dependency-check-report.json"
+          fail_on     = "${{ needs.validate-pipeline.outputs.fail-on-findings }}" == "true"
+
+          if not os.path.exists(report_path):
+              print("[SKIP] No Dependency-Check report found")
+              sys.exit(0)
+
+          with open(report_path) as f:
+              data = json.load(f)
+
+          critical, high = [], []
+
+          for dep in data.get("dependencies", []):
+              for vuln in dep.get("vulnerabilities", []):
+                  name  = vuln.get("name", "UNKNOWN")
+                  sev   = vuln.get("severity", "").upper()
+                  score = 0.0
+
+                  cv3 = vuln.get("cvssv3", {})
+                  cv2 = vuln.get("cvssv2", {})
+                  if cv3 and "baseScore" in cv3:
+                      score = float(cv3["baseScore"])
+                  elif cv2 and "score" in cv2:
+                      score = float(cv2["score"])
+
+                  if sev == "CRITICAL" or score >= 9.0:
+                      critical.append((name, score, dep.get("fileName", "?")))
+                  elif sev == "HIGH" or score >= 7.0:
+                      high.append((name, score, dep.get("fileName", "?")))
+
+          print(f"Dependency-Check — Critical: {len(critical)}, High: {len(high)}")
+
+          for name, score, pkg in critical:
+              print(f"  ::error::CRITICAL CVE {name} (CVSS {score:.1f}) in {pkg}")
+
+          for name, score, pkg in high:
+              print(f"  ::warning::HIGH CVE {name} (CVSS {score:.1f}) in {pkg}")
+
+          if fail_on and critical:
+              print(f"\n[FAIL] {len(critical)} CRITICAL CVE(s) found. Remediate before merge.")
+              sys.exit(1)
+          EOF
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 4 — SonarQube SAST
+# Runs after SCA to import external reports into SonarQube
+# ───────────────────────────────────────────────────────────────────────────────
+  sonarqube-sast:
+    name: "SAST | SonarQube"
+    runs-on: ubuntu-latest
+    needs:
+      - validate-pipeline
+      - build-and-test
+      - trivy-sca
+      - depcheck-sca
+    timeout-minutes: 30
+    if: |
+      always() &&
+      needs.validate-pipeline.outputs.run-sast == 'true' &&
+      needs.build-and-test.result == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonarcloud-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: sonarcloud-${{ runner.os }}-
+
+      - name: Install SonarScanner for .NET
+        run: |
+          dotnet tool install --global dotnet-sonarscanner --version 8.0.3
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      # ── Download artifacts from parallel SCA jobs ─────────────────────────
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: TestResults
+        continue-on-error: true
+
+      - name: Download Trivy SonarQube report
+        uses: actions/download-artifact@v4
+        with:
+          name: trivy-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: sonar-imports
+        continue-on-error: true
+
+      - name: Download Dependency-Check SonarQube report
+        uses: actions/download-artifact@v4
+        with:
+          name: depcheck-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: sonar-imports
+        continue-on-error: true
+
+      - name: Download ZAP SonarQube report
+        uses: actions/download-artifact@v4
+        with:
+          name: zap-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: sonar-imports
+        continue-on-error: true
+
+      - name: Build external report paths
+        id: ext-reports
+        run: |
+          PATHS=""
+          for f in \
+            sonar-imports/trivy-sonar-report.json \
+            sonar-imports/dependency-check-sonar-report.json \
+            sonar-imports/zap-sonar-report.json; do
+            if [[ -f "$f" ]]; then
+              PATHS="${PATHS:+${PATHS},}${f}"
+              echo "  Found: $f"
+            fi
+          done
+          echo "paths=${PATHS}" >> "$GITHUB_OUTPUT"
+          echo "External report paths: ${PATHS:-none}"
+
+      - name: SonarScanner — Begin
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          EXT_PARAM=""
+          if [[ -n "${{ steps.ext-reports.outputs.paths }}" ]]; then
+            EXT_PARAM="/d:sonar.externalIssuesReportPaths=${{ steps.ext-reports.outputs.paths }}"
+          fi
+
+          dotnet sonarscanner begin \
+            /k:"${{ env.SONAR_PROJECT_KEY }}" \
+            /d:sonar.host.url="${SONAR_HOST_URL}" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
+            /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.min.js" \
+            /d:sonar.coverage.exclusions="**/*Tests*/**,**/*Test*/**,**/Program.cs" \
+            /d:sonar.qualitygate.wait=true \
+            /d:sonar.qualitygate.timeout=300 \
+            /d:sonar.scm.provider=git \
+            ${{ needs.validate-pipeline.outputs.sonar-branch-args }} \
+            ${EXT_PARAM}
+
+      - name: Restore NuGet packages
+        run: dotnet restore 
+
+      - name: Build for SonarQube analysis
+        run: |
+          dotnet build \
+            --no-restore \
+            --configuration Release \
+            --verbosity minimal
+
+      - name: SonarScanner — End & Upload
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
+
+      - name: Check Quality Gate
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          python3 - <<'EOF'
+          import json, sys, urllib.request, urllib.error, base64, os, time
+
+          host      = os.environ["SONAR_HOST_URL"].rstrip("/")
+          token     = os.environ["SONAR_TOKEN"]
+          project   = "${{ env.SONAR_PROJECT_KEY }}"
+          fail_on   = "${{ needs.validate-pipeline.outputs.fail-on-findings }}" == "true"
+
+          credentials = base64.b64encode(f"{token}:".encode()).decode()
+          headers = {"Authorization": f"Basic {credentials}"}
+
+          url = f"{host}/api/qualitygates/project_status?projectKey={project}"
+
+          # Retry up to 5 times (SonarQube may still be computing)
+          for attempt in range(5):
+              try:
+                  req  = urllib.request.Request(url, headers=headers)
+                  resp = urllib.request.urlopen(req, timeout=30)
+                  data = json.loads(resp.read())
+                  break
+              except urllib.error.HTTPError as e:
+                  if attempt < 4:
+                      print(f"  Attempt {attempt+1} failed ({e.code}), retrying in 10s...")
+                      time.sleep(10)
+                  else:
+                      print(f"::error::Cannot reach SonarQube API: {e}")
+                      sys.exit(1)
+
+          status     = data["projectStatus"]["status"]
+          conditions = data["projectStatus"].get("conditions", [])
+
+          print(f"\nQuality Gate: {status}")
+          print(f"Dashboard: {host}/dashboard?id={project}\n")
+
+          failed_conditions = []
+          for cond in conditions:
+              cond_status = cond.get("status", "")
+              metric      = cond.get("metricKey", "")
+              actual      = cond.get("actualValue", "N/A")
+              threshold   = cond.get("errorThreshold", "N/A")
+              icon        = "✅" if cond_status == "OK" else "❌"
+              print(f"  {icon} {metric}: {actual} (threshold: {threshold})")
+              if cond_status != "OK":
+                  failed_conditions.append(metric)
+
+          if status != "OK":
+              print(f"\n::error::Quality Gate FAILED — {len(failed_conditions)} condition(s) not met")
+              for m in failed_conditions:
+                  print(f"::error::  Failed condition: {m}")
+              if fail_on:
+                  sys.exit(1)
+              else:
+                  print("[INFO] fail-on-findings=false — continuing despite QG failure")
+          else:
+              print("\n✅ Quality Gate PASSED")
+          EOF
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 5 — OWASP ZAP DAST
+# Only runs on push to staging/master, schedule, or manual dispatch
+# Uses matrix for API + Web scans in parallel
+# ───────────────────────────────────────────────────────────────────────────────
+  zap-dast:
+    name: "DAST | ZAP — ${{ matrix.target.label }}"
+    runs-on: ubuntu-latest
+    needs: [validate-pipeline, build-and-test]
+    timeout-minutes: 45
+    if: |
+      always() &&
+      needs.validate-pipeline.outputs.run-dast == 'true' &&
+      needs.build-and-test.result == 'success'
+
+    strategy:
+      matrix:
+        target:
+          - name:  "api"
+            type:  "api"
+            label: ".NET REST API"
+          - name:  "web"
+            type:  "baseline"
+            label: "Web Frontend"
+      fail-fast: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Resolve URLs directly from secrets here, NOT from job outputs ────
+      - name: Resolve DAST target URLs
+        id: urls
+        env:
+          DAST_ENV:       ${{ needs.validate-pipeline.outputs.dast-environment }}
+          STAGING_API:    ${{ secrets.STAGING_API_URL }}
+          STAGING_WEB:    ${{ secrets.STAGING_WEB_URL }}
+          PROD_API:       ${{ secrets.PROD_API_URL }}
+          PROD_WEB:       ${{ secrets.PROD_WEB_URL }}
+        run: |
+          # Pick URLs based on safe environment flag (not a secret)
+          if [[ "$DAST_ENV" == "production" ]]; then
+            API_URL="$PROD_API"
+            WEB_URL="$PROD_WEB"
+          else
+            API_URL="$STAGING_API"
+            WEB_URL="$STAGING_WEB"
+          fi
+
+          # Validate URLs are not empty
+          if [[ "${{ matrix.target.type }}" == "api" && -z "$API_URL" ]]; then
+            echo "::error::STAGING_API_URL or PROD_API_URL secret is not set"
+            exit 1
+          fi
+          if [[ "${{ matrix.target.type }}" == "baseline" && -z "$WEB_URL" ]]; then
+            echo "::error::STAGING_WEB_URL or PROD_WEB_URL secret is not set"
+            exit 1
+          fi
+
+          OPENAPI_URL="${API_URL}/swagger/v1/swagger.json"
+
+          # Write outputs
+          if [[ "${{ matrix.target.type }}" == "api" ]]; then
+            echo "target-url=${API_URL}"       >> "$GITHUB_OUTPUT"
+            echo "openapi-url=${OPENAPI_URL}"  >> "$GITHUB_OUTPUT"
+          else
+            echo "target-url=${WEB_URL}"       >> "$GITHUB_OUTPUT"
+            echo "openapi-url="                >> "$GITHUB_OUTPUT"
+          fi
+
+          # Print masked-safe info (do not print actual URLs to logs)
+          echo "DAST environment : ${DAST_ENV}"
+          echo "Target type      : ${{ matrix.target.type }}"
+          echo "Target URL set   : $([[ -n "$API_URL" || -n "$WEB_URL" ]] && echo 'yes' || echo 'no')"
+
+      - name: Check target reachability
+        env:
+          TARGET_URL: ${{ steps.urls.outputs.target-url }}
+        run: |
+          if [[ -z "$TARGET_URL" ]]; then
+            echo "::error::Target URL is empty for ${{ matrix.target.name }}"
+            exit 1
+          fi
+
+          echo "Checking reachability for ${{ matrix.target.label }}..."
+          for i in 1 2 3; do
+            if curl -sf --max-time 15 "${TARGET_URL}/health" > /dev/null 2>&1 || \
+               curl -sf --max-time 15 "${TARGET_URL}"        > /dev/null 2>&1; then
+              echo "✅ Target is reachable"
+              exit 0
+            fi
+            echo "  Attempt ${i}/3 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "::warning::Target not reachable after 3 attempts — continuing anyway"
+
+      - name: Create ZAP reports directory
+        run: |
+          mkdir -p ${{ github.workspace }}/zap-wrk
+          mkdir -p ${{ github.workspace }}/zap-reports
+          chmod 777 ${{ github.workspace }}/zap-wrk
+          chmod 777 ${{ github.workspace }}/zap-reports       
+
+      - name: ZAP API Scan (.NET Swagger/OpenAPI)
+        if: matrix.target.type == 'api'
+        uses: zaproxy/action-api-scan@v0.7.0
+        env:
+          TARGET: ${{ steps.urls.outputs.openapi-url }}
+        with:
+          target:              ${{ steps.urls.outputs.openapi-url }}
+          format:              openapi
+          allow_issue_writing: false
+          cmd_options: >-
+            -J zap-reports/zap-${{ matrix.target.name }}-report.json
+            -r zap-reports/zap-${{ matrix.target.name }}-report.html
+            -z "-config spider.maxDuration=10
+                -config scanner.maxScanDurationInMins=20"
+        continue-on-error: true
+
+      - name: ZAP Baseline Scan (Web Frontend)
+        if: matrix.target.type == 'baseline'
+        uses: zaproxy/action-baseline@v0.12.0
+        env:
+          TARGET: ${{ steps.urls.outputs.target-url }}
+        with:
+          target:              ${{ steps.urls.outputs.target-url }}
+          rules_file_name:     ".zap/rules.tsv"
+          allow_issue_writing: false
+          cmd_options: >-
+            -J zap-reports/zap-${{ matrix.target.name }}-report.json
+            -r zap-reports/zap-${{ matrix.target.name }}-report.html
+            -z "-config spider.maxDuration=5
+                -config scanner.maxScanDurationInMins=15"
+        continue-on-error: true
+
+      - name: Convert ZAP → SonarQube format
+        run: |
+          ZAP_REPORT="zap-reports/zap-${{ matrix.target.name }}-report.json"
+          OUT="zap-reports/zap-${{ matrix.target.name }}-sonar-report.json"
+
+          if [[ ! -f "$ZAP_REPORT" ]]; then
+            echo "::warning::No ZAP report generated for ${{ matrix.target.name }}"
+            echo '{"issues":[]}' > "$OUT"
+            exit 0
+          fi
+
+          python3 - <<'EOF'
+          import json, os, re
+          from urllib.parse import urlparse
+
+          ZAP_RISK_MAP = {"3": "CRITICAL", "2": "MAJOR", "1": "MINOR", "0": "INFO"}
+          RISK_LABEL   = {"3": "High", "2": "Medium", "1": "Low", "0": "Informational"}
+
+          def sanitize(text):
+              text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", str(text))
+              return " ".join(text.split())[:3900]
+
+          def uri_to_path(uri):
+              try:
+                  p = urlparse(uri).path.lstrip("/")
+                  return f"src/WebApi/{p}" if p else "."
+              except Exception:
+                  return "."
+
+          zap_report = "zap-reports/zap-${{ matrix.target.name }}-report.json"
+          out_path   = "zap-reports/zap-${{ matrix.target.name }}-sonar-report.json"
+          issues     = []
+
+          with open(zap_report) as f:
+              data = json.load(f)
+
+          sites = data.get("site", []) if isinstance(data, dict) else []
+          for site in sites:
+              for alert in site.get("alerts", []):
+                  alert_ref  = str(alert.get("alertRef", alert.get("pluginid", "0")))
+                  alert_name = alert.get("name", alert.get("alert", "Unknown"))
+                  risk_code  = str(alert.get("riskcode", alert.get("riskCode", "1")))
+                  severity   = ZAP_RISK_MAP.get(risk_code, "INFO")
+                  solution   = sanitize(alert.get("solution", ""))[:300]
+                  cweid      = alert.get("cweid", "")
+                  instances  = alert.get("instances", [])
+
+                  if instances:
+                      for inst in instances:
+                          uri      = inst.get("uri", inst.get("url", "."))
+                          method   = inst.get("method", "GET")
+                          evidence = inst.get("evidence", inst.get("param", ""))[:200]
+                          msg = (f"[ZAP-{alert_ref}] {alert_name} | "
+                                 f"Risk: {RISK_LABEL.get(risk_code,'?')} | "
+                                 f"URL: {uri} | Method: {method}"
+                                 + (f" | Evidence: {evidence}" if evidence else "")
+                                 + (f" | CWE: {cweid}" if cweid else "")
+                                 + (f" | Fix: {solution}" if solution else ""))
+                          issues.append({
+                              "engineId": "zap",
+                              "ruleId":   f"ZAP-{alert_ref}",
+                              "severity": severity,
+                              "type":     "VULNERABILITY",
+                              "primaryLocation": {
+                                  "message":   msg,
+                                  "filePath":  uri_to_path(uri),
+                                  "textRange": {"startLine": 1},
+                              },
+                          })
+                  else:
+                      desc = sanitize(alert.get("desc", alert.get("description", "")))[:400]
+                      msg  = (f"[ZAP-{alert_ref}] {alert_name} | "
+                              f"Risk: {RISK_LABEL.get(risk_code,'?')} | {desc}"
+                              + (f" | CWE: {cweid}" if cweid else "")
+                              + (f" | Fix: {solution}" if solution else ""))
+                      issues.append({
+                          "engineId": "zap",
+                          "ruleId":   f"ZAP-{alert_ref}",
+                          "severity": severity,
+                          "type":     "VULNERABILITY",
+                          "primaryLocation": {
+                              "message":   msg,
+                              "filePath":  ".",
+                              "textRange": {"startLine": 1},
+                          },
+                      })
+
+          with open(out_path, "w") as f:
+              json.dump({"issues": issues}, f, indent=2)
+          print(f"[OK] {out_path} — {len(issues)} issue(s)")
+          EOF
+
+      - name: Upload ZAP SonarQube report
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: zap-reports/zap-${{ matrix.target.name }}-sonar-report.json
+          retention-days: 3
+
+      - name: Upload ZAP HTML reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-reports-${{ matrix.target.name }}-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          path: |
+            zap-reports/zap-${{ matrix.target.name }}-report.html
+            zap-reports/zap-${{ matrix.target.name }}-report.json
+          retention-days: 14
+
+      - name: Evaluate ZAP findings
+        run: |
+          python3 - <<'EOF'
+          import json, sys, os
+
+          report_path = "zap-reports/zap-${{ matrix.target.name }}-report.json"
+          fail_on     = "${{ needs.validate-pipeline.outputs.fail-on-findings }}" == "true"
+
+          if not os.path.exists(report_path):
+              print("[SKIP] No ZAP report")
+              sys.exit(0)
+
+          with open(report_path) as f:
+              data = json.load(f)
+
+          sites  = data.get("site", []) if isinstance(data, dict) else []
+          counts = {3: 0, 2: 0, 1: 0, 0: 0}
+
+          for site in sites:
+              for alert in site.get("alerts", []):
+                  risk = int(alert.get("riskcode", alert.get("riskCode", 1)))
+                  counts[risk] = counts.get(risk, 0) + 1
+
+          labels = {3: "High", 2: "Medium", 1: "Low", 0: "Informational"}
+          print(f"ZAP Findings — ${{ matrix.target.label }}:")
+          for code, label in labels.items():
+              count = counts.get(code, 0)
+              if count > 0 and code == 3:
+                  print(f"  ::error::{label}: {count}")
+              elif count > 0 and code == 2:
+                  print(f"  ::warning::{label}: {count}")
+              else:
+                  print(f"  {label}: {count}")
+
+          if fail_on and counts.get(3, 0) > 0:
+              print(f"\n[FAIL] {counts[3]} High-risk finding(s). Remediate before deployment.")
+              sys.exit(1)
+          EOF
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 6 — Security Gate (single enforcement point)
+# Aggregates all job results and makes the final pass/fail decision
+# ───────────────────────────────────────────────────────────────────────────────
+  security-gate:
+    name: "Gate | Security Enforcement"
+    runs-on: ubuntu-latest
+    needs:
+      - validate-pipeline
+      - build-and-test
+      - trivy-sca
+      - depcheck-sca
+      - sonarqube-sast
+      - zap-dast
+    if: always()
+    timeout-minutes: 10
+
+    outputs:
+      gate-passed: ${{ steps.evaluate.outputs.gate-passed }}
+      summary-json: ${{ steps.evaluate.outputs.summary-json }}
+
+    steps:
+      - name: Evaluate all job results
+        id: evaluate
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          # Job results from GitHub context
+          jobs = {
+              "build-and-test":  "${{ needs.build-and-test.result }}",
+              "trivy-sca":       "${{ needs.trivy-sca.result }}",
+              "depcheck-sca":    "${{ needs.depcheck-sca.result }}",
+              "sonarqube-sast":  "${{ needs.sonarqube-sast.result }}",
+              "zap-dast":        "${{ needs.zap-dast.result }}",
+          }
+
+          # Jobs that were skipped are not failures
+          SKIP_ACCEPTABLE = {"skipped", ""}
+
+          blocking_failures = []
+          warnings          = []
+
+          for job, result in jobs.items():
+              if result == "success":
+                  print(f"  ✅ {job}: {result}")
+              elif result in SKIP_ACCEPTABLE:
+                  print(f"  ⏭️  {job}: skipped (conditional)")
+              elif result == "failure":
+                  print(f"  ❌ {job}: {result}")
+                  blocking_failures.append(job)
+              else:
+                  print(f"  ⚠️  {job}: {result}")
+                  warnings.append(job)
+
+          gate_passed = len(blocking_failures) == 0
+          fail_on     = "${{ needs.validate-pipeline.outputs.fail-on-findings }}" == "true"
+
+          summary = {
+              "gate_passed":        gate_passed,
+              "blocking_failures":  blocking_failures,
+              "warnings":           warnings,
+              "fail_on_findings":   fail_on,
+              "run_id":             "${{ github.run_id }}",
+              "sha":                "${{ github.sha }}",
+          }
+
+          import os
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"gate-passed={'true' if gate_passed else 'false'}\n")
+              f.write(f"summary-json={json.dumps(summary)}\n")
+
+          if not gate_passed and fail_on:
+              print(f"\n❌ Security Gate FAILED — {len(blocking_failures)} blocking job(s):")
+              for j in blocking_failures:
+                  print(f"   • {j}")
+              sys.exit(1)
+          elif not gate_passed:
+              print("\n⚠️  Security Gate — failures detected (fail-on-findings=false)")
+          else:
+              print("\n✅ Security Gate PASSED")
+          EOF
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 7 — PR Security Comment
+# ───────────────────────────────────────────────────────────────────────────────
+  pr-comment:
+    name: "Report | PR Security Comment"
+    runs-on: ubuntu-latest
+    needs:
+      - validate-pipeline
+      - trivy-sca
+      - depcheck-sca
+      - sonarqube-sast
+      - security-gate
+    if: |
+      always() &&
+      needs.validate-pipeline.outputs.is-pr == 'true'
+    timeout-minutes: 10
+
+    steps:
+      - name: Download SCA reports
+        uses: actions/download-artifact@v4
+        with:
+          path: all-reports
+          pattern: "*-sonar-*"
+        continue-on-error: true
+
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          script: |
+            const fs   = require('fs');
+            const path = require('path');
+
+            // ── Parse report counts ─────────────────────────────────────────
+            function countIssues(reportDir, fileName) {
+              try {
+                const dirs = fs.readdirSync(reportDir);
+                for (const d of dirs) {
+                  const candidate = path.join(reportDir, d, fileName);
+                  if (fs.existsSync(candidate)) {
+                    const data = JSON.parse(fs.readFileSync(candidate, 'utf8'));
+                    return data.issues?.length ?? 0;
+                  }
+                }
+              } catch (e) { /* not found */ }
+              return null;
+            }
+
+            const trivyCount   = countIssues('all-reports', 'trivy-sonar-report.json');
+            const depcheckCount = countIssues('all-reports', 'dependency-check-sonar-report.json');
+            const gateStatus   = '${{ needs.security-gate.outputs.gate-passed }}';
+            const sonarUrl     = process.env.SONAR_HOST_URL;
+            const projectKey   = '${{ env.SONAR_PROJECT_KEY }}';
+            const prNum        = context.issue.number;
+            const runUrl       = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${{ github.run_id }}`;
+
+            // ── Status icons ───────────────────────────────────────────────
+            function severityIcon(count) {
+              if (count === null)  return '⏭️';
+              if (count === 0)     return '✅';
+              if (count <= 5)      return '🟡';
+              return '🔴';
+            }
+
+            const gateIcon    = gateStatus === 'true' ? '✅' : '❌';
+            const trivyIcon   = severityIcon(trivyCount);
+            const depIcon     = severityIcon(depcheckCount);
+            const sonarStatus = '${{ needs.sonarqube-sast.result }}' === 'success' ? '✅ Passed' : '❌ Failed';
+
+            const totalFindings = (trivyCount ?? 0) + (depcheckCount ?? 0);
+            const headerIcon    = gateStatus === 'true' ? '🟢' : '🔴';
+
+            const body = `## ${headerIcon} AppSec Pipeline — Security Report
+
+            > **PR #${prNum}** • Commit \`${{ github.sha }}`.slice(0, 7)\`\` • [View Full Run](${runUrl})
+
+            ---
+
+            ### ${gateIcon} Security Gate: ${gateStatus === 'true' ? 'PASSED' : 'FAILED'}
+
+            | Scanner | Type | Coverage | Findings | Status |
+            |---------|------|----------|----------|--------|
+            | **SonarQube** | SAST — C# / JS / TS | New & Changed Code | [View Dashboard](${sonarUrl}/dashboard?id=${projectKey}&pullRequest=${prNum}) | ${sonarStatus} |
+            | **Trivy** | SCA — NuGet + Secrets + IaC | All Dependencies | ${trivyIcon} ${trivyCount ?? 'N/A'} issue(s) | ${trivyIcon} |
+            | **Dependency-Check** | SCA — NuGet / npm (CVE/NVD) | All Dependencies | ${depIcon} ${depcheckCount ?? 'N/A'} issue(s) | ${depIcon} |
+            | **ZAP DAST** | Dynamic — API + Web | Push to staging/master only | ⏭️ Skipped on PR | ⏭️ |
+
+            ---
+
+            ### 📊 Summary
+
+            - **Total external findings:** ${totalFindings}
+            - **Quality Gate:** ${sonarStatus}
+            - **DAST:** Runs automatically on merge to \`staging\` / \`master\`
+            - **Full reports:** Attached as [workflow artifacts](${runUrl})
+
+            ### 🔍 How to review findings
+
+            1. **SonarQube** → [Dashboard](${sonarUrl}/dashboard?id=${projectKey}&pullRequest=${prNum}) — new issues on this PR's code
+            2. **Trivy / Dep-Check** → Download artifacts from the [workflow run](${runUrl})
+            3. **False positives** → Add to \`.trivyignore\` or \`dependency-check-suppression.xml\` with justification
+
+            ---
+            <details>
+            <summary>📖 Legend</summary>
+
+            | Icon | Meaning |
+            |------|---------|
+            | ✅ | No findings / Passed |
+            | 🟡 | 1–5 findings (review required) |
+            | 🔴 | 6+ findings (action required) |
+            | ❌ | Job failed |
+            | ⏭️ | Skipped / Not applicable |
+
+            </details>
+
+            ---
+            <sub>🤖 AppSec Pipeline • ${{ github.workflow }} • ${new Date().toISOString()}</sub>`;
+
+            // ── Upsert comment ─────────────────────────────────────────────
+            const { data: comments } = await github.rest.issues.listComments({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: prNum,
+            });
+
+            const marker    = '<!-- appsec-pipeline-comment -->';
+            const bodyMarked = marker + '\n' + body;
+            const existing  = comments.find(c =>
+              c.body?.includes('AppSec Pipeline') &&
+              c.body?.includes('Security Report') &&
+              c.user?.type === 'Bot'
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner:      context.repo.owner,
+                repo:       context.repo.repo,
+                comment_id: existing.id,
+                body:       bodyMarked,
+              });
+              console.log(`Updated existing comment #${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner:        context.repo.owner,
+                repo:         context.repo.repo,
+                issue_number: prNum,
+                body:         bodyMarked,
+              });
+              console.log('Created new security comment');
+            }
+
+# ───────────────────────────────────────────────────────────────────────────────
+# JOB 8 — Notifications
+# Fires on push to master/staging after the gate resolves
+# ───────────────────────────────────────────────────────────────────────────────
+  notify:
+    name: "Notify | Slack / Teams Alert"
+    runs-on: ubuntu-latest
+    needs:
+      - validate-pipeline
+      - security-gate
+    if: |
+      always() &&
+      needs.validate-pipeline.outputs.is-pr == 'false' &&
+      (github.ref_name == 'master' || github.ref_name == 'staging')
+    timeout-minutes: 5
+
+    steps:
+      - name: Notify Slack on failure
+        if: needs.security-gate.outputs.gate-passed == 'false'
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "🔴 *AppSec Gate FAILED* on `${{ github.ref_name }}`",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🔴 Security Gate Failed"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
+                    { "type": "mrkdwn", "text": "*Commit:*\n`${{ github.sha }}`" },
+                    { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
+                    { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Action required:* Review security findings before this can be deployed."
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
+
+      - name: Notify Slack on success
+        if: needs.security-gate.outputs.gate-passed == 'true'
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "✅ *AppSec Gate PASSED* on `${{ github.ref_name }}`",
+              "blocks": [
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*Branch:*\n`${{ github.ref_name }}`" },
+                    { "type": "mrkdwn", "text": "*Actor:*\n${{ github.actor }}" },
+                    { "type": "mrkdwn", "text": "*Status:*\n✅ All security checks passed" },
+                    { "type": "mrkdwn", "text": "*Run:*\n<https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Pipeline>" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL:  ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
