@@ -507,7 +507,6 @@ jobs:
             --format HTML \
             --enableExperimental \
             --disableAssembly \
-            --disableRetired \
             --exclude "**/.git/**" \
             --exclude "**/bin/**" \
             --exclude "**/obj/**" \
@@ -719,7 +718,7 @@ jobs:
 
       - name: Restore NuGet packages
         run: dotnet restore 
-        
+
       - name: Build for SonarQube analysis
         run: |
           dotnet build \
@@ -892,7 +891,11 @@ jobs:
           echo "::warning::Target not reachable after 3 attempts — continuing anyway"
 
       - name: Create ZAP reports directory
-        run: mkdir -p zap-reports
+        run: |
+          mkdir -p ${{ github.workspace }}/zap-wrk
+          mkdir -p ${{ github.workspace }}/zap-reports
+          chmod 777 ${{ github.workspace }}/zap-wrk
+          chmod 777 ${{ github.workspace }}/zap-reports       
 
       - name: ZAP API Scan (.NET Swagger/OpenAPI)
         if: matrix.target.type == 'api'
