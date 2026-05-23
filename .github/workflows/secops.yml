@@ -552,6 +552,7 @@ jobs:
             ${{ env.REPORTS_DIR }}/odc.log
           retention-days: 14
 
+
       - name: Evaluate CVSS thresholds
         run: |
           python3 - <<'EOF'
@@ -691,7 +692,45 @@ jobs:
           done
           echo "paths=${PATHS}" >> "$GITHUB_OUTPUT"
           echo "External report paths: ${PATHS:-none}"
+      - name: Validate SonarQube connectivity
+        env:
+          SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          # ── Check secrets are not empty ───────────────────────────────────
+          if [[ -z "$SONAR_HOST_URL" ]]; then
+            echo "::error::SONAR_HOST_URL secret is empty or not set"
+            echo "::error::Go to Settings → Secrets → Actions and verify SONAR_HOST_URL"
+            exit 1
+          fi
 
+          if [[ -z "$SONAR_TOKEN" ]]; then
+            echo "::error::SONAR_TOKEN_DOTNET secret is empty or not set"
+            exit 1
+          fi
+
+          echo "SonarQube host: ${SONAR_HOST_URL}"
+
+          # ── Test connectivity ─────────────────────────────────────────────
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            -u "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/system/status" || echo "000")
+
+          echo "SonarQube /api/system/status → HTTP ${HTTP_CODE}"
+
+          if [[ "$HTTP_CODE" == "000" ]]; then
+            echo "::error::Cannot reach SonarQube at: ${SONAR_HOST_URL}"
+            echo "::error::Check network access from GitHub Actions runners to your SonarQube instance"
+            exit 1
+          fi
+
+          if [[ "$HTTP_CODE" == "401" ]]; then
+            echo "::error::SonarQube authentication failed — check SONAR_TOKEN_DOTNET"
+            exit 1
+          fi
+
+          echo "✅ SonarQube is reachable and token is valid"
       - name: SonarScanner — Begin
         env:
           SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
@@ -1026,7 +1065,8 @@ jobs:
         with:
           name: zap-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           path: zap-reports/zap-${{ matrix.target.name }}-sonar-report.json
-          retention-days: 3
+          retention-days: 1
+        continue-on-error: true
 
       - name: Upload ZAP HTML reports
         uses: actions/upload-artifact@v4
@@ -1036,7 +1076,8 @@ jobs:
           path: |
             zap-reports/zap-${{ matrix.target.name }}-report.html
             zap-reports/zap-${{ matrix.target.name }}-report.json
-          retention-days: 14
+          retention-days: 1
+        continue-on-error: true
 
       - name: Evaluate ZAP findings
         run: |
