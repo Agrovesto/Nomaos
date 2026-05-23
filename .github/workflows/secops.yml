@@ -82,7 +82,7 @@ permissions:
 env:
   DOTNET_VERSION:        "8.0.x"
   JAVA_VERSION:          "17"
-  SONAR_PROJECT_KEY:     "dotnet-backend"
+  SONAR_PROJECT_KEY:     "agrovesto_nomaos"
   REPORTS_DIR:           "security-reports"
   DOTNET_NOLOGO:         "true"
   DOTNET_CLI_TELEMETRY_OPTOUT: "true"
@@ -108,9 +108,6 @@ jobs:
       run-sca:           ${{ steps.resolve.outputs.run-sca }}
       run-dast:          ${{ steps.resolve.outputs.run-dast }}
       dast-environment:  ${{ steps.resolve.outputs.dast-environment }}
-      dast-api-url:      ${{ steps.resolve.outputs.dast-api-url }}
-      dast-web-url:      ${{ steps.resolve.outputs.dast-web-url }}
-      dast-openapi-url:  ${{ steps.resolve.outputs.dast-openapi-url }}
       fail-on-findings:  ${{ steps.resolve.outputs.fail-on-findings }}
       pipeline-run-id:   ${{ steps.resolve.outputs.pipeline-run-id }}
       sonar-branch-args: ${{ steps.resolve.outputs.sonar-branch-args }}
@@ -187,9 +184,6 @@ jobs:
             echo "run-sca=${RUN_SCA}"
             echo "run-dast=${RUN_DAST}"
             echo "dast-environment=${DAST_ENV}"
-            echo "dast-api-url=${DAST_API_URL}"
-            echo "dast-web-url=${DAST_WEB_URL}"
-            echo "dast-openapi-url=${DAST_OPENAPI_URL}"
             echo "fail-on-findings=${FAIL_ON}"
             echo "pipeline-run-id=${PIPELINE_RUN_ID}"
             echo "sonar-branch-args=${SONAR_BRANCH_ARGS}"
@@ -642,6 +636,13 @@ jobs:
           distribution: "temurin"
           java-version: ${{ env.JAVA_VERSION }}
 
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonarcloud-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: sonarcloud-${{ runner.os }}-
+
       - name: Install SonarScanner for .NET
         run: |
           dotnet tool install --global dotnet-sonarscanner --version 8.0.3
@@ -797,7 +798,7 @@ jobs:
 # Uses matrix for API + Web scans in parallel
 # ───────────────────────────────────────────────────────────────────────────────
   zap-dast:
-    name: "DAST | ZAP — ${{ matrix.target.name }}"
+    name: "DAST | ZAP — ${{ matrix.target.label }}"
     runs-on: ubuntu-latest
     needs: [validate-pipeline, build-and-test]
     timeout-minutes: 45
@@ -809,59 +810,95 @@ jobs:
     strategy:
       matrix:
         target:
-          - name:    "api"
-            type:    "api"
-            label:   "REST API"
-          - name:    "web"
-            type:    "baseline"
-            label:   "Web Frontend"
+          - name:  "api"
+            type:  "api"
+            label: ".NET REST API"
+          - name:  "web"
+            type:  "baseline"
+            label: "Web Frontend"
       fail-fast: false
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Resolve URLs directly from secrets here, NOT from job outputs ────
       - name: Resolve DAST target URLs
         id: urls
+        env:
+          DAST_ENV:       ${{ needs.validate-pipeline.outputs.dast-environment }}
+          STAGING_API:    ${{ secrets.STAGING_API_URL }}
+          STAGING_WEB:    ${{ secrets.STAGING_WEB_URL }}
+          PROD_API:       ${{ secrets.PROD_API_URL }}
+          PROD_WEB:       ${{ secrets.PROD_WEB_URL }}
         run: |
-          if [[ "${{ matrix.target.type }}" == "api" ]]; then
-            echo "target-url=${{ needs.validate-pipeline.outputs.dast-api-url }}"         >> "$GITHUB_OUTPUT"
-            echo "openapi-url=${{ needs.validate-pipeline.outputs.dast-openapi-url }}"   >> "$GITHUB_OUTPUT"
+          # Pick URLs based on safe environment flag (not a secret)
+          if [[ "$DAST_ENV" == "production" ]]; then
+            API_URL="$PROD_API"
+            WEB_URL="$PROD_WEB"
           else
-            echo "target-url=${{ needs.validate-pipeline.outputs.dast-web-url }}"        >> "$GITHUB_OUTPUT"
-            echo "openapi-url="                                                            >> "$GITHUB_OUTPUT"
+            API_URL="$STAGING_API"
+            WEB_URL="$STAGING_WEB"
           fi
 
+          # Validate URLs are not empty
+          if [[ "${{ matrix.target.type }}" == "api" && -z "$API_URL" ]]; then
+            echo "::error::STAGING_API_URL or PROD_API_URL secret is not set"
+            exit 1
+          fi
+          if [[ "${{ matrix.target.type }}" == "baseline" && -z "$WEB_URL" ]]; then
+            echo "::error::STAGING_WEB_URL or PROD_WEB_URL secret is not set"
+            exit 1
+          fi
+
+          OPENAPI_URL="${API_URL}/swagger/v1/swagger.json"
+
+          # Write outputs
+          if [[ "${{ matrix.target.type }}" == "api" ]]; then
+            echo "target-url=${API_URL}"       >> "$GITHUB_OUTPUT"
+            echo "openapi-url=${OPENAPI_URL}"  >> "$GITHUB_OUTPUT"
+          else
+            echo "target-url=${WEB_URL}"       >> "$GITHUB_OUTPUT"
+            echo "openapi-url="                >> "$GITHUB_OUTPUT"
+          fi
+
+          # Print masked-safe info (do not print actual URLs to logs)
+          echo "DAST environment : ${DAST_ENV}"
+          echo "Target type      : ${{ matrix.target.type }}"
+          echo "Target URL set   : $([[ -n "$API_URL" || -n "$WEB_URL" ]] && echo 'yes' || echo 'no')"
+
       - name: Check target reachability
+        env:
+          TARGET_URL: ${{ steps.urls.outputs.target-url }}
         run: |
-          TARGET="${{ steps.urls.outputs.target-url }}"
-          if [[ -z "$TARGET" ]]; then
+          if [[ -z "$TARGET_URL" ]]; then
             echo "::error::Target URL is empty for ${{ matrix.target.name }}"
             exit 1
           fi
-          echo "Target: ${TARGET}"
-          # Retry health check up to 3 times
+
+          echo "Checking reachability for ${{ matrix.target.label }}..."
           for i in 1 2 3; do
-            if curl -sf --max-time 15 "${TARGET}/health" > /dev/null 2>&1 || \
-               curl -sf --max-time 15 "${TARGET}"        > /dev/null 2>&1; then
+            if curl -sf --max-time 15 "${TARGET_URL}/health" > /dev/null 2>&1 || \
+               curl -sf --max-time 15 "${TARGET_URL}"        > /dev/null 2>&1; then
               echo "✅ Target is reachable"
               exit 0
             fi
-            echo "  Attempt $i failed, retrying in 10s..."
+            echo "  Attempt ${i}/3 failed, retrying in 10s..."
             sleep 10
           done
-          echo "::warning::Target may not be reachable: ${TARGET}"
+          echo "::warning::Target not reachable after 3 attempts — continuing anyway"
 
       - name: Create ZAP reports directory
         run: mkdir -p zap-reports
 
-      # ── API Scan ─────────────────────────────────────────────────────────
-      - name: ZAP API Scan
+      - name: ZAP API Scan (.NET Swagger/OpenAPI)
         if: matrix.target.type == 'api'
         uses: zaproxy/action-api-scan@v0.7.0
+        env:
+          TARGET: ${{ steps.urls.outputs.openapi-url }}
         with:
-          target:             ${{ steps.urls.outputs.openapi-url }}
-          format:             openapi
+          target:              ${{ steps.urls.outputs.openapi-url }}
+          format:              openapi
           allow_issue_writing: false
           cmd_options: >-
             -J zap-reports/zap-${{ matrix.target.name }}-report.json
@@ -870,10 +907,11 @@ jobs:
                 -config scanner.maxScanDurationInMins=20"
         continue-on-error: true
 
-      # ── Baseline Scan (Web) ───────────────────────────────────────────────
-      - name: ZAP Baseline Scan
+      - name: ZAP Baseline Scan (Web Frontend)
         if: matrix.target.type == 'baseline'
         uses: zaproxy/action-baseline@v0.12.0
+        env:
+          TARGET: ${{ steps.urls.outputs.target-url }}
         with:
           target:              ${{ steps.urls.outputs.target-url }}
           rules_file_name:     ".zap/rules.tsv"
@@ -888,32 +926,101 @@ jobs:
       - name: Convert ZAP → SonarQube format
         run: |
           ZAP_REPORT="zap-reports/zap-${{ matrix.target.name }}-report.json"
+          OUT="zap-reports/zap-${{ matrix.target.name }}-sonar-report.json"
 
-          if [[ -f "$ZAP_REPORT" ]]; then
-            python3 scripts/convert-reports-to-sonar.py \
-              --zap "$ZAP_REPORT" \
-              --output-dir zap-reports
-            mv zap-reports/zap-sonar-report.json \
-               zap-reports/zap-${{ matrix.target.name }}-sonar-report.json
-          else
+          if [[ ! -f "$ZAP_REPORT" ]]; then
             echo "::warning::No ZAP report generated for ${{ matrix.target.name }}"
-            echo '{"issues":[]}' > zap-reports/zap-${{ matrix.target.name }}-sonar-report.json
+            echo '{"issues":[]}' > "$OUT"
+            exit 0
           fi
+
+          python3 - <<'EOF'
+          import json, os, re
+          from urllib.parse import urlparse
+
+          ZAP_RISK_MAP = {"3": "CRITICAL", "2": "MAJOR", "1": "MINOR", "0": "INFO"}
+          RISK_LABEL   = {"3": "High", "2": "Medium", "1": "Low", "0": "Informational"}
+
+          def sanitize(text):
+              text = re.sub(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])", "", str(text))
+              return " ".join(text.split())[:3900]
+
+          def uri_to_path(uri):
+              try:
+                  p = urlparse(uri).path.lstrip("/")
+                  return f"src/WebApi/{p}" if p else "."
+              except Exception:
+                  return "."
+
+          zap_report = "zap-reports/zap-${{ matrix.target.name }}-report.json"
+          out_path   = "zap-reports/zap-${{ matrix.target.name }}-sonar-report.json"
+          issues     = []
+
+          with open(zap_report) as f:
+              data = json.load(f)
+
+          sites = data.get("site", []) if isinstance(data, dict) else []
+          for site in sites:
+              for alert in site.get("alerts", []):
+                  alert_ref  = str(alert.get("alertRef", alert.get("pluginid", "0")))
+                  alert_name = alert.get("name", alert.get("alert", "Unknown"))
+                  risk_code  = str(alert.get("riskcode", alert.get("riskCode", "1")))
+                  severity   = ZAP_RISK_MAP.get(risk_code, "INFO")
+                  solution   = sanitize(alert.get("solution", ""))[:300]
+                  cweid      = alert.get("cweid", "")
+                  instances  = alert.get("instances", [])
+
+                  if instances:
+                      for inst in instances:
+                          uri      = inst.get("uri", inst.get("url", "."))
+                          method   = inst.get("method", "GET")
+                          evidence = inst.get("evidence", inst.get("param", ""))[:200]
+                          msg = (f"[ZAP-{alert_ref}] {alert_name} | "
+                                 f"Risk: {RISK_LABEL.get(risk_code,'?')} | "
+                                 f"URL: {uri} | Method: {method}"
+                                 + (f" | Evidence: {evidence}" if evidence else "")
+                                 + (f" | CWE: {cweid}" if cweid else "")
+                                 + (f" | Fix: {solution}" if solution else ""))
+                          issues.append({
+                              "engineId": "zap",
+                              "ruleId":   f"ZAP-{alert_ref}",
+                              "severity": severity,
+                              "type":     "VULNERABILITY",
+                              "primaryLocation": {
+                                  "message":   msg,
+                                  "filePath":  uri_to_path(uri),
+                                  "textRange": {"startLine": 1},
+                              },
+                          })
+                  else:
+                      desc = sanitize(alert.get("desc", alert.get("description", "")))[:400]
+                      msg  = (f"[ZAP-{alert_ref}] {alert_name} | "
+                              f"Risk: {RISK_LABEL.get(risk_code,'?')} | {desc}"
+                              + (f" | CWE: {cweid}" if cweid else "")
+                              + (f" | Fix: {solution}" if solution else ""))
+                      issues.append({
+                          "engineId": "zap",
+                          "ruleId":   f"ZAP-{alert_ref}",
+                          "severity": severity,
+                          "type":     "VULNERABILITY",
+                          "primaryLocation": {
+                              "message":   msg,
+                              "filePath":  ".",
+                              "textRange": {"startLine": 1},
+                          },
+                      })
+
+          with open(out_path, "w") as f:
+              json.dump({"issues": issues}, f, indent=2)
+          print(f"[OK] {out_path} — {len(issues)} issue(s)")
+          EOF
 
       - name: Upload ZAP SonarQube report
         uses: actions/upload-artifact@v4
         with:
-          name: zap-sonar-${{ matrix.target.name }}-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
+          name: zap-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           path: zap-reports/zap-${{ matrix.target.name }}-sonar-report.json
           retention-days: 3
-
-      - name: Upload ZAP SARIF → GitHub Security tab
-        if: hashFiles('zap-reports/*.sarif') != ''
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: zap-reports/
-          category:   "zap-${{ matrix.target.name }}"
-        continue-on-error: true
 
       - name: Upload ZAP HTML reports
         uses: actions/upload-artifact@v4
@@ -925,7 +1032,7 @@ jobs:
             zap-reports/zap-${{ matrix.target.name }}-report.json
           retention-days: 14
 
-      - name: Evaluate ZAP high-risk findings
+      - name: Evaluate ZAP findings
         run: |
           python3 - <<'EOF'
           import json, sys, os
@@ -940,7 +1047,7 @@ jobs:
           with open(report_path) as f:
               data = json.load(f)
 
-          sites = data.get("site", []) if isinstance(data, dict) else []
+          sites  = data.get("site", []) if isinstance(data, dict) else []
           counts = {3: 0, 2: 0, 1: 0, 0: 0}
 
           for site in sites:
@@ -952,14 +1059,15 @@ jobs:
           print(f"ZAP Findings — ${{ matrix.target.label }}:")
           for code, label in labels.items():
               count = counts.get(code, 0)
-              if count > 0:
-                  level = "error" if code == 3 else "warning"
-                  print(f"  ::{level}::ZAP {label}: {count} finding(s)")
+              if count > 0 and code == 3:
+                  print(f"  ::error::{label}: {count}")
+              elif count > 0 and code == 2:
+                  print(f"  ::warning::{label}: {count}")
               else:
-                  print(f"  {label}: 0")
+                  print(f"  {label}: {count}")
 
           if fail_on and counts.get(3, 0) > 0:
-              print(f"\n[FAIL] {counts[3]} High-risk ZAP finding(s). Review and remediate.")
+              print(f"\n[FAIL] {counts[3]} High-risk finding(s). Remediate before deployment.")
               sys.exit(1)
           EOF
 
