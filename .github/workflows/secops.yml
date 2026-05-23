@@ -1018,6 +1018,7 @@ jobs:
           target:              ${{ steps.urls.outputs.openapi-url }}
           format:              openapi
           allow_issue_writing: false
+          artifact_name:       zap-api-results-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           cmd_options: >-
             -J zap-reports/zap-${{ matrix.target.name }}-report.json
             -r zap-reports/zap-${{ matrix.target.name }}-report.html
@@ -1034,6 +1035,7 @@ jobs:
           target:              ${{ steps.urls.outputs.target-url }}
           rules_file_name:     ".zap/rules.tsv"
           allow_issue_writing: false
+          artifact_name:       zap-web-results-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           cmd_options: >-
             -J zap-reports/zap-${{ matrix.target.name }}-report.json
             -r zap-reports/zap-${{ matrix.target.name }}-report.html
