@@ -37,8 +37,8 @@ jobs:
 
           echo "📥 Pulling latest code..."
           git fetch origin
-          git checkout staging
-          git reset --hard origin/staging
+          git checkout master
+          git reset --hard origin/master
 
           echo "🧹 Cleaning project..."
           dotnet clean

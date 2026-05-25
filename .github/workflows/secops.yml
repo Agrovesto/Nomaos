@@ -3,12 +3,12 @@ name: "SecOps Pipeline"
 
 on:
   pull_request:
-    branches: [master, staging]
+    # branches: [master, staging]
     types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
   push:
-    branches: [master, staging]
+    # branches: [master, staging]
     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
   schedule:
@@ -339,9 +339,6 @@ jobs:
     needs: [validate-pipeline]
     timeout-minutes: 20
     if: needs.validate-pipeline.outputs.run-sca == 'true'
-    concurrency:
-      group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-      cancel-in-progress: true
 
     steps:
       - name: Checkout
@@ -507,9 +504,6 @@ jobs:
     needs: [validate-pipeline]
     timeout-minutes: 30
     if: needs.validate-pipeline.outputs.run-sca == 'true'
-    concurrency:
-      group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-      cancel-in-progress: true
 
     steps:
       - name: Checkout
@@ -894,11 +888,6 @@ jobs:
       always() &&
       needs.validate-pipeline.outputs.run-dast == 'true' &&
       needs.build-and-test.result == 'success'
-
-    concurrency:
-      group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-      cancel-in-progress: true
-
     strategy:
       matrix:
         target:
@@ -1186,10 +1175,10 @@ jobs:
     needs:
       - validate-pipeline
       - build-and-test
-      # - trivy-sca
-      # - depcheck-sca
+      - trivy-sca
+      - depcheck-sca
       - sonarqube-sast
-      # - zap-dast
+      - zap-dast
     if: always()
     timeout-minutes: 10
 
