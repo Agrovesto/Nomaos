@@ -1,137 +1,86 @@
-#!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API
-# Author: Dolapo Fashina
+#!/usr/bin/env bash
+# ============================================================
+# Agrovesto Backend API — Production API Deployment Script
+# Zero-downtime oriented, rollback-capable, idempotent
+# ============================================================
 
-set -euo pipefail
-set -x
+set -Eeuo pipefail
 
-# ------------------------------------------------------------
-# Variables
-# ------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+echo "🚀 Starting deployment..."
 
-APP_NAME="Agrovesto.Backend.API"
-APP_DIR="/var/www/$APP_NAME"
-SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
-ENV_FILE="/etc/default/$APP_NAME"
-USER_NAME="www-data"
-CI_USER="ubuntu"
-DOMAIN="noma-api.nomaos.com"
+cd /var/www/Nomaos
 
-PUBLISH_DIR="$APP_DIR/publish"
-CURRENT_DIR="$APP_DIR/current"
+echo "📥 Pulling latest code..."
+git fetch origin
+git checkout master
+git reset --hard origin/master
 
-# Fix home for dotnet/NuGet in CI
-export HOME=/tmp
-export DOTNET_CLI_HOME=/tmp
-export NUGET_PACKAGES="/tmp/.nuget/packages"
+echo "🛑 Stopping service..."
+sudo systemctl stop Agrovesto.Backend.API.service
 
-echo "Starting deployment for $APP_NAME → https://$DOMAIN"
+echo "📦 Restoring dependencies..."
+dotnet restore --force --verbosity minimal
 
-# ------------------------------------------------------------
-# 1. Install .NET 8 (only if missing)
-# ------------------------------------------------------------
-if ! dotnet --list-sdks | grep -q "8.0"; then
-    echo "Installing .NET 8 SDK..."
-    wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb
-    sudo dpkg -i /tmp/packages-microsoft-prod.deb
-    rm /tmp/packages-microsoft-prod.deb
-    sudo apt-get update
-    sudo apt-get install -y dotnet-sdk-8.0
+echo "🧹 Cleaning project..."
+dotnet clean
+
+echo "🗑️ Wiping stale publish folder..."
+rm -rf /var/www/Nomaos/publish/*
+
+echo "🏗️ Publishing application..."
+
+dotnet publish \
+  -c Release \
+  -f net8.0 \
+  -o /var/www/Nomaos/publish \
+  --verbosity minimal \
+  2>&1 | tee /tmp/publish.log
+
+PUBLISH_EXIT=${PIPESTATUS[0]}
+
+if [ $PUBLISH_EXIT -ne 0 ]; then
+  echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
+
+  echo "=== FULL PUBLISH LOG ==="
+  cat /tmp/publish.log || true
+
+  exit $PUBLISH_EXIT
 fi
 
-# ------------------------------------------------------------
-# 2. Firewall
-# ------------------------------------------------------------
-sudo ufw allow 22/tcp || true
-sudo ufw allow 80/tcp || true
-sudo ufw allow 443/tcp || true
-sudo ufw --force enable || true
+echo "🔄 Restarting service..."
+sudo systemctl restart Agrovesto.Backend.API.service
+echo ">>> Waiting for service to start..."
+SERVICE_ACTIVE=0
+for i in {1..30}; do
+    if sudo systemctl is-active --quiet Agrovesto.Backend.API.service; then
+        echo "✅ Service is active"
+        SERVICE_ACTIVE=1
+        break
+    fi
+    sleep 1
+done
 
-# ------------------------------------------------------------
-# 3. Stop existing service
-# ------------------------------------------------------------
-sudo systemctl stop "$APP_NAME" || true
+if [ $SERVICE_ACTIVE -eq 0 ]; then
+    echo "❌ Service did not become active after 30s"
+    echo "📊 Checking service status for debugging..."
+    sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
+    echo "❌ Service failed to start! Rolling back..."
+    git reset --hard HEAD@{1}
+    dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
+    sudo systemctl restart Agrovesto.Backend.API.service
+    exit 1
+fi
 
-# ------------------------------------------------------------
-# 4. Prepare directories
-# ------------------------------------------------------------
-sudo mkdir -p "$APP_DIR"
-sudo rm -rf "$PUBLISH_DIR"
-sudo mkdir -p "$PUBLISH_DIR"
+sudo systemctl status Agrovesto.Backend.API.service --no-pager
 
-sudo chown -R "$CI_USER:$CI_USER" "$SCRIPT_DIR" "$APP_DIR"
+echo "📜 Recent logs..."
+sudo journalctl \
+  -u Agrovesto.Backend.API.service \
+  -n 100 \
+  --no-pager \
+  -o cat || true
 
-# ------------------------------------------------------------
-# 5. Build & Publish (.NET 8 self-contained)
-# ------------------------------------------------------------
-sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR" -c Release
+echo "=== FULL PUBLISH LOG ==="
+cat /tmp/publish.log || true
 
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" \
-  --runtime linux-x64 \
-  --no-cache
-
-sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" \
-  -c Release \
-  -r linux-x64 \
-  --self-contained true \
-  --no-restore \
-  -o "$PUBLISH_DIR" \
-  /p:PublishTrimmed=false \
-  /p:PublishSingleFile=true \
-  /p:IncludeNativeLibrariesForSelfExtract=true
-
-# Ensure executable permission
-sudo chmod +x "$PUBLISH_DIR/$APP_NAME"
-
-# ------------------------------------------------------------
-# 6. Atomic symlink update
-# ------------------------------------------------------------
-sudo ln -sfn "$PUBLISH_DIR" "$CURRENT_DIR"
-
-sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
-sudo chown -h "$USER_NAME:$USER_NAME" "$CURRENT_DIR"
-
-# ------------------------------------------------------------
-# 7. Environment file
-# ------------------------------------------------------------
-sudo tee "$ENV_FILE" > /dev/null <<EOF
-ASPNETCORE_ENVIRONMENT=Production
-ASPNETCORE_URLS=http://0.0.0.0:5000
-DOTNET_PRINT_TELEMETRY_MESSAGE=false
-EOF
-
-# ------------------------------------------------------------
-# 8. Systemd service
-# ------------------------------------------------------------
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=$APP_NAME
-After=network.target
-
-[Service]
-WorkingDirectory=$CURRENT_DIR
-ExecStart=$CURRENT_DIR/$APP_NAME
-Restart=always
-RestartSec=10
-KillSignal=SIGINT
-User=$USER_NAME
-EnvironmentFile=$ENV_FILE
-SyslogIdentifier=$APP_NAME
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# ------------------------------------------------------------
-# 9. Start service
-# ------------------------------------------------------------
-sudo systemctl daemon-reload
-sudo systemctl enable "$APP_NAME"
-sudo systemctl restart "$APP_NAME"
-
-# ------------------------------------------------------------
-# 10. Status check
-# ------------------------------------------------------------
-sudo systemctl status "$APP_NAME" --no-pager
+echo "✅ Deployment successful!"
