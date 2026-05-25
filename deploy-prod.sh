@@ -12,7 +12,7 @@ cd /var/www/Nomaos
 
 echo "📥 Pulling latest code..."
 git fetch origin
-git checkout staging
+git checkout master
 git reset --hard origin/master
 
 echo "🛑 Stopping service..."
