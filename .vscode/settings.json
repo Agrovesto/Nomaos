@@ -1,19 +1,6 @@
 {
-    "sqltools.connections": [
-        {
-            "connectionTimeout": 15,
-            "mssqlOptions": {
-                "appName": "SQLTools",
-                "useUTC": true,
-                "encrypt": true,
-                "trustServerCertificate": true
-            },
-            "previewLimit": 50,
-            "server": "localhost",
-            "port": 1433,
-            "driver": "MSSQL",
-            "username": "agrovesto",
-            "name": "dolapo-agrovesto"
-        }
-    ]
+    "sonarlint.connectedMode.project": {
+        "connectionId": "agrovesto",
+        "projectKey": "agrovesto_nomaos"
+    }
 }

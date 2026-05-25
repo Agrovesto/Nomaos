@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
@@ -176,7 +177,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         }
 
-        public async Task<WalletResponseService<PaymentResponse>> CollectAsync(CollectionRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentResponse>> InitiateTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
@@ -185,18 +186,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             {
                 var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
                 var headers = GenerateHeader(@params, token.AccessToken);
-                headers.Add("X-Reference-Id", request.Reference);
+                headers.Add("X-Reference-Id", request.TransactionReference);
                 headers.Add("X-Callback-Url", callbackUrl);
 
                 var body = new
                 {
                     amount = request.Amount,
                     currency = request.Currency,
-                    externalId = request.Reference,
+                    externalId = request.TransactionReference,
                     payer = new
                     {
                         partyIdType = "MSISDN",
-                        partyId = request.AccountNumber
+                        partyId = request.WalletNumber
                     },          
                     payerMessage = request.Message,
                     payeeNote = request.Message,
@@ -214,10 +215,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     var paymentResponse = new PaymentResponse
                     {
                         Status = sendRequest.StatusCode.ToString(),
-                        Reference = request.Reference
+                        Reference = request.TransactionReference,
+                        ProviderReference= request.TransactionReference,
+                        
                     };
-
-                    return WalletResponseService<PaymentResponse>.Success(paymentResponse);
+                    
+                    return WalletResponseService<PaymentResponse>.Success(paymentResponse, message: $"Dial *671*1*1*1*{request.WalletNumber}*{request.Amount}#");
                 }
 
                 else
@@ -243,7 +246,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
            
         }
 
-        public async Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletWithdrawalAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.DisbursementApiKey);

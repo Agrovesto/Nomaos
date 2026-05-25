@@ -260,6 +260,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public List<FarmerFarmDto> Farms { get; set; }
         public FarmerWalletDto Wallet { get; set; }
         public List<FarmerActivityLogDto> ActivityLogs { get; set; }
+        public List<OrganizationFarmerAgentDto> Agents { get; set; } = new();
+
+        // Memberships (Cooperatives)
+        public List<OrganizationFarmerCooperativeDto> Memberships { get; set; } = new();
+
 
         // Cooperatives
         public List<FarmerMembershipProfileDto> CooperativeInformation { get; set; } = new List<FarmerMembershipProfileDto>();
@@ -277,11 +282,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public long Id { get; set; }
         public string InputReference { get; set; }
+        public string Name { get; set; }
         public decimal TotalCost { get; set; }
         public decimal AmountPaid { get; set; }
         public decimal RemainigBalance { get; set; }
-
-        public double RepaymentProgress { get; set; } // e.g., Deposit, Withdrawal
+        public DateTimeOffset Date {  get; set; }
+        public decimal RepaymentProgress { get; set; } // e.g., Deposit, Withdrawal
 
 
     }
@@ -352,6 +358,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
 
 
+    public class AgentUpdateModel
+    {
+        public string? Name { get; set; }
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
+        public string? Ward { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+        public string? Gender { get; set; }
+        public string? DateOfBirth { get; set; }
+        public string? OrganizationCode { get; set; }
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
+        public bool? IsNinVerified { get; set; }
+    }
 
 
     public class FarmerModel

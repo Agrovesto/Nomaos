@@ -13,6 +13,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -25,6 +26,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using NetTopologySuite.Operation.Valid;
@@ -39,6 +41,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using Path = System.IO.Path;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
@@ -71,6 +75,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args);
         Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
         Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
+        Task<bool> IsUserInRoleAsync(string userId, string role);
+        Task EnsureFarmerIdIsValidAsync(long farmerId);
+        Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
+        Task<MemberShipUpdateResultDto> UpdateMembershipProfile(string userId, MemberShipModel update);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -91,7 +99,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IIdentityVerificationManager _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
         private readonly IAWSService _awsService;
-        public OnBoardingManager(IWalletManager walletManager,
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IBackgroundTaskQueue _taskQueue;
+        public OnBoardingManager(IBackgroundTaskQueue taskQueue,
+              IServiceScopeFactory scopeFactory, IWalletManager walletManager,
             IConfiguration configuration,
             DataContext context,
             INotificationService notificationService,
@@ -101,6 +112,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
             , IExcelConverterService excelConverterService, IAWSService awsService)
         {
+            _scopeFactory = scopeFactory;
+            _taskQueue = taskQueue;
             _onboardingRepository = onboardingRepository;
             _farmerRepository = farmerRepository;
             _agentRepository = agentRepository;
@@ -119,6 +132,86 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _configuration = configuration;
             _awsService = awsService;
         }
+        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+       Stream excelStream,
+       OnBoardingArgs args)
+        {
+            if (excelStream == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+            // Copy stream to memory so we can both inspect and save to disk for background processing
+            using var ms = new MemoryStream();
+            await excelStream.CopyToAsync(ms);
+            ms.Position = 0;
+
+            var rows = _excelConverterService.BulkParseExcel(ms);
+
+            if (!rows.Any())
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+
+            var result = new BulkOnboardingResult
+            {
+                Total = rows.Count,
+                Errors = new List<BulkOnboardingError>(),
+                Successful = 0
+            };
+
+            // Persist file to temp location for background worker
+            var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+            Directory.CreateDirectory(tempDir);
+            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+            ms.Position = 0;
+            await using (var fs = File.Create(tmpFile))
+            {
+                ms.Position = 0;
+                await ms.CopyToAsync(fs);
+                await fs.FlushAsync();
+            }
+
+            // Validate background queue and scope factory to avoid NullReferenceException
+            if (_taskQueue == null || _scopeFactory == null)
+            {
+                // Fail fast with a clear message instead of allowing a NullReferenceException
+                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
+            }
+
+            // Queue background work item that calls processor
+            _taskQueue.QueueTask(async cancellationToken =>
+            {
+                try
+                {
+                    if (_scopeFactory == null)
+                    {
+                        // Should not happen due to the earlier check, but guard anyway
+                        return;
+                    }
+
+                    using var scope = _scopeFactory.CreateScope();
+                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+
+
+                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    try
+                    {
+                        if (_scopeFactory != null)
+                        {
+                            using var scope = _scopeFactory.CreateScope();
+                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                        }
+                    }
+                    catch { }
+                }
+            });
+            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+
+            return result;
+        }
+
 
         public async Task<OrganizationResponseModel> CreateOrganization(
      OrganizationOnboardingModel model,
@@ -257,7 +350,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 sms = messageBody
             });
         }
-
+     
         public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args
 )
         {
@@ -331,13 +424,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         CooperativeIds = args.CooperativeIds
                     };
 
-                    // Register user and create farmer profile using existing flow
                     await CreateBusinessUser(model, farmerArgs);
 
-                    // If cooperative id provided in args, assign farmer to cooperative
                     if (args.CooperativeIds?.Any() == true)
                     {
-                        // Find created user id (CreateBusinessUser sets model.Id)
                         var createdUserId = model.Id;
                         if (!string.IsNullOrWhiteSpace(createdUserId))
                         {
@@ -348,8 +438,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                 businessCode = args.businessCode,
                                 organizationCode = args.organizationCode
                             };
-                            // attempt to assign cooperatives to farmer by calling manager
                             await AssignFarmerToCooperatives(assignArgs);
+                        }
+                    }
+                    if (args.AgentIds?.Any() == true)
+                    {
+                        var createdUserId = model.Id;
+                        if (!string.IsNullOrWhiteSpace(createdUserId))
+                        {
+                            var assignArgs = new AssignmentArgs
+                            {
+                                UserId = createdUserId,
+                                AgentIds = args.AgentIds,
+                                businessCode = args.businessCode,
+                                organizationCode = args.organizationCode
+                            };
+                            await AssignFarmerToAgents(assignArgs);
                         }
                     }
 
@@ -371,6 +475,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return result;
         }
 
+        public async Task<MemberShipUpdateResultDto> UpdateMembershipProfile(string userId,
+           MemberShipModel update)
+        {
+            if (string.IsNullOrWhiteSpace(userId) || update == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
+
+            // validate identifiers if present
+            if (!string.IsNullOrWhiteSpace(update.NIN))
+                ValidateIdentifier(update.NIN, "NIN");
+
+            if (!string.IsNullOrWhiteSpace(update.BVN))
+                ValidateIdentifier(update.BVN, "BVN");
+
+            var updated = await _cooperativeRepository.CreateUpdateMembership(update);
+            if (!updated.status)
+            {
+                return new MemberShipUpdateResultDto
+                {
+                    Success = false,
+                    Message = "Membership not found or update failed."
+                };
+            }
+            var updatedFields = new List<string>();
+            foreach (var prop in typeof(Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel).GetProperties())
+            {
+                var val = prop.GetValue(update);
+                if (val != null)
+                {
+                    // treat empty strings as not-updated
+                    if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
+                    updatedFields.Add(prop.Name);
+                }
+            }
+
+            return new MemberShipUpdateResultDto
+            {
+                Success = true,
+                UpdatedFields = updatedFields,
+                UpdatedMembership = updated.data,
+                Message = "Membership profile updated successfully."
+            };
+
+        }
 
 
         public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
@@ -449,7 +596,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
             }
         }
+        public async Task<bool> IsUserInRoleAsync(string userId, string role)
+        {
+            var login = await _onboardingRepository.IsUserInRoleAsync(userId, role);
 
+            return login;
+        }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
         LoginModel model,
         string businessCode
@@ -512,15 +664,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "Phone number must be exactly 11 digits and numeric only.");
                 }
 
-                if (!string.IsNullOrWhiteSpace(model.Pin)
-    && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                if (!string.IsNullOrWhiteSpace(model.Pin) && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
                 {
                     throw new BaseException(
                         ExceptionType.BAD_REQUEST,
                         "PIN must be exactly 4 digits."
                     );
                 }
-
             }
         }
 
@@ -642,12 +792,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         }
 
-        public async Task OnboardOrganization(
-OrganizationOnboardingModel org,
-OrganizationOnboardingArgs args)
+        public async Task OnboardOrganization(OrganizationOnboardingModel org, OrganizationOnboardingArgs args)
         {
-            var organization =
-                       await _businessRepository.CreateOrUpdateOrganization(org, args);
+            var organization = await _businessRepository.CreateOrUpdateOrganization(org, args);
             var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
                 args.userId,
                 new ProfileRequestModel
@@ -1441,6 +1588,10 @@ OrganizationOnboardingArgs args)
 
         public async Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
         {
+            if (string.IsNullOrEmpty(args.Env))
+            {
+                throw new ValidationException("Environment is required.");
+            }
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (user.model == null)
             {
@@ -1659,6 +1810,15 @@ OrganizationOnboardingArgs args)
                 throw new Exception($"{ex.Message}", ex);
             }
         }
+        public async Task EnsureFarmerIdIsValidAsync(long farmerId)
+        {
+            var farmer = await _context.Farmers
+                .FirstOrDefaultAsync(f => f.Id == farmerId);
+
+            if (farmer == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Farmer not found.");
+
+        }
         public async Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args)
         {
 
@@ -1679,9 +1839,7 @@ OrganizationOnboardingArgs args)
         }
 
 
-        public async Task<CreateMembershipResponseModel> CreateMembershipUser(
-      MemberShipRequestModel model,
-      OnBoardingArgs args)
+        public async Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args)
         {
             try
             {
@@ -1860,7 +2018,6 @@ OrganizationOnboardingArgs args)
         }
 
 
-
         public async Task<CreateAgentResponseModel> CreateAgentUser(
  ProfileRequestModel model,
  OnBoardingArgs args)
@@ -1953,9 +2110,6 @@ OrganizationOnboardingArgs args)
             }
         }
     
-
-
-
     }
 
 }

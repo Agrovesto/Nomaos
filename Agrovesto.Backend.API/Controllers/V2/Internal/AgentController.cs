@@ -30,6 +30,73 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _onBoardingManager = onBoardingManager;
             _businessManager = businessManager;
         }
+        [HttpPost("bulk-onboard")]
+        public async Task<IActionResult> BulkOnboard(
+  IFormFile file,
+  [FromQuery] OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.UserId = CurrentUserId;
+                NormalizeOrganizationCode(args);
+                args.userType = "Farmer";
+                await EnrichAgentAsync(args);
+
+                if (file == null || file.Length == 0)
+                    return BadRequest("Excel file is required.");
+
+
+                using var stream = file.OpenReadStream();
+               // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+                var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
+
+                return Ok(new Response<BulkOnboardingResult>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = response
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+
         [HttpGet("memberships")]
         public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
         {
@@ -40,6 +107,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetMembershipsByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<MemberShipResponseModel>>()
                 {
@@ -96,11 +171,19 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-              //  ResolveUserContext(args);
-                if (CurrentUserId != null && CurrentUserRole != args.userType)
+                //  ResolveUserContext(args);
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Agent"))
                 {
-                    await EnrichArgsByRoleAsync(args);
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
                 }
+                await EnrichAgentAsync(args);
+              
 
                 var request = await _onBoardingManager.CreateMembershipUser(model, args);
 
@@ -145,6 +228,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetFarmersByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
@@ -188,6 +279,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _agentManager.GetAgentDashboardData(query);
                 return Ok(new Response<AgentDashboardDto>()
                 {
@@ -259,8 +358,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
-
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
 
             if (agent == null)
                 throw new BaseException(

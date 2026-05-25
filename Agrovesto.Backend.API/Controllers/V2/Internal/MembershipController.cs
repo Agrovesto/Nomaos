@@ -29,6 +29,69 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _membershipManager = membershipManager;
             _businessManager = businessManager;
         }
+
+        [HttpPut("update-farmer-profile")]
+        public async Task<IActionResult> UpdateFarmerProfile([FromBody] MemberShipModel model, [FromQuery] string? userId)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+            
+
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Membership user.",
+                        Succeeded = false
+                    });
+                }
+                var result = await _onBoardingManager.UpdateMembershipProfile(targetUserId, model);
+
+                return Ok(new Response<MemberShipUpdateResultDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result.Success,
+                    Message = result.Message,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+
         [HttpPost("bulk-onboard")]
         public async Task<IActionResult> BulkOnboard(
         IFormFile file,
@@ -63,7 +126,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                 using var stream = file.OpenReadStream();
-                var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+               // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+                var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
 
                 return Ok(new Response<BulkOnboardingResult>()
                 {
@@ -104,21 +168,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                
-                if (CurrentUserRole != "MemberShip" && string.IsNullOrEmpty(query.UserId))
+              
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
                 {
-                    return BadRequest(new Response<Dictionary<string, string>>()
+                    return StatusCode(400, new Response<string>
                     {
-                        Message = "Validation failed.",
-                        Succeeded = false,
-                        Data = new Dictionary<string, string>
-{
-    { "UserId", "Membership UserId is required" }
-}
-
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
                     });
                 }
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
                 var result = await _membershipManager.GetMembershipDashboardAsync(query);
                 return Ok(new Response<MembershipDashboardDto>()
                 {
@@ -175,6 +235,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = CurrentUserId;
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
+                }
+
                 NormalizeOrganizationCode(args);
                
                     await EnrichCooperativeAsync(args);
@@ -222,10 +291,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
+                }
 
                 var result = await _membershipManager.GetMembershipFarmers(query);
                 return Ok(new PagedListResponse<List<FarmerMembershipDto>>()
@@ -269,10 +343,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     query.organizationCode = OrganizationCode;
                 }
-                var currentRole = CurrentUserRole;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
+                }
 
                 var result = await _membershipManager.GetAgentsByMembership(query);
                 return Ok(new PagedListResponse<List<AgentMembershipDto>>()
@@ -306,13 +387,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
-
+       
         
         [HttpGet("farmer-details")]
         public async Task<IActionResult> GetFarmerDetails([FromQuery] string? userId)
         {
             try
-            { 
+            {
+
+                userId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+
 
                 if (string.IsNullOrEmpty(userId))
                 {
@@ -322,7 +406,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(userId, "Farmer"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Farmer.",
+                        Succeeded = false
+                    });
+                }
                 var profile = await _onBoardingManager.GetFarmerProfile(userId);
 
                 return Ok(new Response<FarmerProfileDto>()
@@ -365,7 +456,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-               await GetAgentIdFromUserIdAsync(args);
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not an Agent.",
+                        Succeeded = false
+                    });
+                }
+                await GetAgentIdFromUserIdAsync(args);
 
                 var profile = await _membershipManager.GetAgentOverview(args);
 
@@ -412,7 +512,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("update-membership-profile")]
-        public async Task<IActionResult> CreateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> UpdateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)
@@ -433,10 +533,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
+                }
                 model.Id = args.UserId;
                  await _onBoardingManager.CreateCooperativeProfileAsync(model, args);
 
@@ -495,6 +601,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
                 NormalizeOrganizationCode(args);
+                if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a MemberShip.",
+                        Succeeded = false
+                    });
+                }
                 //  ResolveUserContext(args);
                 await EnrichCooperativeAsync(args);
 
@@ -536,6 +650,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
                 if (string.IsNullOrEmpty(query.UserId))
                 {
                     return BadRequest(new Response<string>
@@ -549,6 +665,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     query.organizationCode = OrganizationCode;
                 }
 
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Agent.",
+                        Succeeded = false
+                    });
+                }
                 var result = await _membershipManager.GetFarmersByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
@@ -590,7 +714,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-
+                
                 await EnrichAgentAsync(args);
                 await EnrichFarmerAsync(args);
                 var request = await _onBoardingManager.AssignFarmerToAgents(args);

@@ -58,6 +58,12 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<OrganizationLocation>()
+       .HasOne(l => l.ParentLocation)
+       .WithMany(l => l.SubLocations)
+       .HasForeignKey(l => l.ParentLocationId)
+       .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<UserWallet>(entity =>
             {
                 entity.HasIndex(x => new { x.UserId, x.WalletProviderId })
@@ -265,6 +271,62 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithMany()
                 .HasForeignKey(o => o.RoleId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+
+            modelBuilder.Entity<LocationModule>()
+    .HasKey(x => new { x.LocationId, x.ModuleId });
+
+            modelBuilder.Entity<LocationModule>()
+                .HasOne(x => x.Location)
+                .WithMany(x => x.LocationModules)
+                .HasForeignKey(x => x.LocationId);
+
+            modelBuilder.Entity<LocationModule>()
+                .HasOne(x => x.Module)
+                .WithMany(x => x.LocationModules)
+                .HasForeignKey(x => x.ModuleId);
+
+
+
+            modelBuilder.Entity<LocationStorageCategory>()
+    .HasKey(x => new { x.LocationId, x.StorageCategoryId });
+
+            modelBuilder.Entity<LocationStorageCategory>()
+                .HasOne(x => x.Location)
+                .WithMany(x => x.LocationStorageCategories)
+                .HasForeignKey(x => x.LocationId);
+
+            modelBuilder.Entity<LocationStorageCategory>()
+                .HasOne(x => x.StorageCategory)
+                .WithMany(x => x.LocationStorageCategories)
+                .HasForeignKey(x => x.StorageCategoryId);
+
+            modelBuilder.Entity<TemperatureControlType>()
+    .HasKey(x => x.Id);
+
+            modelBuilder.Entity<OrganizationLocation>()
+    .HasOne(x => x.TemperatureControlType)
+    .WithMany()
+    .HasForeignKey(x => x.TemperatureControlTypeId)
+    .OnDelete(DeleteBehavior.Restrict);
+
+
+            modelBuilder.Entity<LocationModule>()
+    .HasIndex(x => x.ModuleId);
+
+            modelBuilder.Entity<LocationStorageCategory>()
+                .HasIndex(x => x.StorageCategoryId);
+
+            modelBuilder.Entity<OrganizationAgent>()
+    .HasIndex(x => new { x.LocationId, x.IsPrimary })
+    .HasFilter("[IsPrimary] = 1")
+    .IsUnique();
+
+            modelBuilder.Entity<InputPackageItem>()
+    .HasOne(x => x.OrganizationProduct)
+    .WithMany()
+    .HasForeignKey(x => x.OrganizationProductId)
+    .OnDelete(DeleteBehavior.NoAction);
             //modelBuilder.Entity<Farm>()
             //    .HasIndex(f => f.FarmPolygon)
             //    .HasDatabaseName("IX_Farm_Polygon")
@@ -350,6 +412,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<FarmerValueChainItem> FarmerValueChainItems { get; set; }
         public DbSet<OrganizationConfiguration> OrganizationConfig { get; set; }
+        public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
         public DbSet<Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob> BulkUploadJobs { get; set; }
 
 
@@ -377,7 +440,21 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
         public DbSet<InputTransaction> InputTransactions { get; set; }
         public DbSet<InputAllocation> InputAllocations { get; set; }
-        public DbSet<Input> Inputs { get; set; }
+        public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<Module> Modules { get; set; }
+        public DbSet<StorageCategory> StorageCategories { get; set; }
+        public DbSet<TemperatureControlType> TemperatureControlTypes { get; set; }
+
+        public DbSet<LocationModule> LocationModules { get; set; }
+        public DbSet<LocationStorageCategory> LocationStorageCategories { get; set; }
+        public DbSet<LocationInventory> LocationInventories { get; set; }
+        public DbSet<OrganizationProduct> OrganizationProducts { get; set; }
+        public DbSet<OrganizationProductCategory> OrganizationProductCategories { get; set; }
+        public DbSet<AdditionalInputPackageCost> AdditionalInputPackageCosts { get; set; }
+        public DbSet<EconomicsOfProduction> EconomicsOfProductions { get; set; }
+        public DbSet<EopCostItem> EopCostItems { get; set; }
+        public DbSet<InputFinancingCategory> InputFinancingCategories { get; set; }
+        public DbSet<InputPackageItem> InputPackageItems { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

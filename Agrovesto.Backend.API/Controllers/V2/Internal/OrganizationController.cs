@@ -2,13 +2,17 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -25,24 +29,625 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
+        private readonly IInputFinancingManager _inputFinancingManager;
         private readonly IOnBoardingManager _onboardingManager;
         private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
         private readonly IMembershipManager _membershipManager;
 
+        private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
             IBusinessManager businessManager,
+             INomaOSWalletService walletService,
              IOrganizationManager organizationManager,
+             IInputFinancingManager inputFinancingManager,
              IMembershipManager membershipManager,
              IOnBoardingManager onboardingManager, IFarmMappingManager farmMappingManager) : base(httpContextAccessor)
         {
+            _walletService = walletService;
             _farmMappingManager = farmMappingManager;
             _organizationManager = organizationManager;
+            _inputFinancingManager = inputFinancingManager;
             _businessManager = businessManager;
             _onboardingManager = onboardingManager;
             _membershipManager = membershipManager;
             _context = (Agrovesto.Backend.Infrastructure.DB.DataContext)httpContextAccessor.HttpContext.RequestServices.GetService(typeof(Agrovesto.Backend.Infrastructure.DB.DataContext));
         }
+
+        #region OrganizationWallet
+        [HttpPost("create-wallet")]
+        public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            (bool flowControl, IActionResult value) = ParameterValidator(request, query);
+            if (!flowControl)
+            {
+                return value;
+            }
+            try
+            {
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                {
+                    query.organizationCode = OrganizationCode;
+                }
+
+                var wallet = await _walletService.CreateWallet(request, query);
+
+                return Ok(new Response<(bool status, string message)>()
+                {
+                    Data = wallet,
+
+
+                    Message = wallet.message,
+                    Succeeded = wallet.status,
+
+                    Code = wallet.status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpGet("wallets")]
+        public async Task<IActionResult> GetWallets([FromQuery] UserWalletParams query)
+        {
+            try
+            {
+
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+                var result = await _walletService.GetUserWallletsByUserId(query);
+                return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Count > 0 ? "Successful" : "Failed",
+                    Succeeded = true,
+                    Count = result.Count,
+                    //PageNumber = query.PageNumber,
+                    //PageSize = 10,
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+        }
+
+        [HttpPost("wallet-topup")]
+        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.TopUpWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("wallet-withdraw")]
+        public async Task<IActionResult> WithdrawWallet([FromBody] WithdrawWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.WithdrawWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
+
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        private (bool flowControl, IActionResult value) ParameterValidator(CreateWalletRequest request, WalletQueryParams query)
+        {
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(query.env))
+                return (flowControl: false, value: BadRequest("Environment is required"));
+
+            if (string.IsNullOrWhiteSpace(request.WalletProviderCode))
+                return (flowControl: false, value: BadRequest("WalletProviderCode is required"));
+
+            if (string.IsNullOrWhiteSpace(query.businessCode))
+                return (flowControl: false, value: BadRequest("BusinessCode is required"));
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return (flowControl: false, value: BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = new Dictionary<string, string>
+                    {
+                            { "UserId", "UserId is required" }
+                    }
+
+                }));
+            }
+
+            return (flowControl: true, value: null);
+        }
+
+        #endregion OrganizationWallet
+
+
+        #region InputFinancing
+
+        [HttpPost("eop")]
+        public async Task<IActionResult> CreateEopAsync([FromBody] CreateEopRequest model, [FromQuery] ListQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
+
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                var result = await _inputFinancingManager.CreateEopAsync(model,args);
+                return Ok(new Response<EopResponseDto> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpPost("package/manual")]
+        public async Task<IActionResult> CreateManualInputPackageAsync([FromBody] CreateInputPackageRequest model, [FromQuery] ListQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
+
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                args.UserId = string.IsNullOrEmpty(args.UserId) ? CurrentUserId : args.UserId;
+                var result = await _inputFinancingManager.CreateManualInputPackageAsync(model, args);
+                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpPost("package/generate-from-eop")]
+        public async Task<IActionResult> GenerateInputPackageFromEopAsync([FromBody] GenerateInputPackageRequest model, [FromQuery] ListQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
+
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
+                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpGet("eop")]
+        public async Task<IActionResult> GetEopByIdAsync( [FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+                if (args.Id <= 0) return BadRequest(new Response<string> { Message = "EOP Id is required", Succeeded = false });
+
+                var result = await _inputFinancingManager.GetEopByIdAsync(args);
+                return Ok(new Response<EopDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpGet("eops")]
+        public async Task<IActionResult> GetEopsAsync([FromQuery] EopFilterRequest filter, [FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                var result = await _inputFinancingManager.GetEopsAsync(filter, args);
+                return Ok(new Response<PagedResult<EopDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpGet("package")]
+        public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+                if (args.Id<= 0) return BadRequest(new Response<string> { Message = "Package Id is required", Succeeded = false });
+
+                var result = await _inputFinancingManager.GetPackageByIdAsync(args);
+                return Ok(new Response<InputPackageDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        [HttpGet("packages")]
+        public async Task<IActionResult> GetPackagesAsync([FromQuery] InputPackageFilterRequest filter, [FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                var result = await _inputFinancingManager.GetPackagesAsync(filter, args);
+                return Ok(new Response<PagedResult<InputPackageDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        #endregion InputFinancing
+        #region OrganizationProduct
+        [HttpPost("create-product")]
+        public async Task<IActionResult> CreateOrganizationProduct([FromBody] OrganizationProductDto model, [FromQuery] ListQueryParams args)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                args.UserId = CurrentUserId;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                var result = await _organizationManager.CreateOrganizationProduct(model, args);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data=true
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpGet("products")]
+        public async Task<IActionResult> GetOrganizationProductList([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                var response = await _organizationManager.GetOrganizationProductList(args);
+
+                return Ok(new PagedListResponse<List<OrganizationProductDto>>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = response != null ? "Successful" : "Failed",
+                    Data = response.Data,
+                    Count = response.Count,
+                    PageSize = args.PageSize,
+                    PageNumber = args.PageNumber
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpGet("product")]
+        public async Task<IActionResult> GetorganizationProductById([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                if (args.Id <= 0)
+                    return BadRequest(new Response<string> { Message = "Product Id is required", Succeeded = false });
+
+                var response = await _organizationManager.GetorganizationProductById(args);
+
+                return Ok(new Response<OrganizationProductDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = response != null,
+                    Message = response != null ? "Successful" : "No record found",
+                    Data = response
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPatch("edit-product")]
+        public async Task<IActionResult> EditProductAsync([FromBody] EditOrganizationProductDto model, [FromQuery] ListQueryParams args)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                if (args.Id <= 0)
+                    return BadRequest(new Response<string> { Message = "Product Id is required", Succeeded = false });
+
+                var result = await _organizationManager.EditProductAsync(args, model);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result,
+                    Message = result ? "Successful" : "Failed",
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPut("deactivate-product")]
+        public async Task<IActionResult> DeactivateProductAsync([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+
+                if (args.Id <= 0)
+                    return BadRequest(new Response<string> { Message = "Product Id is required", Succeeded = false });
+
+                var result = await _organizationManager.DeactivateProductAsync(args);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result,
+                    Message = result ? "Successful" : "Failed",
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+        #endregion OrganizationProduct
 
         [HttpGet("bulk-jobs")]
         public async Task<IActionResult> ListBulkJobs([FromQuery] string organizationCode = null, [FromQuery] string status = null, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20)
@@ -151,7 +756,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #region settings
         [HttpPatch("edit-location")]
-        public async Task<IActionResult> UpdateLocationAsync([FromBody] OrganizationLocationModel model, [FromQuery] ListQueryParams args)
+        public async Task<IActionResult> UpdateLocationAsync([FromBody] EditLocationDto model, [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -179,6 +784,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+                model.Id = args.Id;
                 var type = await _organizationManager.UpdateLocationAsync(model, args);
 
                 return Ok(new Response<OrganizationLocationModel>()
@@ -214,7 +820,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("create-location")]
-        public async Task<IActionResult> Location([FromBody] OrganizationLocationModel model, [FromQuery] ListQueryParams args)
+        public async Task<IActionResult> Location([FromBody] CreateLocationDto model, [FromQuery] ListQueryParams args)
         {
             var isAdmin = CurrentUserRole;
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
@@ -242,7 +848,266 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+          
                 var type = await _organizationManager.CreateLocation(model, args);
+
+                return Ok(new Response<LocationCreateResponse>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpGet("locations")]
+        public async Task<IActionResult> GetLocations([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+            
+                var type = await _organizationManager.GetLocationAsync(args);
+                return Ok(new PagedListResponse<List<LocationResponseDto>> ()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data,
+                    Count=type.Count,
+                    PageNumber=args.PageNumber,
+                    PageSize=args.PageSize,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("location-overview")]
+        public async Task<IActionResult> LocationOverview([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+
+                var type = await _organizationManager.GetFullDashboardAsync(args);
+                return Ok(new Response<LocationDashboardFullDto>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
+        [HttpGet("location")]
+        public async Task<IActionResult> GetLocation([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.organizationCode = query.organizationCode ?? OrganizationCode;
+                var type = await _organizationManager.GetLocationById(query);
+                return Ok(new Response<LocationResponseDto>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpDelete("delete-location")]
+        public async Task<IActionResult> DeleteLocation([FromBody] DeleteLocationDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.DeleteLocation(model, args);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+
+
+        [HttpPatch("edit-sublocation")]
+        public async Task<IActionResult> EditSubLocationAsync([FromBody] EditSubLocationDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.EditSubLocationAsync(model, args);
 
                 return Ok(new Response<OrganizationLocationModel>()
                 {
@@ -275,9 +1140,72 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
-        [HttpGet("locations")]
 
-        public async Task<IActionResult> GetLocations([FromQuery] ListQueryParams args)
+        [HttpPost("create-sublocation")]
+        public async Task<IActionResult> CreateSubLocationAsync([FromBody] CreateSubLocationDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                args.UserId = CurrentUserId;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.CreateSubLocationAsync(model, args);
+
+                return Ok(new Response<OrganizationLocationModel>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        
+        [HttpGet("sublocations/by-parent")]
+        public async Task<IActionResult> GetSubLocationsByParentAsync([FromQuery] ListQueryParams args)
         {
             try
             {
@@ -288,15 +1216,63 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
-                var type = await _organizationManager.GetLocationAsync(args);
-                return Ok(new Response<List<OrganizationLocationResponseModel>>()
+                var type = await _organizationManager.GetSubLocationsByParentAsync(args.Id, args);
+                return Ok(new PagedListResponse<List<SubLocationListDto>>()
                 {
                     Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
 
                     Succeeded = true,
                     Message = "Successful",
-                    Data = type
+                    Data = type.Data,
+                    Count = type.Count,
+                    PageNumber = args.PageNumber,
+                    PageSize = args.PageSize,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpPut("reassign-primary-agent")]
+        public async Task<IActionResult> ReassignPrimaryAgentAsync([FromQuery] ListQueryParams args,[FromBody] ReassignPrimaryAgentDto model)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                model.LocationId = args.Id;
+                model.PerformedByUserId = CurrentUserId;
+                var type = await _organizationManager.ReassignPrimaryAgentAsync(model);
+                return Ok(new Response<bool>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type,
                 });
             }
             catch (BaseException ex)
@@ -320,15 +1296,150 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        [HttpGet("location")]
+        [HttpPut("remove-agent-from-location")]
+        public async Task<IActionResult> RemoveAgentFromLocationAsync([FromQuery] ListQueryParams args, [FromBody] RemoveAgentFromLocationDto model)
+        {
+            try
+            {
 
-        public async Task<IActionResult> GetLocation([FromQuery] ListQueryParams query)
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                model.LocationId = args.Id;
+                model.RemovedByUserId = CurrentUserId;
+                var type = await _organizationManager.RemoveAgentFromLocationAsync(model);
+                return Ok(new Response<bool>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("location-agents")]
+        public async Task<IActionResult> GetLocationAgents([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.GetLocationAgentsAsync(args);
+                return Ok(new Response<LocationAgentsResponseDto>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("sublocations")]
+        public async Task<IActionResult> GetSubLocationsAsync([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.GetSubLocationsAsync(args);
+                return Ok(new PagedListResponse<List<LocationResponseDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data,
+                    Count = type.Count,
+                    PageNumber = args.PageNumber,
+                    PageSize = args.PageSize,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("sublocation")]
+        public async Task<IActionResult> GetSubLocationByIdAsync([FromQuery] ListQueryParams query)
         {
             try
             {
                 query.organizationCode = query.organizationCode ?? OrganizationCode;
-                var type = await _organizationManager.GetLocationById(query);
-                return Ok(new Response<OrganizationLocationModel>()
+                var type = await _organizationManager.GetSubLocationByIdAsync(query);
+                return Ok(new Response<LocationResponseDto>()
                 {
                     Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
@@ -359,6 +1470,193 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        [HttpDelete("delete-sublocation")]
+        public async Task<IActionResult> DeleteSubLocationAsync([FromBody] DeleteLocationDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+
+                args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.DeleteSubLocationAsync(model, args);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("add-inventory")]
+        public async Task<IActionResult> AddInventoryAsync([FromBody] CreateInventoryDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = CurrentUserId;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.AddInventoryAsync(model, args);
+
+                return Ok(new Response<bool>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = true
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("update-inventory")]
+        public async Task<IActionResult> EditInventoryAsync([FromBody] EditInventoryDto model, [FromQuery] ListQueryParams args)
+        {
+            var isAdmin = CurrentUserRole;
+            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                args.UserId = CurrentUserId;
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.EditInventoryAsync(model, args);
+
+                return Ok(new Response<LocationInventory>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
 
         [HttpGet("location-inventory")]
         public async Task<IActionResult> GetInventoryByLocationAsync([FromQuery] ListQueryParams args)
@@ -371,8 +1669,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
 
-                var response = await _organizationManager.GetLocationInventoryBreakdownAsync(args);
-                return Ok(new PagedListResponse<List<LocationInventoryBreakdownResponse>>()
+                var response = await _organizationManager.GetInventoryByLocationAsync(args);
+                return Ok(new PagedListResponse<List<InventoryListDto>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -446,48 +1744,48 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        [HttpGet("location-agents")]
-        public async Task<IActionResult> GetAgentsByLocationAsync([FromQuery] ListQueryParams args)
-        {
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode))
-                {
-                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
-                }
+        //[HttpGet("agent-by-location")]
+        //public async Task<IActionResult> GetAgentsByLocationAsync([FromQuery] ListQueryParams args)
+        //{
+        //    try
+        //    {
+        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
+        //        if (string.IsNullOrEmpty(args.organizationCode))
+        //        {
+        //            throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+        //        }
 
-                var response = await _organizationManager.GetAgentsByLocationAsync(args);
-                return Ok(new PagedListResponse<List<LocationAgentDetailResponse>>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
-                    Data = response.Data,
-                    Count = response.Count,
-                    PageSize = args.PageSize,
-                    PageNumber = args.PageNumber
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
+        //        var response = await _organizationManager.GetAgentsByLocationAsync(args);
+        //        return Ok(new PagedListResponse<List<LocationAgentDetailResponse>>()
+        //        {
+        //            Code = ResponseCodes.Success,
+        //            Succeeded = true,
+        //            Message = response != null ? "Successful" : "Failed",
+        //            Data = response.Data,
+        //            Count = response.Count,
+        //            PageSize = args.PageSize,
+        //            PageNumber = args.PageNumber
+        //        });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.Message,
+        //            Succeeded = false,
+        //        });
+        //    }
 
-        }
+        //}
 
         [HttpPost("create-role")]
         public async Task<IActionResult> CreateRole([FromBody] OrganizationRoleModel model, [FromQuery] ListQueryParams args)
@@ -1097,11 +2395,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentActivityLogs(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>()
+               
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentActivityLog>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1153,11 +2466,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentTransactionHistory(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>()
+              
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentTransactionHistory>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1184,36 +2512,51 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-      
+
         [HttpGet("agent-performance-summary")]
         public async Task<IActionResult> GetOrganizationAgentPerformanceSummary([FromQuery] ListQueryParams args)
         {
             try
             {
                 args.organizationCode = args.organizationCode ?? OrganizationCode;
+
                 if (string.IsNullOrEmpty(args.organizationCode))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
+
                 if (string.IsNullOrEmpty(args.UserId))
                 {
-                    return BadRequest(new Response<Dictionary<string, string>>()
+                    return BadRequest(new Response<Dictionary<string, string>>
                     {
                         Message = "Validation failed.",
                         Succeeded = false,
                         Data = new Dictionary<string, string>
-{
-    { "UserId", "UserId is required" }
-}
-
+                {
+                    { "UserId", "UserId is required" }
+                }
                     });
                 }
+
                 var response = await _organizationManager.GetOrganizationAgentPerformanceSummary(args);
-                return Ok(new Response<OrganizationAgentPerformanceSummary>()
+
+               
+                if (response == null)
+                {
+                    return Ok(new Response<OrganizationAgentPerformanceSummary>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = null
+                    });
+                }
+
+                return Ok(new Response<OrganizationAgentPerformanceSummary>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response
                 });
             }
@@ -1222,21 +2565,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return StatusCode(400, new Response<string>
                 {
                     Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
+                    Succeeded = false
                 });
             }
             catch (Exception ex)
             {
-                return StatusCode(400, new Response<string>
+                return StatusCode(500, new Response<string>
                 {
                     Message = ex.Message,
-                    Succeeded = false,
+                    Succeeded = false
                 });
             }
-
         }
-
         [HttpGet("agent-subscribers")]
         public async Task<IActionResult> GetAgentSubscribers([FromQuery] ListQueryParams args)
         {
@@ -1261,11 +2601,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentSubscribers(args);
-                return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>()
+              
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentSubscriberModel>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -1317,16 +2672,30 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 var response = await _organizationManager.GetAgentInputAllocations(args);
-             
-                return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>()
+
+                if (response == null || response.Data == null || !response.Data.Any())
+                {
+                    return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
+                    {
+                        Code = ResponseCodes.Success,
+                        Succeeded = false,
+                        Message = "No record found",
+                        Data = new List<OrganizationAgentInputAllocationModel>(),
+                        Count = 0,
+                        PageSize = args.PageSize,
+                        PageNumber = args.PageNumber
+                    });
+                }
+
+                return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = response != null ? "Successful" : "Failed",
+                    Message = "Successful",
                     Data = response.Data,
-                    Count=response.Count,   
-                    PageSize=args.PageSize,
-                    PageNumber=args.PageNumber
+                    Count = response.Count,
+                    PageSize = args.PageSize,
+                    PageNumber = args.PageNumber
                 });
             }
             catch (BaseException ex)
@@ -1519,7 +2888,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("memberships")]
-        public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
+        public async Task<IActionResult> GetCooperativesByOrganization([FromQuery] ListQueryParams query)
         {
             try
             {
@@ -2206,9 +3575,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 await EnrichFarmerAsync(args);
                 args.CooperativeIds = model.MembershipIds;
                 var CooperativeIds = args.CooperativeIds
-  .Where(x => x.HasValue)
-  .Select(x => x.Value)
-  .ToList();
+                                    .Where(x => x.HasValue)
+                                    .Select(x => x.Value)
+                                    .ToList();
                 var updateDetail = await _organizationManager.RemoveFarmerFromCooperatives(args.farmerUserId, CooperativeIds);
 
 
@@ -2602,6 +3971,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.organizationCode = args.organizationCode ?? OrganizationCode;
                 await EnrichFarmerAsync(args);
+                args.UserId = args.farmerUserId;
                 args.AgentIds = model.AgentIds;
                 var request = await _onboardingManager.RemoveFarmerToAgents(args);
 

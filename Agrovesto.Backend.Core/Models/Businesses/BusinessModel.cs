@@ -73,6 +73,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? PaymentStatus { get; set; } // "Linked" or "Not Linked"
         public string? SalesContext { get; set; } // "Linked" or "Not Linked"
         public string? FarmerUserId { get; set; } // "Linked" or "Not Linked"
+        public long? LocationTypeId { get; set; }
+        public string? LocationStatus { get; set; }
+        public string? TransactionReference { get; set; }
+        public DateTimeOffset? TransactionDate { get; set; }
     }
     public class BusinessRegistrationArgs
     {

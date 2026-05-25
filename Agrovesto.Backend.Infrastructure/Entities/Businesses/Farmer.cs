@@ -28,8 +28,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
 
         public long FarmerId { get; set; }   // FK to Farmer
+        public Farmer Farmer { get; set; }
         public string OrganizationCode { get; set; }  // FK to Organization
-
+       // public Organization Organization { get; set; }  
         public DateTimeOffset OnBoardedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; } // user/admin who onboarded
         public bool IsActive { get; set; } = true;
@@ -76,8 +77,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
 
         public long FarmerId { get; set; }
+        public Farmer Farmer { get; set; }
         public long CooperativeId { get; set; }
-
+       // public MemberShip Cooperative { get; set; }
         public DateTimeOffset JoinedOn { get; set; } = DateTimeOffset.Now;
         public string? OnboardedByUserId { get; set; }
         public bool IsActive { get; set; } = true;
@@ -86,6 +88,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public string? OrganizationCode { get; set; }
         public DateTimeOffset? DeactivatedOn { get; set; }
+       
     }
     public class FarmerAgent
     {
@@ -95,7 +98,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long Id { get; set; }
 
         public long FarmerId { get; set; }
+        public Farmer Farmer { get; set; }
         public long AgentId { get; set; }
+        public Agent Agent { get; set; }
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? AssignedByUserId { get; set; }
@@ -111,6 +116,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
     public class BulkRowAggregate
     {
+        public long RowNumber { get; set; }
         public User User { get; set; }
         public Farmer Farmer { get; set; }
         public List<ValueChainSelectionDto> ValueChains { get; set; }

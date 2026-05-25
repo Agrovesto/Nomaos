@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
@@ -9,11 +10,13 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal.Util;
+using Amazon.S3;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,9 +28,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
     public interface IOrganizationRepository
     {
-        Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model);
+        Task<LocationAgentsResponseDto> GetLocationAgentsAsync(long locationId);
+        Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto);
+        Task<OrganizationLocation> CreateLocationAsync(CreateLocationDto model);
         Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(FarmerModel data);
         Task<OrganizationRoleModel> CreateRoleAsync(OrganizationRoleModel model);
+        Task<OrganizationLocation> CreateSubLocationAsync(CreateSubLocationDto dto);
+        Task<OrganizationLocation> EditSubLocationAsync(EditSubLocationDto dto);
         Task<PagedListResponse<List<OrganizationAgentActivityLog>>> GetAgentActivityLogs(ListQueryParams args);
         Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query);
         Task<PagedListResponse<List<OrganizationAgentInputAllocationModel>>> GetAgentInputAllocations(ListQueryParams args);
@@ -37,8 +44,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<OrganizationMemberShipResponseModel>> GetCooperativesByOrganization(string organizationCode, ListQueryParams query);
         Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query);
         Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
-        Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query);
-        Task<OrganizationLocationModel> GetLocationByIAsync(long Id);
+        Task<PagedListResponse<List<LocationResponseDto>>> GetLocationsAsync(ListQueryParams query);
+        Task<LocationResponseDto> GetLocationByIdAsync(long id);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
         Task<OrganizationAgentDetailResponse> GetOrganizationAgentDetail(ListQueryParams args);
         Task<OrganizationAgentPerformanceSummary> GetOrganizationAgentPerformanceSummary(ListQueryParams args);
@@ -51,7 +58,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<OrganizationRoleModel> GetRoleByIAsync(long Id);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
         Task<bool> ReassignAgentToLocation(OrganizationAgentArgs data);
-        Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model);
+        Task<OrganizationLocation> EditLocationAsync(EditLocationDto dto);
+        Task DeleteLocationAsync(DeleteLocationDto dto);
+        Task DeleteSubLocationAsync(DeleteLocationDto dto);
+        Task<List<LocationResponseDto>> GetLocationTreeAsync(long organizationId);
+        Task<PagedListResponse<List<LocationResponseDto>>> GetSubLocationsAsync(ListQueryParams query);
+        Task<LocationResponseDto> GetSubLocationByIdAsync(long id);
+        Task<PagedListResponse<List<SubLocationListDto>>> GetSubLocationsByParentAsync(long parentLocationId, ListQueryParams query);
+        Task<bool> RemoveAgentFromLocationAsync(RemoveAgentFromLocationDto dto);
+        Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(
+    long locationId,
+    ListQueryParams query);
+        Task<LocationInventory> EditInventoryAsync(EditInventoryDto dto);
+        Task<LocationInventory> AddInventoryAsync(CreateInventoryDto dto);
+        Task<LocationDashboardFullDto> GetFullDashboardAsync(long organizationId);
+        Task<ProductCategoryDto> GetCategoryById(long id);
+        Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query);
+        Task<OrganizationProductCategory> CreateCategory(ProductCategoryDto dto);
+        Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto dto);
+        Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query);
+        Task<OrganizationProductDto> GetorganizationProductById(long id);
+        Task<bool> EditProductAsync(long id, EditOrganizationProductDto request);
+        Task<bool> DeactivateProductAsync(long id);
+        Task<List<InventoryTransactionDto>> GetInventoryTransactionsAsync(long inventoryId);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -70,48 +99,47 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     GetAgentActivityLogs(
        ListQueryParams args)
         {
-            await Task.Delay(50); // simulate async
 
             var now = DateTimeOffset.Now;
 
-            var data = new List<OrganizationAgentActivityLog>
-    {
-        new OrganizationAgentActivityLog
-        {
-            Id = 1,
-            ActivityType = "Login",
-            ActivityName = "Agent logged into system",
-            TimeStamp = now.AddHours(-1)
-        },
-        new OrganizationAgentActivityLog
-        {
-            Id = 2,
-            ActivityType = "Assignment",
-            ActivityName = "Assigned to Location 8",
-            TimeStamp = now.AddHours(-5)
-        },
-        new OrganizationAgentActivityLog
-        {
-            Id = 3,
-            ActivityType = "Distribution",
-            ActivityName = "Distributed fertilizer to farmer",
-            TimeStamp = now.AddDays(-1)
-        },
-        new OrganizationAgentActivityLog
-        {
-            Id = 4,
-            ActivityType = "Update",
-            ActivityName = "Updated farmer subscription",
-            TimeStamp = now.AddDays(-2)
-        },
-        new OrganizationAgentActivityLog
-        {
-            Id = 5,
-            ActivityType = "Login",
-            ActivityName = "Agent logged into mobile app",
-            TimeStamp = now.AddDays(-3)
-        }
-    };
+            var data = new List<OrganizationAgentActivityLog>();
+            //{
+            //    new OrganizationAgentActivityLog
+            //    {
+            //        Id = 1,
+            //        ActivityType = "Login",
+            //        ActivityName = "Agent logged into system",
+            //        TimeStamp = now.AddHours(-1)
+            //    },
+            //    new OrganizationAgentActivityLog
+            //    {
+            //        Id = 2,
+            //        ActivityType = "Assignment",
+            //        ActivityName = "Assigned to Location 8",
+            //        TimeStamp = now.AddHours(-5)
+            //    },
+            //    new OrganizationAgentActivityLog
+            //    {
+            //        Id = 3,
+            //        ActivityType = "Distribution",
+            //        ActivityName = "Distributed fertilizer to farmer",
+            //        TimeStamp = now.AddDays(-1)
+            //    },
+            //    new OrganizationAgentActivityLog
+            //    {
+            //        Id = 4,
+            //        ActivityType = "Update",
+            //        ActivityName = "Updated farmer subscription",
+            //        TimeStamp = now.AddDays(-2)
+            //    },
+            //    new OrganizationAgentActivityLog
+            //    {
+            //        Id = 5,
+            //        ActivityType = "Login",
+            //        ActivityName = "Agent logged into mobile app",
+            //        TimeStamp = now.AddDays(-3)
+            //    }
+            //};
 
             //if (!string.IsNullOrWhiteSpace(activityType))
             //{
@@ -119,7 +147,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             //        .Where(x => x.ActivityType.Equals(activityType, StringComparison.OrdinalIgnoreCase))
             //        .ToList();
             //}
-
+            if (!data.Any())
+                return null;
             if (args.startDate.HasValue)
             {
                 data = data
@@ -153,63 +182,63 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>>
     GetAgentTransactionHistory(ListQueryParams args)
         {
-            await Task.Delay(50); // simulate async
 
-            var factor = (args.Id % 4) + 1;
 
-            var data = new List<OrganizationAgentTransactionHistory>
-    {
-        new OrganizationAgentTransactionHistory
-        {
-            Id = 1,
-            TransactionType = "Allocation",
-            FarmerName = $"Farmer {args.Id}-A",
-            FarmerUserId = $"FRM{args.Id}01",
-            InputType = "Fertilizer",
-            Quantity = 50 * factor,
-            QuantityType = "Bags",
-            Amount = 25000 * factor,
-            Status = "Completed"
-        },
-        new OrganizationAgentTransactionHistory
-        {
-            Id = 2,
-            TransactionType = "Distribution",
-            FarmerName = $"Farmer {args.Id}-B",
-            FarmerUserId = $"FRM{args.Id}02",
-            InputType = "Seeds",
-            Quantity = 30 * factor,
-            QuantityType = "Kg",
-            Amount = 12000 * factor,
-            Status = factor % 2 == 0 ? "Pending" : "Completed"
-        },
-        new OrganizationAgentTransactionHistory
-        {
-            Id = 3,
-            TransactionType = "Return",
-            FarmerName = $"Farmer {args.Id}-C",
-            FarmerUserId = $"FRM{args.Id}03",
-            InputType = "Pesticide",
-            Quantity = 10 * factor,
-            QuantityType = "Litres",
-            Amount = 5000 * factor,
-            Status = "Failed"
-        },
-        new OrganizationAgentTransactionHistory
-        {
-            Id = 4,
-            TransactionType = "Distribution",
-            FarmerName = $"Farmer {args.Id}-D",
-            FarmerUserId = $"FRM{args.Id}04",
-            InputType = "Fertilizer",
-            Quantity = 20 * factor,
-            QuantityType = "Bags",
-            Amount = 10000 * factor,
-            Status = "Completed"
-        }
-    };
+            var data = new List<OrganizationAgentTransactionHistory>();
+            //{
+            //    new OrganizationAgentTransactionHistory
+            //    {
+            //        Id = 1,
+            //        TransactionType = "Allocation",
+            //        FarmerName = $"Farmer {args.Id}-A",
+            //        FarmerUserId = $"FRM{args.Id}01",
+            //        InputType = "Fertilizer",
+            //        Quantity = 50 * factor,
+            //        QuantityType = "Bags",
+            //        Amount = 25000 * factor,
+            //        Status = "Completed"
+            //    },
+            //    new OrganizationAgentTransactionHistory
+            //    {
+            //        Id = 2,
+            //        TransactionType = "Distribution",
+            //        FarmerName = $"Farmer {args.Id}-B",
+            //        FarmerUserId = $"FRM{args.Id}02",
+            //        InputType = "Seeds",
+            //        Quantity = 30 * factor,
+            //        QuantityType = "Kg",
+            //        Amount = 12000 * factor,
+            //        Status = factor % 2 == 0 ? "Pending" : "Completed"
+            //    },
+            //    new OrganizationAgentTransactionHistory
+            //    {
+            //        Id = 3,
+            //        TransactionType = "Return",
+            //        FarmerName = $"Farmer {args.Id}-C",
+            //        FarmerUserId = $"FRM{args.Id}03",
+            //        InputType = "Pesticide",
+            //        Quantity = 10 * factor,
+            //        QuantityType = "Litres",
+            //        Amount = 5000 * factor,
+            //        Status = "Failed"
+            //    },
+            //    new OrganizationAgentTransactionHistory
+            //    {
+            //        Id = 4,
+            //        TransactionType = "Distribution",
+            //        FarmerName = $"Farmer {args.Id}-D",
+            //        FarmerUserId = $"FRM{args.Id}04",
+            //        InputType = "Fertilizer",
+            //        Quantity = 20 * factor,
+            //        QuantityType = "Bags",
+            //        Amount = 10000 * factor,
+            //        Status = "Completed"
+            //    }
+            //};
 
-            // ✅ Filtering
+            if (!data.Any())
+                return null;
+
             //if (args.Status.HasValue)
             //{
             //    data = data
@@ -274,45 +303,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args)
         {
-            await Task.Delay(50); // simulate async
 
-            await Task.Delay(50);
-
-            var factor = (args.Id % 3) + 1;
 
             var subscribers = new List<OrganizationAgentSubscriberModel>();
-    //{
-    //    new OrganizationAgentSubscriberModel
-    //    {
-    //        Id = 1,
-    //        FarmerName = $"Farmer {args.Id }-A",
-    //        FarmerUserId = $"FRM{args.Id }01",
-    //        InputPackage = "Maize Package",
-    //        InputPackageId = 101,
-    //        EquityPaid = 10000 * factor,
-    //        Status = true
-    //    },
-    //    new OrganizationAgentSubscriberModel
-    //    {
-    //        Id = 2,
-    //        FarmerName = $"Farmer {args.Id }-B",
-    //        FarmerUserId = $"FRM{args.Id }02",
-    //        InputPackage = "Rice Package",
-    //        InputPackageId = 102,
-    //        EquityPaid = 15000 * factor,
-    //        Status = factor % 2 == 0
-    //    },
-    //    new OrganizationAgentSubscriberModel
-    //    {
-    //        Id = 3,
-    //        FarmerName = $"Farmer {args.Id }-C",
-    //        FarmerUserId = $"FRM{args.Id }03",
-    //        InputPackage = "Cassava Package",
-    //        InputPackageId = 103,
-    //        EquityPaid = 8000 * factor,
-    //        Status = true
-    //    }
-    //};
+            //{
+            //    new OrganizationAgentSubscriberModel
+            //    {
+            //        Id = 1,
+            //        FarmerName = $"Farmer {args.Id }-A",
+            //        FarmerUserId = $"FRM{args.Id }01",
+            //        InputPackage = "Maize Package",
+            //        InputPackageId = 101,
+            //        EquityPaid = 10000 * factor,
+            //        Status = true
+            //    },
+            //    new OrganizationAgentSubscriberModel
+            //    {
+            //        Id = 2,
+            //        FarmerName = $"Farmer {args.Id }-B",
+            //        FarmerUserId = $"FRM{args.Id }02",
+            //        InputPackage = "Rice Package",
+            //        InputPackageId = 102,
+            //        EquityPaid = 15000 * factor,
+            //        Status = factor % 2 == 0
+            //    },
+            //    new OrganizationAgentSubscriberModel
+            //    {
+            //        Id = 3,
+            //        FarmerName = $"Farmer {args.Id }-C",
+            //        FarmerUserId = $"FRM{args.Id }03",
+            //        InputPackage = "Cassava Package",
+            //        InputPackageId = 103,
+            //        EquityPaid = 8000 * factor,
+            //        Status = true
+            //    }
+            //};
 
             if (!subscribers.Any())
                 return null;
@@ -339,9 +364,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<PagedListResponse<List<OrganizationAgentInputAllocationModel>>>
     GetAgentInputAllocations(ListQueryParams args)
         {
-            await Task.Delay(50); // simulate async
 
-            var baseValue = args.Id % 5 + 1; // vary data per agent
 
             var data = new List<OrganizationAgentInputAllocationModel>();
             //{
@@ -398,6 +421,259 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
         #endregion agentviews
+
+        #region OrganizationProduct
+
+       
+        public async Task<OrganizationProductCategory> CreateCategory(ProductCategoryDto dto)
+        {
+            var exists = await _context.OrganizationProductCategories.AnyAsync(x =>
+                x.CategoryName == dto.CategoryName &&
+                x.BusinessCode == dto.BusinessCode);
+
+            if (exists)
+                throw new Exception("Product Category already exists.");
+
+
+            var cat = new OrganizationProductCategory
+            {
+                BusinessCode = dto.BusinessCode,
+
+                CategoryName = dto.CategoryName,
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now,
+            };
+
+            _context.OrganizationProductCategories.Add(cat);
+            await _context.SaveChangesAsync();
+
+            return cat;
+        }
+        public async Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query)
+        {
+            var baseQuery = _context.OrganizationProductCategories
+                .Where(x => x.BusinessCode == query.businessCode && x.IsActive)
+                .AsQueryable();
+
+           
+            var totalCount = await baseQuery.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new ProductCategoryDto
+                {
+                    Id = x.Id,
+                    CategoryName = x.CategoryName,
+                    BusinessCode=x.BusinessCode
+                  
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<ProductCategoryDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<ProductCategoryDto> GetCategoryById(long id)
+        {
+            var cat = await _context.OrganizationProductCategories
+                           .Where(x => x.IsActive && x.Id == id)
+                          
+                           .FirstOrDefaultAsync();
+
+            if (cat == null)
+                throw new Exception("Product Category not found.");
+
+            return new ProductCategoryDto
+            {
+                Id = cat.Id,
+                CategoryName = cat.CategoryName,
+                BusinessCode = cat.BusinessCode
+            };
+        }
+
+        public async Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto dto)
+        {
+            var location = await _context.OrganizationProductCategories
+               .FirstOrDefaultAsync(x => x.Id == dto.ProductCategoryId && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Category not found.");
+
+            var exists = await _context.OrganizationProducts.AnyAsync(x =>
+                x.ProductName == dto.ProductName &&
+                x.ProductCode == dto.ProductCode
+                && x.OrganizationId == dto.OrganizationId
+                && x.Season == dto.Season
+                && x.OrganizationProductCategoryId == dto.ProductCategoryId
+                && x.BusinessCode == dto.BusinessCode);
+
+            if (exists)
+                throw new Exception("Product already exists.");
+
+            var prod = new OrganizationProduct
+            {
+                CreatedOn = DateTimeOffset.Now,
+                OrganizationId = dto.OrganizationId,
+                OrganizationProductCategoryId=dto.ProductCategoryId,
+                ProductName=dto.ProductName,
+                ProductCode=dto.ProductCode,
+                Season= dto.Season,
+                BusinessCode = dto.BusinessCode,
+                IsActive = true,
+                UnitType=dto.UnitType,
+                MaximumOrderQuantity=dto.MaximumOrderQuantity,
+                MinimumOrderQuantity=dto.MinimumOrderQuantity,
+                Description=dto.Description
+            };
+
+            _context.OrganizationProducts.Add(prod);
+            await _context.SaveChangesAsync();
+
+            return prod;
+        }
+        public async Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(
+        ListQueryParams query)
+        {
+            var baseQuery = _context.OrganizationProducts
+    .Where(li => li.OrganizationId == query.Id && li.IsActive);
+
+
+            var totalCount = await baseQuery.CountAsync();
+
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 50 : query.PageSize;
+
+            var data = await baseQuery
+     .OrderByDescending(li => li.CreatedOn)
+     .Skip((pageNumber - 1) * pageSize)
+     .Take(pageSize)
+     .Select(li => new OrganizationProductDto
+     {
+         Id = li.Id,
+         ProductCategory=li.OrganizationProductCategory.CategoryName,
+         ProductCode = li.ProductCode,
+         BusinessCode=li.BusinessCode,
+         CreatedOn=li.CreatedOn,
+         IsActive=li.IsActive,
+         ProductCategoryId=li.OrganizationProductCategoryId,
+         ProductName=li.ProductName,
+         Season=li.Season,
+         UnitType=li.UnitType,
+         Description=li.Description,
+         MaximumOrderQuantity=li.MaximumOrderQuantity,
+         MinimumOrderQuantity=li.MinimumOrderQuantity
+     })
+     .ToListAsync();
+
+            return new PagedListResponse<List<OrganizationProductDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<OrganizationProductDto> GetorganizationProductById(long id)
+        {
+            var product = await _context.OrganizationProducts
+                .Where(p => p.Id == id && p.IsActive)
+                .Select(p => new OrganizationProductDto
+                {
+                    Id = p.Id,
+                    ProductCategory = p.OrganizationProductCategory.CategoryName,
+                    ProductCode = p.ProductCode,
+                    BusinessCode = p.BusinessCode,
+                    CreatedOn = p.CreatedOn,
+                    IsActive = p.IsActive,
+                    ProductCategoryId = p.OrganizationProductCategoryId,
+                    ProductName = p.ProductName,
+                    Season = p.Season,
+                    UnitType = p.UnitType,
+                    Description=p.Description,
+                    MaximumOrderQuantity=p.MaximumOrderQuantity,
+                    MinimumOrderQuantity=p.MinimumOrderQuantity
+                })
+                .FirstOrDefaultAsync();
+
+            return product;
+        }
+
+        public async Task<bool> EditProductAsync(long id, EditOrganizationProductDto request)
+        {
+            var product = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
+
+            if (product == null)
+            {
+                throw new KeyNotFoundException("Product not found or has been deactivated.");
+            }
+
+
+            if (!string.IsNullOrWhiteSpace(request.ProductName))
+                product.ProductName = request.ProductName;
+
+            if (!string.IsNullOrWhiteSpace(request.ProductCode))
+                product.ProductCode = request.ProductCode;
+
+            if (!string.IsNullOrWhiteSpace(request.BusinessCode))
+                product.BusinessCode = request.BusinessCode;
+
+            if (request.ProductCategoryId.HasValue)
+                product.OrganizationProductCategoryId = request.ProductCategoryId.Value;
+
+            if (!string.IsNullOrWhiteSpace(request.Season))
+                product.Season = request.Season;
+
+            if (!string.IsNullOrWhiteSpace(request.UnitType))
+                product.UnitType = request.UnitType;
+            if(request.MinimumOrderQuantity > 0)
+            {
+                product.MinimumOrderQuantity = request.MinimumOrderQuantity;
+            }
+            if(request.MaximumOrderQuantity > 0)
+            {
+                product.MaximumOrderQuantity = request.MaximumOrderQuantity;
+            }
+            if (!string.IsNullOrEmpty(request.Description))
+                product.Description = request.Description;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> DeactivateProductAsync(long id)
+        {
+            var product = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (product == null)
+            {
+                throw new KeyNotFoundException("Product not found.");
+            }
+
+            if (!product.IsActive)
+            {
+                return false;
+            }
+
+            product.IsActive = false;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        
+        #endregion OrganizationProduct
 
         public async Task<OrganizationDashboardResponse> GetOrganizationDashboardAsync(ListQueryParams args)
         {
@@ -833,8 +1109,8 @@ SELECT
                     TotalVerifiedFarmers = g.Count(x => x != null && x.Level != FarmerLevel.Level1),
 
                     TotalUnverifiedFarmers = g.Count(x => x != null && x.Level == FarmerLevel.Level1),
-                    TotalInputDisbursed=0,
-                    TotalRecoveryAmount=0
+                    TotalInputDisbursed = 0,
+                    TotalRecoveryAmount = 0
                 }
             )
             .FirstOrDefaultAsync();
@@ -842,10 +1118,10 @@ SELECT
             return result ?? new OrganizationMembershipDashboardResponse();
         }
         public async Task<List<OrganizationMemberShipResponseModel>> GetCooperativesByOrganization(
-           string organizationCode,
-           ListQueryParams query)
+      string organizationCode,
+      ListQueryParams query)
         {
-            var baseQuery =
+            var result = await (
                 from m in _context.MemberShips.AsNoTracking()
 
                 join om in _context.OrganizationMemberships.AsNoTracking()
@@ -854,89 +1130,86 @@ SELECT
                 join o in _context.BusinessOrganizations.AsNoTracking()
                     on om.OrganizationId equals o.OrganizationId
 
+                join mt in _context.MemberShipTypes.AsNoTracking()
+                    on m.MemberShipTypeId equals mt.Id into mtJoin
+                from mt in mtJoin.DefaultIfEmpty()
+
                 where o.OrganizationCode == organizationCode
 
-                select m;
-
-            var memberships = await baseQuery
-                .OrderByDescending(x => x.OnBoardedOn)
-                .ToListAsync();
-
-            if (!memberships.Any())
-                return new List<OrganizationMemberShipResponseModel>();
-
-            var membershipIds = memberships.Select(x => x.Id).ToList();
-
-            var farmerLinks = await (
-                from fc in _context.FarmerCooperatives.AsNoTracking()
-                where membershipIds.Contains(fc.CooperativeId)
-
-                join f in _context.Farmers.AsNoTracking()
-                    on fc.FarmerId equals f.Id
-
-                select new
-                {
-                    fc.CooperativeId,
-                    f.Id,
-                    f.Level
-                }
-            ).ToListAsync();
-
-            var membershipAgents = await _context.MemberShipAgents
-                .AsNoTracking()
-                .Where(x => membershipIds.Contains(x.MemberShipId))
-                .Select(x => x.MemberShipId)
-                .Distinct()
-                .ToListAsync();
-
-            var agentSet = membershipAgents.ToHashSet();
-
-            var result = memberships.Select(m =>
-            {
-                var farmersForMembership = farmerLinks
-                    .Where(x => x.CooperativeId == m.Id)
-                    .ToList();
-
-                var totalFarmers = farmersForMembership.Count;
-
-                var totalVerifiedFarmers = farmersForMembership
-                    .Count(x => x.Level != FarmerLevel.Level1);
-
-                var totalUnverifiedFarmers = totalFarmers - totalVerifiedFarmers;
-
-                var hasAgent = agentSet.Contains(m.Id);
-
-                return new OrganizationMemberShipResponseModel
+                select new OrganizationMemberShipResponseModel
                 {
                     Id = m.Id,
                     Name = m.Name,
                     Location = m.Location,
                     State = m.State,
                     Lga = m.Lga,
+                    Ward = m.Ward,
                     OnBoardedOn = m.OnBoardedOn,
 
                     ContactPerson =
-                        $"{m.MembershipLeaderLastName} {m.MembershipLeaderFirstName}",
+                        m.MembershipLeaderLastName + " " +
+                        m.MembershipLeaderFirstName,
 
                     PhoneNumber = m.PhoneNumber,
                     UserId = m.UserId,
+
                     Tier = EnumExtensions.GetDisplayName(m.Tier),
-                    MembershipType = m.MemberShipType?.Name,
-                    Ward = m.Ward,
+                    MembershipType = mt != null ? mt.Name : null,
 
-                    TotalFarmers = totalFarmers,
-                    TotalVerifiedFarmers = totalVerifiedFarmers,
-                    TotalUnverifiedFarmers = totalUnverifiedFarmers,
+                    // ============================
+                    // FARMER COUNTS (SAFE + CONSISTENT)
+                    // ============================
+
+                    TotalFarmers =
+                        _context.FarmerCooperatives
+                            .Where(fc => fc.CooperativeId == m.Id)
+                            .Select(fc => fc.FarmerId)
+                            .Distinct()
+                            .Count(),
+
+                    TotalVerifiedFarmers =
+                        (from fc in _context.FarmerCooperatives
+                         join f in _context.Farmers
+                             on fc.FarmerId equals f.Id
+                         where fc.CooperativeId == m.Id
+                               && f.Level != FarmerLevel.Level1
+                         select fc.FarmerId)
+                        .Distinct()
+                        .Count(),
+
+                    TotalUnverifiedFarmers =
+                        (
+                            _context.FarmerCooperatives
+                                .Where(fc => fc.CooperativeId == m.Id)
+                                .Select(fc => fc.FarmerId)
+                                .Distinct()
+                                .Count()
+                        )
+                        -
+                        (
+                            from fc in _context.FarmerCooperatives
+                            join f in _context.Farmers
+                                on fc.FarmerId equals f.Id
+                            where fc.CooperativeId == m.Id
+                                  && f.Level != FarmerLevel.Level1
+                            select fc.FarmerId
+                        )
+                        .Distinct()
+                        .Count(),
+
+                    HasbeenAssignedAgent =
+                        _context.MemberShipAgents
+                            .Any(a => a.MemberShipId == m.Id),
+
                     TotalInputReceived = 0,
-                    RecoveryAmount = 0,
-
-                    HasbeenAssignedAgent = hasAgent
-                };
-            }).ToList();
+                    RecoveryAmount = 0
+                }
+            )
+            .OrderByDescending(x => x.OnBoardedOn)
+            .ToListAsync();
 
             return result;
         }
-
         /// <summary>
         /// TODO: REVERT if it fails
         /// </summary>
@@ -1073,165 +1346,593 @@ SELECT
                 Data = result
             };
         }
-       
+
+        #region Location
         /// <summary>
         /// TODO: revert if fails
         /// </summary>
         /// <param name="args"></param>
         /// <returns></returns>
-      /**  public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
+        /**  public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
+          {
+              var query =
+      from oa in _context.OrganizationAgents.AsNoTracking()
+      where oa.OrganizationId == args.Id && oa.IsActive
+
+      group oa by oa.AgentId into g
+
+      select new
+      {
+          AgentId = g.Key,
+
+          LocationCount = g
+              .Where(x => x.LocationId > 0)
+              .Select(x => x.LocationId)
+              .Distinct()
+              .Count(),
+
+          OrganizationAgentIds = g.Select(x => x.Id)
+      };
+              var totalCount = await query.CountAsync();
+
+              var pagedAgents = await query
+                  .OrderByDescending(x => x.AgentId)
+                  .Skip((args.PageNumber - 1) * args.PageSize)
+                  .Take(args.PageSize)
+                  .ToListAsync();
+
+              var agentIds = pagedAgents.Select(x => x.AgentId).ToList();
+
+              var agents = await _context.Agents
+                  .AsNoTracking()
+                  .Where(x => agentIds.Contains(x.Id))
+                  .ToDictionaryAsync(x => x.Id);
+
+              var orgAgentIds = pagedAgents
+                  .SelectMany(x => x.OrganizationAgentIds)
+                  .ToList();
+
+              var roleCounts = await _context.OrganizationAgentRoles
+                  .AsNoTracking()
+                  .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
+                  .GroupBy(x => x.OrganizationAgentId)
+                  .Select(g => new
+                  {
+                      OrganizationAgentId = g.Key,
+                      Count = g.Count()
+                  })
+                  .ToListAsync();
+
+              var roleCountDict = roleCounts.ToDictionary(x => x.OrganizationAgentId, x => x.Count);
+
+              var result = pagedAgents.Select(x =>
+              {
+                  var agent = agents.GetValueOrDefault(x.AgentId);
+
+                  var totalRoles = x.OrganizationAgentIds
+                      .Sum(id => roleCountDict.GetValueOrDefault(id, 0));
+
+                  return new OrganizationAgentResponse
+                  {
+                      AgentId = agent?.Id ?? 0,
+                      UserId = agent?.UserId,
+                      Name = agent?.Name,
+                      Email = agent?.Email,
+                      PhoneNumber = agent?.PhoneNumber,
+                      State = agent?.State,
+                      Lga = agent?.Lga,
+                      Ward = agent?.Ward,
+                      OnBoardedOn = agent?.OnBoardedOn ?? DateTimeOffset.MinValue,
+
+                      LocationCount = x.LocationCount,
+                      RoleCount = totalRoles,
+                      Subscribers = 0, //TODO:update when you have subscribers 
+                      InputDisbursed = 0, //TODO:update when you have data
+                      EquityPaid = 0, //TODO:update when you have data
+                      ProductSold = 0 //TODO:update when you have data
+
+                  };
+              }).ToList();
+
+              return new PagedListResponse<List<OrganizationAgentResponse>>
+              {
+                  PageNumber = args.PageNumber,
+                  PageSize = args.PageSize,
+                  Count = totalCount,
+                  Data = result
+              };
+          }
+        **/
+
+        private async Task ValidateModules(List<long> moduleIds)
         {
-            var query =
-    from oa in _context.OrganizationAgents.AsNoTracking()
-    where oa.OrganizationId == args.Id && oa.IsActive
+            if (moduleIds.Count > 4)
+                throw new Exception("Max 4 modules allowed.");
 
-    group oa by oa.AgentId into g
+            var count = await _context.Modules.CountAsync(x => moduleIds.Contains(x.Id));
 
-    select new
-    {
-        AgentId = g.Key,
+            if (count != moduleIds.Count)
+                throw new Exception("Invalid modules.");
+        }
 
-        LocationCount = g
-            .Where(x => x.LocationId > 0)
-            .Select(x => x.LocationId)
-            .Distinct()
-            .Count(),
+        private async Task ValidateStorageCategories(List<long> categoryIds)
+        {
+            if (!categoryIds.Any()) return;
 
-        OrganizationAgentIds = g.Select(x => x.Id)
-    };
-            var totalCount = await query.CountAsync();
+            var count = await _context.StorageCategories.CountAsync(x => categoryIds.Contains(x.Id));
 
-            var pagedAgents = await query
-                .OrderByDescending(x => x.AgentId)
-                .Skip((args.PageNumber - 1) * args.PageSize)
-                .Take(args.PageSize)
-                .ToListAsync();
+            if (count != categoryIds.Count)
+                throw new Exception("Invalid storage categories.");
+        }
 
-            var agentIds = pagedAgents.Select(x => x.AgentId).ToList();
+        private void ValidateTemperature(bool hasTemp, long? tempTypeId)
+        {
+            if (hasTemp && tempTypeId == null)
+                throw new Exception("Temperature type required.");
 
-            var agents = await _context.Agents
-                .AsNoTracking()
-                .Where(x => agentIds.Contains(x.Id))
-                .ToDictionaryAsync(x => x.Id);
+            if (!hasTemp && tempTypeId != null)
+                throw new Exception("Temperature type should be null.");
+        }
 
-            var orgAgentIds = pagedAgents
-                .SelectMany(x => x.OrganizationAgentIds)
-                .ToList();
 
-            var roleCounts = await _context.OrganizationAgentRoles
-                .AsNoTracking()
-                .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
-                .GroupBy(x => x.OrganizationAgentId)
-                .Select(g => new
-                {
-                    OrganizationAgentId = g.Key,
-                    Count = g.Count()
-                })
-                .ToListAsync();
-
-            var roleCountDict = roleCounts.ToDictionary(x => x.OrganizationAgentId, x => x.Count);
-
-            var result = pagedAgents.Select(x =>
+        private List<LocationModule> MapModules(List<long> moduleIds)
+        {
+            return moduleIds.Select(x => new LocationModule
             {
-                var agent = agents.GetValueOrDefault(x.AgentId);
-
-                var totalRoles = x.OrganizationAgentIds
-                    .Sum(id => roleCountDict.GetValueOrDefault(id, 0));
-
-                return new OrganizationAgentResponse
-                {
-                    AgentId = agent?.Id ?? 0,
-                    UserId = agent?.UserId,
-                    Name = agent?.Name,
-                    Email = agent?.Email,
-                    PhoneNumber = agent?.PhoneNumber,
-                    State = agent?.State,
-                    Lga = agent?.Lga,
-                    Ward = agent?.Ward,
-                    OnBoardedOn = agent?.OnBoardedOn ?? DateTimeOffset.MinValue,
-
-                    LocationCount = x.LocationCount,
-                    RoleCount = totalRoles,
-                    Subscribers = 0, //TODO:update when you have subscribers 
-                    InputDisbursed = 0, //TODO:update when you have data
-                    EquityPaid = 0, //TODO:update when you have data
-                    ProductSold = 0 //TODO:update when you have data
-
-                };
+                ModuleId = x
             }).ToList();
+        }
 
-            return new PagedListResponse<List<OrganizationAgentResponse>>
+        private List<LocationStorageCategory> MapCategories(List<long> categoryIds)
+        {
+            return categoryIds.Select(x => new LocationStorageCategory
             {
-                PageNumber = args.PageNumber,
-                PageSize = args.PageSize,
-                Count = totalCount,
-                Data = result
+                StorageCategoryId = x
+            }).ToList();
+        }
+        private async Task<bool> IsDescendant(long locationId, long potentialParentId)
+        {
+            var current = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == potentialParentId);
+
+            while (current != null)
+            {
+                if (current.ParentLocationId == locationId)
+                    return true;
+
+                if (current.ParentLocationId == null)
+                    return false;
+
+                current = await _context.OrganizationLocations
+                    .FirstOrDefaultAsync(x => x.Id == current.ParentLocationId);
+            }
+
+            return false;
+        }
+
+        private async Task DeactivateChildren(long parentId, string userId, string reason)
+        {
+            var children = await _context.OrganizationLocations
+                .Where(x => x.ParentLocationId == parentId && x.IsActive)
+                .ToListAsync();
+
+            foreach (var child in children)
+            {
+                child.IsActive = false;
+                child.DeactivatedByUserId = userId;
+                child.DeactivationReason = reason;
+
+                await DeactivateChildren(child.Id, userId, reason);
+            }
+        }
+        private LocationResponseDto MapToDto(OrganizationLocation x)
+        {
+            return new LocationResponseDto
+            {
+                Id = x.Id,
+                LocationName = x.LocationName,
+
+                LocationTypeId = x.LocationTypeId,
+                LocationTypeName = x.LocationType?.Type,
+
+                Capacity = x.Capacity,
+                CapacityType = x.CapacityType,
+                StockLevel = x.StockLevel,
+
+                Address = x.Address,
+
+                HasTemperatureControl = x.HasTemperatureControl,
+                TemperatureControlType = x.TemperatureControlType?.Name,
+
+                DateOfCommissioning = x.DateOfCommissioning,
+
+                Modules = x.LocationModules
+                    .Select(m => m.Module.Name)
+                    .ToList(),
+
+                StorageCategories = x.LocationStorageCategories
+                    .Select(c => c.StorageCategory.Name)
+                    .ToList(),
+
+                ParentLocationId = x.ParentLocationId,
+                LocationStatus = x.LocationStatus,
+                Agents = x.OrganizationAgents
+                        .Where(a => a.IsActive)
+                        .Select(a => new AgentDto
+                        {
+                             AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+                            IsPrimary=a.IsPrimary
+                        })
+                        .ToList(),
             };
         }
-      **/
-        public async Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model)
+        //public async Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model)
+        //{
+        //    var existingLocation = await _context.OrganizationLocations
+        //        .FirstOrDefaultAsync(x => x.Id == locationId);
+
+        //    if (existingLocation == null)
+        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Location not found");
+
+        //    var duplicate = await _context.OrganizationLocations
+        //        .AnyAsync(x => x.LocationName == model.LocationName
+        //        && x.OrganizationId==model.OrganizationId
+        //        && x.StateId == model.StateId
+        //        && x.LgaId == model.LgaId
+        //        && x.Address == model.Address
+        //        && x.Id != locationId);
+
+        //    if (duplicate)
+        //        throw new ValidationException("A location with this name already exists");
+        //    if (model.LocationTypeId > 0)
+        //        existingLocation.LocationTypeId = model.LocationTypeId;
+
+        //    if (model.StateId > 0)
+        //        existingLocation.StateId = model.StateId;
+
+        //    if (model.LgaId > 0)
+        //        existingLocation.LgaId = model.LgaId;
+
+        //    if (!string.IsNullOrWhiteSpace(model.Address))
+        //        existingLocation.Address = model.Address;
+
+        //    if (model.Capacity > 0)
+        //        existingLocation.Capacity = model.Capacity;
+
+        //    if (!string.IsNullOrWhiteSpace(model.CapacityType))
+        //        existingLocation.CapacityType = model.CapacityType;
+
+        //    if (!string.IsNullOrWhiteSpace(model.LocationName))
+        //        existingLocation.LocationName = model.LocationName;
+
+
+        //    existingLocation.IsActive = model.IsActive;
+
+        //    _context.OrganizationLocations.Update(existingLocation);
+        //    await _context.SaveChangesAsync();
+
+        //    return existingLocation.ViewMap();
+        //}
+        //public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)
+        //{
+        //    var orgExist = await _context.OrganizationLocations
+        //      .FirstOrDefaultAsync(x => x.LocationName == model.LocationName && x.OrganizationId == model.OrganizationId);
+
+        //    if (orgExist != null)
+        //    {
+        //        return orgExist.ViewMap();
+        //    }
+        //    OrganizationLocation org = model.Map();
+        //    org.IsActive = true;
+        //    _context.Set<OrganizationLocation>().Add(org);
+        //    await _context.SaveChangesAsync();
+        //    var response = org.ViewMap();
+        //    return response;
+        //}
+        //public async Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query)
+        //{
+        //    var locations = await _context.Set<OrganizationLocation>()
+        //        .Where(x => x.BusinessCode == query.businessCode && x.OrganizationId == query.Id)
+        //        .Include(x => x.LocationType)
+        //        .Include(x => x.State)
+        //        .Include(x => x.LGA)
+        //        .ToListAsync();
+
+        //    var locationIds = locations.Select(l => l.Id).ToList();
+
+        //    var agentCounts = await _context.Set<OrganizationAgent>()
+        //        .Where(a => locationIds.Contains(a.LocationId))
+        //        .GroupBy(a => a.LocationId)
+        //        .Select(g => new { LocationId = g.Key, Count = g.Count() })
+        //        .ToListAsync();
+
+        //    var result = locations.Select(loc =>
+        //    {
+        //        var assignedCount = agentCounts.FirstOrDefault(ac => ac.LocationId == loc.Id)?.Count ?? 0;
+
+        //        return new OrganizationLocationResponseModel
+        //        {
+        //            Id = loc.Id,
+        //            StateId = loc.StateId,
+        //            LgaId = loc.LgaId,
+        //            BusinessCode = loc.BusinessCode,
+        //            OrganizationId = loc.OrganizationId,
+        //            LocationName = loc.LocationName,
+        //            LocationTypeId = loc.LocationTypeId,
+        //            State = loc.State?.State,
+        //            Lga = loc.LGA?.Name,
+        //            LocationType = loc.LocationType?.Type,
+        //            Address = loc.Address,
+        //            IsActive = loc.IsActive,
+        //            Capacity = loc.Capacity,
+        //            TotalStock = loc.StockLevel,
+        //            CurrentUsage = loc.Capacity - loc.StockLevel,
+        //            CapacityType = loc.CapacityType,
+        //            AssignedAgentCount = assignedCount.ToString()
+        //        };
+        //    }).ToList();
+
+        //    return result;
+        //}
+        //public async Task<OrganizationLocationModel> GetLocationByIAsync(long Id)
+        //{
+        //    var loc = await _context.Set<OrganizationLocation>()
+        //         .Include(x => x.LocationType)
+        //        .Include(x => x.State)
+        //        .Include(x => x.LGA)
+        //        .FirstOrDefaultAsync(x => x.Id == Id);
+        //    if (loc == null)
+        //    {
+        //        return null;
+        //    }
+        //    return new OrganizationLocationModel
+        //    {
+        //        Id = loc.Id,
+        //        StateId = loc.StateId,
+        //        LgaId = loc.LgaId,
+        //        BusinessCode = loc.BusinessCode,
+        //        OrganizationId = loc.OrganizationId,
+        //        LocationName = loc.LocationName,
+        //        LocationTypeId = loc.LocationTypeId,
+        //        StateName = loc.State?.State,
+        //        LgaName = loc.LGA?.Name,
+        //        LocationTypeName = loc.LocationType?.Type,
+        //        Address = loc.Address,
+        //        IsActive = loc.IsActive,
+        //        Capacity = loc.Capacity,
+        //        Used = loc.StockLevel,
+        //        Available = loc.Capacity - loc.StockLevel,
+        //        CapacityType = loc.CapacityType
+        //    };
+        //}
+
+
+        public async Task<OrganizationLocation> EditLocationAsync(EditLocationDto dto)
         {
-            var existingLocation = await _context.OrganizationLocations
-                .FirstOrDefaultAsync(x => x.Id == locationId);
+            var location = await _context.OrganizationLocations
+                .Include(x => x.LocationModules)
+                .Include(x => x.LocationStorageCategories)
+                .FirstOrDefaultAsync(x => x.Id == dto.Id);
 
-            if (existingLocation == null)
-                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Location not found");
+            if (location == null)
+                throw new Exception("Location not found.");
 
-            var duplicate = await _context.OrganizationLocations
-                .AnyAsync(x => x.LocationName == model.LocationName
-                && x.OrganizationId==model.OrganizationId
-                && x.StateId == model.StateId
-                && x.LgaId == model.LgaId
-                && x.Address == model.Address
-                && x.Id != locationId);
-
-            if (duplicate)
-                throw new ValidationException("A location with this name already exists");
-            if (model.LocationTypeId > 0)
-                existingLocation.LocationTypeId = model.LocationTypeId;
-
-            if (model.StateId > 0)
-                existingLocation.StateId = model.StateId;
-
-            if (model.LgaId > 0)
-                existingLocation.LgaId = model.LgaId;
-
-            if (!string.IsNullOrWhiteSpace(model.Address))
-                existingLocation.Address = model.Address;
-
-            if (model.Capacity > 0)
-                existingLocation.Capacity = model.Capacity;
-
-            if (!string.IsNullOrWhiteSpace(model.CapacityType))
-                existingLocation.CapacityType = model.CapacityType;
-
-            if (!string.IsNullOrWhiteSpace(model.LocationName))
-                existingLocation.LocationName = model.LocationName;
+            if (location.ParentLocationId != null)
+                throw new Exception("Use EditSubLocation for sublocations.");
 
 
-            existingLocation.IsActive = model.IsActive;
+            var locationType = await _context.LocationTypes
+                .FirstOrDefaultAsync(x => x.Id == location.LocationTypeId);
 
-            _context.OrganizationLocations.Update(existingLocation);
+            if (!locationType.Type.Equals("Warehouse", StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Only warehouse can be edited here.");
+
+
+            ValidateTemperature(dto.HasTemperatureControl, dto.TemperatureControlTypeId);
+            await ValidateModules(dto.ModuleIds);
+            await ValidateStorageCategories(dto.StorageCategoryIds);
+
+
+            location.LocationName = dto.LocationName;
+            location.Capacity = dto.Capacity;
+            location.CapacityType = dto.CapacityType;
+
+            location.StateId = dto.StateId;
+            location.LgaId = dto.LgaId;
+            location.Address = dto.Address;
+
+            location.DateOfCommissioning = dto.DateOfCommissioning;
+
+            location.HasTemperatureControl = dto.HasTemperatureControl;
+            location.TemperatureControlTypeId =
+                dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null;
+
+
+            location.LocationModules.Clear();
+            location.LocationModules = MapModules(dto.ModuleIds);
+
+            location.LocationStorageCategories.Clear();
+            location.LocationStorageCategories = MapCategories(dto.StorageCategoryIds);
+
             await _context.SaveChangesAsync();
 
-            return existingLocation.ViewMap();
+            return location;
         }
-        public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)
+        public async Task<OrganizationLocation> CreateLocationAsync(CreateLocationDto dto)
         {
-            var orgExist = await _context.OrganizationLocations
-              .FirstOrDefaultAsync(x => x.LocationName == model.LocationName && x.OrganizationId == model.OrganizationId);
+            var locationType = await _context.LocationTypes
+                .FirstOrDefaultAsync(x => x.Id == dto.LocationTypeId);
 
-            if (orgExist != null)
+            if (locationType == null)
+                throw new Exception("Invalid location type.");
+
+            if (!locationType.Type.Equals("Warehouse", StringComparison.OrdinalIgnoreCase))
+                throw new Exception("Only Warehouse can be created as root location.");
+
+            var exists = await _context.OrganizationLocations.AnyAsync(x =>
+                x.LocationName == dto.LocationName &&
+                x.OrganizationId == dto.OrganizationId &&
+                x.ParentLocationId == null);
+
+            if (exists)
+                throw new Exception("Warehouse already exists.");
+
+            ValidateTemperature(dto.HasTemperatureControl, dto.TemperatureControlTypeId);
+            await ValidateModules(dto.ModuleIds);
+            await ValidateStorageCategories(dto.StorageCategoryIds);
+
+            var location = new OrganizationLocation
             {
-                return orgExist.ViewMap();
-            }
-            OrganizationLocation org = model.Map();
-            org.IsActive = true;
-            _context.Set<OrganizationLocation>().Add(org);
+                OrganizationId = dto.OrganizationId.Value,
+                BusinessCode = dto.BusinessCode,
+
+                LocationName = dto.LocationName,
+                LocationTypeId = dto.LocationTypeId,
+                Longitude = dto.Longitude,
+                Latitude = dto.Latitude,
+                Capacity = dto.Capacity,
+                CapacityType = dto.CapacityType,
+                StockLevel = 0,
+                LocationStatus = dto.LocationStatus,
+                StateId = dto.StateId,
+                LgaId = dto.LgaId,
+                Address = dto.Address,
+                OwnershipType=dto.OwnerShip,
+                
+                DateOfCommissioning = dto.DateOfCommissioning,
+
+                HasTemperatureControl = dto.HasTemperatureControl,
+                TemperatureControlTypeId = dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null,
+
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now,
+                CreatedByUserId = dto.CreatedByUserId,
+
+                ParentLocationId = null
+            };
+
+            location.LocationModules = MapModules(dto.ModuleIds);
+            location.LocationStorageCategories = MapCategories(dto.StorageCategoryIds);
+
+            _context.OrganizationLocations.Add(location);
             await _context.SaveChangesAsync();
-            var response = org.ViewMap();
-            return response;
+
+            location.ParentLocationId = location.Id;
+
+            _context.OrganizationLocations.Update(location);
+            await _context.SaveChangesAsync();
+
+            return location;
         }
+
+        public async Task<LocationDashboardFullDto> GetFullDashboardAsync(long organizationId)
+        {
+            var now = DateTimeOffset.Now;
+            var soon = now.AddDays(30);
+
+            var locations = _context.OrganizationLocations
+                .Where(x => x.OrganizationId == organizationId && x.IsActive);
+
+            // LOCATION COUNTS
+            var totalWarehouses = await locations
+      .CountAsync(x => x.ParentLocationId == null);
+            var totalSubWarehouses = await locations
+    .CountAsync(x => x.ParentLocationId != null);
+            // CAPACITY
+            var totalCapacity = await locations.SumAsync(x => (double?)x.Capacity) ?? 0;
+            var totalStock = await locations.SumAsync(x => (double?)x.StockLevel) ?? 0;
+
+            var occupancyRate = totalCapacity == 0 ? 0 : (totalStock / totalCapacity) * 100;
+            var availableCapacity = totalCapacity - totalStock;
+           
+                  // AGENTS
+            var agents = _context.OrganizationAgents
+                .Where(x => x.OrganizationId == organizationId && x.LocationId != null);
+
+            var activeAgents = await agents.CountAsync(x => x.IsActive);
+            var inactiveAgents = await agents.CountAsync(x => !x.IsActive);
+            var primaryAgents = await agents.CountAsync(x => x.IsPrimary && x.IsActive);
+            var supportingAgents = await agents.CountAsync(x => !x.IsPrimary && x.IsActive);
+
+            // INVENTORY HEALTH
+            var inventories = _context.LocationInventories
+                .Where(x => x.Location.OrganizationId == organizationId && x.IsActive);
+
+            var expiringSoon = await inventories.CountAsync(x =>
+                x.ExpiryDate != null && x.ExpiryDate <= soon && x.ExpiryDate > now);
+
+            var expired = await inventories.CountAsync(x =>
+                x.ExpiryDate != null && x.ExpiryDate <= now);
+
+            // OVER CAPACITY
+            var overCapacity = await locations.CountAsync(x => x.StockLevel > x.Capacity);
+
+            var transactions = _context.InventoryTransactions
+        .Where(x => x.OrganizationId == organizationId);
+
+            var totalIncomingInventory = await transactions
+    .Where(x =>
+        x.TransactionType == InventoryTransactionType.StockIn ||
+        x.TransactionType == InventoryTransactionType.TransferIn ||
+        x.TransactionType == InventoryTransactionType.AdjustmentIncrease ||
+        x.TransactionType == InventoryTransactionType.Returned)
+    .SumAsync(x => (double?)x.Quantity) ?? 0;
+
+            var totalOutgoingInventory = await transactions
+    .Where(x =>
+        x.TransactionType == InventoryTransactionType.StockOut ||
+        x.TransactionType == InventoryTransactionType.TransferOut ||
+        x.TransactionType == InventoryTransactionType.AdjustmentDecrease ||
+        x.TransactionType == InventoryTransactionType.Damaged ||
+        x.TransactionType == InventoryTransactionType.Expired ||
+        x.TransactionType == InventoryTransactionType.Sold ||
+        x.TransactionType == InventoryTransactionType.Consumed)
+    .SumAsync(x => (double?)x.Quantity) ?? 0;
+
+            // TOP UTILIZED LOCATIONS
+            var topLocations = await locations
+                .Select(x => new LocationUtilizationDto
+                {
+                    LocationId = x.Id,
+                    LocationName = x.LocationName,
+                    Capacity = x.Capacity,
+                    StockLevel = x.StockLevel,
+                    UtilizationRate = x.Capacity == 0
+                        ? 0
+                        : (x.StockLevel / x.Capacity) * 100
+                })
+                .OrderByDescending(x => x.UtilizationRate)
+                .Take(5)
+                .ToListAsync();
+
+            return new LocationDashboardFullDto
+            {
+                TotalWarehouses = totalWarehouses,
+                TotalSubWarehouses = totalSubWarehouses,
+
+                TotalCapacity = totalCapacity,
+                TotalStockLevel = totalStock,
+                OccupancyRate = Math.Round(occupancyRate, 2),
+                AvailableCapacity = availableCapacity,
+
+                ActiveAgents = activeAgents,
+                InactiveAgents = inactiveAgents,
+                PrimaryAgents = primaryAgents,
+                SupportingAgents = supportingAgents,
+
+                ExpiringSoonCount = expiringSoon,
+                ExpiredCount = expired,
+
+                OverCapacityLocations = overCapacity,
+
+                TopUtilizedLocations = topLocations,
+                TotalIncomingInventory= (int)totalIncomingInventory,
+                TotalOutgoingInventory= (int)totalOutgoingInventory
+            };
+        }
+
         public async Task<List<OrganizationAgentLocationResponseModel>> GetAgentAssignedLocations(ListQueryParams query)
         {
             var agentLocations = await _context.Set<OrganizationAgent>()
@@ -1271,82 +1972,984 @@ SELECT
 
             return result;
         }
-        public async Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query)
+        public async Task<PagedListResponse<List<LocationResponseDto>>> GetLocationsAsync(ListQueryParams query)
         {
-            var locations = await _context.Set<OrganizationLocation>()
-                .Where(x => x.BusinessCode == query.businessCode && x.OrganizationId == query.Id)
-                .Include(x => x.LocationType)
-                .Include(x => x.State)
-                .Include(x => x.LGA)
-                .ToListAsync();
+            var baseQuery = _context.OrganizationLocations
+                .Where(x => x.OrganizationId == query.Id && x.IsActive)
+                .AsQueryable();
 
-            var locationIds = locations.Select(l => l.Id).ToList();
-
-            var agentCounts = await _context.Set<OrganizationAgent>()
-                .Where(a => locationIds.Contains(a.LocationId))
-                .GroupBy(a => a.LocationId)
-                .Select(g => new { LocationId = g.Key, Count = g.Count() })
-                .ToListAsync();
-
-            var result = locations.Select(loc =>
+            if (!string.IsNullOrWhiteSpace(query.Location))
             {
-                var assignedCount = agentCounts.FirstOrDefault(ac => ac.LocationId == loc.Id)?.Count ?? 0;
+                baseQuery = baseQuery.Where(x => x.LocationName.Contains(query.Location));
+            }
+            if (!string.IsNullOrEmpty(query.LocationStatus))
+            {
+                baseQuery = baseQuery.Where(x => x.LocationStatus.ToLower().Contains(query.LocationStatus.ToLower()));
+            }
+            if (query.LocationTypeId.HasValue)
+            {
+                baseQuery = baseQuery.Where(x => x.LocationTypeId == query.LocationTypeId);
+            }
+            //if (query.HasPrimaryAgent == true)
+            //{
+            //    baseQuery = baseQuery.Where(x =>
+            //        x.OrganizationAgents.Any(a => a.IsPrimary && a.IsActive));
+            //}
+            //if (!string.IsNullOrEmpty(query.AgentUserId))
+            //{
+            //    baseQuery = baseQuery.Where(x =>
+            //        x.OrganizationAgents.Any(a => a.Agent.UserId == query.AgentUserId));
+            //}
+            var totalCount = await baseQuery.CountAsync();
 
-                return new OrganizationLocationResponseModel
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new LocationResponseDto
                 {
-                    Id = loc.Id,
-                    StateId = loc.StateId,
-                    LgaId = loc.LgaId,
-                    BusinessCode = loc.BusinessCode,
-                    OrganizationId = loc.OrganizationId,
-                    LocationName = loc.LocationName,
-                    LocationTypeId = loc.LocationTypeId,
-                    State = loc.State?.State,
-                    Lga = loc.LGA?.Name,
-                    LocationType = loc.LocationType?.Type,
-                    Address = loc.Address,
-                    IsActive = loc.IsActive,
-                    Capacity = loc.Capacity,
-                    TotalStock = loc.StockLevel,
-                    CurrentUsage = loc.Capacity - loc.StockLevel,
-                    CapacityType = loc.CapacityType,
-                    AssignedAgentCount = assignedCount.ToString()
-                };
-            }).ToList();
+                    Id = x.Id,
+                    LocationName = x.LocationName,
+                    Address = x.Address,
+                    Capacity = x.Capacity,
+                    CapacityType = x.CapacityType,
+                    StockLevel = x.StockLevel,
+                    LocationStatus=x.LocationStatus,
+                    Latitude=x.Latitude,
+                    Longitude=x.Longitude,
+                    LocationTypeId = x.LocationTypeId,
+                    LocationTypeName = x.LocationType.Type,
+                    OwnerShip = x.OwnershipType,
+                    HasTemperatureControl = x.HasTemperatureControl,
+                    TemperatureControlType = x.TemperatureControlType != null
+                        ? x.TemperatureControlType.Name
+                        : null,
+
+                    DateOfCommissioning = x.DateOfCommissioning,
+
+                    Modules = x.LocationModules
+                        .Select(m => m.Module.Name)
+                        .ToList(),
+
+                    StorageCategories = x.LocationStorageCategories
+                        .Select(c => c.StorageCategory.Name)
+                        .ToList(),
+
+                    Agents = x.OrganizationAgents
+                        .Where(a => a.IsActive)
+                        .Select(a => new AgentDto
+                        {
+                            AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+                            IsPrimary = a.IsPrimary
+                        })
+                        .ToList(),
+                    PrimaryAgent = x.OrganizationAgents
+                        .Where(a => a.IsPrimary && a.IsActive)
+                        .Select(a => new AgentDto
+                        {
+                            AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+                            IsPrimary = true
+                        })
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<LocationResponseDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<LocationResponseDto> GetLocationByIdAsync(long id)
+        {
+            var location = await _context.OrganizationLocations
+                .Where(x => x.IsActive && x.Id == id)
+                .Select(x => new LocationResponseDto
+                {
+                    Id = x.Id,
+                    LocationName = x.LocationName,
+                    Address = x.Address,
+                                        Latitude = x.Latitude,
+                                        Longitude=x.Longitude,
+                                        LocationStatus=x.LocationStatus,
+                                        OwnerShip=x.OwnershipType,
+
+                    Capacity = x.Capacity,
+                    CapacityType = x.CapacityType,
+                    StockLevel = x.StockLevel,
+
+                    LocationTypeId = x.LocationTypeId,
+                    LocationTypeName = x.LocationType.Type,
+                    
+
+                    HasTemperatureControl = x.HasTemperatureControl,
+                    TemperatureControlType = x.TemperatureControlType != null
+                        ? x.TemperatureControlType.Name
+                        : null,
+
+                    DateOfCommissioning = x.DateOfCommissioning,
+
+                    ParentLocationId = x.ParentLocationId,
+
+                    Modules = x.LocationModules
+                        .Select(m => m.Module.Name)
+                        .ToList(),
+
+                    StorageCategories = x.LocationStorageCategories
+                        .Select(c => c.StorageCategory.Name)
+                        .ToList(),
+
+                    Agents = x.OrganizationAgents
+                        .Where(a => a.IsActive)
+                        .Select(a => new AgentDto
+                        {
+                            AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+                            IsPrimary = a.IsPrimary
+                        })
+                        .ToList(),
+
+                    PrimaryAgent = x.OrganizationAgents
+                        .Where(a => a.IsPrimary && a.IsActive)
+                        .Select(a => new AgentDto
+                        {
+                            AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+                            IsPrimary = true
+                        })
+                        .FirstOrDefault()
+                })
+                .FirstOrDefaultAsync();
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            return location;
+        }
+        public async Task<PagedListResponse<List<SubLocationListDto>>> GetSubLocationsByParentAsync(
+    long parentLocationId,
+    ListQueryParams query)
+        {
+            var baseQuery = _context.OrganizationLocations
+                .Where(x => x.ParentLocationId == parentLocationId && x.IsActive)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(query.Location))
+            {
+                baseQuery = baseQuery.Where(x => x.LocationName.Contains(query.Location));
+            }
+
+            if (query.LocationTypeId.HasValue)
+            {
+                baseQuery = baseQuery.Where(x => x.LocationTypeId == query.LocationTypeId);
+            }
+
+            var totalCount = await baseQuery.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 50 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new SubLocationListDto
+                {
+                    Id = x.Id,
+                    LocationName = x.LocationName,
+                    LocationType = x.LocationType.Type,
+
+                    Capacity = x.Capacity,
+                    CapacityType = x.CapacityType,
+
+                    IsActive = x.IsActive,
+
+                    AssignedAgentName = x.OrganizationAgents
+                        .Where(a => a.IsPrimary && a.IsActive)
+                        .Select(a => a.Agent.Name)
+                        .FirstOrDefault(),
+
+                    AssignedAgentUserId = x.OrganizationAgents
+                        .Where(a => a.IsPrimary && a.IsActive)
+                        .Select(a => a.Agent.UserId)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<SubLocationListDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        private async Task<bool> IsUnderWarehouse(long locationId)
+        {
+            var current = await _context.OrganizationLocations
+                .Include(x => x.LocationType)
+                .FirstOrDefaultAsync(x => x.Id == locationId);
+
+            while (current != null)
+            {
+                //if (current.LocationType.Type == "Warehouse")
+                //    return true;
+
+                if (current.ParentLocationId != current.Id)
+                    return false;
+
+                current = await _context.OrganizationLocations
+                    .Include(x => x.LocationType)
+                    .FirstOrDefaultAsync(x => x.Id == current.ParentLocationId);
+            }
+
+            return false;
+        }
+        public async Task<OrganizationLocation> CreateSubLocationAsync(CreateSubLocationDto dto)
+        {
+            var parent = await _context.OrganizationLocations
+                .Include(x => x.LocationType)
+                .FirstOrDefaultAsync(x => x.Id == dto.ParentLocationId);
+
+            if (parent == null)
+                throw new Exception("Parent not found.");
+
+            if (!await IsUnderWarehouse(parent.Id))
+                throw new Exception("Must belong to parent location.");
+
+            var locationType = await _context.LocationTypes
+                .FirstOrDefaultAsync(x => x.Id == dto.LocationTypeId);
+
+            if (locationType == null)
+                throw new Exception("Invalid location type.");
+
+            //if (locationType.Type == "Warehouse")
+            //    throw new Exception("Warehouse cannot be a sublocation.");
+
+            var exists = await _context.OrganizationLocations.AnyAsync(x =>
+                x.LocationName == dto.LocationName &&
+                x.OrganizationId == parent.OrganizationId &&
+                x.ParentLocationId == dto.ParentLocationId);
+
+            if (exists)
+                throw new Exception("Location already exists under this parent.");
+
+            ValidateTemperature(dto.HasTemperatureControl, dto.TemperatureControlTypeId);
+            await ValidateModules(dto.ModuleIds);
+            await ValidateStorageCategories(dto.StorageCategoryIds);
+
+            var location = new OrganizationLocation
+            {
+                OrganizationId = parent.OrganizationId,
+                BusinessCode = parent.BusinessCode,
+
+                LocationName = dto.LocationName,
+                LocationTypeId = dto.LocationTypeId,
+
+                Capacity = dto.Capacity,
+                CapacityType = dto.CapacityType,
+                StockLevel = 0,
+                Latitude = dto.Latitude,
+                Longitude = dto.Longitude,
+                StateId = dto.StateId,
+                LgaId = dto.LgaId,
+                Address = dto.Address,
+                LocationStatus = dto.LocationStatus,
+                DateOfCommissioning = dto.DateOfCommissioning,
+
+                HasTemperatureControl = dto.HasTemperatureControl,
+                TemperatureControlTypeId = dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null,
+
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now,
+                CreatedByUserId = dto.CreatedByUserId,
+
+                ParentLocationId = parent.Id
+            };
+
+            location.LocationModules = MapModules(dto.ModuleIds);
+            location.LocationStorageCategories = MapCategories(dto.StorageCategoryIds);
+
+            _context.OrganizationLocations.Add(location);
+            await _context.SaveChangesAsync();
+
+            return location;
+        }
+
+        public async Task<OrganizationLocation> EditSubLocationAsync(EditSubLocationDto dto)
+        {
+            var location = await _context.OrganizationLocations
+                .Include(x => x.LocationModules)
+                .Include(x => x.LocationStorageCategories)
+                .FirstOrDefaultAsync(x => x.Id == dto.Id);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            if (location.ParentLocationId == null)
+                throw new Exception("Use EditLocation for root.");
+
+
+            if (dto.NewParentLocationId.HasValue &&
+                dto.NewParentLocationId != location.ParentLocationId)
+            {
+                var newParent = await _context.OrganizationLocations
+                    .Include(x => x.LocationType)
+                    .FirstOrDefaultAsync(x => x.Id == dto.NewParentLocationId);
+
+                if (newParent == null)
+                    throw new Exception("New parent not found.");
+
+                if (!await IsUnderWarehouse(newParent.Id))
+                    throw new Exception("Must belong to a parent location.");
+
+
+                if (await IsDescendant(location.Id, newParent.Id))
+                    throw new Exception("Cannot assign child as parent.");
+
+                location.ParentLocationId = newParent.Id;
+            }
+
+            ValidateTemperature(dto.HasTemperatureControl, dto.TemperatureControlTypeId);
+            await ValidateModules(dto.ModuleIds);
+            await ValidateStorageCategories(dto.StorageCategoryIds);
+
+
+            location.LocationName = dto.LocationName;
+            location.Capacity = dto.Capacity;
+            location.CapacityType = dto.CapacityType;
+
+            location.StateId = dto.StateId;
+            location.LgaId = dto.LgaId;
+            location.Address = dto.Address;
+
+            location.DateOfCommissioning = dto.DateOfCommissioning;
+
+            location.HasTemperatureControl = dto.HasTemperatureControl;
+            location.TemperatureControlTypeId =
+                dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null;
+
+
+            location.LocationModules.Clear();
+            location.LocationModules = MapModules(dto.ModuleIds);
+
+
+            location.LocationStorageCategories.Clear();
+            location.LocationStorageCategories = MapCategories(dto.StorageCategoryIds);
+
+            await _context.SaveChangesAsync();
+
+            return location;
+        }
+        public async Task DeleteLocationAsync(DeleteLocationDto dto)
+        {
+            var location = await _context.OrganizationLocations
+                .Include(x => x.SubLocations)
+                .FirstOrDefaultAsync(x => x.Id == dto.Id);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            if (location.ParentLocationId != null)
+                throw new Exception("Use DeleteSubLocation for sublocations.");
+
+
+            var hasActiveChildren = await _context.OrganizationLocations
+                .AnyAsync(x => x.ParentLocationId == location.Id && x.IsActive);
+
+            if (hasActiveChildren && !dto.ForceDelete)
+                throw new Exception("Cannot delete location with active sublocations.");
+
+            if (dto.ForceDelete)
+            {
+                await DeactivateChildren(location.Id, dto.UserId, dto.Reason);
+            }
+
+
+            location.IsActive = false;
+            location.DeactivatedByUserId = dto.UserId;
+            location.DeactivationReason = dto.Reason;
+            location.DeletedOn = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+        public async Task DeleteSubLocationAsync(DeleteLocationDto dto)
+        {
+            var location = await _context.OrganizationLocations
+                .Include(x => x.SubLocations)
+                .FirstOrDefaultAsync(x => x.Id == dto.Id);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            if (location.ParentLocationId == null)
+                throw new Exception("Use DeleteLocation for root.");
+
+            var hasActiveChildren = await _context.OrganizationLocations
+                .AnyAsync(x => x.ParentLocationId == location.Id && x.IsActive);
+
+            if (hasActiveChildren && !dto.ForceDelete)
+                throw new Exception("Cannot delete sublocation with active children.");
+
+            if (dto.ForceDelete)
+            {
+                await DeactivateChildren(location.Id, dto.UserId, dto.Reason);
+            }
+
+            location.IsActive = false;
+            location.DeactivatedByUserId = dto.UserId;
+            location.DeactivationReason = dto.Reason;
+            location.DeletedOn = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+        public async Task<List<LocationResponseDto>> GetLocationTreeAsync(long organizationId)
+        {
+            var allLocations = await _context.OrganizationLocations
+                .Where(x => x.OrganizationId == organizationId && x.IsActive)
+                .Include(x => x.LocationType)
+                .Include(x => x.TemperatureControlType)
+                .Include(x => x.LocationModules)
+                    .ThenInclude(x => x.Module)
+                .Include(x => x.LocationStorageCategories)
+                    .ThenInclude(x => x.StorageCategory)
+                .ToListAsync();
+
+            var lookup = allLocations.ToLookup(x => x.ParentLocationId);
+
+            List<LocationResponseDto> BuildTree(long? parentId)
+            {
+                return lookup[parentId]
+                    .Select(loc =>
+                    {
+                        var dto = MapToDto(loc);
+                        dto.Children = BuildTree(loc.Id);
+                        return dto;
+                    }).ToList();
+            }
+
+            return BuildTree(null);
+        }
+        public async Task<PagedListResponse<List<LocationResponseDto>>> GetSubLocationsAsync(ListQueryParams query)
+        {
+            var result = _context.OrganizationLocations
+                .Where(x => x.ParentLocationId == query.Id && x.IsActive)
+                .Include(x => x.LocationType)
+                .Include(x => x.TemperatureControlType)
+                .Include(x => x.LocationModules)
+                    .ThenInclude(x => x.Module)
+                .Include(x => x.LocationStorageCategories)
+                    .ThenInclude(x => x.StorageCategory)
+                .AsQueryable();
+
+
+            if (!string.IsNullOrWhiteSpace(query.Location))
+            {
+                result = result.Where(x => x.LocationName.Contains(query.Location));
+            }
+
+            if (query.LocationTypeId.HasValue)
+            {
+                result = result.Where(x => x.LocationTypeId == query.LocationTypeId);
+            }
+
+            //if (query.HasTemperatureControl.HasValue)
+            //{
+            //    result = result.Where(x => x.HasTemperatureControl == query.HasTemperatureControl);
+            //}
+
+            var totalCount = await result.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 10 : query.PageSize;
+
+            var data = await result
+              .OrderByDescending(x => x.CreatedOn)
+              .Skip((pageNumber - 1) * pageSize)
+              .Take(pageSize)
+              .ToListAsync();
+
+            return new PagedListResponse<List<LocationResponseDto>>
+            {
+                Data = data.Select(MapToDto).ToList(),
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+        public async Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var locationExists = await _context.OrganizationLocations
+                    .AnyAsync(x => x.Id == dto.LocationId && x.IsActive);
+
+                if (!locationExists)
+                    throw new Exception("Location not found.");
+
+                var agent = await _context.Agents
+                    .FirstOrDefaultAsync(x => x.UserId == dto.NewPrimaryAgentUserId);
+
+                if (agent == null)
+                    throw new Exception("Agent not found.");
+
+                var assignments = await _context.OrganizationAgents
+                    .Where(x => x.LocationId == dto.LocationId && x.IsActive)
+                    .ToListAsync();
+
+                var currentPrimary = assignments
+                    .FirstOrDefault(x => x.IsPrimary);
+
+                var newAgentAssignment = assignments
+                    .FirstOrDefault(x => x.AgentId == agent.Id);
+
+                if (newAgentAssignment == null)
+                {
+                    newAgentAssignment = new OrganizationAgent
+                    {
+                        AgentId = agent.Id,
+                        LocationId = dto.LocationId,
+                        OrganizationId = assignments.First().OrganizationId, 
+                        AssignedByUserId = dto.PerformedByUserId,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                        IsActive = true,
+                        IsPrimary = true
+                    };
+
+                    await _context.OrganizationAgents.AddAsync(newAgentAssignment);
+                }
+                else
+                {
+                    newAgentAssignment.IsPrimary = true;
+                    newAgentAssignment.AssignedOn = DateTimeOffset.UtcNow;
+                }
+
+                if (currentPrimary != null && currentPrimary.AgentId != agent.Id)
+                {
+                    currentPrimary.IsPrimary = false;
+                    _context.OrganizationAgents.Update(currentPrimary);
+                }
+
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        public async Task<LocationAgentsResponseDto> GetLocationAgentsAsync(long locationId)
+        {
+            var result = await _context.OrganizationLocations
+                .Where(x => x.Id == locationId && x.IsActive)
+                .Select(x => new LocationAgentsResponseDto
+                {
+                    PrimaryAgent = x.OrganizationAgents
+                        .Where(a => a.IsPrimary && a.IsActive)
+                        .Select(a => new PrimaryAgentDto
+                        {
+                            AgentId = a.AgentId,
+                            UserId = a.Agent.UserId,
+                            Name = a.Agent.Name,
+
+                            AssignedOn = a.AssignedOn,
+
+                            AgentLevel =EnumExtensions.GetDisplayName(a.Agent.Tier), 
+                            Status = a.IsActive ? "Active" : "Inactive"
+                        })
+                        .FirstOrDefault(),
+
+                    OtherAgents = x.OrganizationAgents
+                        .Where(a => !a.IsPrimary && a.IsActive)
+                        .Select(a => new OtherAgentDto
+                        {
+                            AgentId = a.AgentId,
+                            Name = a.Agent.Name,
+
+                            AssignedOn = a.AssignedOn,
+                            Status = a.IsActive ? "Active" : "Inactive"
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            if (result == null)
+                throw new Exception("Location not found.");
 
             return result;
         }
-        public async Task<OrganizationLocationModel> GetLocationByIAsync(long Id)
+        public async Task<LocationResponseDto> GetSubLocationByIdAsync(long id)
         {
-            var loc = await _context.Set<OrganizationLocation>()
-                 .Include(x => x.LocationType)
-                .Include(x => x.State)
-                .Include(x => x.LGA)
-                .FirstOrDefaultAsync(x => x.Id == Id);
-            if (loc == null)
+
+
+            var location = await _context.OrganizationLocations
+                           .Where(x => x.IsActive && x.Id == id)
+                           .Include(x => x.LocationType)
+                           .Include(x => x.TemperatureControlType)
+                           .Include(x => x.LocationModules)
+                               .ThenInclude(x => x.Module)
+                           .Include(x => x.LocationStorageCategories)
+                               .ThenInclude(x => x.StorageCategory)
+                           .FirstOrDefaultAsync();
+
+            if (location == null)
+                throw new Exception("Sub Location not found.");
+
+            return MapToDto(location);
+        }
+        public async Task<bool> RemoveAgentFromLocationAsync(RemoveAgentFromLocationDto dto)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
             {
-                return null;
+                var agent = await _context.Agents
+                    .FirstOrDefaultAsync(x => x.UserId == dto.UserId);
+
+                if (agent == null)
+                    throw new Exception("Agent not found.");
+
+                var assignment = await _context.OrganizationAgents
+                    .Where(x =>
+                        x.AgentId == agent.Id &&
+                        x.LocationId == dto.LocationId &&
+                        x.IsActive)
+                    .FirstOrDefaultAsync();
+
+                if (assignment == null)
+                    throw new Exception("Agent is not assigned to this location.");
+
+                var allAgents = await _context.OrganizationAgents
+                    .Where(x => x.LocationId == dto.LocationId && x.IsActive)
+                    .ToListAsync();
+
+                if (assignment.IsPrimary)
+                {
+                    var otherAgent = allAgents
+                        .Where(x => x.AgentId != agent.Id)
+                        .OrderByDescending(x => x.AssignedOn) 
+                        .FirstOrDefault();
+
+                    if (otherAgent != null)
+                    {
+                        otherAgent.IsPrimary = true;
+                        _context.OrganizationAgents.Update(otherAgent);
+                    }
+                    else
+                    {
+                        throw new Exception("Cannot remove the only primary agent. Assign another agent first.");
+                    }
+                }
+
+                assignment.IsActive = false;
+                assignment.IsPrimary = false;
+                assignment.DeactivatedByUserId = dto.RemovedByUserId;
+                assignment.DeactivatedOn = DateTimeOffset.UtcNow;
+
+                _context.OrganizationAgents.Update(assignment);
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                return true;
             }
-            return new OrganizationLocationModel
+            catch
             {
-                Id = loc.Id,
-                StateId = loc.StateId,
-                LgaId = loc.LgaId,
-                BusinessCode = loc.BusinessCode,
-                OrganizationId = loc.OrganizationId,
-                LocationName = loc.LocationName,
-                LocationTypeId = loc.LocationTypeId,
-                State = loc.State?.State,
-                Lga = loc.LGA?.Name,
-                LocationType = loc.LocationType?.Type,
-                Address = loc.Address,
-                IsActive = loc.IsActive,
-                Capacity = loc.Capacity,
-                Used = loc.StockLevel,
-                Available = loc.Capacity - loc.StockLevel,
-                CapacityType = loc.CapacityType
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<LocationInventory> AddInventoryAsync(CreateInventoryDto dto)
+        {
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == dto.LocationId && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            if (location.StockLevel + dto.Quantity > location.Capacity)
+                throw new Exception("Exceeds location capacity.");
+
+            var productExist = await _context.OrganizationProducts
+                .FirstOrDefaultAsync(x => x.Id == dto.ProductId && x.IsActive);
+
+            if (productExist == null)
+                throw new Exception("Product not found.");
+
+            var batchNumber = dto.BatchNumber ?? $"BATCH-{DateTime.UtcNow.Ticks}";
+
+            // Check if inventory already exists
+            var inventory = await _context.LocationInventories
+                .FirstOrDefaultAsync(x =>
+                    x.LocationId == dto.LocationId &&
+                    x.OrganizationProductId == dto.ProductId &&
+                    x.BatchNumber == batchNumber &&
+                    x.IsActive);
+
+            double quantityBefore = 0;
+
+            if (inventory == null)
+            {
+                inventory = new LocationInventory
+                {
+                    LocationId = dto.LocationId,
+                    OrganizationProductId = dto.ProductId,
+                    BatchNumber = batchNumber,
+                    InventoryOwner = dto.InventoryOwner,
+                    Quantity = dto.Quantity,
+                    QuantityType = dto.QuantityType,
+                    Description = dto.Description,
+                    StorageDate = dto.StorageDate,
+                    ExpiryDate = dto.ExpiryDate,
+                    QualityGrade = dto.QualityGrade,
+                    BusinessCode = dto.BusinessCode,
+                    RecordedOn = DateTimeOffset.UtcNow,
+                    RecordByUserId = dto.RecordedByUserId,
+                    IsActive = true
+                };
+
+                _context.LocationInventories.Add(inventory);
+            }
+            else
+            {
+                quantityBefore = inventory.Quantity;
+
+                inventory.Quantity += dto.Quantity;
+            }
+
+            var quantityAfter = quantityBefore + dto.Quantity;
+
+            // CREATE TRANSACTION HERE
+            var transaction = new InventoryTransaction
+            {
+                LocationInventory = inventory,
+                OrganizationProductId = dto.ProductId,
+
+                ToLocationId = dto.LocationId,
+
+                TransactionType = InventoryTransactionType.StockIn,
+
+                Quantity = dto.Quantity,
+                QuantityType = dto.QuantityType,
+
+                QuantityBefore = quantityBefore,
+                QuantityAfter = quantityAfter,
+
+                BatchNumber = batchNumber,
+
+                Reason = "New stock added",
+
+                PerformedByUserId = dto.RecordedByUserId,
+
+                BusinessCode = dto.BusinessCode,
+
+                TransactionDate = DateTimeOffset.UtcNow,
+                OrganizationId = location.OrganizationId
+            };
+
+            _context.InventoryTransactions.Add(transaction);
+
+            // UPDATE LOCATION STOCK
+            location.StockLevel += dto.Quantity;
+
+            await _context.SaveChangesAsync();
+
+            return inventory;
+        }
+        public async Task<LocationInventory> EditInventoryAsync(EditInventoryDto dto)
+        {
+            var inventory = await _context.LocationInventories
+                .FirstOrDefaultAsync(x => x.Id == dto.Id && x.IsActive);
+
+            if (inventory == null)
+                throw new Exception("Inventory not found.");
+
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == inventory.LocationId && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+
+            var quantityBefore = inventory.Quantity;
+
+            // difference between old and new quantity
+            var diff = dto.Quantity - inventory.Quantity;
+
+            // validate capacity
+            if (location.StockLevel + diff > location.Capacity)
+                throw new Exception("Exceeds location capacity.");
+
+            // update location stock
+            await UpdateLocationStockLevel(location.Id);
+
+            // determine transaction type
+            InventoryTransactionType transactionType;
+
+            if (diff > 0)
+            {
+                transactionType = InventoryTransactionType.AdjustmentIncrease;
+            }
+            else if (diff < 0)
+            {
+                transactionType = InventoryTransactionType.AdjustmentDecrease;
+            }
+            else
+            {
+                transactionType = InventoryTransactionType.Edit;
+            }
+
+            // update inventory
+            inventory.Quantity = dto.Quantity;
+            inventory.QuantityType = dto.QuantityType;
+
+            inventory.InventoryOwner = dto.InventoryOwner;
+
+            inventory.Description = dto.Description;
+
+            inventory.StorageDate = dto.StorageDate;
+            inventory.ExpiryDate = dto.ExpiryDate;
+
+            inventory.QualityGrade = dto.QualityGrade;
+
+            // CREATE TRANSACTION
+            var transaction = new InventoryTransaction
+            {
+                LocationInventoryId = inventory.Id,
+
+                OrganizationProductId = inventory.OrganizationProductId,
+
+                ToLocationId = inventory.LocationId,
+
+                TransactionType = transactionType,
+
+                Quantity = Math.Abs(diff),
+
+                QuantityType = inventory.QuantityType,
+
+                QuantityBefore = quantityBefore,
+
+                QuantityAfter = dto.Quantity,
+
+                BatchNumber = inventory.BatchNumber,
+
+                Reason = dto.Reason ?? "Inventory edited",
+
+                PerformedByUserId = dto.UpdatedByUserId,
+
+                BusinessCode = inventory.BusinessCode,
+
+                TransactionDate = DateTimeOffset.UtcNow
+            };
+
+            _context.InventoryTransactions.Add(transaction);
+
+            await _context.SaveChangesAsync();
+
+            return inventory;
+        }
+        private async Task UpdateLocationStockLevel(long locationId)
+        {
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == locationId);
+
+            if (location == null)
+                return;
+
+            location.StockLevel = await _context.LocationInventories
+                .Where(x => x.LocationId == locationId && x.IsActive)
+                .SumAsync(x => x.Quantity);
+        }
+        public async Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(
+      long locationId,
+      ListQueryParams query)
+        {
+            var baseQuery = _context.LocationInventories
+                .Where(li =>
+                    li.LocationId == locationId &&
+                    li.IsActive &&
+                    li.OrganizationProduct.IsActive);
+
+            if (query.startDate.HasValue)
+            {
+                baseQuery = baseQuery.Where(li => li.StorageDate >= query.startDate.Value);
+            }
+
+            if (query.endDate.HasValue)
+            {
+                baseQuery = baseQuery.Where(li => li.StorageDate <= query.endDate.Value);
+            }
+
+            var totalCount = await baseQuery.CountAsync();
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 50 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(li => li.RecordedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(li => new InventoryListDto
+                {
+                    Id = li.Id,
+                    ProductCode = li.OrganizationProduct.ProductCode,
+                    BatchNumber = li.BatchNumber,
+                    InventoryOwner = li.InventoryOwner,
+                    Quantity = li.Quantity,
+                    QuantityType = li.QuantityType,
+                    StorageDate = li.StorageDate,
+                    ExpiryDate = li.ExpiryDate,
+                    QualityGrade = li.QualityGrade
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<InventoryListDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
             };
         }
+
+        public async Task<List<InventoryTransactionDto>>
+    GetInventoryTransactionsAsync(long inventoryId)
+        {
+            return await _context.InventoryTransactions
+                .Where(x => x.LocationInventoryId == inventoryId)
+                .OrderByDescending(x => x.TransactionDate)
+                .Select(x => new InventoryTransactionDto
+                {
+                    Id = x.Id,
+                    TransactionType =EnumExtensions.GetDisplayName(x.TransactionType),
+                    Quantity = x.Quantity,
+                    QuantityBefore = x.QuantityBefore,
+                    QuantityAfter = x.QuantityAfter,
+                    BatchNumber = x.BatchNumber,
+                    Reason = x.Reason,
+                    TransactionDate = x.TransactionDate
+                })
+                .ToListAsync();
+        }
+        #endregion Location
+
 
         public async Task<OrganizationRoleModel> CreateRoleAsync(OrganizationRoleModel model)
         {
@@ -1447,7 +3050,7 @@ SELECT
                             {
                                 FarmerId = farmer.Id,
                                 OrganizationCode = data.OrganizationCode,
-                                IsActive=true,
+                                IsActive = true,
                                 OnboardedByUserId = data.OnboardedByUserId
                             });
                         }
@@ -1473,7 +3076,7 @@ SELECT
                             {
                                 FarmerId = farmer.Id,
                                 CooperativeId = id,
-                                IsActive=true,
+                                IsActive = true,
                                 OnboardedByUserId = data.OnboardedByUserId,
                                 JoinedOn = DateTimeOffset.UtcNow
                             }));
@@ -1503,7 +3106,7 @@ SELECT
                                 AgentId = id,
                                 AssignedByUserId = data.OnboardedByUserId,
                                 AssignedOn = DateTimeOffset.UtcNow,
-                                IsActive=true,
+                                IsActive = true,
                             }));
 
                         _context.FarmerAgents.RemoveRange(toRemove);
@@ -1681,7 +3284,7 @@ SELECT
         //        }
         //    });
         //}
-       
+
         public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
         {
             if (string.IsNullOrWhiteSpace(userId) || update == null)
@@ -1856,8 +3459,28 @@ SELECT
             _context.FarmerValueChainItems.RemoveRange(toRemove);
             await _context.SaveChangesAsync();
         }
-        public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
-      ListQueryParams args)
+
+        private IQueryable<BaseUserDto> GetOrganizationBaseUsers(string orgCode)
+        {
+            return _context.UserOrganizations
+                .AsNoTracking()
+                .Where(uo => uo.OrganizationCode == orgCode)
+                .Join(_context.Users.AsNoTracking(),
+                    uo => uo.UserId,
+                    u => u.Id,
+                    (uo, u) => new BaseUserDto
+                    {
+                        UserId = u.Id,
+                        CreatedOn = u.CreatedOn
+                    })
+                .GroupBy(x => x.UserId)
+                .Select(g => new BaseUserDto
+                {
+                    UserId = g.Key,
+                    CreatedOn = g.Max(x => x.CreatedOn)
+                });
+        }
+        public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(args.organizationCode))
                 throw new ValidationException("Organization code is required");
@@ -1866,192 +3489,65 @@ SELECT
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
 
             var skip = (args.PageNumber - 1) * args.PageSize;
+            var orgCode = args.organizationCode;
 
-            var completedQuery = from fo in _context.FarmerOrganizations.AsNoTracking()
-                                 join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
-                                 join u in _context.Users.AsNoTracking() on f.UserId equals u.Id
-                                 where fo.OrganizationCode == args.organizationCode
-                                       && fo.IsActive
-                                 select new OrganizationFarmerResponse
-                                 {
-                                     FarmerId = f.Id,
-                                     UserId = u.Id,
-                                     Name = f.Name ?? u.Name,
-                                     PhoneNumber = u.PhoneNumber,
-                                     Email = u.Email,
-                                     Gender = f.Gender,
-                                     State = f.State,
-                                     Lga = f.Lga,
-                                     Ward = f.Ward,
-                                     Location = f.Location,
-                                     FarmerCategory = f.FarmerCategory,
-                                     Level = EnumExtensions.GetDisplayName((FarmerLevel)f.Level),
-                                     CreatedOn = f.OnBoardedOn == default ? u.CreatedOn : f.OnBoardedOn,
-                                     FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
-                                     IsPendingOnboarding = false,
-                                     IsActive=fo.IsActive
-                                 };
+            var baseUsers = GetOrganizationBaseUsers(orgCode);
 
-            var pendingQuery = from u in _context.Users.AsNoTracking()
-                               where u.UserType == UserType.Farmer.ToString()
-                                     && u.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed
-                                     && u.CreatedBy == args.UserId
-                               select new OrganizationFarmerResponse
-                               {
-                                   FarmerId = 0,
-                                   UserId = u.Id,
-                                   Name = u.Name,
-                                   PhoneNumber = u.PhoneNumber,
-                                   Email = u.Email,
-                                   Gender = null,
-                                   State = null,
-                                   Lga = null,
-                                   Ward = null,
-                                   Location = null,
-                                   FarmerCategory = null,
-                                   Level = "Pending",
-                                   CreatedOn = u.CreatedOn,
-                                   FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
-                                   IsPendingOnboarding = true,
-                                   
-                               };
+            var query =
+                from b in baseUsers
+                join u in _context.Users.AsNoTracking()
+                    on b.UserId equals u.Id
 
-            var completedUserIdsQuery =
-                from fo in _context.FarmerOrganizations.AsNoTracking()
-                join f in _context.Farmers.AsNoTracking() on fo.FarmerId equals f.Id
-                join u in _context.Users.AsNoTracking() on f.UserId equals u.Id
-                where fo.OrganizationCode == args.organizationCode && fo.IsActive
-                select u.Id;
+                join f in _context.Farmers.AsNoTracking()
+                    on u.Id equals f.UserId into fj
+                from f in fj.DefaultIfEmpty()
 
-            var pendingUserIdsQuery = _context.Users
-                .AsNoTracking()
-                .Where(x =>
-                    x.UserType == UserType.Farmer.ToString() &&
-                    x.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed &&
-                    x.CreatedBy == args.UserId)
-                .Select(x => x.Id);
+                join fo in _context.FarmerOrganizations.AsNoTracking()
+                    .Where(x => x.OrganizationCode == orgCode)
+                    on f.Id equals fo.FarmerId into foj
+                from fo in foj.DefaultIfEmpty()
 
-            var completedUserIdsDistinct = await completedUserIdsQuery
-                .Distinct()
-                .ToListAsync();
+                select new OrganizationFarmerResponse
+                {
+                    UserId = u.Id,
+                    FarmerId = f != null ? f.Id : 0,
+                    Name = f != null ? (f.Name ?? u.Name) : u.Name,
+                    PhoneNumber = u.PhoneNumber,
+                    Email = u.Email,
+                    Gender = f != null ? f.Gender : null,
+                    State = f != null ? f.State : null,
+                    Lga = f != null ? f.Lga : null,
+                    Ward = f != null ? f.Ward : null,
+                    Location = f != null ? f.Location : null,
+                    FarmerCategory = f != null ? f.FarmerCategory : null,
+                    Level = f != null
+                        ? EnumExtensions.GetDisplayName((FarmerLevel)f.Level)
+                        : "Pending",
+                    CreatedOn = b.CreatedOn,
+                    FarmerOnboardingStatus = u.FarmerOnboardingStatus.ToString(),
+                    IsPendingOnboarding = fo == null || !fo.IsActive,
+                    IsActive = fo != null && fo.IsActive
+                };
 
-            var pendingUserIdsDistinct = await pendingUserIdsQuery
-                .Distinct()
-                .ToListAsync();
+            var totalCount = await baseUsers.CountAsync();
 
-            var pendingOnlyCount = pendingUserIdsDistinct
-                .Where(id => !completedUserIdsDistinct.Contains(id))
-                .Count();
-
-            var totalCount = completedUserIdsDistinct.Count + pendingOnlyCount;
-
-          
-            var lightweightUnion = completedQuery
-                .Select(x => new { x.UserId, x.CreatedOn })
-                .Concat(pendingQuery.Select(x => new { x.UserId, x.CreatedOn }));
-
-            var pageUserIdsWithDate = await lightweightUnion
-                .Where(x => !string.IsNullOrWhiteSpace(x.UserId))
-                .GroupBy(x => x.UserId)
-                .Select(g => new { UserId = g.Key, LatestCreatedOn = g.Max(x => x.CreatedOn) })
-                .OrderByDescending(x => x.LatestCreatedOn)
+            var data = await query
+                .OrderByDescending(x => x.CreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
                 .ToListAsync();
-
-            var pageUserIds = pageUserIdsWithDate.Select(x => x.UserId).ToList();
-
-            var completedPage = pageUserIds.Any()
-                ? await completedQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
-                : new List<OrganizationFarmerResponse>();
-
-            var pendingPage = pageUserIds.Any()
-                ? await pendingQuery.Where(x => pageUserIds.Contains(x.UserId)).ToListAsync()
-                : new List<OrganizationFarmerResponse>();
-
-            var mergedDict = completedPage.Concat(pendingPage)
-                .GroupBy(x => x.UserId)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedOn).First());
-
-            var pagedData = pageUserIdsWithDate
-                .Select(p => mergedDict.GetValueOrDefault(p.UserId))
-                .Where(x => x != null)
-                .ToList();
-            var farmerIds = pagedData
-                .Where(x => x.FarmerId > 0)
-                .Select(x => x.FarmerId.Value)
-                .Distinct()
-                .ToList();
-
-            Dictionary<long, int> agentCounts = new();
-            Dictionary<long, int> membershipCounts = new();
-            Dictionary<long, double> RepaymentPercentage = new();
-
-            if (farmerIds.Any())
-            {
-                   agentCounts = await _context.FarmerAgents
-                    .AsNoTracking()
-                    .Where(x => farmerIds.Contains(x.FarmerId))
-                    .GroupBy(x => x.FarmerId)
-                    .Select(g => new { g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.Key, x => x.Count);
-
-                membershipCounts = await _context.FarmerCooperatives
-                    .AsNoTracking()
-                    .Where(x => farmerIds.Contains(x.FarmerId))
-                    .GroupBy(x => x.FarmerId)
-                    .Select(g => new { g.Key, Count = g.Count() })
-                    .ToDictionaryAsync(x => x.Key, x => x.Count);
-                RepaymentPercentage = await _context.Repayments
-       .AsNoTracking()
-       .Where(x => farmerIds.Contains(x.FarmerId))
-       .GroupBy(x => x.FarmerId)
-       .Select(g => new
-       {
-           FarmerId = g.Key,
-           Percentage = g.Count(x => x.IsComplete) * 100.0 / g.Count()
-       })
-       .ToDictionaryAsync(x => x.FarmerId, x => x.Percentage);
-             
-            }
-
-            var result = pagedData.Select(x => new OrganizationFarmerResponse
-            {
-                IsActive=x.IsActive,
-                FarmerId = x.FarmerId,
-                UserId = x.UserId,
-                Name = x.Name,
-                PhoneNumber = x.PhoneNumber,
-                Email = x.Email,
-                Gender = x.Gender,
-                State = x.State,
-                Lga = x.Lga,
-                Ward = x.Ward,
-                Location = x.Location,
-                FarmerCategory = x.FarmerCategory,
-                Level = x.Level,
-                CreatedOn = x.CreatedOn,
-                FarmerOnboardingStatus = x.FarmerOnboardingStatus,
-                IsPendingOnboarding = x.IsPendingOnboarding,
-                AgentCount = x.FarmerId > 0 && agentCounts.TryGetValue(x.FarmerId.Value, out var a)
-                    ? a
-                    : 0,
-                MembershipCount = x.FarmerId > 0 && membershipCounts.TryGetValue(x.FarmerId.Value, out var m)
-                    ? m
-                    : 0,
-                RepaymentPercentage = x.FarmerId > 0 && RepaymentPercentage.TryGetValue(x.FarmerId.Value, out var r)
-                    ? r
-                    : 0
-            }).ToList();
 
             return new PagedListResponse<List<OrganizationFarmerResponse>>
             {
                 PageNumber = args.PageNumber,
                 PageSize = args.PageSize,
                 Count = totalCount,
-                Data = result
+                Data = data
             };
         }
+     
+        
+        
         //public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
         //    ListQueryParams args)
         //{
@@ -2269,63 +3765,71 @@ SELECT
         //        };
         //    }
 
-        public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(
-  ListQueryParams query)
+        public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query)
         {
             if (string.IsNullOrWhiteSpace(query.organizationCode))
                 throw new ValidationException("Organization code is required");
 
-            // ===========================
-            // VALIDATE FARMER IN ORG
-            // ===========================
-            var farmer = await (from fo in _context.FarmerOrganizations
-                                join f in _context.Farmers on fo.FarmerId equals f.Id
-                                where fo.OrganizationCode == query.organizationCode
-                                      && f.Id == query.Id
-                                select f)
-                                .FirstOrDefaultAsync();
+            var farmerData = await (
+                from fo in _context.FarmerOrganizations
+                join f in _context.Farmers on fo.FarmerId equals f.Id
+                join u in _context.Users on f.UserId equals u.Id into userJoin
+                from u in userJoin.DefaultIfEmpty()
+                where fo.OrganizationCode == query.organizationCode
+                      && f.Id == query.Id
+                select new { Farmer = f, User = u }
+            ).FirstOrDefaultAsync();
 
-            if (farmer == null)
+            if (farmerData == null)
                 throw new NotFoundException("Farmer not found in this organization");
 
+            var farmer = farmerData.Farmer;
+            var user = farmerData.User;
+
+            var farmerImage = await _context.FarmerImages
+                .Where(x => x.FarmerUserId == farmer.UserId)
+                .Select(x => x.IMageKey)
+                .FirstOrDefaultAsync();
+
             var valueChainItems = await _context.FarmerValueChainItems
-       .Where(x => x.FarmerId == query.Id)
-       .Select(x => new FarmerValueChainItemDto
-       {
-           ValueChainType = x.ValueChainType,
-           ItemName = x.ItemName
-       })
-       .ToListAsync();
+                .Where(x => x.FarmerId == farmer.Id)
+                .Select(x => new FarmerValueChainItemDto
+                {
+                    ValueChainType = x.ValueChainType,
+                    ItemName = x.ItemName
+                })
+                .ToListAsync();
 
-            var farmsQuery = _context.Farms
-                .Where(f => f.FarmerId == query.Id);
-            var farms = await farmsQuery.ToListAsync();
+            var farms = await _context.Farms
+                .Where(f => f.FarmerId == farmer.Id)
+                .ToListAsync();
 
-           
-            var agents = await (from fa in _context.FarmerAgents
-                                join a in _context.Agents on fa.AgentId equals a.Id
-                                where fa.FarmerId == query.Id
-                                select new OrganizationFarmerAgentDto
-                                {
-                                    AgentId = a.Id,
-                                    AgentName = a.Name,
-                                    AgentUserId = a.UserId,
-                                    AssignedOn = fa.AssignedOn,
-                                    Active= a.IsActive
-                                })
-                                .ToListAsync();
+            var agents = await (
+                from fa in _context.FarmerAgents
+                join a in _context.Agents on fa.AgentId equals a.Id
+                where fa.FarmerId == farmer.Id
+                select new OrganizationFarmerAgentDto
+                {
+                    AgentId = a.Id,
+                    AgentName = a.Name,
+                    AgentUserId = a.UserId,
+                    AssignedOn = fa.AssignedOn,
+                    Active = a.IsActive
+                })
+                .ToListAsync();
 
-            var memberships = await (from fc in _context.FarmerCooperatives
-                                     join c in _context.MemberShips on fc.CooperativeId equals c.Id
-                                     where fc.FarmerId == query.Id
-                                     select new OrganizationFarmerCooperativeDto
-                                     {
-                                         MembershipId = c.Id,
-                                         MembershipName = c.Name,
-                                         JoinedOn = fc.JoinedOn,
-                                         IsActive=c.IsActive
-                                     })
-                                     .ToListAsync();
+            var memberships = await (
+                from fc in _context.FarmerCooperatives
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where fc.FarmerId == farmer.Id
+                select new OrganizationFarmerCooperativeDto
+                {
+                    MembershipId = c.Id,
+                    MembershipName = c.Name,
+                    JoinedOn = fc.JoinedOn,
+                    IsActive = c.IsActive
+                })
+                .ToListAsync();
 
             return new OrganizationFarmerDetailResponse
             {
@@ -2335,15 +3839,23 @@ SELECT
                 PhoneNumber = farmer.PhoneNumber,
                 Email = farmer.Email,
                 Gender = farmer.Gender,
+                Dob = farmer.DateOfBirth,
+                BVN = user?.BVN,
+                NIN = user?.NIN,
+                FarmerImage = farmerImage,
+
                 State = farmer.State,
                 Lga = farmer.Lga,
                 Ward = farmer.Ward,
                 Location = farmer.Location,
+
                 FarmerCategory = farmer.FarmerCategory,
                 Level = EnumExtensions.GetDisplayName(farmer.Level),
                 CreatedOn = farmer.OnBoardedOn,
-                YearsInAgric=farmer.YearsInAgric,
-                FarmSize=farms.Sum(x=>x.FarmSize),
+
+                YearsInAgric = farmer.YearsInAgric,
+                FarmSize = farms.Sum(x => x.FarmSize),
+
                 ValueChainItems = valueChainItems,
                 Agents = agents,
                 Memberships = memberships
@@ -2357,150 +3869,39 @@ SELECT
             if (string.IsNullOrWhiteSpace(args.organizationCode))
                 throw new ValidationException("Invalid Organization");
 
-            var result = await _context.Database
-    .SqlQueryRaw<OrganizationFarmerDashboardResponse>(
-@"
-SELECT
-    -- Total Farmers (MATCHES WORKING QUERY)
-    (SELECT COUNT(DISTINCT f.Id)
-     FROM FarmerOrganizations fo
-     INNER JOIN Farmers f ON fo.FarmerId = f.Id
-     INNER JOIN AspNetUsers u ON f.UserId = u.Id
-     WHERE fo.OrganizationCode = @orgCode
-       ) AS TotalFarmers,
+            var orgCode = args.organizationCode;
 
-    -- Active Farmers
-    (SELECT COUNT(DISTINCT f.Id)
-     FROM FarmerOrganizations fo
-     INNER JOIN Farmers f ON fo.FarmerId = f.Id
-     INNER JOIN AspNetUsers u ON f.UserId = u.Id
-     WHERE fo.OrganizationCode = @orgCode
-       AND fo.IsActive = 1) AS ActiveFarmers,
+            var baseUsers = GetOrganizationBaseUsers(orgCode);
 
-    0 AS FarmersWithLoans,
-    CAST(0 AS decimal(18,2)) AS RecoveryRate
-",
-    new SqlParameter("@orgCode", args.organizationCode)
-)
-.FirstOrDefaultAsync();
+            var totalFarmers = await baseUsers.CountAsync();
 
-            return result ?? new OrganizationFarmerDashboardResponse();
-        }
-        /// <summary>
-        /// TODO: REVERT
-        /// </summary>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        //public async Task<OrganizationFarmerDashboardResponse> GetOrganizationFarmerDashboardAsync(ListQueryParams args)
-        //{
-        //    if (args == null)
-        //        throw new ArgumentNullException(nameof(args));
+            var activeFarmers = await (
+                from b in baseUsers
+                join f in _context.Farmers.AsNoTracking()
+                    on b.UserId equals f.UserId
+                join fo in _context.FarmerOrganizations.AsNoTracking()
+                    on f.Id equals fo.FarmerId
+                where fo.OrganizationCode == orgCode
+                      && fo.IsActive
+                select b.UserId
+            )
+            .Distinct()
+            .CountAsync();
 
-        //    if (string.IsNullOrWhiteSpace(args.organizationCode))
-        //        throw new ValidationException("Invalid Organization");
+            var pendingFarmers = totalFarmers - activeFarmers;
 
-        //    try
-        //    {
-        //        var cacheKey = $"organization-farmer-dashboard:{args.organizationCode}";
-
-        //        string cachedData = null;
-        //        try
-        //        {
-        //            if (_cache != null)
-        //                cachedData = await _cache.GetStringAsync(cacheKey);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            // Redis/Distributed cache timeout or connection issue — degrade gracefully
-        //            try { Console.WriteLine($"Cache read failed for {cacheKey}: {ex.Message}"); } catch { }
-        //            cachedData = null;
-        //        }
-
-        //        if (!string.IsNullOrEmpty(cachedData))
-        //        {
-        //            return JsonSerializer.Deserialize<OrganizationFarmerDashboardResponse>(cachedData);
-        //        }
-        //        // ✅ Base Query (VERY IMPORTANT: reuse this)
-        //        var farmerOrgQuery = _context.FarmerOrganizations
-        //            .AsNoTracking()
-        //            .Where(x => x.OrganizationCode == args.organizationCode && x.IsActive);
-
-        //        // ✅ TOTAL FARMERS
-        //        var totalFarmers = await farmerOrgQuery
-        //            .Select(x => x.FarmerId)
-        //            .Distinct()
-        //            .CountAsync();
-
-        //        // ✅ ACTIVE FARMERS (Completed onboarding)
-        //        var activeFarmers = await (
-        //            from fo in farmerOrgQuery
-        //            join f in _context.Farmers on fo.FarmerId equals f.Id
-        //            join u in _context.Users on f.UserId equals u.Id
-        //            where u.FarmerOnboardingStatus == FarmerOnboardingStatus.Completed
-        //            select f.Id
-        //        ).Distinct().CountAsync();
-
-        //        // ✅ FARMERS WITH LOANS
-        //        //var farmersWithLoans = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-        //        //    where l.IsActive
-        //        //    select l.FarmerId
-        //        //).Distinct().CountAsync();
-
-        //        //// ✅ RECOVERY RATE
-        //        //// Assumption: LoanRepayments table exists
-        //        //var totalLoanAmount = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join l in _context.InputAllocations on fo.FarmerId equals l.FarmerId
-        //        //    where l.IsActive
-        //        //    select l.Amount
-        //        //).SumAsync() ?? 0;
-
-        //        //var totalRecoveredAmount = await (
-        //        //    from fo in farmerOrgQuery
-        //        //    join r in _context.Repayments on fo.FarmerId equals r.FarmerId
-        //        //    where r.IsSuccessful
-        //        //    select r.Amount
-        //        //).SumAsync() ?? 0;
-
-        //        //var recoveryRate = totalLoanAmount == 0
-        //        //    ? 0
-        //        //    : (totalRecoveredAmount / totalLoanAmount) * 100;
-
-        //        var result= new OrganizationFarmerDashboardResponse
-        //        {
-        //            TotalFarmers = totalFarmers,
-        //            ActiveFarmers = activeFarmers,
-        //            FarmersWithLoans = 0,//farmersWithLoans,
-        //            RecoveryRate = 0//Math.Round(recoveryRate, 2)
-        //        };
-        //        var cacheOptions = new DistributedCacheEntryOptions
-        //        {
-        //            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-        //        };
-
-        //        var serialized = JsonSerializer.Serialize(result);
-
-        //        try
-        //        {
-        //            if (_cache != null)
-        //                await _cache.SetStringAsync(cacheKey, serialized, cacheOptions);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            // Swallow cache set exceptions to avoid failing the request when Redis is down
-        //            try { Console.WriteLine($"Cache write failed for {cacheKey}: {ex.Message}"); } catch { }
-        //        }
-
-        //        return result;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new Exception("Error retrieving organization farmer dashboard", ex);
-        //    }
-        //}
-
+            return new OrganizationFarmerDashboardResponse
+            {
+                TotalFarmers = totalFarmers,
+                ActiveFarmers = activeFarmers,
+                PendingFarmers = pendingFarmers,
+                FarmersWithLoans = 0,
+                RecoveryRate = 0
+            };
+        }      /// <param name="args"></param>
+              
+        
+     
         public async Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args)
         {
             var query = _context.FarmerSalesTracker
@@ -2525,7 +3926,7 @@ SELECT
             };
         }
 
-        
+
         #endregion FarmerMgt
     }
 }

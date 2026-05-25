@@ -8,6 +8,70 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
 {
+    public class ProviderWebhookRequest
+    {       
+        public string TransactionReference { get; set; }
+        public string? ProviderReference { get; set; }
+        public string Status { get; set; }
+        public decimal? Amount { get; set; }
+        public string? Currency { get; set; }
+        public string Provider { get; set; }
+        public string? RawPayload { get; set; }
+        public string? Signature { get; set; }
+        public DateTimeOffset? EventTime { get; set; }
+    }
+    public class WithdrawWalletRequest
+    {
+        public long UserWalletId { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string WalletProviderCode { get; set; }
+
+        public string? Description { get; set; }
+
+        public string? RecipientAccount { get; set; }
+
+        public string? RecipientName { get; set; }
+
+        public string? TransactionPin { get; set; }
+    }
+    public class ProviderResponse
+    {
+        public bool IsSuccess { get; set; }
+
+        public string Message { get; set; }
+
+        public string? ProviderReference { get; set; }
+
+        public object? Data { get; set; } // e.g. payment link, account number, ussd code  etc.
+    }
+    public class TopUpWalletRequest
+    {
+        public long UserWalletId { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string WalletProviderCode { get; set; }
+
+        public string? Description { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+    public class WalletTopUpProviderRequest
+    {
+        public decimal Amount { get; set; }
+
+        public string Currency { get; set; }
+
+        public string WalletNumber { get; set; }
+
+        public string TransactionReference { get; set; }
+
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? Message { get; set; } = null;
+    }
     public class UserWalletParams
     {
         public string businessCode { get; set; }
@@ -41,7 +105,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? BelongToBusinessCode { get; set; }
         public string? TransactionPin { get; set; }
 
-        // ===== CONTEXT SETTINGS =====
+       
 
         /// <summary>
         /// Personal / Organization / Cooperative

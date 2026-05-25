@@ -9,6 +9,8 @@ using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -30,6 +32,13 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly INotificationService _smsService;
         private readonly IBusinessManager _businessManager;
         private readonly ISettingsManager _settingsManager;
+        private readonly IStorageCategoryRepository _storageCategoryRepository;
+        private readonly ITemperatureControlType _temperatureControlType;
+        private readonly IModuleRepository _moduleRepository;
+
+        private readonly IOrganizationManager _organizationManager;
+
+        private readonly IInputFinancingRepository _inputFinancingRepository;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
         //    IGoogleDriveService googleDriveService,
             IIdentityVerificationManager verificationManager,
@@ -37,7 +46,13 @@ namespace Agrovesto.Backend.API.Controllers
             // IFlutterwaveService flutterwaveService,
             // IWebHostEnvironment hostingEnvironment, 
              INotificationService smsService,
-             ISettingsManager settingsManager, IWalletProviderManager walletProvider, IBusinessManager businessManager)
+             ISettingsManager settingsManager, IWalletProviderManager walletProvider, IBusinessManager businessManager,
+                IStorageCategoryRepository storageCategoryRepository,
+            ITemperatureControlType temperatureControlType,
+
+            IOrganizationManager organizationManager,
+            IModuleRepository moduleRepository,
+            IInputFinancingRepository inputFinancingRepository)
         {
             _cafeOneWalletService = cafeOneWalletService;
            // _hostingEnvironment = hostingEnvironment;
@@ -49,7 +64,203 @@ namespace Agrovesto.Backend.API.Controllers
             _settingsManager = settingsManager;
             _walletProvider = walletProvider;
             _businessManager = businessManager;
+            _temperatureControlType = temperatureControlType;
+            _moduleRepository = moduleRepository;
+            _storageCategoryRepository = storageCategoryRepository;
+
+            _organizationManager = organizationManager;
+
+            _inputFinancingRepository = inputFinancingRepository;
         }
+
+        [HttpGet("inputfinancing-categories")]
+        public async Task<IActionResult> GetInputFinancingCategory([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _inputFinancingRepository.GetInputFinancingCategories(args);
+                return Ok(new Response<List<ProductCategoryDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("organization-product-categories")]
+        public async Task<IActionResult> OrganizationProductCategory([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _organizationManager.GetCategories(args);
+                return Ok(new Response<List<ProductCategoryDto>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type.Data
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+        [HttpGet("storage-categories")]
+        public async Task<IActionResult> StorageCategories([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _storageCategoryRepository.GetAllAsync();
+                return Ok(new Response<List<StorageCategory>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("temperature-control-types")]
+        public async Task<IActionResult> TemperatureControlTypes([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _temperatureControlType.GetAllAsync();
+                return Ok(new Response<List<TemperatureControlType>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("system-modules")]
+        public async Task<IActionResult> GetSystemsModules([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                var type = await _moduleRepository.GetAllAsync();
+                return Ok(new Response<List<Module>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
 
         [HttpGet("location-types")]
 

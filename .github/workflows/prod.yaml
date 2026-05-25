@@ -1,185 +1,30 @@
-name: CI/CD Deploy Agrovesto.Backend.API - Production
+name: CI/CD Deploy Agrovesto.Backend.API
 on:
   push:
     branches:
       - master
-  pull_request:
-    branches:
-      - master
-
+      
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  
 jobs:
-  # ------------------------------------------------------------------
-  # 1. Build & Test (runs on PRs and pushes)
-  # ------------------------------------------------------------------
-  build-and-test:
+  deploy-prod:
     runs-on: ubuntu-latest
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build -c Release --no-restore
-
-      # Notify on PR
-      - name: Notify Slack - PR Build Success
-        if: github.event_name == 'pull_request' && success()
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          payload: |
-            {
-              "text": "✅ PR Build Successful (Production) - ${{ github.repository }} by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "✅ Pull Request Build Successful (Production)"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.head_ref }} → master"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Author:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Title:*\n${{ github.event.pull_request.title }}"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "⚠️ This PR targets *production* (master branch)"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: Notify Slack - PR Build Failure
-        if: github.event_name == 'pull_request' && failure()
-        uses: slackapi/slack-github-action@v1.26.0
-        with:
-          payload: |
-            {
-              "text": "❌ PR Build Failed (Production) - ${{ github.repository }} by ${{ github.actor }}",
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "❌ Pull Request Build Failed (Production)"
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n${{ github.repository }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n${{ github.head_ref }} → master"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Author:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*PR:*\n<${{ github.event.pull_request.html_url }}|#${{ github.event.pull_request.number }}>"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Action:*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Failed Workflow>"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "🚨 Production build failed - immediate attention required"
-                    }
-                  ]
-                }
-              ]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-  # ------------------------------------------------------------------
-  # 2. Deploy to Staging (only on push to prod)
-  # ------------------------------------------------------------------
-  deploy-Production:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install rsync 
-        run: sudo apt-get update && sudo apt-get install -y rsync
-
       - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}  
-
-      - name: Add EC2 host to known_hosts (with retry + timeout)
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+          
+      - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          for i in {1..5}; do
-            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_PROD }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts 2>/dev/null && break
-            sleep 5
-          done
-
-      - name: Deploy source code + run deploy script
+          ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts
+          
+      - name: SSH and Deploy
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Agrovesto.Backend.API/
-  
-      - name: Execute deployment script
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-prod.sh"
-
+          ssh -tt ubuntu@${{ secrets.EC2_HOST_PROD }} \
+          'bash -x /var/www/Nomaos/deploy-prod.sh'

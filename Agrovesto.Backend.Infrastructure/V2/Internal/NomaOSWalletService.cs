@@ -6,9 +6,12 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Serilog;
 using System;
@@ -18,6 +21,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
+using CreateWalletRequest = Agrovesto.Backend.Core.Models.Businesses.CreateWalletRequest;
 
 namespace Agrovesto.Backend.Infrastructure.V2.Internal
 {
@@ -26,24 +30,32 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         // Define methods that the NomaOSWalletService should implement
         Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
+        Task HandleTopUpWebhook(ProviderWebhookRequest request);
+        Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
+        Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
     }
-    public class NomaOSWalletService : INomaOSWalletService
+
+            public class NomaOSWalletService : INomaOSWalletService
     {
         private readonly IWalletServiceFactory _factory;
         private readonly IBusinessRepository _businessRepository;
         private readonly IOnboardingRepository _onboardingRepository;
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IUserWalletRepository _userWalletRepository;
+        private readonly DataContext _context;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
-            IWalletProviderRepository providerRepo, IWalletServiceFactory factory)
+            IWalletProviderRepository providerRepo, IWalletServiceFactory factory,
+            DataContext context)
         {
             _factory = factory;
             _providerRepo = providerRepo;
             _businessRepository = businessRepository;
             _onboardingRepository = onboardingRepository;
+            _context = context;
             _userWalletRepository = userWalletRepository;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env)
@@ -98,25 +110,34 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 throw new NotFoundException($"No Record Found");
             }
         }
+        public async Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args)
+        {
+            try
+            {
+                if(args.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid wallet ID");
+                var wallet = await _userWalletRepository.GetUserWalletTransaction(args);
+                return wallet;
+            }
+            catch (BaseException ex)
+            {
+                //  _log.LogError($"Error retrieving Agents: {ex.Message}");
 
-        public async Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args)
+                throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
+            }
+            catch (Exception ex)
+            {
+                throw new NotFoundException($"No Record Found");
+            }
+        }
+
+        public async Task<(bool status, string message)> CreateWallet(Core.Models.Businesses.CreateWalletRequest request, WalletQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(request.TransactionPin))
                 throw new Exception("Transaction PIN is required");
-            /*
-                Flow:
-                1. Validate Business (optional)
-                2. Validate User
-                3. Check existing wallet for same provider + context
-                4. Get Provider Service
-                5. Validate account with provider
-                6. Create wallet entity
-                7. Create wallet context (Personal or Organization)
-            */
-
+       
             try
             {
-                // 1. Validate Business (optional)
+            
                 string? businessCode = null;
                 if (!string.IsNullOrWhiteSpace(args.businessCode))
                 {
@@ -127,12 +148,10 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     businessCode = args.businessCode;
                 }
 
-                // 2. Validate User
                 var userProfile = await _onboardingRepository.GetUserProfile(args.UserId);
                 if (userProfile == null)
                     return (false, "User not found");
 
-                // 3. Determine Context
                 var contextType = string.IsNullOrWhiteSpace(args.organizationCode)
                     ? WalletContextType.Personal
                     : WalletContextType.Organization;
@@ -141,10 +160,6 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ? args.UserId
                     : args.organizationCode;
 
-                //4. check if supplied details is different from what the system has
-
-
-                // 4. Check for existing wallet with same provider + context
                 var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
 
@@ -153,7 +168,6 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 if (existingWallet != null)
                     return (false, "Wallet already exists for this provider and context");
 
-                // 5. Get Provider Service
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
                 var providerService = _factory.GetService(providerType);
 
@@ -164,17 +178,15 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     PhoneNumber = !string.IsNullOrEmpty( userProfile.Phone) ? userProfile.Phone : request.PhoneNumber
                 };
 
-                // 6. Validate Account with Provider
                 var validationResponse = await providerService.ValidateAccountAsync(providerUserProfile, providerParams, args.env);
 
-                if (validationResponse == null || !validationResponse.IsSucess)
+                if (validationResponse == null || !validationResponse.IsSuccess)
                     return (false, validationResponse?.Message ?? "Account validation failed");
 
                 var walletNumber = validationResponse.Data?.WalletNumber;
                 if (string.IsNullOrWhiteSpace(walletNumber))
                     return (false, "Provider did not return a valid wallet number");
 
-                // 7. Build UserWalletModel for repository
                 var walletModel = new UserWalletModel
                 {
                     UserId = args.UserId,
@@ -189,7 +201,6 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     TransactionPin = request.TransactionPin
                 };
 
-                // 8. Call repository to create wallet and context
                 await _userWalletRepository.CreateUserWallet(walletModel, new UserWalletParams
                 {
                     businessCode = businessCode,
@@ -308,6 +319,293 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             lastName = lastName.ToLower();
 
             return $"{firstName}.{lastName}@{domain}";
+        }
+
+
+        public async Task<ProviderResponse> TopUpWallet(
+           TopUpWalletRequest request,
+           WalletQueryParams args)
+        {
+            try
+            {
+                if (request.Amount <= 0)
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Invalid amount"
+                    };
+
+                var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+                {
+                    UserId = args.UserId,
+                    businessCode = args.businessCode,
+                    Env = args.env,
+                    Id = request.UserWalletId
+                });
+
+                if (wallet == null)
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Wallet not found"
+                    };
+
+                if (!wallet.IsActive)
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Wallet is inactive"
+                    };
+
+                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
+                var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
+
+                if (wallet.WalletProviderId != providerId)
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = "Wallet provider mismatch"
+                    };
+
+                var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
+                var providerService = _factory.GetService(providerType);
+
+                var transactionReference = await _userWalletRepository.InitiateWalletTopUp(
+                    wallet.Id,
+                    request.Amount,
+                    request.Description ?? "Wallet top-up");
+
+                var providerRequest = new WalletTopUpProviderRequest
+                {
+                    Amount = request.Amount,
+                    Currency = wallet.Currency,
+                    WalletNumber = wallet.WalletNumber,
+                    TransactionReference = transactionReference,
+                    Email = request.Email,
+                    PhoneNumber = request.PhoneNumber,
+                    Message = $"Top-up for wallet {wallet.WalletNumber}"
+                };
+
+                var providerResponse = await providerService.InitiateTopUpAsync(
+                    providerRequest,
+                    providerParams,
+                    args.env);
+
+                if (providerResponse == null || !providerResponse.IsSuccess)
+                {
+                    await _userWalletRepository.CompleteWalletTopUp(
+                        transactionReference,
+                        false,
+                        providerResponse?.Data.ProviderReference,
+                        providerResponse?.Message ?? "Provider failed");
+
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = providerResponse?.Message ?? "Top-up initiation failed",
+                        ProviderReference = providerResponse?.Data.ProviderReference,
+                        Data = new
+                        {
+                            TransactionReference = transactionReference
+                        }
+                    };
+                }
+
+                return new ProviderResponse
+                {
+                    IsSuccess = true,
+                    Message = providerResponse.Message ?? "Top-up initiated successfully",
+                    ProviderReference = providerResponse?.Data.ProviderReference,
+                    Data = new
+                    {
+                        TransactionReference = transactionReference,
+                        ProviderData = providerResponse.Data
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ProviderResponse
+                {
+                    IsSuccess = false,
+                    Message = $"Error topping up wallet: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task HandleTopUpWebhook(ProviderWebhookRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.TransactionReference))
+                return;
+
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var transaction = await _userWalletRepository.GetWalletTransactionByRef(
+                    request.TransactionReference);
+
+                if (transaction == null)
+                    return;
+
+                if (transaction.WalletTransactionStatus == WalletTransactionStatus.Successful ||
+                    transaction.WalletTransactionStatus == WalletTransactionStatus.Reversed)
+                    return;
+
+                var isSuccessful = request.Status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase);
+                var isFailed = request.Status.Equals("FAILED", StringComparison.OrdinalIgnoreCase);
+
+                await _userWalletRepository.UpdateTransactionProviderInfo(
+                    transaction.TransactionReference,
+                    request.ProviderReference,
+                    request.Status,
+                    request.RawPayload);
+
+                if (isFailed)
+                {
+                    await _userWalletRepository.UpdateTransactionStatus(
+                        transaction.TransactionReference,
+                        WalletTransactionStatus.Failed);
+
+                    await dbTransaction.CommitAsync();
+                    return;
+                }
+                
+                if (isSuccessful)
+                {
+                    var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+                    {
+                        UserId = transaction.UserWallet.UserId,
+                        Id = transaction.UserWalletId
+                    });
+
+                    if (wallet == null)
+                        return;
+
+                    var balanceBefore = wallet.WalletBalance;
+
+                    var netAmount = transaction.TransactionAmount
+                                    - transaction.TransactionFee
+                                    - transaction.CommissionFee;
+
+                    wallet.WalletBalance += netAmount;
+
+                    transaction.BalanceBefore = balanceBefore;
+                    transaction.BalanceAfter = wallet.WalletBalance;
+                    transaction.WalletTransactionStatus = WalletTransactionStatus.Successful;
+                    
+                    await _userWalletRepository.UpdateWalletBalance(new UserWallet
+                    {
+                        WalletBalance= wallet.WalletBalance,
+                        IsActive = wallet.IsActive,
+                        Id = wallet.Id,
+
+                    });
+                    await _userWalletRepository.UpdateTransaction(transaction);
+
+                    await dbTransaction.CommitAsync();
+                    return;
+                }
+
+                await _userWalletRepository.UpdateTransactionStatus(
+                    transaction.TransactionReference,
+                    WalletTransactionStatus.Pending);
+
+                await dbTransaction.CommitAsync();
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        public async Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args)
+        {
+            try
+            {
+                if (request.Amount <= 0)
+                    return new ProviderResponse { IsSuccess = false, Message = "Invalid amount" };
+
+                var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+                {
+                    UserId = args.UserId,
+                    businessCode = args.businessCode,
+                    Env = args.env,
+                    Id = request.UserWalletId
+                });
+
+                if (wallet == null)
+                    return new ProviderResponse { IsSuccess = false, Message = "Wallet not found" };
+
+                if (!wallet.IsActive)
+                    return new ProviderResponse { IsSuccess = false, Message = "Wallet is inactive" };
+
+                if (wallet.WalletBalance < request.Amount)
+                    return new ProviderResponse { IsSuccess = false, Message = "Insufficient balance" };
+
+                if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                    return new ProviderResponse { IsSuccess = false, Message = "Transaction PIN is required" };
+
+                // validate pin via repository (throws on failure)
+                try
+                {
+                    await _userWalletRepository.ValidateTransactionPin(request.UserWalletId, request.TransactionPin);
+                }
+                catch (Exception ex)
+                {
+                    return new ProviderResponse { IsSuccess = false, Message = ex.Message };
+                }
+
+                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
+                var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
+
+                var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
+                var providerService = _factory.GetService(providerType);
+
+                // create pending withdrawal transaction
+                var transactionReference = await _userWalletRepository.InitiateWalletWithdrawal(request.UserWalletId, request.Amount, request.Description ?? "Withdrawal");
+
+                var disbursementRequest = new DisbursementRequest
+                {
+                    AccountNumber = request.RecipientAccount ?? wallet.WalletNumber,
+                    Amount = $"{request.Amount}",
+                    Currency = wallet.Currency,
+                    Message = request.Description ?? "Wallet withdrawal",
+                    Reference = transactionReference
+                };
+
+                var providerResponse = await providerService.InitiateWalletWithdrawalAsync(
+                    disbursementRequest,
+                    providerParams, args.env);
+
+                if (providerResponse == null || !providerResponse.IsSuccess)
+                {
+                    await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, false, providerResponse?.Data?.ToString(), providerResponse?.Message);
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = providerResponse?.Message ?? "Provider withdrawal failed",
+                        ProviderReference = providerResponse?.Data?.ToString()
+                    };
+                }
+
+                await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, true, providerResponse?.Data?.ToString(), providerResponse?.Message);
+
+                // TODO: send notification to user (SMS/Email)
+
+                return new ProviderResponse
+                {
+                    IsSuccess = true,
+                    Message = providerResponse.Message ?? "Withdrawal initiated",
+                    ProviderReference = providerResponse?.Data?.ToString(),
+                    Data = new { TransactionReference = transactionReference }
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ProviderResponse { IsSuccess = false, Message = ex.Message };
+            }
         }
 
     }

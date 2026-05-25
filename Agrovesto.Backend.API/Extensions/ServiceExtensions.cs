@@ -3,7 +3,9 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService;
@@ -34,7 +36,10 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddHttpContextAccessor();
 
             services.AddScoped<IHttpService, HttpService>();
-            services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+            services.Configure<SerilogServiceOptions>(
+    configuration.GetSection("AppLogs"));
+            //services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+
             services.AddSingleton<ILogService, SerilogService>();
            
             services.AddScoped<IBusinessRepository, BusinessRepository>();
@@ -129,6 +134,21 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IGenericWalletService, MTNMomo>();
             services.AddScoped<IAWSService, AWSService>();
             services.AddScoped<ISalesRepository, SalesRepository>();
+
+            services.AddScoped<IWebhookRouter, WebhookRouter>();
+
+            services.AddScoped<IProviderWebhookHandler, PaystackWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FlutterwaveWebhookHandler>();
+
+            services.AddScoped<IProviderWebhookHandler, MtnMomoWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, SterlingWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FcmbWebhookHandler>();
+
+            services.AddScoped<IStorageCategoryRepository, StorageCategoryRepository>();
+            services.AddScoped<ITemperatureControlType, TemperatureControlTypeRepository>();
+            services.AddScoped<IModuleRepository, ModuleRepository>();
+            services.AddScoped<IInputFinancingManager, InputFinancingManager>();
+            services.AddScoped<IInputFinancingRepository, InputFinancingRepository>();
         }
     }
 }

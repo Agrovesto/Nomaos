@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -1783,72 +1784,80 @@ SELECT
 
             return result;
         }
+        private IQueryable<Farmer> BuildFarmerQuery(FarmerFilter filter)
+        {
+            var query =
+                from fc in _context.FarmerCooperatives.AsNoTracking()
+                join f in _context.Farmers.AsNoTracking()
+                    on fc.FarmerId equals f.Id
+                where fc.CooperativeId == filter.CooperativeId
+                select f;
+
+            if (!string.IsNullOrWhiteSpace(filter.BusinessCode))
+                query = query.Where(x => x.BelongToBusinessCode == filter.BusinessCode);
+
+            if (!string.IsNullOrWhiteSpace(filter.State))
+                query = query.Where(x => x.State == filter.State);
+
+            if (filter.Id.HasValue && filter.Id > 0)
+                query = query.Where(x => x.Id == filter.Id);
+
+            if (filter.StartDate.HasValue || filter.EndDate.HasValue)
+            {
+                var start = filter.StartDate?.Date ?? DateTime.MinValue.Date;
+                var end = filter.EndDate?.Date ?? DateTime.UtcNow.Date;
+
+                query = query.Where(x =>
+                    x.OnBoardedOn.Date >= start &&
+                    x.OnBoardedOn.Date <= end);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                query =
+                    from f in query
+                    join fo in _context.FarmerOrganizations.AsNoTracking()
+                        on f.Id equals fo.FarmerId
+                    where fo.OrganizationCode == filter.OrganizationCode
+                    select f;
+            }
+
+            return query.Distinct();
+        }
+
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(
     long cooperativeId,
     ListQueryParams query)
         {
             query ??= new ListQueryParams();
+
             if (query.PageNumber <= 0) query.PageNumber = 1;
             if (query.PageSize <= 0) query.PageSize = 10;
 
-            var baseQuery =
-                from f in _context.Farmers
-                join fc in _context.FarmerCooperatives on f.Id equals fc.FarmerId
-                join c in _context.MemberShips on fc.CooperativeId equals c.Id
-                where c.Id == cooperativeId
-                select f;
-
-            if (!string.IsNullOrWhiteSpace(query.businessCode))
-                baseQuery = baseQuery.Where(f => f.BelongToBusinessCode == query.businessCode);
-
-            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            var filter = new FarmerFilter
             {
-                baseQuery =
-                    from f in baseQuery
-                    join fo in _context.FarmerOrganizations on f.Id equals fo.FarmerId
-                    where fo.OrganizationCode == query.organizationCode
-                    select f;
-            }
+                CooperativeId = cooperativeId,
+                BusinessCode = query.businessCode,
+                OrganizationCode = query.organizationCode,
+                State = query.State,
+                Id = query.Id,
+                StartDate = query.startDate,
+                EndDate = query.endDate
+            };
 
-            if (query.startDate.HasValue && query.endDate.HasValue)
-            {
-                baseQuery = baseQuery.Where(f =>
-                    f.OnBoardedOn >= query.startDate.Value &&
-                    f.OnBoardedOn <= query.endDate.Value);
-            }
-            else if (query.startDate.HasValue)
-            {
-                var date = query.startDate.Value.Date;
-                baseQuery = baseQuery.Where(f => f.OnBoardedOn.Date == date);
-            }
-
-            if (!string.IsNullOrWhiteSpace(query.State))
-               baseQuery = baseQuery.Where(f => f.State == query.State);
-                //baseQuery = baseQuery.Where(f => f.State.Contains(query.State));
-
-            if (query.Id > 0)
-                baseQuery = baseQuery.Where(f => f.Id == query.Id);
+            var baseQuery = BuildFarmerQuery(filter);
 
             var totalCount = await baseQuery.CountAsync();
 
-            var farmers = await baseQuery
-                .OrderByDescending(f => f.OnBoardedOn)
+            var farmerIds = await baseQuery
+                .Select(x => x.Id)
                 .Skip((query.PageNumber - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .ToListAsync();
 
-            if (!farmers.Any())
-            {
-                return new PagedListResponse<List<FarmerMembershipDto>>
-                {
-                    Data = new List<FarmerMembershipDto>(),
-                    Count = 0,
-                    PageNumber = query.PageNumber,
-                    PageSize = query.PageSize
-                };
-            }
-
-            var farmerIds = farmers.Select(f => f.Id).ToList();
+            var farmers = await _context.Farmers
+                .Where(f => farmerIds.Contains(f.Id))
+                .ToListAsync();
 
             var farmsLookup = await _context.Farms
                 .Where(p => farmerIds.Contains(p.FarmerId))
@@ -1872,6 +1881,7 @@ SELECT
                     State = f.State,
                     Lga = f.Lga,
                     Level = EnumExtensions.GetDisplayName(f.Level),
+
                     TotalFarms = farmData?.TotalFarms ?? 0,
                     LandSize = farmData?.LandSize ?? 0,
                     MappingStatus = (farmData?.TotalFarms ?? 0) > 0 ? "Mapped" : "Unmapped"
@@ -1886,7 +1896,107 @@ SELECT
                 PageSize = query.PageSize
             };
         }
-       
+        //  public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(
+        //long cooperativeId,
+        //ListQueryParams query)
+        //  {
+        //      query ??= new ListQueryParams();
+
+        //      if (query.PageNumber <= 0) query.PageNumber = 1;
+        //      if (query.PageSize <= 0) query.PageSize = 10;
+
+
+        //      var baseQuery =
+        //          from fc in _context.FarmerCooperatives.AsNoTracking()
+        //          join f in _context.Farmers.AsNoTracking()
+        //              on fc.FarmerId equals f.Id
+        //          where fc.CooperativeId == cooperativeId
+        //          select new { fc.FarmerId, Farmer = f };
+
+        //      if (!string.IsNullOrWhiteSpace(query.businessCode))
+        //          baseQuery = baseQuery.Where(x => x.Farmer.BelongToBusinessCode == query.businessCode);
+
+        //      if (!string.IsNullOrWhiteSpace(query.organizationCode))
+        //      {
+        //          baseQuery =
+        //              from x in baseQuery
+        //              join fo in _context.FarmerOrganizations.AsNoTracking()
+        //                  on x.FarmerId equals fo.FarmerId
+        //              where fo.OrganizationCode == query.organizationCode
+        //              select x;
+        //      }
+
+        //      if (!string.IsNullOrWhiteSpace(query.State))
+        //          baseQuery = baseQuery.Where(x => x.Farmer.State == query.State);
+
+        //      if (query.Id > 0)
+        //          baseQuery = baseQuery.Where(x => x.Farmer.Id == query.Id);
+
+        //      if (query.startDate.HasValue || query.endDate.HasValue)
+        //      {
+        //          var start = query.startDate?.Date ?? DateTime.MinValue.Date;
+        //          var end = query.endDate?.Date ?? DateTime.UtcNow.Date;
+
+        //          baseQuery = baseQuery.Where(x =>
+        //              x.Farmer.OnBoardedOn.Date >= start &&
+        //              x.Farmer.OnBoardedOn.Date <= end);
+        //      }
+
+        //      var totalCount = await baseQuery
+        //          .Select(x => x.FarmerId)
+        //          .Distinct()
+        //          .CountAsync();
+
+        //      var farmerIds = await baseQuery
+        //          .Select(x => x.FarmerId)
+        //          .Distinct()
+        //          .Skip((query.PageNumber - 1) * query.PageSize)
+        //          .Take(query.PageSize)
+        //          .ToListAsync();
+
+        //      var farmers = await _context.Farmers
+        //          .Where(f => farmerIds.Contains(f.Id))
+        //          .ToListAsync();
+
+        //      var farmsLookup = await _context.Farms
+        //          .Where(p => farmerIds.Contains(p.FarmerId))
+        //          .GroupBy(p => p.FarmerId)
+        //          .ToDictionaryAsync(g => g.Key, g => new
+        //          {
+        //              TotalFarms = g.Count(),
+        //              LandSize = g.Sum(x => x.FarmSize)
+        //          });
+
+        //      var result = farmers.Select(f =>
+        //      {
+        //          farmsLookup.TryGetValue(f.Id, out var farmData);
+
+        //          return new FarmerMembershipDto
+        //          {
+        //              Id = f.Id,
+        //              FarmerUserId = f.UserId,
+        //              FullName = f.Name,
+        //              DateAdded = f.OnBoardedOn,
+        //              State = f.State,
+        //              Lga = f.Lga,
+        //              Level = EnumExtensions.GetDisplayName(f.Level),
+
+        //              TotalFarms = farmData?.TotalFarms ?? 0,
+        //              LandSize = farmData?.LandSize ?? 0,
+        //              MappingStatus = (farmData?.TotalFarms ?? 0) > 0 ? "Mapped" : "Unmapped"
+        //          };
+        //      }).ToList();
+
+        //      return new PagedListResponse<List<FarmerMembershipDto>>
+        //      {
+        //          Data = result,
+        //          Count = totalCount,
+        //          PageNumber = query.PageNumber,
+        //          PageSize = query.PageSize
+        //      };
+        //  }
+
+
         public async Task<List<FarmerModel>> GetFarmersByCooperativeId(
             long? cooperativeId,
             ListQueryParams query)
@@ -2311,20 +2421,28 @@ SELECT
 
             var farmerId = farmer.Id;
 
+            var farmerImage = await _context.FarmerImages
+                .AsNoTracking()
+                .Where(x => x.FarmerUserId == userId)
+                .Select(x => x.IMageKey)
+                .FirstOrDefaultAsync();
 
+            // Farms
             var farms = await _context.Farms
                 .AsNoTracking()
                 .Where(f => f.FarmerId == farmerId)
                 .ToListAsync();
 
+            var farmIds = farms.Select(f => f.Id).ToList();
+
             var coordinates = await _context.FarmCoordinates
                 .AsNoTracking()
-                .Where(c => farms.Select(f => f.Id).Contains(c.FarmId))
+                .Where(c => farmIds.Contains(c.FarmId))
                 .ToListAsync();
 
             var documents = await _context.FarmLandDocuments
                 .AsNoTracking()
-                .Where(d => farms.Select(f => f.Id).Contains(d.FarmId))
+                .Where(d => farmIds.Contains(d.FarmId))
                 .ToListAsync();
 
             var farmDtos = farms.Select(f =>
@@ -2385,6 +2503,34 @@ SELECT
                 })
                 .ToListAsync();
 
+            var agents = await (
+                from fa in _context.FarmerAgents
+                join a in _context.Agents on fa.AgentId equals a.Id
+                where fa.FarmerId == farmerId
+                select new OrganizationFarmerAgentDto
+                {
+                    AgentId = a.Id,
+                    AgentName = a.Name,
+                    AssignedOn = fa.AssignedOn,
+                    Active = a.IsActive,
+                    AgentUserId=a.UserId
+                })
+                .ToListAsync();
+
+            var memberships = await (
+                from fc in _context.FarmerCooperatives
+                join c in _context.MemberShips on fc.CooperativeId equals c.Id
+                where fc.FarmerId == farmerId
+                select new OrganizationFarmerCooperativeDto
+                {
+                    MembershipId = c.Id,
+                    MembershipName = c.Name,
+                    JoinedOn = fc.JoinedOn,
+                    IsActive = c.IsActive,
+                    
+                })
+                .ToListAsync();
+
             return new FarmerProfileDto
             {
                 PersonalInformation = new FarmerPersonalInfoDto
@@ -2398,9 +2544,11 @@ SELECT
                     Email = farmer.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
+                    FarmerImage = farmerImage,
                     DateRegistered = farmer.OnBoardedOn,
                     FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level),
                     IsActive = user?.IsActive ?? false,
+                    
                 },
 
                 Location = new FarmerProfileLocationDto
@@ -2419,10 +2567,13 @@ SELECT
                     Transactions = transactions
                 },
 
-                ActivityLogs = activities
+                ActivityLogs = activities,
+
+                Agents = agents,
+                Memberships = memberships
             };
         }
-         public async Task<FarmerDetailDto> GetFarmerDetails(string userId)
+        public async Task<FarmerDetailDto> GetFarmerDetails(string userId)
         {
              var farmer = await _context.Farmers
                 .FirstOrDefaultAsync(f => f.UserId == userId);

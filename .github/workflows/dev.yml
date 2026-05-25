@@ -3,67 +3,28 @@ on:
   push:
     branches:
       - staging
-  pull_request:
-    branches:
-      - staging
-
+      
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  
 jobs:
-  # ------------------------------------------------------------------
-  # 1. Build & Test (runs on PRs and pushes)
-  # ------------------------------------------------------------------
-  build-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build -c Release --no-restore
-
-  # ------------------------------------------------------------------
-  # 2. Deploy to Staging (only on push to staging)
-  # ------------------------------------------------------------------
   deploy-staging:
-    needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install rsync (sometimes missing)
-        run: sudo apt-get update && sudo apt-get install -y rsync
-
       - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-
-      - name: Add EC2 host to known_hosts (with retry + timeout)
+          
+      - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          for i in {1..5}; do
-            echo "Attempt $i: Adding host key for ${{ secrets.EC2_HOST_DEV }}"
-            ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts 2>/dev/null && break
-            sleep 5
-          done
-
-      - name: Deploy source code + run deploy script
+          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+          
+      - name: SSH and Deploy
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Agrovesto.Backend.API/
-  
-      - name: Execute deployment script
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-staging.sh"
+          ssh -tt ubuntu@${{ secrets.EC2_HOST_DEV }} \
+          'bash -x /var/www/Nomaos/deploy-staging.sh'
