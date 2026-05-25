@@ -511,8 +511,7 @@ jobs:
 
       - name: Create reports directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
-      - name: 
-        \Get current date (for cache key)
+      - name: Get current date (for cache key)
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
