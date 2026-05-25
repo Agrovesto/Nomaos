@@ -645,7 +645,7 @@ jobs:
       - validate-pipeline
       - build-and-test
       - trivy-sca
-      - depcheck-sca
+      # - depcheck-sca
     timeout-minutes: 30
     if: |
       always() &&
