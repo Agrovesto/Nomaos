@@ -1,66 +1,30 @@
 name: CI/CD Deploy Agrovesto.Backend.API
-
 on:
   push:
     branches:
-      - master
-
+      - staging
+      
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
+  
 jobs:
   deploy-staging:
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.10.0
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
-
+          
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts
-
+          
       - name: SSH and Deploy
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} << 'EOF'
-
-          set -e
-
-          echo "🚀 Starting deployment..."
-
-          cd /var/www/Nomaos
-
-          echo "📥 Pulling latest code..."
-          git fetch origin
-          git checkout master
-          git reset --hard origin/master
-
-          echo "🧹 Cleaning project..."
-          dotnet clean
-
-          echo "📦 Restoring dependencies..."
-          dotnet restore
-
-          echo "🏗️ Publishing application..."
-          dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
-
-          echo "🔄 Restarting service..."
-          sudo systemctl restart Agrovesto.Backend.API.service
-
-          echo ">>> Waiting for service to settle..."
-          sleep 2
-
-          echo "📊 Checking service status..."
-          sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
-
-          echo "📜 Recent logs:"
-          sudo journalctl -u Agrovesto.Backend.API.service -n 50 --no-pager || true
-
-          echo "✅ Deployment successful!"
-
-          EOF
+          ssh -tt ubuntu@${{ secrets.EC2_HOST_PROD }} \
+          'bash -x /var/www/Nomaos/deploy-prod.sh'
