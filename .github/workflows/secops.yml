@@ -448,7 +448,7 @@ jobs:
         with:
           name: trivy-sonar-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           path: ${{ env.REPORTS_DIR }}/trivy-sonar-report.json
-          retention-days: 3
+          retention-days: 1
 
       - name: Upload Trivy raw reports
         uses: actions/upload-artifact@v4
@@ -456,7 +456,7 @@ jobs:
         with:
           name: trivy-raw-${{ needs.validate-pipeline.outputs.pipeline-run-id }}
           path: ${{ env.REPORTS_DIR }}/trivy-*.json
-          retention-days: 14
+          retention-days: 1
 
       - name: Evaluate critical findings
         run: |
@@ -511,50 +511,36 @@ jobs:
 
       - name: Create reports directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
+      - name: 
+        \Get current date (for cache key)
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
-      # ── Cache 5: NVD database ───────────────────────────────────────────────
-      # Key: content hash of lock/project files so the DB is only re-downloaded
-      # when the dependency tree actually changes.  The outer restore-key falls
-      # back to any NVD cache on this runner so we never start entirely cold.
-      - name: Cache NVD database
+      - name: Cache OWASP Dependency-Check NVD data
+        id: odc-cache
         uses: actions/cache@v4
         with:
           path: ~/.odc-data
-          key:          ${{ env.DOCKER_CACHE_VERSION }}-odc-nvd-${{ needs.validate-pipeline.outputs.csproj-hash }}
+          key: odc-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}
           restore-keys: |
-            ${{ env.DOCKER_CACHE_VERSION }}-odc-nvd-
-
-      # ── Cache 6: OWASP Dependency-Check Docker image layers ────────────────
-      # Pulling a ~700 MB image on every run costs ~30–40 s.  We cache the
-      # exported tar so subsequent runs load from disk in ~5 s.
-      - name: Cache OWASP DC Docker image
-        id: odc-docker-cache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/odc-image.tar
-          key:          ${{ env.DOCKER_CACHE_VERSION }}-odc-docker-10.0.4
-          restore-keys: ${{ env.DOCKER_CACHE_VERSION }}-odc-docker-
-
-      - name: Load or pull OWASP DC image
-        run: |
-          if [[ -f /tmp/odc-image.tar ]]; then
-            echo "Loading OWASP DC image from cache..."
-            docker load -i /tmp/odc-image.tar
-          else
-            echo "Pulling OWASP DC image..."
-            docker pull owasp/dependency-check:10.0.4
-            docker save owasp/dependency-check:10.0.4 -o /tmp/odc-image.tar
-          fi
+            odc-nvd-${{ runner.os }}-
 
       - name: Run OWASP Dependency-Check
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: |
+          UPDATE_FLAG=""
+          if [[ "${{ steps.odc-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Cache hit — skipping NVD database update"
+            UPDATE_FLAG="--noupdate"
+          fi
+
           docker run --rm \
             -v "$(pwd):/apps/src:ro" \
             -v "$HOME/.odc-data:/usr/share/dependency-check/data" \
             -v "$(pwd)/${{ env.REPORTS_DIR }}:/apps/reports" \
             --memory="2g" \
+            --cpus="2" \
             owasp/dependency-check:10.0.4 \
             --project "dotnet-backend" \
             --scan "/apps/src" \
@@ -567,8 +553,10 @@ jobs:
             --exclude "**/bin/**" \
             --exclude "**/obj/**" \
             ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
+            --nvdApiDelay 1000 \
             --failOnCVSS 11 \
             --log /apps/reports/odc.log \
+            ${UPDATE_FLAG} \
           || true
 
       - name: Convert Dependency-Check → SonarQube format
@@ -648,7 +636,6 @@ jobs:
               print(f"\n[FAIL] {len(critical)} CRITICAL CVE(s) found. Remediate before merge.")
               sys.exit(1)
           EOF
-
 # ───────────────────────────────────────────────────────────────────────────────
 # JOB 4 — SonarQube SAST
 # ───────────────────────────────────────────────────────────────────────────────
@@ -803,15 +790,21 @@ jobs:
           SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          EXT_PARAM=""
-          if [[ -n "${{ steps.ext-reports.outputs.paths }}" ]]; then
-            EXT_PARAM="/d:sonar.externalIssuesReportPaths=${{ steps.ext-reports.outputs.paths }}"
+          FIXED_EXT_REPORTS="${GITHUB_WORKSPACE}/sonar-imports/trivy-sonar-report.json,${GITHUB_WORKSPACE}/sonar-imports/zap-api-sonar-report.json"
+
+          # Append any additional paths discovered by a prior step (optional)
+          ADDITIONAL="${{ steps.ext-reports.outputs.paths }}"
+          if [[ -n "${ADDITIONAL}" ]]; then
+            EXT_REPORTS="${FIXED_EXT_REPORTS},${ADDITIONAL}"
+          else
+            EXT_REPORTS="${FIXED_EXT_REPORTS}"
           fi
 
           dotnet sonarscanner begin \
             /k:"${{ env.SONAR_PROJECT_KEY }}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.externalIssuesReportPaths="${EXT_REPORTS}" \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.min.js" \
@@ -819,8 +812,7 @@ jobs:
             /d:sonar.qualitygate.wait=true \
             /d:sonar.qualitygate.timeout=300 \
             /d:sonar.scm.provider=git \
-            ${{ needs.validate-pipeline.outputs.sonar-branch-args }} \
-            ${EXT_PARAM}
+            ${{ needs.validate-pipeline.outputs.sonar-branch-args }}
 
       - name: Restore NuGet packages
         run: dotnet restore --no-cache   # NuGet cache already warm; validates lockfile
