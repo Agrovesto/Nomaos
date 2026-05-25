@@ -2,14 +2,14 @@ name: CI/CD Deploy Agrovesto.Backend.API
 on:
   push:
     branches:
-      - staging
+      - master
       
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
   
 jobs:
-  deploy-staging:
+  deploy-prod:
     runs-on: ubuntu-latest
     
     steps:
