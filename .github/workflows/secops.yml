@@ -657,10 +657,7 @@ jobs:
       always() &&
       needs.validate-pipeline.outputs.run-sast == 'true' &&
       needs.build-and-test.result == 'success'
-    concurrency:
-      group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-      cancel-in-progress: true
-      
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -898,6 +895,10 @@ jobs:
       always() &&
       needs.validate-pipeline.outputs.run-dast == 'true' &&
       needs.build-and-test.result == 'success'
+
+    concurrency:
+      group: secops-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+      cancel-in-progress: true
 
     strategy:
       matrix:
