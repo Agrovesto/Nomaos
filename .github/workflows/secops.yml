@@ -755,55 +755,44 @@ jobs:
             sonar-imports/trivy-sonar-report.json \
             sonar-imports/dependency-check-sonar-report.json \
             sonar-imports/zap-sonar-report.json; do
-            if [[ -f "$f" ]]; then
-              PATHS="${PATHS:+${PATHS},}${f}"
-              echo "  Found: $f"
+            # ── Use ABSOLUTE paths — SonarQube resolves relative paths
+            # against each module's base dir, not the workspace root.
+            ABS="${GITHUB_WORKSPACE}/${f}"
+            if [[ -f "$ABS" ]]; then
+              PATHS="${PATHS:+${PATHS},}${ABS}"
+              echo "  ✅ Found: ${ABS}"
+            else
+              echo "  ⏭️  Not found: ${ABS}"
             fi
           done
           echo "paths=${PATHS}" >> "$GITHUB_OUTPUT"
           echo "External report paths: ${PATHS:-none}"
+
 
       - name: Validate SonarQube connectivity
         env:
           SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          if [[ -z "$SONAR_HOST_URL" ]]; then
-            echo "::error::SONAR_HOST_URL secret is empty or not set"
-            exit 1
-          fi
-          if [[ -z "$SONAR_TOKEN" ]]; then
-            echo "::error::SONAR_TOKEN_DOTNET secret is empty or not set"
-            exit 1
-          fi
-          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
-            --max-time 15 -u "${SONAR_TOKEN}:" \
-            "${SONAR_HOST_URL}/api/system/status" || echo "000")
-          echo "SonarQube /api/system/status → HTTP ${HTTP_CODE}"
-          [[ "$HTTP_CODE" == "000" ]] && { echo "::error::Cannot reach SonarQube"; exit 1; }
-          [[ "$HTTP_CODE" == "401" ]] && { echo "::error::SonarQube auth failed"; exit 1; }
-          echo "✅ SonarQube is reachable and token is valid"
+          HTTP=$(curl -sf -o /dev/null -w "%{http_code}" --max-time 15 \
+            -u "${SONAR_TOKEN}:" "${SONAR_HOST_URL}/api/system/status" || echo "000")
+          echo "SonarQube status → HTTP ${HTTP}"
+          [[ "$HTTP" == "000" ]] && { echo "::error::Cannot reach SonarQube"; exit 1; }
+          [[ "$HTTP" == "401" ]] && { echo "::error::SonarQube auth failed";  exit 1; }
+          echo "✅ SonarQube reachable"
 
       - name: SonarScanner — Begin
         env:
           SONAR_TOKEN:    ${{ secrets.SONAR_TOKEN_DOTNET }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          FIXED_EXT_REPORTS="${GITHUB_WORKSPACE}/sonar-imports/trivy-sonar-report.json,${GITHUB_WORKSPACE}/sonar-imports/zap-api-sonar-report.json"
-
-          # Append any additional paths discovered by a prior step (optional)
-          ADDITIONAL="${{ steps.ext-reports.outputs.paths }}"
-          if [[ -n "${ADDITIONAL}" ]]; then
-            EXT_REPORTS="${FIXED_EXT_REPORTS},${ADDITIONAL}"
-          else
-            EXT_REPORTS="${FIXED_EXT_REPORTS}"
-          fi
+          EXT="${{ steps.ext-reports.outputs.paths }}"
 
           dotnet sonarscanner begin \
             /k:"${{ env.SONAR_PROJECT_KEY }}" \
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_TOKEN}" \
-            /d:sonar.externalIssuesReportPaths="${EXT_REPORTS}" \
+            ${EXT:+/d:sonar.externalIssuesReportPaths="${EXT}"} \
             /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="**/TestResults/**/*.trx" \
             /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.min.js" \
