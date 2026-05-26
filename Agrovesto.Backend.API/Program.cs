@@ -70,27 +70,57 @@ var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
 var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
 //var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
-if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
+// Fail fast if Vault is required in this environment
+if (string.IsNullOrWhiteSpace(vaultUrl) ||
+    string.IsNullOrWhiteSpace(roleId) ||
+    string.IsNullOrWhiteSpace(secretId))
 {
-    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
-    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
-        () => new VaultOptions(
-            vaultUrl,
-            new AppRoleAuthMethodInfo(roleId, secretId),
-            reloadOnChange: true,
-            reloadCheckIntervalSeconds: 60
-        ),
-        "nomaos/prod/appsettings", // Path in Vault: secret/nomaos/prod/api
-        "kv"              // Your KV engine name
-    );
-    
-    Log.Information("Vault configuration provider added.");
+    throw new Exception("Vault environment variables are missing. Startup aborted.");
 }
+try
+{
+    // =====================
+    // Build Vault client
+    // =====================
+    var authMethod = new AppRoleAuthMethodInfo(roleId, secretId);
 
-foreach (var item in builder.Configuration.AsEnumerable())
-{
-    Console.WriteLine($"Vault {item.Key} = {item.Value}");
+    var vaultClientSettings = new VaultClientSettings(vaultUrl, authMethod);
+
+    var vaultClient = new VaultClient(vaultClientSettings);
+
+    // =====================
+    // Read secrets from KV
+    // =====================
+    var secretPath = "nomaos/prod/appsettings";
+    var mountPoint = "kv";
+
+    var secretResponse = await vaultClient.V1.Secrets.KeyValue.V2
+        .ReadSecretAsync(path: secretPath, mountPoint: mountPoint);
+
+    var data = secretResponse.Data.Data;
+
+    // =====================
+    // Inject into Configuration
+    // =====================
+    var configBuilder = (IConfigurationBuilder)builder.Configuration;
+
+    foreach (var kv in data)
+    {
+        configBuilder.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            [$"ConnectionStrings:{kv.Key}"] = kv.Value?.ToString()
+        });
+    }
+
+    Log.Information("Vault configuration successfully loaded and injected.");
 }
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Failed to load Vault configuration");
+    throw;
+}   
+
+
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 // Prefer awaiting the async implementation to avoid blocking threads
 //await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
