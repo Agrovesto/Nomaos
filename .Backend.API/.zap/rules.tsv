@@ -1,0 +1,26 @@
+# .zap/rules.tsv
+# Format: rule_id	action	name
+# Actions: IGNORE, INFO, WARN, FAIL
+# Customize based on your Amplify app
+
+# Informational - Don't fail on these
+10021	IGNORE	X-Content-Type-Options Header Missing
+10036	IGNORE	Server Leaks Version Information
+10037	IGNORE	Server Leaks Information via "X-Powered-By"
+10098	IGNORE	Cross-Domain Misconfiguration
+10109	IGNORE	Modern Web Application
+
+# Amplify-specific - CloudFront handles these
+10038	IGNORE	Content Security Policy (CSP) Header Not Set
+90003	IGNORE	Sub Resource Integrity Attribute Missing
+
+# Warn but don't fail
+10020	WARN	X-Frame-Options Header
+10035	WARN	Strict-Transport-Security Header
+
+# Always fail on these
+40012	FAIL	Cross Site Scripting (Reflected)
+40014	FAIL	Cross Site Scripting (Persistent)
+40018	FAIL	SQL Injection
+90020	FAIL	Remote OS Command Injection
+90021	FAIL	XPath Injection

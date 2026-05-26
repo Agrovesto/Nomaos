@@ -50,7 +50,7 @@ if (!string.IsNullOrEmpty(logFilePath))
 Log.Logger = logConfig
     .WriteTo.AWSSeriLog(new AWSLoggerConfig
     {
-        LogGroup = "/nomaos/staging/api",
+        LogGroup = "/nomaos/prod/api",
         Region = "eu-west-1",
     })
     .CreateLogger();
