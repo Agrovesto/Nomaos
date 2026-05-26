@@ -544,13 +544,15 @@ jobs:
 
           docker run --rm \
             -v "$(pwd):/apps/src:ro" \
-            -v "$HOME/.odc-data:/usr/share/dependency-check/data" \
+            -v "$DATA_DIR:/usr/share/dependency-check/data" \
             -v "$(pwd)/${{ env.REPORTS_DIR }}:/apps/reports" \
             --memory="2g" \
             --cpus="2" \
             owasp/dependency-check:10.0.4 \
             --project "dotnet-backend" \
-            --scan "/apps/src" \
+            --scan "/apps/src/Agrovesto.Backend.API" \
+            --scan "/apps/src/Agrovesto.Backend.Core" \
+            --scan "/apps/src/Agrovesto.Backend.Infrastructure" \
             --out "/apps/reports" \
             --format JSON \
             --format HTML \
@@ -559,7 +561,6 @@ jobs:
             --disableYarnAudit \
             --disablePnpmAudit \
             --disableRetireJS \
-            --disableAssembly \
             --exclude "**/.git/**" \
             --exclude "**/bin/**" \
             --exclude "**/obj/**" \
@@ -567,13 +568,13 @@ jobs:
             --exclude "**/.nuget/**" \
             --exclude "**/dist/**" \
             --exclude "**/coverage/**" \
-            --noupdate \
+            --exclude "**/Agrovesto.Backend.Tests/**" \
             ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
             --nvdApiDelay 1000 \
+            --connectionTimeout 120000 \
             --failOnCVSS 11 \
             --log /apps/reports/odc.log \
-            ${UPDATE_FLAG} \
-          || true
+            ${UPDATE_FLAG}
 
       - name: Convert Dependency-Check → SonarQube format
         run: |
