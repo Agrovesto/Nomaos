@@ -23,24 +23,32 @@ namespace Agrovesto.Backend.Infrastructure.DB
     {
         public DataContext CreateDbContext(string[] args)
         {
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.Development.json")
+                .AddJsonFile("appsettings.json", optional: false)
+                .AddJsonFile($"appsettings.{environment}.json", optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
             optionsBuilder.UseSqlServer(
-              config.GetConnectionString("DefaultConnection"),
-        sqlOptions =>
-        {
-            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(300);
-            sqlOptions.UseNetTopologySuite();
-        });
+            config.GetConnectionString("DefaultConnection"),
+            sqlOptions =>
+            {
+                sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+
+                sqlOptions.UseNetTopologySuite();
+
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorNumbersToAdd: null);
+
+                sqlOptions.CommandTimeout(300);
+            });
+
 
             return new DataContext(optionsBuilder.Options);
         }
@@ -327,6 +335,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .WithMany()
     .HasForeignKey(x => x.OrganizationProductId)
     .OnDelete(DeleteBehavior.NoAction);
+
+            modelBuilder.Entity<Organization>()
+    .ToTable("Organizations");
             //modelBuilder.Entity<Farm>()
             //    .HasIndex(f => f.FarmPolygon)
             //    .HasDatabaseName("IX_Farm_Polygon")
@@ -361,7 +372,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<Business> Businesses { get; set; }
         public DbSet<UserOrganization> UserOrganizations { get; set; }
-        public DbSet<Organization> BusinessOrganizations { get; set; }
+        public DbSet<Organization> Organizations { get; set; }
         public DbSet<BusinessWorker> BusinessWorkers { get; set; }  
         public DbSet<SubAccount> SubAccounts { get; set; }
         public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
@@ -455,6 +466,14 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<EopCostItem> EopCostItems { get; set; }
         public DbSet<InputFinancingCategory> InputFinancingCategories { get; set; }
         public DbSet<InputPackageItem> InputPackageItems { get; set; }
+        public DbSet<BusinessLicenseModule> BusinessLicenseModules { get; set; }
+        public DbSet<SystemModule> SystemModules { get; set; }
+        public DbSet<BusinessLicense> BusinessLicenses { get; set; }
+        public DbSet<BusinessBillingInvoice> BusinessBillingInvoices { get; set; }
+        public DbSet<BusinessPayment> BusinessPayments { get; set; }
+        public DbSet<UserBusiness> UserBusinesses { get; set; }
+        public DbSet<MigrationTracker> MigrationTrackers { get; set; }
+        public DbSet<OrganizationBusiness> OrganizationBusinesses { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>
