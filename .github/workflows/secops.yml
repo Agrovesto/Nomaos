@@ -520,7 +520,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.odc-data
-          key: odc-nvd-${{ runner.os }}-${{ steps.date.outputs.date }}
+          key: odc-nvd-${{ runner.os }}-v1
           restore-keys: |
             odc-nvd-${{ runner.os }}-
 
@@ -546,11 +546,20 @@ jobs:
             --out "/apps/reports" \
             --format JSON \
             --format HTML \
-            --enableExperimental \
+            --disableAssembly \
+            --disableNodeJS \
+            --disableYarnAudit \
+            --disablePnpmAudit \
+            --disableRetireJS \
             --disableAssembly \
             --exclude "**/.git/**" \
             --exclude "**/bin/**" \
             --exclude "**/obj/**" \
+            --exclude "**/node_modules/**" \
+            --exclude "**/.nuget/**" \
+            --exclude "**/dist/**" \
+            --exclude "**/coverage/**" \
+            --noupdate \
             ${NVD_API_KEY:+--nvdApiKey "${NVD_API_KEY}"} \
             --nvdApiDelay 1000 \
             --failOnCVSS 11 \
