@@ -65,8 +65,8 @@ builder.Host.UseSerilog();
 //var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
 
 
-//if (!builder.Environment.IsDevelopment())
-//{
+if (!builder.Environment.IsDevelopment())
+{
     var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
     var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
     var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
@@ -86,7 +86,7 @@ builder.Host.UseSerilog();
             "kv"
         );
     }
-//}
+}
 //if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
 //{
 //    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
@@ -105,7 +105,7 @@ builder.Host.UseSerilog();
 //}
 
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
-
+Console.WriteLine($"Loading AWS Secrets... config {builder.Configuration.GetConnectionString("DefaultConnection")}");
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
