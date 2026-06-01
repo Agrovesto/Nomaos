@@ -16,8 +16,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public enum RepaymentScheduleType
     {
-        Instant,
         Installment,
+        Instant,
+       
         HarvestLinked
     }
     public enum InputPackageStatus
@@ -33,6 +34,15 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         Produce = 2,
         Hybrid = 3,
         RevenueShare = 4
+    }
+    
+    public enum RepaymentFrequency
+    {
+        Weekly = 1,
+        BiWeekly = 2,
+        Monthly = 3,
+        Quarterly = 4,
+        Annually = 5
     }
     public enum RiskCategory
     {

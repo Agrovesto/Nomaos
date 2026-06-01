@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.V2.Events;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -18,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     {
         Task<EopResponseDto> CreateEopAsync(CreateEopRequest request);
         Task<bool> CreateInputFinancingCategory(ProductCategoryDto dto);
-        Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request);
+        Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, InputPackageConfigArgs args);
         Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
         Task<EopDto> GetEopByIdAsync(long id);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request);
@@ -49,7 +51,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var cat = new InputFinancingCategory
             {
                 BusinessCode = dto.BusinessCode,
-
+                Description=dto.Description,
+                
                 Name = dto.CategoryName,
                 IsActive = true,
                 CreatedOn = DateTimeOffset.Now,
@@ -164,83 +167,272 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }).ToList()
             };
         }
-        public async Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request)
+        public async Task<bool> CreateInputFinancingPackageConfig(
+    CreateInputPackageRequest request,
+    InputPackageConfigArgs args)
         {
-            if (request.Structure == InputPackageStructure.Physical &&
-                (request.InputPackageItems == null || !request.InputPackageItems.Any()))
-                throw new Exception("Physical package must have items");
+            var strategy = _context.Database.CreateExecutionStrategy();
 
-            var items = request.InputPackageItems?.Select(x => new InputPackageItem
+            return await strategy.ExecuteAsync(async () =>
             {
-                OrganizationProductId = x.OrganizationProductId,
-                Quantity = x.Quantity,
-                UnitCost = x.UnitCost,
-                UnitOfMeasure = x.UnitOfMeasure
-            }).ToList() ?? new List<InputPackageItem>();
+                using var transaction = await _context.Database.BeginTransactionAsync();
 
-            var additionalCosts = request.AdditionalCosts?.Select(x => new AdditionalInputPackageCost
-            {
-                Name = x.Name,
-                Description = x.Description,
-                Amount = x.Amount,
-                IsPerUnit= x.IsPerUnit,
-                Quantity=x.Quantity,
-                Type=x.Type
-            }).ToList() ?? new List<AdditionalInputPackageCost>();
-            var totalValue =
-                items.Sum(x => x.Quantity * x.UnitCost) +
-                additionalCosts.Sum(x => x.Amount);
+                try
+                {
+                    if (request == null)
+                        throw new Exception("Request cannot be null");
 
-            var repaymentValue = request.ApplyInterest
-                ? totalValue + (totalValue * request.InterestRate)
-                : totalValue;
+                    var isPhysical = request.PackageStructure == InputPackageStructure.Physical;
 
-            var commitment = request.CommitmentRequired
-                ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
-                    ? totalValue * request.CommitmentValue
-                    : request.CommitmentValue)
-                : 0;
+                    if (isPhysical)
+                    {
+                        if (request.InputPackageItems == null || !request.InputPackageItems.Any())
+                            throw new Exception("Physical package must have items");
+                    }
+                    else
+                    {
+                        if (request.InputPackageItems != null && request.InputPackageItems.Any())
+                            throw new Exception("Non-physical package cannot have items");
+                    }
 
-            var package = new InputPackage
-            {
-                Name = request.Name,
-                OrganizationId = request.OrganizationId,
-                InputFinancingCategoryId = request.InputFinancingCategoryId,
-                SubScriptionType= request.SubScriptionType,
-                PackageStructure = request.Structure,
+                    var items = isPhysical
+                        ? request.InputPackageItems.Select(x => new InputPackageItem
+                        {
+                            OrganizationProductId = x.OrganizationProductId,
+                            Quantity = x.Quantity,
+                            UnitCost = x.UnitCost
+                        }).ToList()
+                        : new List<InputPackageItem>();
 
-                InputPackageItems = items,
-               
-                CommitmentRequired = request.CommitmentRequired,
-                CommitmentType = request.CommitmentType,
-                CommitmentValue =request.CommitmentValue > 0 ? request.CommitmentValue : commitment,
+                    var additionalCosts = request.AdditionalCosts?.Select(x => new AdditionalInputPackageCost
+                    {
+                        Name = x.Name,
+                        Description = x.Description,
+                        Amount = x.Amount,
+                        IsPerUnit = x.IsPerUnit,
+                        Quantity = x.Quantity,
+                        Type = x.Type
+                    }).ToList() ?? new List<AdditionalInputPackageCost>();
 
-                TotalPackageValue = request.TotalPackageValue > 0 ? request.TotalPackageValue : totalValue, // if totalvalue is supplied, TotalPackageValue = dto.TotalPackageValue, else calculate from items and additional costs
-                UserWalletId = request.UserWalletId,
+                    var additionalCostsTotal = additionalCosts.Sum(x => x.Amount);
 
-                AdditionalCosts = additionalCosts,                
-          
+                    decimal itemsTotal = isPhysical
+                        ? items.Sum(x => x.Quantity * x.UnitCost)
+                        : request.TotalPackageValue;
 
-                RepaymentMode = request.RepaymentMode,
-                RepaymentValue = request.RepaymentValue > 0 ? request.RepaymentValue : repaymentValue,
-                RepaymentPeriodInMonths = request.RepaymentPeriodInMonths,
+                    if (isPhysical &&
+                        request.TotalPackageValue > 0 &&
+                        request.TotalPackageValue != itemsTotal)
+                        throw new Exception("TotalPackageValue mismatch");
 
-                InterestRatePercentage = request.InterestRate,
-                IsInterestApplied = request.ApplyInterest,
+                    var totalPackageValue = itemsTotal;
+                    var totalFinancingValue = totalPackageValue + additionalCostsTotal;
 
-                Currency = request.Currency,
+                    var commitment = request.CommitmentRequired
+                        ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
+                            ? totalPackageValue * (request.CommitmentValue / 100m)
+                            : request.CommitmentValue)
+                        : 0;
 
-                IsGeneratedFromEop = false,
-                Status = InputPackageStatus.Draft,
-                Version = 1,
-                CreatedOn = DateTimeOffset.UtcNow
-            };
+                    var package = new InputPackage
+                    {
+                        OrganizationId = args.organizationId,
+                        CreatedByUserId = args.createdByUserId,
+                        Name = request.Name,
+                        InputFinancingCategoryId = request.InputFinancingCategoryId,
+                        SubScriptionType = request.SubScriptionType,
+                        InputTarget = request.InputTarget,
+                        InputSeason = request.InputSeason,
+                        PackageStructure = request.PackageStructure,
+                        InputPackageItems = items,
+                        AdditionalCosts = additionalCosts,
+                        TotalPackageValue = totalPackageValue,
+                        AdditionalCostAmount = additionalCostsTotal,
+                        TotalFinancingValue = totalFinancingValue,
+                        CommitmentRequired = request.CommitmentRequired,
+                        CommitmentType = request.CommitmentType,
+                        CommitmentValue = commitment,
+                        CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
+                        CommitmentPaymentEndDate = request.CommitmentPaymentEndDate,
+                        UserWalletId = request.UserWalletId,
+                        WalletProviderId = request.PaybackWalletId,
+                        RepaymentFrequency = request.RepaymentFrequency,
+                        RepaymentDuration = request.RepaymentDuration,
+                        RepaymentStartDate = request.RepaymentStartDate,
+                        RepaymentEndDate = request.RepaymentEndDate,
+                        RepaymentGracePeriod = request.RepaymentGracePeriod,
+                        RepaymentMode = request.RepaymentMode,
+                        RepaymentValue = request.RepaymentValue,
+                        RiskCategory = request.RiskCategory,
+                        IsSelectedWalletProvisioned = args.isSelectedWalletProvisioned,
+                        Currency = request.Currency,
+                        IsGeneratedFromEop = false,
+                        Version = 1,
+                        CreatedOn = DateTimeOffset.UtcNow
+                    };
 
-            _context.InputPackages.Add(package);
-            await _context.SaveChangesAsync();
+                    _context.InputPackages.Add(package);
+                    await _context.SaveChangesAsync();
 
-            return true;
+                    var outboxEvent = new OutboxMessage
+                    {
+                        Id = Guid.NewGuid(),
+                        EventType = nameof(InputPackageCreatedEvent),
+                        CreatedOn = DateTime.UtcNow,
+                        IsProcessed = false,
+                        Payload = JsonSerializer.Serialize(new InputPackageCreatedEvent
+                        {
+                            PackageId = package.Id,
+                            OrganizationId = package.OrganizationId,
+                            CreatedByUserId = package.CreatedByUserId
+                        })
+                    };
+
+                    _context.OutboxMessages.Add(outboxEvent);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    return true;
+                }
+                catch(Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
+
+        //   public async Task<bool> CreateInputFinancingPackageConfig(
+        //CreateInputPackageRequest request, InputPackageConfigArgs args)
+        //   {
+        //       if (request == null)
+        //           throw new Exception("Request cannot be null");
+
+        //       var isPhysical = request.PackageStructure == InputPackageStructure.Physical;
+
+        //       if (isPhysical)
+        //       {
+        //           if (request.InputPackageItems == null || !request.InputPackageItems.Any())
+        //               throw new Exception("Physical package must have items");
+        //       }
+        //       else
+        //       {
+        //           if (request.InputPackageItems != null && request.InputPackageItems.Any())
+        //               throw new Exception("Non-physical package cannot have items");
+        //       }
+
+        //       var items = isPhysical
+        //           ? request.InputPackageItems.Select(x => new InputPackageItem
+        //           {
+        //               OrganizationProductId = x.OrganizationProductId,
+        //               Quantity = x.Quantity,
+        //               UnitCost = x.UnitCost
+        //           }).ToList()
+        //           : new List<InputPackageItem>();
+
+        //       var additionalCosts = request.AdditionalCosts?.Select(x => new AdditionalInputPackageCost
+        //       {
+        //           Name = x.Name,
+        //           Description = x.Description,
+        //           Amount = x.Amount,
+        //           IsPerUnit = x.IsPerUnit,
+        //           Quantity = x.Quantity,
+        //           Type = x.Type
+        //       }).ToList() ?? new List<AdditionalInputPackageCost>();
+
+        //       var additionalCostsTotal = additionalCosts.Sum(x => x.Amount);
+
+        //       decimal itemsTotal = 0;
+
+        //       if (isPhysical)
+        //       {
+        //           itemsTotal = items.Sum(x => x.Quantity * x.UnitCost);
+
+        //           if (request.TotalPackageValue > 0 &&
+        //               Math.Round(request.TotalPackageValue, 2) != Math.Round(itemsTotal, 2))
+        //           {
+        //               throw new Exception(
+        //                   $"TotalPackageValue mismatch. Expected {itemsTotal}, got {request.TotalPackageValue}");
+        //           }
+        //       }
+        //       else
+        //       {
+        //           if (request.TotalPackageValue <= 0)
+        //               throw new Exception("Monetary package must have TotalPackageValue > 0");
+
+        //           itemsTotal = request.TotalPackageValue;
+        //       }
+
+        //       var totalPackageValue = itemsTotal;
+
+
+        //       var totalFinancingValue = totalPackageValue + additionalCostsTotal;
+
+        //       var commitment = request.CommitmentRequired
+        //           ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
+        //               ? totalPackageValue * request.CommitmentValue  //change to totalFinancingValue * request.CommitmentValue if commitment should be calculated on total financing value instead of total package value
+        //               : request.CommitmentValue)
+        //           : 0;
+
+        //       var package = new InputPackage
+        //       {
+        //           OrganizationId = args.organizationId,
+        //           CreatedByUserId = args.createdByUserId,
+        //           Name = request.Name,
+
+        //           InputFinancingCategoryId = request.InputFinancingCategoryId,
+        //           SubScriptionType = request.SubScriptionType,
+        //           InputTarget = request.InputTarget,
+        //           InputSeason = request.InputSeason,
+
+        //           PackageStructure = request.PackageStructure,
+
+        //           InputPackageItems = items,
+        //           AdditionalCosts = additionalCosts,
+
+        //           TotalPackageValue = totalPackageValue,
+        //           AdditionalCostAmount = additionalCostsTotal,
+
+        //           TotalFinancingValue = totalFinancingValue,
+
+        //           CommitmentRequired = request.CommitmentRequired,
+        //           CommitmentType = request.CommitmentType,
+        //           CommitmentValue = commitment,
+
+        //           CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
+        //           CommitmentPaymentEndDate = request.CommitmentPaymentEndDate.HasValue ? request.CommitmentPaymentEndDate.Value : null,
+
+        //           UserWalletId = request.UserWalletId.HasValue ? request.UserWalletId.Value : null,
+        //           WalletProviderId = request.PaybackWalletId,
+
+
+        //           RepaymentFrequency = request.RepaymentFrequency,
+        //           RepaymentDuration = request.RepaymentDuration,
+        //           RepaymentStartDate = request.RepaymentStartDate.HasValue ? request.RepaymentStartDate.Value : null,
+        //           RepaymentEndDate = request.RepaymentEndDate.HasValue ? request.RepaymentEndDate.Value : null,
+        //           RepaymentGracePeriod = request.RepaymentGracePeriod.HasValue ? request.RepaymentGracePeriod.Value : null,
+        //           RepaymentMode = request.RepaymentMode,
+        //           RepaymentValue = request.RepaymentValue,
+
+        //           RiskCategory = request.RiskCategory,
+
+        //           IsSelectedWalletProvisioned = args.isSelectedWalletProvisioned,
+        //           Currency = request.Currency,
+
+        //           IsGeneratedFromEop = false,
+        //           Version = 1,
+        //           CreatedOn = DateTimeOffset.UtcNow
+        //       };
+
+
+        //       _context.InputPackages.Add(package);
+        //       await _context.SaveChangesAsync();
+
+        //       return true;
+        //   }
+
+        //update package configuration
         public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
         {
             var eop = await _context.EconomicsOfProductions
@@ -324,7 +516,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 RiskCategory = risk,
                 RepaymentMode = request.RepaymentMode,
-                RepaymentPeriodInMonths = request.RepaymentPeriodInMonths,
+                RepaymentDuration = request.RepaymentPeriodInMonths,
 
                 InterestRatePercentage = request.InterestRate,
                 IsInterestApplied = request.ApplyInterest,
@@ -335,9 +527,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 Currency = request.Currency,
 
-                Status = request.AutoApprove
-                    ? InputPackageStatus.Published
-                    : InputPackageStatus.Draft,
+                //Status = request.AutoApprove
+                //    ? InputPackageStatus.Published
+                //    : InputPackageStatus.Draft,
 
                 Version = 1,
                 CreatedOn = DateTimeOffset.UtcNow
@@ -422,8 +614,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var query = _context.InputPackages
                 .Where(x => x.OrganizationId == request.OrganizationId && x.IsActive);
 
-            if (request.Status.HasValue)
-                query = query.Where(x => x.Status == request.Status);
+            //if (request.Status.HasValue)
+            //    query = query.Where(x => x.IsActive == request.Status);
 
             if (request.IsGeneratedFromEop.HasValue)
                 query = query.Where(x => x.IsGeneratedFromEop == request.IsGeneratedFromEop);
@@ -443,7 +635,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Name = x.Name,
                     TotalPackageValue = x.TotalPackageValue,
                     RepaymentValue = x.RepaymentValue,
-                    Status = x.Status,
+                  //  Status = x.Status,
                     IsGeneratedFromEop = x.IsGeneratedFromEop,
                     Currency = x.Currency
                 })
@@ -473,7 +665,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Name = package.Name,
                 TotalPackageValue = package.TotalPackageValue,
                 RepaymentValue = package.RepaymentValue,
-                Status = package.Status,
+               // Status = package.Status,
                 IsGeneratedFromEop = package.IsGeneratedFromEop,
                 Currency = package.Currency,
 

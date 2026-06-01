@@ -30,7 +30,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
-        private readonly IInputFinancingManager _inputFinancingManager;
         private readonly IOnBoardingManager _onboardingManager;
         private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
         private readonly IMembershipManager _membershipManager;
@@ -41,14 +40,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IBusinessManager businessManager,
              INomaOSWalletService walletService,
              IOrganizationManager organizationManager,
-             IInputFinancingManager inputFinancingManager,
              IMembershipManager membershipManager,
              IOnBoardingManager onboardingManager, IFarmMappingManager farmMappingManager) : base(httpContextAccessor)
         {
             _walletService = walletService;
             _farmMappingManager = farmMappingManager;
             _organizationManager = organizationManager;
-            _inputFinancingManager = inputFinancingManager;
             _businessManager = businessManager;
             _onboardingManager = onboardingManager;
             _membershipManager = membershipManager;
@@ -1592,165 +1589,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #endregion OrganizationWallet
 
-
-        #region InputFinancing
-
-        [HttpPost("eop")]
-        public async Task<IActionResult> CreateEopAsync([FromBody] CreateEopRequest model, [FromQuery] ListQueryParams args)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
-
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-
-                var result = await _inputFinancingManager.CreateEopAsync(model,args);
-                return Ok(new Response<EopResponseDto> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpPost("package/manual")]
-        public async Task<IActionResult> CreateManualInputPackageAsync([FromBody] CreateInputPackageRequest model, [FromQuery] ListQueryParams args)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
-
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-
-                args.UserId = string.IsNullOrEmpty(args.UserId) ? CurrentUserId : args.UserId;
-                var result = await _inputFinancingManager.CreateManualInputPackageAsync(model, args);
-                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpPost("package/generate-from-eop")]
-        public async Task<IActionResult> GenerateInputPackageFromEopAsync([FromBody] GenerateInputPackageRequest model, [FromQuery] ListQueryParams args)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
-
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-
-                var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
-                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpGet("eop")]
-        public async Task<IActionResult> GetEopByIdAsync( [FromQuery] ListQueryParams args)
-        {
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-                if (args.Id <= 0) return BadRequest(new Response<string> { Message = "EOP Id is required", Succeeded = false });
-
-                var result = await _inputFinancingManager.GetEopByIdAsync(args);
-                return Ok(new Response<EopDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpGet("eops")]
-        public async Task<IActionResult> GetEopsAsync([FromQuery] EopFilterRequest filter, [FromQuery] ListQueryParams args)
-        {
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                var result = await _inputFinancingManager.GetEopsAsync(filter, args);
-                return Ok(new Response<PagedResult<EopDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpGet("package")]
-        public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
-        {
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-                if (args.Id<= 0) return BadRequest(new Response<string> { Message = "Package Id is required", Succeeded = false });
-
-                var result = await _inputFinancingManager.GetPackageByIdAsync(args);
-                return Ok(new Response<InputPackageDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        [HttpGet("packages")]
-        public async Task<IActionResult> GetPackagesAsync([FromQuery] InputPackageFilterRequest filter, [FromQuery] ListQueryParams args)
-        {
-            try
-            {
-                var result = await _inputFinancingManager.GetPackagesAsync(filter, args);
-                return Ok(new Response<PagedResult<InputPackageDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
-
-        #endregion InputFinancing
-        #region OrganizationProduct
+      #region OrganizationProduct
         [HttpPost("create-product")]
         public async Task<IActionResult> CreateOrganizationProduct([FromBody] OrganizationProductDto model, [FromQuery] ListQueryParams args)
         {

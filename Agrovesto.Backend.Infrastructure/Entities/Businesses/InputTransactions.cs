@@ -10,7 +10,16 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-
+    public class OutboxMessage
+    {
+     
+        public Guid Id { get; set; }
+        public string EventType { get; set; }
+        public string Payload { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public DateTime? ProcessedOn { get; set; }
+        public bool IsProcessed { get; set; }
+    }
     /**Configuration Layer
 InputPackage
 InputPackageItem
@@ -44,7 +53,7 @@ RepaymentTransaction
         public long OrganizationProductId { get; set; } //input type Id
         public OrganizationProduct OrganizationProduct { get; set; }
         public decimal Quantity { get; set; }
-        public string UnitOfMeasure { get; set; } // e.g., Bag, Kg, Litre
+        public string? UnitOfMeasure { get; set; } // e.g., Bag, Kg, Litre
         public decimal UnitCost { get; set; }
         public decimal? OverrideCost { get; set; }
         public bool IsActive { get; set; } = true;
@@ -55,49 +64,67 @@ RepaymentTransaction
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
+        public string Name { get; set; } // e.g., Maize wet season
         public long InputFinancingCategoryId { get; set; }
         public InputFinancingCategory InputFinancingCategory { get; set; }
         public InputSubScriptionType SubScriptionType { get; set; }
-        public string Name { get; set; } // e.g., Maize wet season
+        
         public long OrganizationId { get; set; }
         public Organization Organization { get; set; }
+
+        public string? InputTarget { get; set; } // e.g. crop, livestock, fishery
+        public string? InputSeason { get; set; } // e.g. 2024 wet season
         public InputPackageStructure PackageStructure { get; set; }
         public List<InputPackageItem> InputPackageItems { get; set; }
         public decimal TotalPackageValue { get; set; } // if package structure is physical, total would be the sum of the cost, if it is monetary, total is the amount entered
        public bool CommitmentRequired { get; set; } // if true, farmer must commit to repay before receiving the package
         public CommitmentType CommitmentType { get; set; } // if commitment required, how is the commitment calculated
         public decimal CommitmentValue { get; set; } // value of the commitment, either a static fee or percentage
-        public List<AdditionalInputPackageCost> AdditionalCosts { get; set; }
-        public RiskCategory RiskCategory { get; set; } // Low, Medium, High
-        public InputPackageRepaymentMode RepaymentMode { get; set; } // Low, Medium, High
-       
-        public int RepaymentPeriodInMonths { get; set; } //how long does the farmer have to repay, in months
-        public long? UserWalletId { get; set; } // if package structure is monetary, this is the wallet the money will be disbursed to
-        public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
+        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
+        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
         public decimal RepaymentValue { get; set; } // amount farmer has to repay, if repayment mode is cash or hybrid, this is the cash amount, if repayment mode is produce, this is the value of the produce to be repaid
-        public string? Season { get; set; } // e.g. "Wet Season 2024"
-        public InputPackageStatus Status { get; set; }
+        public long? UserWalletId { get; set; } // if wallet has not been provisioned, it should be null, this allows for package configuration before wallet setup, and also allows for packages that do not require wallet disbursement (e.g. physical input delivery by 3rd party)
+        public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
+
+        public long? WalletProviderId { get; set; }
+        public WalletProvider WalletProvider { get; set; }
+
+        public RepaymentFrequency RepaymentFrequency { get; set; }
+        public int RepaymentDuration { get; set; } //how long does the farmer have to repay, in months
+        public InputPackageRepaymentMode RepaymentMode { get; set; } // Low, Medium, High
+        public RiskCategory RiskCategory { get; set; } // Low, Medium, High
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
+        public bool IsSelectedWalletProvisioned { get; set; } // indicates if the user wallet for disbursement has been provisioned, this is important for package activation and disbursement readiness
+        public decimal AdditionalCostAmount { get; set; } // total of all additional costs, this is important for calculating total repayment amount and for farmer commitment
+        public List<AdditionalInputPackageCost> AdditionalCosts { get; set; }
+        public decimal TotalFinancingValue { get; set; }// => TotalPackageValue + AdditionalCostAmount; // total cost of the package including additional costs, this is important for calculating total repayment amount and for farmer commitment
+        public RepaymentScheduleType ScheduleType { get; set; }
+        public string Currency { get; set; } = "NGN";
+
+       // public InputPackageStatus Status { get; set; }
         public bool IsActive { get; set; } = true;
+
         public int Version { get; set; }
         public long? ParentPackageId { get; set; }
         public InputPackage ParentPackage { get; set; }
         public List<InputPackage> ChildVersions { get; set; }
+
         public bool AllowPartialUtilization { get; set; }
         public DateTimeOffset? PlannedDisbursementDate { get; set; }
         public decimal InterestRatePercentage { get; set; }
         public bool IsInterestApplied { get; set; } = false;
-        public RepaymentScheduleType ScheduleType { get; set; }
        
-        public string Currency { get; set; } = "NGN";
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? UpdatedOn { get; set; }
-        public long CreatedByUserId { get; set; }
+        public string CreatedByUserId { get; set; }
         public long? EconomicsOfProductionId { get; set; }
         public EconomicsOfProduction EconomicsOfProduction { get; set; }
         public bool IsGeneratedFromEop { get; set; } =false;
         public bool IsEditable { get; set; } = true;
         public DateTimeOffset? PublishedOn { get; set; }
- 
+      
     }
   public class AdditionalInputPackageCost
     {

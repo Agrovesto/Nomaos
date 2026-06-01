@@ -103,32 +103,55 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public long? OrganizationProductId { get; set; } // null = service cost
     }
 
-
+    public class InputPackageConfigArgs
+    {
+        public long organizationId { get; set; }
+     public bool isSelectedWalletProvisioned { get; set; } = false;
+        public string createdByUserId { get; set; }
+    }
     public class CreateInputPackageRequest
     {
-        public long PaybackWalletId { get; set; } // wallet type
-        public long UserWalletId { get; set; }
-        public  decimal TotalPackageValue { get; set; }
-        public decimal RepaymentValue { get; set; }
         public string Name { get; set; }
-        public long OrganizationId { get; set; }
         public long InputFinancingCategoryId { get; set; }
         public InputSubScriptionType SubScriptionType { get; set; }
-        public InputPackageStructure Structure { get; set; }
-
+        public string InputTarget { get; set; } // e.g. crop, livestock, fishery
+        public string InputSeason { get; set; } // e.g. 2024 wet season
+        public InputPackageStructure PackageStructure { get; set; }
         public List<CreateInputPackageItemRequest> InputPackageItems { get; set; }
-
-        public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; }
-
-        public InputPackageRepaymentMode RepaymentMode { get; set; }
-        public int RepaymentPeriodInMonths { get; set; }
-
+        public decimal TotalPackageValue { get; set; } //calculate if structure is physical
         public bool CommitmentRequired { get; set; }
         public CommitmentType CommitmentType { get; set; }
-        public decimal CommitmentValue { get; set; }
+        public decimal CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
+        
+        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
+        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
 
-        public bool ApplyInterest { get; set; }
-        public decimal InterestRate { get; set; }
+        public long PaybackWalletId { get; set; } // wallet provider type, e.g etransact, momo, etc
+        public long? UserWalletId { get; set; }
+        public RepaymentFrequency RepaymentFrequency { get; set; }
+        public int RepaymentDuration { get; set; } //e.g 1 week, 4 month, 1 day etc
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }        
+        public InputPackageRepaymentMode RepaymentMode { get; set; }
+        public decimal RepaymentValue { get; set; }
+        public RiskCategory RiskCategory { get; set; }
+
+        public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; }
+        
+        
+ 
+
+        
+
+        
+
+     
+       
+ 
+
+        //public bool ApplyInterest { get; set; }
+        //public decimal InterestRate { get; set; }
 
         public string Currency { get; set; } = "NGN";
     }
@@ -137,7 +160,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public long OrganizationProductId { get; set; }
         public decimal Quantity { get; set; }
         public decimal UnitCost { get; set; }
-        public string UnitOfMeasure { get; set; }
+        public string? UnitOfMeasure { get; set; }
     }
     public class CreateAdditionalCostRequest
     {

@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
@@ -11,13 +12,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IInputFinancingManager
     {
         Task<EopResponseDto> CreateEopAsync(CreateEopRequest request, ListQueryParams query);
-        Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request, ListQueryParams query);
+        Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, ListQueryParams query);
         Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query);
         Task<EopDto> GetEopByIdAsync(ListQueryParams query);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request, ListQueryParams query);
@@ -30,12 +32,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IUserWalletRepository _userWalletRepository;
         private readonly IBusinessRepository _businessRepository;
         private readonly IInputFinancingRepository _inputFinancingRepository;
-
-        public InputFinancingManager(IUserWalletRepository userWalletRepository, IInputFinancingRepository inputFinancingRepository, IBusinessRepository businessRepository)
+        private readonly IWalletProviderRepository _walletproviderRepo;
+        public InputFinancingManager(IUserWalletRepository userWalletRepository,
+            IInputFinancingRepository inputFinancingRepository, IBusinessRepository businessRepository,
+            IWalletProviderRepository walletProviderRepository)
         {
             _userWalletRepository = userWalletRepository;
             _inputFinancingRepository = inputFinancingRepository;
             _businessRepository = businessRepository;
+            _walletproviderRepo = walletProviderRepository;
         }
         private async Task FetchOrganizationDetails(ListQueryParams query)
         {
@@ -59,26 +64,56 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _inputFinancingRepository.CreateEopAsync(request);
         }
 
-        public async Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request, ListQueryParams query)
+        public async Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, ListQueryParams query)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-            if (hasOrg != null)
+            if (request == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Request cannot be null");
+
+            if (query == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Query cannot be null");
+
+            var args = new InputPackageConfigArgs
             {
-                request.OrganizationId = hasOrg.OrganizaionId;
+                createdByUserId = query.UserId
+            };
+
+            var organization = await _businessRepository
+          .GetOrganizationByCodeAsync(query.organizationCode);
+
+            if (organization == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Organization not found");
+
+            args.organizationId = organization.OrganizaionId;
+
+            if (request.PaybackWalletId <= 0)
+            {
+                return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
             }
-            if (request.PaybackWalletId > 0)
+
+            var provider = await _walletproviderRepo.Get(request.PaybackWalletId);
+
+            if (provider == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
+
+            var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
             {
-                //get userwalletId by userwallettype
-                var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
-                {
-                    Id = request.PaybackWalletId,
-                    UserId = query.UserId,
-                    businessCode = query.businessCode
-                });
-                if (userWallet == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "User Wallet not found"); }
+                Id = request.PaybackWalletId,
+                UserId = query.UserId,
+                businessCode = query.businessCode
+            });
+
+            if (userWallet != null)
+            {
+                args.isSelectedWalletProvisioned = true;
                 request.UserWalletId = userWallet.Id;
             }
-            return await _inputFinancingRepository.CreateManualInputPackageAsync(request);
+            else
+            {
+                args.isSelectedWalletProvisioned = false;
+            }
+
+         
+            return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
         }
 
         public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query)
