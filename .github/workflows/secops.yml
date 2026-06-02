@@ -2,12 +2,12 @@
 name: "SecOps Pipeline"
 
 on:
-  pull_request:
+  # pull_request:
     # branches: [master, staging]
     types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
-  push:
+ # push:
     # branches: [master, staging]
     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
