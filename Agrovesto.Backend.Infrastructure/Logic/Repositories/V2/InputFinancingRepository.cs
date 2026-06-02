@@ -376,7 +376,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var query = _context.InputPackages
                 .Include(x => x.InputFinancingCategory)
                 
-                .Where(x => x.OrganizationId == request.OrganizationId && x.IsActive);
+                .Where(x => x.OrganizationId == request.OrganizationId
+               // && x.IsActive
+                );
 
             var totalCount = await query.CountAsync();
 
