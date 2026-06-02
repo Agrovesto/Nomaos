@@ -589,7 +589,7 @@ V2/Internal/NomaOSWalletService.cs
  microsoft.aspnetcore.authentication.jwtbearer/8.0.4/lib/net8.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
  microsoft.aspnetcore.identity.entityframeworkcore/8.0.4/lib/net8.0/Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
  microsoft.bcl.asyncinterfaces/6.0.0/lib/netstandard2.1/Microsoft.Bcl.AsyncInterfaces.dll
- microsoft.data.sqlclient/5.1.5/ref/net6.0/Microsoft.Data.SqlClient.dll
+ microsoft.data.sqlclient/5.1.5/ref/net8.0/Microsoft.Data.SqlClient.dll
  microsoft.data.sqlite.core/8.0.0/lib/net8.0/Microsoft.Data.Sqlite.dll
  microsoft.entityframeworkcore.abstractions/8.0.4/lib/net8.0/Microsoft.EntityFrameworkCore.Abstractions.dll
  microsoft.entityframeworkcore.relational/8.0.4/lib/net8.0/Microsoft.EntityFrameworkCore.Relational.dll

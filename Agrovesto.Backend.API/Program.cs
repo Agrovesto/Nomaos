@@ -51,7 +51,7 @@ if (!string.IsNullOrEmpty(logFilePath))
 Log.Logger = logConfig
     .WriteTo.AWSSeriLog(new AWSLoggerConfig
     {
-        LogGroup = "/nomaos/staging/api",
+        LogGroup = "/nomaos/prod/api",
         Region = "eu-west-1",
     })
     .CreateLogger();
@@ -80,7 +80,7 @@ if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.
             reloadOnChange: true,
             reloadCheckIntervalSeconds: 60
         ),
-        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
+        "nomaos/prod/appsettings", // Path in Vault: secret/nomaos/prod/api
         "kv"              // Your KV engine name
     );
     
