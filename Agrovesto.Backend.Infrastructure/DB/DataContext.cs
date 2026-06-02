@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                //.AddJsonFile("appsettings.Development.json", optional: false)
+                .AddJsonFile("appsettings.json", optional: false)
                 .AddJsonFile($"appsettings.{environment}.json", optional: true)
                 .AddEnvironmentVariables()
                 .Build();
@@ -452,6 +452,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<InputTransaction> InputTransactions { get; set; }
         public DbSet<InputAllocation> InputAllocations { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
         public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<StorageCategory> StorageCategories { get; set; }

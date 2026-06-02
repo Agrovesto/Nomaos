@@ -75,7 +75,7 @@ RepaymentTransaction
         public string? InputTarget { get; set; } // e.g. crop, livestock, fishery
         public string? InputSeason { get; set; } // e.g. 2024 wet season
         public InputPackageStructure PackageStructure { get; set; }
-        public List<InputPackageItem> InputPackageItems { get; set; }
+        public List<InputPackageItem> InputPackageItems { get; set; } = new();
         public decimal TotalPackageValue { get; set; } // if package structure is physical, total would be the sum of the cost, if it is monetary, total is the amount entered
        public bool CommitmentRequired { get; set; } // if true, farmer must commit to repay before receiving the package
         public CommitmentType CommitmentType { get; set; } // if commitment required, how is the commitment calculated
@@ -98,7 +98,7 @@ RepaymentTransaction
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
         public bool IsSelectedWalletProvisioned { get; set; } // indicates if the user wallet for disbursement has been provisioned, this is important for package activation and disbursement readiness
         public decimal AdditionalCostAmount { get; set; } // total of all additional costs, this is important for calculating total repayment amount and for farmer commitment
-        public List<AdditionalInputPackageCost> AdditionalCosts { get; set; }
+        public List<AdditionalInputPackageCost> AdditionalCosts { get; set; } = new();
         public decimal TotalFinancingValue { get; set; }// => TotalPackageValue + AdditionalCostAmount; // total cost of the package including additional costs, this is important for calculating total repayment amount and for farmer commitment
         public RepaymentScheduleType ScheduleType { get; set; }
         public string Currency { get; set; } = "NGN";
@@ -109,7 +109,7 @@ RepaymentTransaction
         public int Version { get; set; }
         public long? ParentPackageId { get; set; }
         public InputPackage ParentPackage { get; set; }
-        public List<InputPackage> ChildVersions { get; set; }
+        public List<InputPackage> ChildVersions { get; set; } = new();
 
         public bool AllowPartialUtilization { get; set; }
         public DateTimeOffset? PlannedDisbursementDate { get; set; }
@@ -119,6 +119,7 @@ RepaymentTransaction
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? UpdatedOn { get; set; }
         public string CreatedByUserId { get; set; }
+        public string? UpdatedByUserId { get; set; }
         public long? EconomicsOfProductionId { get; set; }
         public EconomicsOfProduction EconomicsOfProduction { get; set; }
         public bool IsGeneratedFromEop { get; set; } =false;
@@ -357,5 +358,28 @@ RepaymentTransaction
         Disbursement = 1,  // Inputs given to farmer
         Repayment = 2      // Farmer paying back
     }
-   
+
+
+
+    public class RepaymentSchedule
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long InputPackageId { get; set; }
+
+        public int InstallmentNumber { get; set; }
+
+        public DateTimeOffset DueDate { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public bool IsWithinGracePeriod { get; set; }
+
+        public bool IsPaid { get; set; }
+
+        public DateTimeOffset? PaidOn { get; set; }
+    }
 }

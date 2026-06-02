@@ -12,4 +12,10 @@ namespace Agrovesto.Backend.Core.V2.Events
         public long OrganizationId { get; set; }
         public string CreatedByUserId { get; set; }
     }
+    public class InputPackageConfigurationUpdatedEvent
+    {
+        public long PackageId { get; set; }
+        public long OrganizationId { get; set; }
+        public DateTime OccurredOn { get; set; } = DateTime.UtcNow;
+    }
 }

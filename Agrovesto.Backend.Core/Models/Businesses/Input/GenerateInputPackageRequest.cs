@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -107,7 +108,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     {
         public long organizationId { get; set; }
      public bool isSelectedWalletProvisioned { get; set; } = false;
-        public string createdByUserId { get; set; }
+        public string? createdByUserId { get; set; }
+
+        public string? OrganizationCode { get; set; }
     }
     public class CreateInputPackageRequest
     {
@@ -117,7 +120,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string InputTarget { get; set; } // e.g. crop, livestock, fishery
         public string InputSeason { get; set; } // e.g. 2024 wet season
         public InputPackageStructure PackageStructure { get; set; }
-        public List<CreateInputPackageItemRequest> InputPackageItems { get; set; }
+        public List<CreateInputPackageItemRequest> InputPackageItems { get; set; } = new();
         public decimal TotalPackageValue { get; set; } //calculate if structure is physical
         public bool CommitmentRequired { get; set; }
         public CommitmentType CommitmentType { get; set; }
@@ -137,9 +140,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal RepaymentValue { get; set; }
         public RiskCategory RiskCategory { get; set; }
 
-        public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; }
-        
-        
+  
+
+        public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; } = new();
+
+        public decimal TotalFinancingValue { get; set; }
  
 
         
@@ -173,7 +178,19 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
 
 
+    public class UpdateInputPackageConfigRequest
+    {
+        public DateTimeOffset CommitmentPaymentStartDate { get; set; }
+        public DateTimeOffset CommitmentPaymentEndDate { get; set; }
 
+        public RepaymentFrequency RepaymentFrequency { get; set; }
+        public int RepaymentDuration { get; set; }
+
+        public DateTimeOffset RepaymentStartDate { get; set; }
+        public DateTimeOffset RepaymentEndDate { get; set; }
+
+        public DateTimeOffset RepaymentGracePeriod { get; set; }
+    }
     //views
     public class EopDto
     {
@@ -201,22 +218,55 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class InputPackageDto
     {
+        public long WalletProviderId { get; set; }
+        public bool IsActive { get; set; }
         public long Id { get; set; }
         public string Name { get; set; }
+        public string FinancingCategory { get; set; }
+        public string InputTarget { get; set; } // e.g. crop, livestock, fishery
+        public string InputSeason { get; set; } // e.g. 2024 wet season
+        public string SubscriptionType { get; set; }
+        public bool IsRepaymentWalletConfigured { get; set; }
+        public InputPackageFinancingStructureDto FinancialStructure { get; set; }
+        public InputPackageRepaymentWallet RepaymentWallet { get; set; }
 
-        public decimal TotalPackageValue { get; set; }
-        public decimal RepaymentValue { get; set; }
-
-        public InputPackageStatus Status { get; set; }
-
-        public bool IsGeneratedFromEop { get; set; }
-
-        public string Currency { get; set; }
-
-        public List<InputPackageItemDto> Items { get; set; }
+        public List<InputPackageBreakdownDto> PackageInputs { get; set; }
         public List<AdditionalCostDto> AdditionalCosts { get; set; }
     }
-
+    public class InputPackageFinancingStructureDto
+    {
+        public decimal TotalFinancingValue { get; set; }
+        public bool CommitmentRequired { get; set; }
+        public decimal CommitmentValue { get; set; }
+        public decimal RepaymentValue { get; set; }
+        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
+        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
+      //  public long RepaymentDuration { get; set; } // calculate the frequency and the supplied duration e.g 6 months, 1 year, etc
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
+        public string RepaymentModel { get; set; }
+        public string RiskCategory { get; set; }
+        public string RepaymentPeriod { get; set; }
+    }
+    public class  InputPackageRepaymentWallet
+    {
+        public long WalletId { get; set; }
+        public string WalletProvider { get; set; }
+        public string WalletName { get; set; }
+        public string WalletNumber { get; set; }
+        
+    }
+   public class InputPackageBreakdownDto
+    {
+        public string InputType { get; set; }
+        public long InputId { get; set; }
+        public long OrganizationProductId { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal TotalCost { get; set; }
+    }
+    
     public class InputPackageItemDto
     {
         public long OrganizationProductId { get; set; }
@@ -231,12 +281,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class PagedResult<T>
     {
         public List<T> Items { get; set; }
-        public int TotalCount { get; set; }
+        public int Count { get; set; }
 
-        public int Page { get; set; }
+        public int PageNumber { get; set; }
         public int PageSize { get; set; }
 
-        public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+        public int TotalPages => (int)Math.Ceiling((double)Count / PageSize);
     }
     public class EopFilterRequest : PagedRequest
     {
@@ -256,5 +306,67 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public InputPackageStatus? Status { get; set; }
         public bool? IsGeneratedFromEop { get; set; }
         public long? CategoryId { get; set; }
+    }
+
+
+    public class InputPackageListModel
+    {
+        public long Id { get; set; }
+        public string Name { get; set; }
+        public string FinancingCategory { get; set; }
+        public string InputTarget { get; set; } // e.g. crop, livestock, fishery
+        public decimal TotalFinancingValue { get; set; } //calculate if structure is physical
+        public decimal CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
+
+        public string RepaymentModel { get; set; }
+        public string RiskCategory { get; set; }
+
+        public long Subscribers { get; set; }
+        public bool IsActive { get; set; }
+    }
+    public class ReplacePackageItemRequestArgs
+    {
+        public long PackageId { get; set; }
+
+        public long InputId { get; set; }
+        public string? OrganizationCode { get; set; }
+        public long OrganizationId { get; set; }
+
+    }
+
+public class ReplacePackageItemRequest
+    {
+        [Required]
+        public long PackageId { get; set; }
+
+        [Required]
+        public long ItemId { get; set; }
+
+        [Required]
+        public long OrganizationProductId { get; set; }
+
+        [Range(0.01, double.MaxValue)]
+        public decimal Quantity { get; set; }
+
+        public string? UnitOfMeasure { get; set; }
+
+        [Range(0.01, double.MaxValue)]
+        public decimal UnitCost { get; set; }
+
+    }
+
+  
+    public class RepaymentEngineRequest
+    {
+        public long PackageId { get; set; }
+        public RepaymentFrequency Frequency { get; set; }
+        public int Duration { get; set; }
+
+        public DateTimeOffset StartDate { get; set; }
+        public DateTimeOffset EndDate { get; set; }
+
+        public DateTimeOffset GracePeriod { get; set; }
+
+        public decimal TotalAmount { get; set; }
     }
 }

@@ -222,6 +222,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Count = type.Count,
                     PageNumber = args.PageNumber,
                     PageSize = args.PageSize,
+                    
                 });
             }
             catch (BaseException ex)

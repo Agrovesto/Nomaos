@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure
 {
+    using Agrovesto.Backend.Core.Exceptions;
     using Microsoft.AspNetCore.Http;
     using Microsoft.Data.SqlClient;
     using Microsoft.EntityFrameworkCore;
@@ -55,14 +56,31 @@ namespace Agrovesto.Backend.Infrastructure
             context.Response.StatusCode = StatusCodes.Status500InternalServerError;
             context.Response.ContentType = "application/json";
 
+            var message = ResolveExceptionMessage(ex);
+
             await context.Response.WriteAsJsonAsync(new
             {
                 succeeded = false,
-                message = "An unexpected error occurred. Please contact support if the issue persists.",
+                message,
                 traceId
             });
         }
+        private static string ResolveExceptionMessage(Exception ex)
+        {
+            if (ex is BaseException bex && !string.IsNullOrWhiteSpace(bex.ExceptionMessage))
+                return bex.ExceptionMessage;
 
+            if (!string.IsNullOrWhiteSpace(ex.Message) &&
+                !ex.Message.Contains("See the inner exception") &&
+                !ex.Message.Contains("An error occurred"))
+                return ex.Message;
+
+            if (ex.InnerException != null &&
+                !string.IsNullOrWhiteSpace(ex.InnerException.Message))
+                return ex.InnerException.Message;
+
+            return "An unexpected error occurred. Please contact support if the issue persists.";
+        }
         private async Task HandleDbException(HttpContext context, DbUpdateException ex)
         {
             if (context.Response.HasStarted)

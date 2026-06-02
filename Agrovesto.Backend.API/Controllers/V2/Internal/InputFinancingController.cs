@@ -128,9 +128,115 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
-
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
             var result = await _inputFinancingManager
                 .CreateInputFinancingPackageConfig(model, args);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Created Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpPatch("update-package")]
+        public async Task<IActionResult> UpdateInputPackageConfig(
+   [FromBody] UpdateInputPackageConfigRequest model,
+   [FromQuery] ReplacePackageItemRequestArgs args,
+   [FromQuery] InputPackageConfigArgs query)
+        {
+            query.OrganizationCode ??= OrganizationCode;
+            query.createdByUserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(query.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+          
+            var result = await _inputFinancingManager
+                .UpdateInputPackageConfig(args.PackageId, model, query);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Created Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+
+        [HttpGet("package")]
+        public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
+        {
+            args.organizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.organizationCode) ||
+                string.IsNullOrWhiteSpace(args.businessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            if (args.Id <= 0)
+            {
+                return BadRequest(ApiResponse<object>.Fail(
+                    "Package Id is required",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.GetPackageByIdAsync(args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<InputPackageDto>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+        [HttpPatch("change-package-input")]
+        public async Task<IActionResult> ReplacePackageItemAsync([FromBody] ReplacePackageItemRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+          //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) )
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.ReplacePackageItemAsync(request,args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
 
             return Ok(ApiResponse<bool>.Success(
                 result,
@@ -138,70 +244,126 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-        //public async Task<IActionResult> CreateManualInputPackageAsync([FromBody] CreateInputPackageRequest model, [FromQuery] ListQueryParams args)
-        //{
-        //    if (!ModelState.IsValid)
-        //        return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
 
-        //    try
-        //    {
-        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
-        //        if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-
-        //        args.UserId = string.IsNullOrEmpty(args.UserId) ? CurrentUserId : args.UserId;
-        //        var result = await _inputFinancingManager.CreateInputFinancingPackageConfig(model, args);
-        //        return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-        //    }
-        //}
-
-
-
-        [HttpGet("package")]
-        public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
+        [HttpDelete("remove-package-input")]
+        public async Task<IActionResult> RemoveItemFromPackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-                if (args.Id <= 0) return BadRequest(new Response<string> { Message = "Package Id is required", Succeeded = false });
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
 
-                var result = await _inputFinancingManager.GetPackageByIdAsync(args);
-                return Ok(new Response<InputPackageDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
-            }
-            catch (BaseException ex)
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
             {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
             }
-            catch (Exception ex)
+
+            var result = await _inputFinancingManager.RemoveItemFromPackage(args);
+
+            if (result == null)
             {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
             }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
         }
+        [HttpDelete("deactivate-package")]
+        public async Task<IActionResult> DeactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
 
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.DeactivateInputPackage(args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpPatch("reactivate-package")]
+        public async Task<IActionResult> ReactivatePackage( [FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.ReactivatePackageAsync(args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
         [HttpGet("packages")]
         public async Task<IActionResult> GetPackagesAsync([FromQuery] InputPackageFilterRequest filter, [FromQuery] ListQueryParams args)
         {
-            try
+            args.organizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.organizationCode))
             {
-                var result = await _inputFinancingManager.GetPackagesAsync(filter, args);
-                return Ok(new Response<PagedResult<InputPackageDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
             }
-            catch (BaseException ex)
+            if (string.IsNullOrWhiteSpace(args.businessCode))
             {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
             }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
+            var result = await _inputFinancingManager
+              .GetPackagesAsync(args);
+
+            return Ok(ApiResponse<List<InputPackageListModel>>.SuccessPaged(
+      result,
+      "Successful",
+      ResponseCodes.Success,
+      HttpContext.TraceIdentifier
+  ));
         }
 
         #endregion InputFinancing

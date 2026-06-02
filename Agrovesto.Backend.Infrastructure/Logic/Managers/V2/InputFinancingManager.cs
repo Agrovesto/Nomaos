@@ -20,11 +20,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     {
         Task<EopResponseDto> CreateEopAsync(CreateEopRequest request, ListQueryParams query);
         Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, ListQueryParams query);
+        Task<bool> DeactivateInputPackage(ReplacePackageItemRequestArgs query);
         Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query);
         Task<EopDto> GetEopByIdAsync(ListQueryParams query);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request, ListQueryParams query);
         Task<InputPackageDto> GetPackageByIdAsync(ListQueryParams query);
-        Task<PagedResult<InputPackageDto>> GetPackagesAsync(InputPackageFilterRequest request, ListQueryParams query);
+        Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams query);
+        Task<bool> ReactivatePackageAsync(ReplacePackageItemRequestArgs query);
+        Task<bool> RemoveItemFromPackage(ReplacePackageItemRequestArgs query);
+        Task<bool> ReplacePackageItemAsync(ReplacePackageItemRequest request, ReplacePackageItemRequestArgs query);
+        Task<bool> UpdateInputPackageConfig(long packageId, UpdateInputPackageConfigRequest request, InputPackageConfigArgs args);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -145,13 +150,105 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<InputPackageDto> GetPackageByIdAsync(ListQueryParams query)
         {
-            return await _inputFinancingRepository.GetPackageByIdAsync(query.Id);
+            var package = await _inputFinancingRepository.GetPackageByIdAsync(query.Id);
+
+            if (package == null)
+                throw new Exception($"Package not found: {query.Id}");
+
+            if (package.IsRepaymentWalletConfigured)
+            {
+                if (package.WalletProviderId == null)
+                    throw new Exception("Wallet provider not configured for this package.");
+
+                var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
+                {
+                    Id = package.WalletProviderId,
+                    UserId = query.UserId,
+                    businessCode = query.businessCode
+                });
+
+                if (userWallet == null)
+                    throw new Exception("User wallet not found for repayment configuration.");
+
+                package.RepaymentWallet = new InputPackageRepaymentWallet
+                {
+                    WalletId = userWallet.Id,
+                    WalletName = userWallet.WalletNumber,
+                    WalletNumber = userWallet.WalletNumber,
+                    WalletProvider = userWallet.ProviderName
+                };
+            }
+
+            return package;
+        }
+        public async Task<bool> DeactivateInputPackage(ReplacePackageItemRequestArgs query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.DeactivatePackageAsync(query.PackageId, query.OrganizationId);
+        }
+        public async Task<bool> UpdateInputPackageConfig(
+        long packageId,
+        UpdateInputPackageConfigRequest request,
+        InputPackageConfigArgs args)
+        {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (packageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(packageId));
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
+            if (hasOrg != null)
+            {
+                args.organizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.UpdateInputPackageConfig(packageId, request, args);
         }
 
-        public async Task<PagedResult<InputPackageDto>> GetPackagesAsync(InputPackageFilterRequest request, ListQueryParams query)
+        public async Task<bool> ReactivatePackageAsync(ReplacePackageItemRequestArgs query)
         {
-            await FetchOrganizationDetails(query);
-            return await _inputFinancingRepository.GetPackagesAsync(request);
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.ReactivatePackageAsync(query.PackageId, query.OrganizationId);
+        }
+        public async Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams query)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.GetPackagesAsync(query);
+        }
+
+        public async Task<bool> RemoveItemFromPackage(ReplacePackageItemRequestArgs query)
+        {
+            if(query == null) throw new ArgumentNullException(nameof(query));
+            if(query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            if(query.InputId <= 0) throw new ArgumentException("Invalid InputId", nameof(query.InputId));
+            return await _inputFinancingRepository.RemoveItemFromPackage(query.PackageId, query.InputId);
+        }
+
+        public async Task<bool> ReplacePackageItemAsync(ReplacePackageItemRequest request, ReplacePackageItemRequestArgs query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            if (query.InputId <= 0) throw new ArgumentException("Invalid InputId", nameof(query.InputId));
+           if (request == null) throw new ArgumentNullException(nameof(request));
+           if(request.OrganizationProductId <= 0) throw new ArgumentException("Invalid OrganizationProductId", nameof(request.OrganizationProductId));
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.ReplacePackageItemAsync(request, query);
         }
     }
 }
