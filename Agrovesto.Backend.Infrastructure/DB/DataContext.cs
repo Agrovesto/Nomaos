@@ -452,6 +452,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<InputTransaction> InputTransactions { get; set; }
         public DbSet<InputAllocation> InputAllocations { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
+        public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<StorageCategory> StorageCategories { get; set; }
         public DbSet<TemperatureControlType> TemperatureControlTypes { get; set; }

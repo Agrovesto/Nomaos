@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long Id { get; set; }
         public string CategoryName { get; set; }
+        public string Description { get; set; }
         public string? BusinessCode { get; set; }
        
     }

@@ -95,6 +95,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+            services.AddScoped<IRepaymentEngine, RepaymentEngine>();
          
             services.AddScoped<IOtpService, OtpService>();
             services.AddScoped<IOnBoardingManager, OnBoardingManager>();

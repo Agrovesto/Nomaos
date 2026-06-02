@@ -2,13 +2,18 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.V2.Events;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
+using DocumentFormat.OpenXml.Office2010.Excel;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -18,22 +23,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     {
         Task<EopResponseDto> CreateEopAsync(CreateEopRequest request);
         Task<bool> CreateInputFinancingCategory(ProductCategoryDto dto);
-        Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request);
+        Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, InputPackageConfigArgs args);
+        Task<bool> DeactivatePackageAsync(long packageId, long organizationId);
         Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
         Task<EopDto> GetEopByIdAsync(long id);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request);
         Task<PagedListResponse<List<ProductCategoryDto>>> GetInputFinancingCategories(ListQueryParams query);
         Task<ProductCategoryDto> GetInputFinancingCategoryById(long id);
         Task<InputPackageDto> GetPackageByIdAsync(long id);
-        Task<PagedResult<InputPackageDto>> GetPackagesAsync(InputPackageFilterRequest request);
+        Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams query);
+        Task<bool> ReactivatePackageAsync(long packageId, long organizationId);
+        Task<bool> RemoveItemFromPackage(long packageId, long itemId);
+        Task<bool> ReplacePackageItemAsync(ReplacePackageItemRequest request, ReplacePackageItemRequestArgs args);
+        Task<bool> UpdateInputPackageConfig(long packageId, UpdateInputPackageConfigRequest request, InputPackageConfigArgs args);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
         private readonly DataContext _context;
-
-        public InputFinancingRepository(DataContext context)
+        private readonly IRepaymentEngine _repaymentEngine;
+        public InputFinancingRepository(DataContext context, IRepaymentEngine repaymentEngine)
         {
             _context = context;
+            _repaymentEngine = repaymentEngine;
         }
 
         public async Task<bool> CreateInputFinancingCategory(ProductCategoryDto dto)
@@ -49,7 +60,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var cat = new InputFinancingCategory
             {
                 BusinessCode = dto.BusinessCode,
-
+                Description=dto.Description,
+                
                 Name = dto.CategoryName,
                 IsActive = true,
                 CreatedOn = DateTimeOffset.Now,
@@ -111,8 +123,465 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
+        /**
+         * 
+         *InputPackage (template)
+        ↓
+Subscription (real customer participation)
+        ↓
+RepaymentSchedule (per subscriber tracking OR linked schedule)
+         */
+
+        public async Task<bool> CreateInputFinancingPackageConfig(
+        CreateInputPackageRequest request,
+        InputPackageConfigArgs args)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    if (request == null)
+                        throw new Exception("Request cannot be null");
+
+                    var isPhysical = request.PackageStructure == InputPackageStructure.Physical;
+
+                    var requestItems = request.InputPackageItems ?? new List<CreateInputPackageItemRequest>();
+                    var requestAdditionalCosts = request.AdditionalCosts ?? new List<CreateAdditionalCostRequest>();
+
+                    if (isPhysical)
+                    {
+                        if (!requestItems.Any())
+                            throw new Exception("Physical package must have items");
+                    }
+                    else
+                    {
+                        if (requestItems.Any())
+                            throw new Exception("Non-physical package cannot have items");
+                    }
+
+                    var items = isPhysical
+                        ? requestItems.Select(x => new InputPackageItem
+                        {
+                            OrganizationProductId = x.OrganizationProductId,
+                            Quantity = x.Quantity,
+                            UnitCost = x.UnitCost
+                        }).ToList()
+                        : new List<InputPackageItem>();
+
+                    var additionalCosts = requestAdditionalCosts?.Select(x => new AdditionalInputPackageCost
+                    {
+                        Name = x.Name,
+                        Description = x.Description,
+                        Amount = x.Amount,
+                        IsPerUnit = x.IsPerUnit,
+                        Quantity = x.Quantity,
+                        Type = x.Type
+                    }).ToList() ?? new List<AdditionalInputPackageCost>();
+
+                    var additionalCostsTotal = additionalCosts.Sum(x => x.Amount);
+
+                    decimal itemsTotal = isPhysical
+                        ? items.Sum(x => x.Quantity * x.UnitCost)
+                        : request.TotalPackageValue;
+
+                    if (isPhysical &&
+                        request.TotalPackageValue > 0 &&
+                        Math.Round(request.TotalPackageValue, 2) != Math.Round(itemsTotal, 2))
+                        throw new Exception("TotalPackageValue mismatch");
 
 
+
+                    var totalPackageValue = itemsTotal;
+                    var totalFinancingValue = totalPackageValue + additionalCostsTotal;
+
+                    if(request.TotalFinancingValue > 0 && Math.Round(request.TotalFinancingValue, 2) != Math.Round(totalFinancingValue, 2))
+                        throw new Exception("TotalFinancingValue mismatch");
+
+                    var commitment = request.CommitmentRequired
+                       ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
+                           ? totalPackageValue * (request.CommitmentValue / 100m)
+                           : request.CommitmentValue)
+                       : 0;
+
+
+                    var package = new InputPackage
+                    {
+                        OrganizationId = args.organizationId,
+                        CreatedByUserId = args.createdByUserId,
+                        Name = request.Name,
+                        InputFinancingCategoryId = request.InputFinancingCategoryId,
+                        SubScriptionType = request.SubScriptionType,
+                        InputTarget = request.InputTarget,
+                        InputSeason = request.InputSeason,
+                        PackageStructure = request.PackageStructure,
+                        InputPackageItems = items,
+                        AdditionalCosts = additionalCosts,
+                        TotalPackageValue = totalPackageValue,
+                        AdditionalCostAmount = additionalCostsTotal,
+                        TotalFinancingValue = request.TotalFinancingValue > 0 ? request.TotalFinancingValue : totalFinancingValue,
+                        CommitmentRequired = request.CommitmentRequired,
+                        CommitmentType = request.CommitmentType,
+                        CommitmentValue = commitment,
+                        CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
+                        CommitmentPaymentEndDate = request.CommitmentPaymentEndDate,
+                        UserWalletId = request.UserWalletId,
+                        WalletProviderId = request.PaybackWalletId,
+                        RepaymentFrequency = request.RepaymentFrequency,
+                        RepaymentDuration = request.RepaymentDuration,
+                        RepaymentStartDate = request.RepaymentStartDate,
+                        RepaymentEndDate = request.RepaymentEndDate,
+                        RepaymentGracePeriod = request.RepaymentGracePeriod,
+                        RepaymentMode = request.RepaymentMode,
+                        RepaymentValue = request.RepaymentValue,
+                        RiskCategory = request.RiskCategory,
+                        IsSelectedWalletProvisioned = args.isSelectedWalletProvisioned,
+                        Currency = request.Currency,
+                        IsGeneratedFromEop = false,
+                        Version = 1,
+                        CreatedOn = DateTimeOffset.UtcNow,
+                        IsActive = true
+                    };
+
+                    _context.InputPackages.Add(package);
+                    await _context.SaveChangesAsync();
+
+                    var outboxEvent = new OutboxMessage
+                    {
+                        Id = Guid.NewGuid(),
+                        EventType = nameof(InputPackageCreatedEvent),
+                        CreatedOn = DateTime.UtcNow,
+                        IsProcessed = false,
+                        Payload = JsonSerializer.Serialize(new InputPackageCreatedEvent
+                        {
+                            PackageId = package.Id,
+                            OrganizationId = package.OrganizationId,
+                            CreatedByUserId = package.CreatedByUserId
+                        })
+                    };
+
+                    _context.OutboxMessages.Add(outboxEvent);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    return true;
+                }
+                catch(Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        public async Task<bool> UpdateInputPackageConfig(
+        long packageId,
+        UpdateInputPackageConfigRequest request,
+        InputPackageConfigArgs args)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    if (request == null)
+                        throw new Exception("Request cannot be null");
+
+                    var package = await _context.InputPackages
+                        .FirstOrDefaultAsync(x => x.Id == packageId
+                                               && x.OrganizationId == args.organizationId);
+
+                    if (package == null)
+                        throw new Exception("Package not found");
+
+                    if (request.CommitmentPaymentStartDate >= request.CommitmentPaymentEndDate)
+                        throw new Exception("Invalid commitment payment date range");
+
+                    if (request.RepaymentStartDate >= request.RepaymentEndDate)
+                        throw new Exception("Invalid repayment date range");
+
+                    if (request.RepaymentGracePeriod < request.RepaymentStartDate)
+                        throw new Exception("Grace period cannot be before repayment start date");
+
+                    if (!package.IsActive)
+                        throw new Exception("Cannot update configuration for inactive package");
+
+                    package.CommitmentPaymentStartDate = request.CommitmentPaymentStartDate;
+                    package.CommitmentPaymentEndDate = request.CommitmentPaymentEndDate;
+
+                    package.RepaymentFrequency = request.RepaymentFrequency;
+                    package.RepaymentDuration = request.RepaymentDuration;
+
+                    package.RepaymentStartDate = request.RepaymentStartDate;
+                    package.RepaymentEndDate = request.RepaymentEndDate;
+                    package.RepaymentGracePeriod = request.RepaymentGracePeriod;
+
+                    package.UpdatedOn = DateTimeOffset.UtcNow;
+                    package.UpdatedByUserId = args.createdByUserId;
+
+                    await _context.SaveChangesAsync();
+
+                    var scheduleRequest = new RepaymentEngineRequest
+                    {
+                        PackageId = package.Id,
+                        Frequency = request.RepaymentFrequency,
+                        Duration = request.RepaymentDuration,
+                        StartDate = request.RepaymentStartDate,
+                        EndDate = request.RepaymentEndDate,
+                        GracePeriod = request.RepaymentGracePeriod,
+                        TotalAmount = package.TotalFinancingValue
+                    };
+
+                    var schedule = _repaymentEngine.GenerateSchedule(scheduleRequest);
+                    _context.RepaymentSchedules.AddRange(schedule);
+
+                    await _context.SaveChangesAsync();
+                    var outboxEvent = new OutboxMessage
+                    {
+                        Id = Guid.NewGuid(),
+                        EventType = nameof(InputPackageConfigurationUpdatedEvent),
+                        CreatedOn = DateTime.UtcNow,
+                        IsProcessed = false,
+                        Payload = JsonSerializer.Serialize(new InputPackageConfigurationUpdatedEvent
+                        {
+                            PackageId = package.Id,
+                            OrganizationId = package.OrganizationId
+                        })
+                    };
+
+                    _context.OutboxMessages.Add(outboxEvent);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    return true;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        public async Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams request)
+        {
+            var query = _context.InputPackages
+                .Include(x => x.InputFinancingCategory)
+                
+                .Where(x => x.OrganizationId == request.OrganizationId
+               // && x.IsActive
+                );
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((request.PageNumber - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .Select(x => new InputPackageListModel
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    FinancingCategory= x.InputFinancingCategory.Name,
+                    InputTarget= x.InputTarget,
+                    TotalFinancingValue = x.TotalFinancingValue,
+                    CommitmentValue = x.CommitmentValue,
+                    RepaymentModel= EnumExtensions.GetDisplayName(x.RepaymentMode),
+                    RiskCategory= EnumExtensions.GetDisplayName(x.RiskCategory),
+                    Subscribers= 0,//update on subscribers added
+                    IsActive= x.IsActive,
+                    
+                })
+                .ToListAsync();
+
+            return new PagedResult<InputPackageListModel>
+            {
+                Items = items,
+                Count = totalCount,
+                PageNumber = request.PageNumber,
+                PageSize = request.PageSize
+            };
+        }
+        public async Task<InputPackageDto> GetPackageByIdAsync(long id)
+        {
+            var package = await _context.InputPackages
+                .Include(x=> x.InputFinancingCategory)
+                .Include(x => x.InputPackageItems)
+                .ThenInclude(x => x.OrganizationProduct)
+                .Include(x => x.AdditionalCosts)
+                .FirstOrDefaultAsync(x => x.Id == id);
+
+            if (package == null)
+                return null;
+
+            return new InputPackageDto
+            {
+                IsActive= package.IsActive,
+               WalletProviderId= package.WalletProviderId ?? 0,
+                Id = package.Id,
+                Name = package.Name,
+                IsRepaymentWalletConfigured =package.IsSelectedWalletProvisioned,
+                SubscriptionType= EnumExtensions.GetDisplayName(package.SubScriptionType),
+                InputSeason=package.InputSeason,
+                InputTarget=package.InputTarget,
+                FinancingCategory=package.InputFinancingCategory.Name,
+                FinancialStructure = new InputPackageFinancingStructureDto
+                {
+                    TotalFinancingValue = package.TotalFinancingValue,
+                    CommitmentRequired = package.CommitmentRequired,
+                    CommitmentValue = package.CommitmentValue,                   
+                    RepaymentEndDate=package.RepaymentEndDate,
+                    RepaymentGracePeriod=package.RepaymentGracePeriod,
+                    CommitmentPaymentStartDate=package.CommitmentPaymentStartDate,
+                    CommitmentPaymentEndDate=package.CommitmentPaymentEndDate,
+                    RepaymentModel= EnumExtensions.GetDisplayName(package.RepaymentMode),
+                    RepaymentStartDate=package.RepaymentStartDate,
+                    RepaymentValue= package.RepaymentValue,
+                    RepaymentPeriod = GetRepaymentPeriod(package.RepaymentFrequency, package.RepaymentDuration),
+                    RiskCategory = EnumExtensions.GetDisplayName(package.RiskCategory)
+                },
+                PackageInputs = package.InputPackageItems.Select(i => new InputPackageBreakdownDto
+                {
+                    OrganizationProductId = i.OrganizationProductId,
+                    InputId=i.Id,
+                    InputType = i.OrganizationProduct.ProductName,
+                    Quantity = i.Quantity,
+                    UnitCost = i.UnitCost,
+                    TotalCost = i.Quantity * i.UnitCost,
+                    
+                }).ToList(),
+
+                AdditionalCosts = package.AdditionalCosts.Select(c => new AdditionalCostDto
+                {
+                    Name = c.Name,
+                    Amount = c.Amount
+                }).ToList()
+            };
+        }
+
+        public async Task<bool> DeactivatePackageAsync(long packageId, long organizationId)
+        {
+            var package = await _context.InputPackages
+                .FirstOrDefaultAsync(x => x.Id == packageId
+                                       && x.OrganizationId == organizationId);
+
+            if (package == null)
+                throw new Exception("Package not found");
+
+            package.IsActive = false;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> ReactivatePackageAsync(long packageId, long organizationId)
+        {
+            var package = await _context.InputPackages
+                .FirstOrDefaultAsync(x => x.Id == packageId
+                                       && x.OrganizationId == organizationId);
+
+            if (package == null)
+                throw new Exception("Package not found");
+
+            package.IsActive = false;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> RemoveItemFromPackage(long packageId, long itemId)
+        {
+            var package = await _context.InputPackages
+                .FirstOrDefaultAsync(x => x.Id == packageId);
+
+            EnsurePackageIsEditable(package);
+
+            var item = await _context.InputPackageItems
+                .FirstOrDefaultAsync(x => x.Id == itemId && x.InputPackageId == packageId);
+
+            if (item == null)
+                throw new Exception("Item not found in package");
+
+            _context.InputPackageItems.Remove(item);
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> ReplacePackageItemAsync(
+        ReplacePackageItemRequest request,
+        ReplacePackageItemRequestArgs args)
+        {
+            var package = await _context.InputPackages
+                .FirstOrDefaultAsync(x => x.Id == args.PackageId);
+
+            EnsurePackageIsEditable(package);
+
+            var item = await _context.InputPackageItems
+                .FirstOrDefaultAsync(x => x.Id == args.InputId && x.InputPackageId == args.PackageId);
+
+            if (item == null)
+                throw new Exception("Package item not found");
+
+            var productExists = await _context.OrganizationProducts
+                .AnyAsync(x => x.Id == request.OrganizationProductId
+                            && x.OrganizationId == args.OrganizationId);
+
+            if (!productExists)
+                throw new Exception("Invalid product for this organization");
+
+            item.OrganizationProductId = request.OrganizationProductId;
+            item.Quantity = request.Quantity;
+            item.UnitOfMeasure = request.UnitOfMeasure;
+            item.UnitCost = request.UnitCost;
+            item.OverrideCost = null;
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        private void EnsurePackageIsEditable(InputPackage package)
+        {
+            if (package == null)
+                throw new Exception("Package not found");
+
+            if (!package.IsActive)
+            {
+                throw new Exception("This package is not editable because it is deactivated.");
+            }
+        }
+        private static string GetRepaymentPeriod(RepaymentFrequency frequency, int duration)
+        {
+            var unit = frequency switch
+            {
+                RepaymentFrequency.Weekly => "week",
+                RepaymentFrequency.BiWeekly => "2 weeks",
+                RepaymentFrequency.Monthly => "month",
+                RepaymentFrequency.Quarterly => "quarter",
+                RepaymentFrequency.Annually => "year",
+                _ => "period"
+            };
+
+            // handle special case for BiWeekly to avoid "6 2 weeks"
+            if (frequency == RepaymentFrequency.BiWeekly)
+            {
+                return $"{duration * 2} weeks";
+            }
+
+            var plural = duration > 1 && frequency != RepaymentFrequency.BiWeekly ? "s" : "";
+
+            return $"{duration} {unit}{plural}";
+        }
+
+        #region EOP to Package Generation
         public async Task<EopResponseDto> CreateEopAsync(CreateEopRequest request)
         {
             if (request.CostItems == null || !request.CostItems.Any())
@@ -140,8 +609,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 OrganizationId = request.OrganizationId,
                 CostItems = costItems,
                 CreatedOn = DateTime.UtcNow,
-                IsActive= true,
-                UnitOfMeasure=request.UnitOfMeasure
+                IsActive = true,
+                UnitOfMeasure = request.UnitOfMeasure
             };
 
             _context.EconomicsOfProductions.Add(eop);
@@ -164,83 +633,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }).ToList()
             };
         }
-        public async Task<bool> CreateManualInputPackageAsync(CreateInputPackageRequest request)
-        {
-            if (request.Structure == InputPackageStructure.Physical &&
-                (request.InputPackageItems == null || !request.InputPackageItems.Any()))
-                throw new Exception("Physical package must have items");
 
-            var items = request.InputPackageItems?.Select(x => new InputPackageItem
-            {
-                OrganizationProductId = x.OrganizationProductId,
-                Quantity = x.Quantity,
-                UnitCost = x.UnitCost,
-                UnitOfMeasure = x.UnitOfMeasure
-            }).ToList() ?? new List<InputPackageItem>();
-
-            var additionalCosts = request.AdditionalCosts?.Select(x => new AdditionalInputPackageCost
-            {
-                Name = x.Name,
-                Description = x.Description,
-                Amount = x.Amount,
-                IsPerUnit= x.IsPerUnit,
-                Quantity=x.Quantity,
-                Type=x.Type
-            }).ToList() ?? new List<AdditionalInputPackageCost>();
-            var totalValue =
-                items.Sum(x => x.Quantity * x.UnitCost) +
-                additionalCosts.Sum(x => x.Amount);
-
-            var repaymentValue = request.ApplyInterest
-                ? totalValue + (totalValue * request.InterestRate)
-                : totalValue;
-
-            var commitment = request.CommitmentRequired
-                ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
-                    ? totalValue * request.CommitmentValue
-                    : request.CommitmentValue)
-                : 0;
-
-            var package = new InputPackage
-            {
-                Name = request.Name,
-                OrganizationId = request.OrganizationId,
-                InputFinancingCategoryId = request.InputFinancingCategoryId,
-                SubScriptionType= request.SubScriptionType,
-                PackageStructure = request.Structure,
-
-                InputPackageItems = items,
-               
-                CommitmentRequired = request.CommitmentRequired,
-                CommitmentType = request.CommitmentType,
-                CommitmentValue =request.CommitmentValue > 0 ? request.CommitmentValue : commitment,
-
-                TotalPackageValue = request.TotalPackageValue > 0 ? request.TotalPackageValue : totalValue, // if totalvalue is supplied, TotalPackageValue = dto.TotalPackageValue, else calculate from items and additional costs
-                UserWalletId = request.UserWalletId,
-
-                AdditionalCosts = additionalCosts,                
-          
-
-                RepaymentMode = request.RepaymentMode,
-                RepaymentValue = request.RepaymentValue > 0 ? request.RepaymentValue : repaymentValue,
-                RepaymentPeriodInMonths = request.RepaymentPeriodInMonths,
-
-                InterestRatePercentage = request.InterestRate,
-                IsInterestApplied = request.ApplyInterest,
-
-                Currency = request.Currency,
-
-                IsGeneratedFromEop = false,
-                Status = InputPackageStatus.Draft,
-                Version = 1,
-                CreatedOn = DateTimeOffset.UtcNow
-            };
-
-            _context.InputPackages.Add(package);
-            await _context.SaveChangesAsync();
-
-            return true;
-        }
         public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
         {
             var eop = await _context.EconomicsOfProductions
@@ -324,7 +717,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 RiskCategory = risk,
                 RepaymentMode = request.RepaymentMode,
-                RepaymentPeriodInMonths = request.RepaymentPeriodInMonths,
+                RepaymentDuration = request.RepaymentPeriodInMonths,
 
                 InterestRatePercentage = request.InterestRate,
                 IsInterestApplied = request.ApplyInterest,
@@ -335,9 +728,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 Currency = request.Currency,
 
-                Status = request.AutoApprove
-                    ? InputPackageStatus.Published
-                    : InputPackageStatus.Draft,
+                //Status = request.AutoApprove
+                //    ? InputPackageStatus.Published
+                //    : InputPackageStatus.Draft,
 
                 Version = 1,
                 CreatedOn = DateTimeOffset.UtcNow
@@ -382,8 +775,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return new PagedResult<EopDto>
             {
                 Items = items,
-                TotalCount = totalCount,
-                Page = request.Page,
+                Count = totalCount,
+                PageNumber = request.Page,
                 PageSize = request.PageSize
             };
         }
@@ -417,81 +810,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }).ToList()
             };
         }
-        public async Task<PagedResult<InputPackageDto>> GetPackagesAsync(InputPackageFilterRequest request)
-        {
-            var query = _context.InputPackages
-                .Where(x => x.OrganizationId == request.OrganizationId && x.IsActive);
 
-            if (request.Status.HasValue)
-                query = query.Where(x => x.Status == request.Status);
-
-            if (request.IsGeneratedFromEop.HasValue)
-                query = query.Where(x => x.IsGeneratedFromEop == request.IsGeneratedFromEop);
-
-            if (request.CategoryId.HasValue)
-                query = query.Where(x => x.InputFinancingCategoryId == request.CategoryId);
-
-            var totalCount = await query.CountAsync();
-
-            var items = await query
-                .OrderByDescending(x => x.Id)
-                .Skip((request.Page - 1) * request.PageSize)
-                .Take(request.PageSize)
-                .Select(x => new InputPackageDto
-                {
-                    Id = x.Id,
-                    Name = x.Name,
-                    TotalPackageValue = x.TotalPackageValue,
-                    RepaymentValue = x.RepaymentValue,
-                    Status = x.Status,
-                    IsGeneratedFromEop = x.IsGeneratedFromEop,
-                    Currency = x.Currency
-                })
-                .ToListAsync();
-
-            return new PagedResult<InputPackageDto>
-            {
-                Items = items,
-                TotalCount = totalCount,
-                Page = request.Page,
-                PageSize = request.PageSize
-            };
-        }
-        public async Task<InputPackageDto> GetPackageByIdAsync(long id)
-        {
-            var package = await _context.InputPackages
-                .Include(x => x.InputPackageItems)
-                .Include(x => x.AdditionalCosts)
-                .FirstOrDefaultAsync(x => x.Id == id);
-
-            if (package == null)
-                throw new Exception("Package not found");
-
-            return new InputPackageDto
-            {
-                Id = package.Id,
-                Name = package.Name,
-                TotalPackageValue = package.TotalPackageValue,
-                RepaymentValue = package.RepaymentValue,
-                Status = package.Status,
-                IsGeneratedFromEop = package.IsGeneratedFromEop,
-                Currency = package.Currency,
-
-                Items = package.InputPackageItems.Select(i => new InputPackageItemDto
-                {
-                    OrganizationProductId = i.OrganizationProductId,
-                    Quantity = i.Quantity,
-                    UnitCost = i.UnitCost
-                }).ToList(),
-
-                AdditionalCosts = package.AdditionalCosts.Select(c => new AdditionalCostDto
-                {
-                    Name = c.Name,
-                    Amount = c.Amount
-                }).ToList()
-            };
-        }
-    
         private void ValidateEop(EconomicsOfProduction eop)
         {
             if (eop.ExpectedYield <= 0)
@@ -503,6 +822,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!eop.CostItems.Any(x => x.OrganizationProductId != null))
                 throw new Exception("EOP must contain at least one input item");
         }
+        #endregion EOP to Package Generation
         private decimal CalculateRepayment(decimal baseValue, bool applyInterest, decimal rate)
         {
             if (!applyInterest)

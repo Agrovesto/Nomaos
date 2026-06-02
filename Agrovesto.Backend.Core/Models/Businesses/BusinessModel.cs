@@ -48,6 +48,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class ListQueryParams
     {
+        public long OrganizationId { get; set; }
         public string? FilterBy { get; set; }
         public long farmerId { get; set; }
         public int PageNumber { get; set; } = 1;
