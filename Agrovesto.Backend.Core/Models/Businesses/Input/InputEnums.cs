@@ -132,26 +132,36 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public enum SubscriptionStatus
     {
-        [Display(Name = "Pending")]
-        Pending = 1,
+        [Display(Name = "Pending Approval")]
+        PendingApproval = 1,
 
         [Display(Name = "Approved")]
         Approved = 2,
 
-        [Display(Name = "Rejected")]
-        Rejected = 3,
+        [Display(Name = "Pending Commitment")]
+        PendingCommitment = 3,
+
+
+        [Display(Name = "Commitment Paid")]
+        CommitmentPaid = 4,
+
+        [Display(Name = "Pending Disbursement")]
+        PendingDisbursement = 5,
 
         [Display(Name = "Disbursed")]
-        Disbursed = 4,
+        Disbursed = 6,
 
         [Display(Name = "Active")]
-        Active = 5,
+        Active = 7,
 
-        [Display(Name = "Completed")]
-        Completed = 6,
+        [Display(Name = "Completed Repayment")]
+        RepaymentCompleted = 8,
 
         [Display(Name = "Defaulted")]
-        Defaulted = 7
+        Defaulted = 9,
+
+        [Display(Name = "Rejected")]
+        Rejected = 10
     }
 
     public enum DisbursementType
@@ -212,5 +222,43 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Display(Name = "Failed")]
         Failed = 3
+    }
+
+    public enum ApprovalDecision
+    {
+        [Display(Name = "Approved")]
+        Approved = 1,
+        [Display(Name = "Rejected")]
+        Rejected = 2
+    }
+
+    public enum PaymentType
+    {
+        [Display(Name = "Commitment")]
+        Commitment = 1,
+        [Display(Name = "Repayment")]
+        Repayment = 2
+      
+    }
+
+    public enum Stage
+    {
+        [Display(Name = "SoftReminder")]
+        SoftReminder = 1,
+        [Display(Name = "HardReminder")]
+        HardReminder = 2,
+        [Display(Name = "Legal")]
+        Legal = 3
+    }
+
+    public enum SubscriptionView
+    {
+        All=0,
+        PendingApproval=1,
+        PendingCommitment=2,
+        PendingDisbursement=3,
+        Active=4,
+        Completed=5,
+        Defaulted=6
     }
 }

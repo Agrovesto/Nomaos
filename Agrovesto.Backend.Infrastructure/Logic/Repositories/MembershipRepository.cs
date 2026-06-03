@@ -806,7 +806,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     PhoneNumber = s.PhoneNumber,
                     UserId = s.UserId,
                     IsLeaderAFarmer = s.IsLeaderAFarmer,
-                    Tier=EnumExtensions.GetDisplayName(s.Tier),
+                    Tier=EnumExtensions.GetDisplayName(s.TierLevel),
                     MembershipType= s.MemberShipType.Name,
                     MembershipLeaderFirstName=s.MembershipLeaderLastName,
                     MembershipLeaderGender=s.MembershipLeaderGender ,

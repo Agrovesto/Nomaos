@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
   
     public class RepaymentBreakdownDto
     {
-        public DateTime Date { get; set; }
+        public DateTimeOffset Date { get; set; }
         public decimal LoanAmount { get; set; }
         public decimal AmountPaid { get; set; }
         public string MethodOfPayment { get; set; }
@@ -31,14 +31,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class InstallmentDto
     {
-        public DateTime PaymentDate { get; set; }
+        public DateTimeOffset PaymentDate { get; set; }
         public decimal Amount { get; set; }
         public string Reference { get; set; }
     }
     public class RepaymentScheduleDto
     {
         public int InstallmentNo { get; set; }
-        public DateTime DueDate { get; set; }
+        public DateTimeOffset DueDate { get; set; }
         public decimal ExpectedAmount { get; set; }
         public bool IsPaid { get; set; }
     }
@@ -46,8 +46,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     {
         public string LoanName { get; set; }
         public decimal LoanAmount { get; set; }
-        public DateTime DateIssued { get; set; }
-        public DateTime DueDate { get; set; }
+        public DateTimeOffset DateIssued { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
         public decimal InterestRate { get; set; }
 
         public List<InputBreakdownDto> Inputs { get; set; }
@@ -59,14 +59,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal TotalLoansIssued { get; set; }
         public decimal TotalActiveLoans { get; set; }
         public decimal TotalRepaid { get; set; }
+        public decimal TotalOutstanding { get; set; }
+        public decimal TotalActiveLoansAmount { get; set; }
+        public decimal TotalRepaidAmount { get; set; }
+
         public decimal TotalOutstandingBalance { get; set; }
     }
     public class FinancingBreakdownDto
     {
         public string LoanName { get; set; }
         public decimal Amount { get; set; }
-        public DateTime DateIssued { get; set; }
-        public DateTime DueDate { get; set; }
+        public DateTimeOffset DateIssued { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
         public decimal RepaymentPercentage { get; set; }
         public string Status { get; set; }
     }

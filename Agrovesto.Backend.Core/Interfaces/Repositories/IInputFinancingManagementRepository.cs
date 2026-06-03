@@ -46,11 +46,5 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BundleSubscriptionInterestModel> SettlePendingFarmerBundleSubscriptionEquityToBusiness(BundleSubscriptionInterestModel model);
         Task<BundleSubscriptionInterestModel> GetSingleSubscription(string farmerUserId, long bundleId);
         Task SaveBundleSubscriptionRepayment(RepaymentModel model);
-        Task<LoanDetailDto> GetLoanDetailAsync(long inputAllocationId);
-        Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams args);
-        Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
-        Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(long inputAllocationId);
-        Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args);
-        Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(ListQueryParams args);
-    }
+             }
 }

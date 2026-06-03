@@ -149,7 +149,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal TotalWalletBalance { get; set; }
         public decimal OutstandingInputDebt { get; set; }
         public decimal NextRepaymentAmount { get; set; }  // e.g., next scheduled repayment
-        public DateTime? NextRepaymentDate { get; set; }  // optional
+        public DateTimeOffset? NextRepaymentDate { get; set; }  // optional
     }
     public class FarmerMembershipProfileDto
     {

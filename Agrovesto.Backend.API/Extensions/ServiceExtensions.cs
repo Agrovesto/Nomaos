@@ -157,6 +157,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ILicenseService, LicenseService>();
             services.AddScoped<IModuleAccessService, SystemModuleAccessService>();
             services.AddScoped<IMigrationService, MigrationService>();
+
+            services.AddScoped<RepaymentOverdueProcessor>();
+            services.AddHostedService<JobSchedulerService>();
+
+            services.AddTransient<OverdueRepaymentJob>();
         }
     }
 }

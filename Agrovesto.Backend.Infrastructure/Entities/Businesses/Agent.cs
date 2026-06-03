@@ -10,6 +10,8 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
+
+
     public class InventoryTransaction
     {
         [Key]
@@ -42,13 +44,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         // SALES
 
         // Quantity moved
-        public double Quantity { get; set; }
+        public decimal Quantity { get; set; }
 
         public string QuantityType { get; set; } = "Bag";
 
         // Before & after balances
-        public double QuantityBefore { get; set; }
-        public double QuantityAfter { get; set; }
+        public decimal QuantityBefore { get; set; }
+        public decimal QuantityAfter { get; set; }
 
         // Batch tracking
         public string? BatchNumber { get; set; }
@@ -71,6 +73,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string Status { get; set; } = "Completed";
         public long OrganizationId { get; set; }
         public Organization Organization { get; set; }
+        public long? SubscriptionId { get; set; }
     }
     public class Agent
     {
@@ -91,7 +94,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? SupervisorUserId { get; set; }
         public string? OnboardedById { get; set; }
         public bool IsActive { get; set; } = true;
-        public Tier Tier { get; set; }
+        public Tier TierLevel { get; set; }
 
     }
 
@@ -160,7 +163,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public OrganizationProduct OrganizationProduct { get; set; }
         public string? BatchNumber { get; set; } //can be auto generated or provided by user
         public string? InventoryOwner { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
-        public double Quantity { get; set; }
+        public decimal Quantity { get; set; }
         public string? QuantityType { get; set; } = "Bag";
          public string? Description { get; set; }
         public DateTimeOffset? StorageDate { get; set; }
@@ -184,9 +187,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string LocationName { get; set; }
         public string OwnershipType { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
-        public double Capacity { get; set; }
+        public decimal Capacity { get; set; }
         public string? CapacityType { get; set; } = "Bag";
-        public double StockLevel { get; set; }
+        public decimal StockLevel { get; set; }
         public long LocationTypeId { get; set; }
         public LocationType LocationType { get; set; }
         public long StateId { get; set; }
@@ -294,8 +297,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? Description { get; set; }
 
     }
-
-    public class  OrganizationProductCategory
+     public class  OrganizationProductCategory
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]

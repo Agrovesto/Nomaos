@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using DocumentFormat.OpenXml.Bibliography;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -69,7 +70,7 @@ RepaymentTransaction
         public InputFinancingCategory InputFinancingCategory { get; set; }
         public InputSubScriptionType SubScriptionType { get; set; }
         
-        public long OrganizationId { get; set; }
+        public long? OrganizationId { get; set; }
         public Organization Organization { get; set; }
 
         public string? InputTarget { get; set; } // e.g. crop, livestock, fishery
@@ -119,13 +120,17 @@ RepaymentTransaction
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public DateTimeOffset? UpdatedOn { get; set; }
         public string CreatedByUserId { get; set; }
+        public User CreatedBy { get; set; }
         public string? UpdatedByUserId { get; set; }
+        public User UpdatedBy { get; set; }
         public long? EconomicsOfProductionId { get; set; }
         public EconomicsOfProduction EconomicsOfProduction { get; set; }
         public bool IsGeneratedFromEop { get; set; } =false;
         public bool IsEditable { get; set; } = true;
         public DateTimeOffset? PublishedOn { get; set; }
-      
+
+        public decimal? InterestRate { get; set; }
+        public string? BusinessCode { get; set; }
     }
   public class AdditionalInputPackageCost
     {
@@ -170,6 +175,8 @@ RepaymentTransaction
         public bool IsActive { get; set; } = true;
 
         public DateTimeOffset CreatedOn { get; set; }
+
+        public string BusinessCode { get; set; }
     }
     public class EopCostItem
     {
@@ -188,180 +195,161 @@ RepaymentTransaction
         public long? OrganizationProductId { get; set; } // optional link to actual product
         public OrganizationProduct OrganizationProduct { get; set; }
     }
-    public class FarmerInputSubscription
+        
+    public class RepaymentSchedule
     {
         [Key]
-        public long Id { get; set; }
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
 
-        public long FarmerId { get; set; }
-        public Farmer Farmer { get; set; }
+        public long Id { get; set; }
+       
+        public long InputPackageSubscriptionId { get; set; }
+        public InputPackageSubscription InputPackageSubscription { get; set; }
+        public int InstallmentNumber { get; set; }
+
+        public DateTimeOffset DueDate { get; set; }
+
+        public decimal Amount { get; set; }
+        public decimal AmountPaid { get; set; }
+        public DateTimeOffset? PaidOn { get; set; }
+      
+        public bool IsWithinGracePeriod { get; set; }
+
+        public bool IsPaid { get; set; }
+
+        public bool IsOverdue { get; set; }
+        public decimal PenaltyAccrued { get; set; }
+        public decimal PenaltyPaid { get; set; }
+    }
+
+    public class InputPackageSubscription
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
 
         public long InputPackageId { get; set; }
         public InputPackage InputPackage { get; set; }
+        public long? OrganizationId { get; set; }
+        public Organization Organization { get; set; }
+        public string SubscriberUserId { get; set; }
+        public User SubscriberUser { get; set; }
+        public string AddedByUserId { get; set; }
+        public User AddedByUser { get; set; }
+        public SubscriptionStatus Status { get; set; }
 
-        public string PackageNameSnapshot { get; set; }
-        public decimal TotalPackageValueSnapshot { get; set; }
+        public InputSubScriptionType SubscriberType { get; set; } //membership, individual or both
+        public DateTimeOffset SubscribedOn { get; set; }
+        public bool IsActive { get; set; } = true;
+        public RepaymentFrequency RepaymentFrequency { get; set; }
 
-        public decimal CommitmentAmount { get; set; }
-        public bool CommitmentPaid { get; set; }
+        public int RepaymentDuration { get; set; }
 
-        public decimal RepaymentAmount { get; set; }
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
 
         public InputPackageRepaymentMode RepaymentMode { get; set; }
 
-        public SubscriptionStatus Status { get; set; }
+        public decimal TotalFinancingValue { get; set; }
 
-        public DateTime SubscribedAt { get; set; }
-        public DateTime? ApprovedAt { get; set; }
+        public bool CommitmentRequired { get; set; }
 
-        public long OrganizationId { get; set; }
+        public decimal CommitmentValue { get; set; }
 
-        public List<SubscribedInputItem> Items { get; set; }
-        public List<InputDisbursement> Disbursements { get; set; }
-        public List<RepaymentTransaction> Repayments { get; set; }
+        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
+
+        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
+
+        public string? ApprovedByUserId { get; set; }
+        public DateTimeOffset? ApprovedOn { get; set; }
+
+        public string? RejectedByUserId { get; set; }
+        public DateTimeOffset? RejectedOn { get; set; }
+
+        public string? RejectionReason { get; set; }
+
+        public DateTimeOffset? DisbursedOn { get; set; }
+        public DateTimeOffset? CompletedOn { get; set; } //payment completed on
+        public RiskCategory RiskCategory { get; set; }
+        public DateTimeOffset? LastOverdueDetectedOn { get; set; }
+
+        public int OverdueCount { get; set; }
+
+        public RiskCategory RiskLevel { get; set; }
+
+        public string BusinessCode { get; set; }
+        public ICollection<RepaymentSchedule> RepaymentSchedules { get; set; }
+        = new List<RepaymentSchedule>();
     }
-
-    public class SubscribedInputItem
+    public class InputPackageSubscriptionPayment
     {
         [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
         public long Id { get; set; }
 
-        public long FarmerInputSubscriptionId { get; set; }
-        public FarmerInputSubscription Subscription { get; set; }
+        public long SubscriptionId { get; set; }
 
-        public long OrganizationProductId { get; set; }
+        public InputPackageSubscription Subscription { get; set; }
 
-        public string ProductName { get; set; }
+        public PaymentType PaymentType { get; set; } // Commitment
 
-        public decimal Quantity { get; set; }
-        public decimal UnitCost { get; set; }
+        public decimal AmountPaid { get; set; }
 
-        public decimal TotalCost => Quantity * UnitCost;
-    }
+        public PaymentChannel PaymentChannel { get; set; }
 
-    public class InputDisbursement
-    {
-        [Key]
-        public long Id { get; set; }
-
-        public long FarmerInputSubscriptionId { get; set; }
-        public FarmerInputSubscription Subscription { get; set; }
-
-        public DisbursementType Type { get; set; }
-
-        public decimal Amount { get; set; }
-
-        public long? WalletId { get; set; }
-        public UserWallet Wallet { get; set; }
-
-        public DisbursementStatus Status { get; set; }
-
-        public DateTime DisbursedAt { get; set; }
-
-        public string Reference { get; set; } // payment ref or logistics ref
-
-        public List<DisbursedItem> Items { get; set; } // for physical inputs
-    }
-    public class DisbursedItem
-    {
-        [Key]
-        public long Id { get; set; }
-
-        public long InputDisbursementId { get; set; }
-        public InputDisbursement Disbursement { get; set; }
-
-        public long OrganizationProductId { get; set; }
-
-        public decimal Quantity { get; set; }
-    }
-
-    public class RepaymentTransaction
-    {
-        [Key]
-        public long Id { get; set; }
-
-        public long FarmerInputSubscriptionId { get; set; }
-        public FarmerInputSubscription Subscription { get; set; }
-
-        public RepaymentType Type { get; set; }
-
-        public decimal Amount { get; set; }
-
-        public decimal? Quantity { get; set; } // for produce repayment
-        public long? OrganizationProductId { get; set; } // produce type
+        public TransactionStatus Status { get; set; }
 
         public string Reference { get; set; }
 
-        public DateTime TransactionDate { get; set; }
+        public DateTimeOffset PaidOn { get; set; }
 
-        public PaymentChannel Channel { get; set; }
-
-        public TransactionStatus Status { get; set; }
+        public string? ExternalReference { get; set; }
     }
- 
-    public class InputAllocation
+    public class InputSubscriptionDisbursement
     {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
         public long Id { get; set; }
 
-        public long FarmerId { get; set; }
-        public Farmer Farmer { get; set; }
+        public long SubscriptionId { get; set; }
 
-        public long FarmId { get; set; }
-        public Farm Farm { get; set; }
-
-        public long InputId { get; set; }
-        public InputPackage Input { get; set; }
-
-        public decimal Quantity { get; set; }
-        public decimal UnitPrice { get; set; }
-
-        public decimal TotalCost => Quantity * UnitPrice;
-
-        public DateTime AllocatedDate { get; set; }
-
-        public long? InputTransactionId { get; set; }
-        public InputTransaction InputTransaction { get; set; }
-    }
-    public class InputTransaction
-    {
-        public long Id { get; set; }
-
-        // Relationship
-        public long FarmerId { get; set; }
-        public Farmer Farmer { get; set; }
-
-        public long? FarmId { get; set; }  // Optional (if tied to a specific farm)
-        public Farm Farm { get; set; }
-
-        // Financial
         public decimal Amount { get; set; }
 
-        public InputTransactionType TransactionType { get; set; }
+        public string Reference { get; set; }
 
-        public PaymentStatus PaymentStatus { get; set; }  // For repayment tracking
+        public DateTimeOffset DisbursedOn { get; set; }
 
-        // Optional metadata
-        public string ReferenceNumber { get; set; }
-        public string Description { get; set; }
-
-        // Audit
-        public DateTime TransactionDate { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public string CreatedBy { get; set; }
-
-        public ICollection<InputAllocation> InputAllocations { get; set; }
-
-        public bool IsDeleted { get; set; } = false;
+        public string DisbursedByUserId { get; set; }
     }
-    public enum InputTransactionType
+
+    public class RepaymentPenalty
     {
-        Disbursement = 1,  // Inputs given to farmer
-        Repayment = 2      // Farmer paying back
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long SubscriptionId { get; set; }
+
+        public long RepaymentScheduleId { get; set; }
+
+        public decimal FlatFeeApplied { get; set; }
+
+        public decimal InterestApplied { get; set; }
+
+        public decimal TotalPenalty { get; set; }
+
+        public DateTimeOffset CalculatedOn { get; set; }
+
+        public bool IsReversed { get; set; }
     }
-
-
-
-    public class RepaymentSchedule
+    public class PenaltyPolicy
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -370,16 +358,44 @@ RepaymentTransaction
 
         public long InputPackageId { get; set; }
 
-        public int InstallmentNumber { get; set; }
+        public decimal FlatFee { get; set; }
 
-        public DateTimeOffset DueDate { get; set; }
+        public decimal DailyInterestRate { get; set; } // e.g. 0.5% = 0.005
 
-        public decimal Amount { get; set; }
+        public decimal MaxPenaltyCap { get; set; }
 
-        public bool IsWithinGracePeriod { get; set; }
+        public int GracePeriodDays { get; set; }
 
-        public bool IsPaid { get; set; }
+        public bool IsActive { get; set; }
+    }
+    public class RepaymentCollectionCase
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
 
-        public DateTimeOffset? PaidOn { get; set; }
+        public long SubscriptionId { get; set; }
+
+        public string AssignedAgent { get; set; }
+
+        public Stage Stage { get; set; }
+    }
+
+    public class SubscriptionPaymentAllocation
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+
+        public long InputPackageSubscriptionPaymentId { get; set; }
+
+        public long? RepaymentScheduleId { get; set; }
+
+        public decimal PenaltyPortion { get; set; }
+
+        public decimal InterestPortion { get; set; }
+
+        public decimal PrincipalPortion { get; set; }
     }
 }

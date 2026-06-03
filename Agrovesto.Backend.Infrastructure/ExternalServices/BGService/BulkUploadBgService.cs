@@ -23,6 +23,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
             _scopeFactory = scopeFactory;
             _taskQueue = taskQueue;
         }
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("Background Service Started");
@@ -55,12 +56,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
             while (!stoppingToken.IsCancellationRequested)
             {
                 _logger.LogInformation("Background task running at: {time}", DateTime.UtcNow);
-                // Perform background work
+
                 var workItem = await _taskQueue.DequeueAsync(stoppingToken);
 
                 await workItem(stoppingToken);
+
+              
             }
             _logger.LogInformation("Background Service Stopped");
         }
+       
     }
 }
