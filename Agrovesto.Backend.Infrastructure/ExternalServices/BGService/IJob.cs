@@ -28,8 +28,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
 
             var processor = scope.ServiceProvider
                 .GetRequiredService<RepaymentOverdueProcessor>();
+            await Task.Delay(TimeSpan.FromSeconds(30), token);
 
-            await processor.ProcessOverdueRepaymentsAsync(token);
+            while (!token.IsCancellationRequested)
+            {
+                await processor.ProcessOverdueRepaymentsAsync(token);
+
+                await Task.Delay(TimeSpan.FromMinutes(10), token);
+            }
+       
         }
     }
 

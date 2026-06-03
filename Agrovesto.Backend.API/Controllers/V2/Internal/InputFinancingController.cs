@@ -494,6 +494,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
+
+        //subscriber details for
+        //pending commitment (1) endpoint
+        //active commitment (2) endpoint
+        //pending approval (3) endpoint // print commission letter
+        //confirm input release (4) endpoint // approve disbursement
+        //subscribe input detail to include subscriber information and package information
+        //send commitment reminder to subscriber (notify agent or membership leader, notification note
+        //escalete default reminder to subscriber (notify agent or membership leader, notification note
         #endregion
         /**  /api/financing-packages
 /api/subscriptions
