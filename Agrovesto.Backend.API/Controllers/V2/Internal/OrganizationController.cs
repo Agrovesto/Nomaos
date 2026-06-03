@@ -33,7 +33,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IOnBoardingManager _onboardingManager;
         private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
         private readonly IMembershipManager _membershipManager;
-
+        private readonly IInputFinancingManager _inputFinancingManager;
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
@@ -41,6 +41,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
              INomaOSWalletService walletService,
              IOrganizationManager organizationManager,
              IMembershipManager membershipManager,
+             IInputFinancingManager inputFinancingManager,
              IOnBoardingManager onboardingManager, IFarmMappingManager farmMappingManager) : base(httpContextAccessor)
         {
             _walletService = walletService;
@@ -49,6 +50,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _businessManager = businessManager;
             _onboardingManager = onboardingManager;
             _membershipManager = membershipManager;
+            _inputFinancingManager = inputFinancingManager;
             _context = (Agrovesto.Backend.Infrastructure.DB.DataContext)httpContextAccessor.HttpContext.RequestServices.GetService(typeof(Agrovesto.Backend.Infrastructure.DB.DataContext));
         }
         #region settings
@@ -527,78 +529,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-        // [HttpPost("create-sublocation")]
-        // public async Task<IActionResult> CreateSubLocationAsync([FromBody] CreateSubLocationDto model, [FromQuery] ListQueryParams args)
-        // {
-        //     var isAdmin = CurrentUserRole;
-        //     // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-        //     if (!ModelState.IsValid)
-        //     {
-
-        //         return BadRequest(new Response<Dictionary<string, string>>()
-        //         {
-        //             Message = "Validation failed.",
-        //             Succeeded = false,
-        //             Data = ModelState
-        //                 .Where(ms => ms.Value.Errors.Any())
-        //                 .ToDictionary(
-        //                     ms => ms.Key,
-        //                     ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-        //                 )
-        //         });
-        //     }
-        //     try
-        //     {
-
-        //         args.organizationCode = args.organizationCode ?? OrganizationCode;
-        //         args.UserId = CurrentUserId;
-        //         if (string.IsNullOrEmpty(args.organizationCode))
-        //         {
-        //             throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
-        //         }
-        //         var type = await _organizationManager.CreateSubLocationAsync(model, args);
-
-        //         return Ok(new Response<OrganizationLocationModel>()
-        //         {
-        //             Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
-
-
-        //             Succeeded = true,
-        //             Message = "Successful",
-        //             Data = type
-        //         });
-
-
-
-        //     }
-        //     catch (BaseException ex)
-        //     {
-        //         return StatusCode(400, new Response<string>
-        //         {
-        //             Message = ex.ExceptionMessage,
-        //             Succeeded = false,
-
-        //         });
-        //     }
-        //     catch (DbUpdateException ex) when
-        //(ex.InnerException is SqlException sqlEx && sqlEx.Number == 547)
-        //     {
-        //         return BadRequest(new Response<string>
-        //         {
-        //             Succeeded = false,
-        //             Message = "Unable to save the record because some related data is invalid or missing"
-        //         });
-        //     }
-        //     catch (Exception ex)
-        //     {
-        //         return StatusCode(400, new Response<string>
-        //         {
-        //             Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-        //             Succeeded = false,
-        //         });
-        //     }
-        // }
-
+      
         [HttpGet("sublocations/by-parent")]
         public async Task<IActionResult> GetSubLocationsByParentAsync([FromQuery] ListQueryParams args)
         {
@@ -3306,7 +3237,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
 
-                var response = await _organizationManager.GetFinancingRepaymentSummaryAsync(args);
+                var response = await _inputFinancingManager.GetFinancingRepaymentSummaryAsync(args);
                 return Ok(new Response<FinancingRepaymentSummaryDto>()
                 {
                     Code = (response != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -3347,13 +3278,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
 
-                var response = await _organizationManager.GetRepaymentBreakdownAsync(args.Id, args, cancellationToken);
+                var response = await _inputFinancingManager.GetRepaymentBreakdownAsync(args.Id, args);
                 return Ok(new PagedListResponse<List<RepaymentBreakdownDto>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = response.Count > 0 ? "Record Retrieved" : "No Records Found",
-                    Data = response.Data,
+                    Data = response.Items,
                     Count = response.Count,
                     PageSize = args.PageSize,
                     PageNumber = args.PageNumber
@@ -3390,7 +3321,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
                 }
       
-                var response = await _organizationManager.GetLoanDetailAsync(args);
+                var response = await _inputFinancingManager.GetLoanDetailAsync(args);
                 return Ok(new Response<LoanDetailDto>()
                 {
                     Code = (response != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -3427,7 +3358,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
                 query.organizationCode = query.organizationCode ?? OrganizationCode;
-                var overview = await _organizationManager.GetInputLoanSummaryAsync(query);
+                var overview = await _inputFinancingManager.GetInputLoanSummaryAsync(query);
                 return Ok(new Response<InputLoanSummaryDto>()
                 {
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -3467,13 +3398,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 query.organizationCode = query.organizationCode ?? OrganizationCode;
 
-                var response = await _organizationManager.GetFinancingBreakdownAsync(query, cancellationToken);
+                var response = await _inputFinancingManager.GetFinancingBreakdownAsync(query);
                 return Ok(new PagedListResponse<List<FinancingBreakdownDto>>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
                     Message = response.Count > 0 ? "Record Retrieved" : "No Records Found",
-                    Data = response.Data,
+                    Data = response.Items,
                     Count = response.Count,
                     PageSize = query.PageSize,
                     PageNumber = query.PageNumber

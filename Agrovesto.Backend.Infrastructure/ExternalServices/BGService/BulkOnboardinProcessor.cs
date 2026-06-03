@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -35,6 +36,77 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
             _excelConverterService = excelConverterService;
             _logger = logger;
         }
+
+        //public async Task ProcessOverdueRepaymentsAsync()
+        //{
+        //    var now = DateTimeOffset.UtcNow;
+
+        //    var overdueSchedules = await _context.RepaymentSchedules
+        //        .Include(x => x.InputPackageSubscription)
+        //        .Where(x => !x.IsPaid && x.DueDate < now)
+        //        .ToListAsync();
+
+        //    var affectedSubscriptions = new HashSet<long>();
+
+        //    foreach (var schedule in overdueSchedules)
+        //    {
+        //        var subscription = schedule.InputPackageSubscription;
+
+        //        var graceEnds = subscription.RepaymentGracePeriod;
+
+        //        if (now <= graceEnds)
+        //        {
+        //            schedule.IsOverdue = false;
+        //            continue;
+        //        }
+
+        //        schedule.IsOverdue = true;
+
+        //        affectedSubscriptions.Add(subscription.Id);
+        //    }
+
+        //    await _context.SaveChangesAsync();
+
+        //    // escalate AFTER detection (once per subscription)
+        //    foreach (var subId in affectedSubscriptions)
+        //    {
+        //        await EscalateSubscriptionRisk(subId);
+        //    }
+        //}
+        //private async Task EscalateSubscriptionRisk(long subscriptionId)
+        //{
+        //    var subscription = await _context.InputPackageSubscriptions
+        //        .FirstOrDefaultAsync(x => x.Id == subscriptionId);
+
+        //    if (subscription == null)
+        //        return;
+
+        //    // 1. USE DIRECT DATA FROM SUBSCRIPTION (faster + consistent)
+        //    var overdueCount = await _context.RepaymentSchedules
+        //        .CountAsync(x =>
+        //            x.InputPackageSubscriptionId == subscriptionId &&
+        //            x.IsOverdue);
+
+        //    subscription.OverdueCount = overdueCount;
+        //    subscription.LastOverdueDetectedOn = DateTimeOffset.UtcNow;
+
+        //    subscription.RiskCategory = overdueCount switch
+        //    {
+        //        0 => RiskCategory.Low,
+        //        1 => RiskCategory.Medium,
+        //        2 => RiskCategory.High,
+        //        _ => RiskCategory.High
+        //    };
+
+        //    if (overdueCount >= 3)
+        //    {
+        //        subscription.Status = SubscriptionStatus.Defaulted;
+        //    }
+
+        //    _context.InputPackageSubscriptions.Update(subscription);
+        //}
+
+
 
         // Basic phone normalization: remove spaces, hyphens, parentheses and leading plus signs.
         // This function keeps only digits and, if present, a leading country code without the '+' sign.

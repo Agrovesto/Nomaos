@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool HasbeenAssignedAgent { get; set; }
        // public string? OrganizationCode { get; set; }
         public string? OnboardedById { get; set; }
-        public Tier Tier { get; set; }
+        public Tier TierLevel { get; set; }
         public long MemberShipTypeId { get; set; }
         public MemberShipType MemberShipType { get; set; }
         public bool IsActive { get; set; } = true;

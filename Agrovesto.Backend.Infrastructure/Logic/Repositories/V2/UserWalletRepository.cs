@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -126,49 +127,110 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return wallet;
         }
 
+        //public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
+        //{
+        //    var userId = args.UserId;
+
+        //    var totalWalletBalance = await _context.UserWallets
+        //        .Where(w => w.UserId == userId &&
+        //                    w.BelongToBusinessCode == args.businessCode &&
+        //                    !w.IsDeleted)
+        //        .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+
+        //    var inputStats = await _context.InputTransactions
+        //        .Where(t => t.Farmer.UserId == userId)
+        //        .GroupBy(t => 1)
+        //        .Select(g => new
+        //        {
+        //            TotalDisbursement = g
+        //                .Where(x => x.TransactionType == InputTransactionType.Disbursement)
+        //                .Sum(x => (decimal?)x.Amount) ?? 0m,
+
+        //            TotalRepayment = g
+        //                .Where(x => x.TransactionType == InputTransactionType.Repayment)
+        //                .Sum(x => (decimal?)x.Amount) ?? 0m
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    var totalDisbursement = inputStats?.TotalDisbursement ?? 0m;
+        //    var totalRepayment = inputStats?.TotalRepayment ?? 0m;
+        //    var outstandingDebt = totalDisbursement - totalRepayment;
+
+        //    var nextRepayment = await _context.InputTransactions
+        //        .Where(t => t.Farmer.UserId == userId &&
+        //                    t.TransactionType == InputTransactionType.Repayment &&
+        //                    t.TransactionDate > DateTime.UtcNow)
+        //        .OrderBy(t => t.TransactionDate)
+        //        .Select(t => new { t.Amount, t.TransactionDate })
+        //        .FirstOrDefaultAsync();
+
+        //    return new FarmerFinancialSummaryDto
+        //    {
+        //        TotalWalletBalance = totalWalletBalance,
+        //        OutstandingInputDebt = outstandingDebt,
+        //        NextRepaymentAmount = nextRepayment?.Amount ?? 0m,
+        //        NextRepaymentDate = nextRepayment?.TransactionDate
+        //    };
+        //}
+       
+        
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
-            var userId = args.UserId;
+            var subscriberUserId = args.UserId;
+
+            if (string.IsNullOrWhiteSpace(subscriberUserId))
+                throw new ArgumentException("SubscriberUserId is required");
 
             var totalWalletBalance = await _context.UserWallets
-                .Where(w => w.UserId == userId &&
-                            w.BelongToBusinessCode == args.businessCode &&
-                            !w.IsDeleted)
-                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+               .Where(w => w.UserId == subscriberUserId &&
+                           w.BelongToBusinessCode == args.businessCode &&
+                           !w.IsDeleted)
+               .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
 
-            var inputStats = await _context.InputTransactions
-                .Where(t => t.Farmer.UserId == userId)
-                .GroupBy(t => 1)
-                .Select(g => new
+            var subscriptionIds = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(x =>
+                    x.SubscriberUserId == subscriberUserId &&
+                    x.Status == SubscriptionStatus.Active)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (!subscriptionIds.Any())
+            {
+                return new FarmerFinancialSummaryDto
                 {
-                    TotalDisbursement = g
-                        .Where(x => x.TransactionType == InputTransactionType.Disbursement)
-                        .Sum(x => (decimal?)x.Amount) ?? 0m,
+                    OutstandingInputDebt = 0,
+                    NextRepaymentAmount = 0,
+                    NextRepaymentDate = null
+                };
+            }
 
-                    TotalRepayment = g
-                        .Where(x => x.TransactionType == InputTransactionType.Repayment)
-                        .Sum(x => (decimal?)x.Amount) ?? 0m
+            var outstandingInputDebt = await _context.RepaymentSchedules
+                .Where(x =>
+                    subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+                    !x.IsPaid)
+                .SumAsync(x => (decimal?)(
+                    x.Amount - x.AmountPaid
+                )) ?? 0;
+
+            var nextRepayment = await _context.RepaymentSchedules
+                .Where(x =>
+                    subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+                    !x.IsPaid)
+                .OrderBy(x => x.DueDate)
+                .Select(x => new
+                {
+                    x.DueDate,
+                    RemainingAmount = x.Amount - x.AmountPaid
                 })
-                .FirstOrDefaultAsync();
-
-            var totalDisbursement = inputStats?.TotalDisbursement ?? 0m;
-            var totalRepayment = inputStats?.TotalRepayment ?? 0m;
-            var outstandingDebt = totalDisbursement - totalRepayment;
-
-            var nextRepayment = await _context.InputTransactions
-                .Where(t => t.Farmer.UserId == userId &&
-                            t.TransactionType == InputTransactionType.Repayment &&
-                            t.TransactionDate > DateTime.UtcNow)
-                .OrderBy(t => t.TransactionDate)
-                .Select(t => new { t.Amount, t.TransactionDate })
                 .FirstOrDefaultAsync();
 
             return new FarmerFinancialSummaryDto
             {
-                TotalWalletBalance = totalWalletBalance,
-                OutstandingInputDebt = outstandingDebt,
-                NextRepaymentAmount = nextRepayment?.Amount ?? 0m,
-                NextRepaymentDate = nextRepayment?.TransactionDate
+                TotalWalletBalance= totalWalletBalance,
+                OutstandingInputDebt = outstandingInputDebt,
+                NextRepaymentAmount = nextRepayment?.RemainingAmount ?? 0,
+                NextRepaymentDate = nextRepayment?.DueDate
             };
         }
         public  async Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId)

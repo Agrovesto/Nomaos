@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false)
+                //.AddJsonFile("appsettings.json", optional: false)
                 .AddJsonFile($"appsettings.{environment}.json", optional: true)
                 .AddEnvironmentVariables()
                 .Build();
@@ -338,25 +338,14 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             modelBuilder.Entity<Organization>()
     .ToTable("Organizations");
-            //modelBuilder.Entity<Farm>()
-            //    .HasIndex(f => f.FarmPolygon)
-            //    .HasDatabaseName("IX_Farm_Polygon")
-            //    .IsSpatial();
 
-            //for market transaction
-            //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
+            modelBuilder.Entity<RepaymentSchedule>()
+        .HasOne(x => x.InputPackageSubscription)
+        .WithMany(x => x.RepaymentSchedules)
+        .HasForeignKey(x => x.InputPackageSubscriptionId);
         }
 
-        //public DbSet<MarketTransaction> MarketTransactions { get; set; }
-        //public DbSet<Commodity> Commodities { get; set; }
-        //public DbSet<CommodityVariety> CommodityVarieties { get; set; }
-        //public DbSet<CommodityCategory> CommodityCategories { get; set; }
-        //public DbSet<TransactionCost> TransactionCosts { get; set; }
-        //public DbSet<Market> Markets { get; set; }
-        //public DbSet<MarketCommodity> MarketCommodities { get; set; }
-        //public DbSet<MarketDay> MarketDays { get; set; }
-
-
+     
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<MemberShipAgent> MemberShipAgents { get; set; }
@@ -449,10 +438,16 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletSecurity> WalletSecurities { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
-        public DbSet<InputTransaction> InputTransactions { get; set; }
-        public DbSet<InputAllocation> InputAllocations { get; set; }
+        //public DbSet<InputTransaction> InputTransactions { get; set; }
+        //public DbSet<InputAllocation> InputAllocations { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<InputPackageSubscription> InputPackageSubscriptions { get; set; }
         public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
+        public DbSet<RepaymentPenalty> RepaymentPenalties { get; set; }
+        public DbSet<PenaltyPolicy> PenaltyPolicies { get; set; }
+        public DbSet<SubscriptionPaymentAllocation> SubscriptionPaymentAllocations { get; set; }
+        public DbSet<InputPackageSubscriptionPayment> InputPackageSubscriptionPayments { get; set; }
+        public DbSet<InputSubscriptionDisbursement> InputSubscriptionDisbursements { get; set; }
         public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<StorageCategory> StorageCategories { get; set; }

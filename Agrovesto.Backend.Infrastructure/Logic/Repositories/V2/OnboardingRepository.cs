@@ -836,7 +836,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 OnBoardedOn = memberShip.OnBoardedOn,
                 PhoneNumber = memberShip.PhoneNumber,
                 State = memberShip.State,
-                Tier = EnumExtensions.GetDisplayName(memberShip.Tier),
+                Tier = EnumExtensions.GetDisplayName(memberShip.TierLevel),
                 UserId = userId,
                 Ward = memberShip.Ward,
                 AgentIds = agents.Select(a => a).ToList()

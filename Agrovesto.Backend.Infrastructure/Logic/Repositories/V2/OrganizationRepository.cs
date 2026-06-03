@@ -1156,7 +1156,7 @@ SELECT
                     PhoneNumber = m.PhoneNumber,
                     UserId = m.UserId,
 
-                    Tier = EnumExtensions.GetDisplayName(m.Tier),
+                    Tier = EnumExtensions.GetDisplayName(m.TierLevel),
                     MembershipType = mt != null ? mt.Name : null,
 
                     // ============================
@@ -2028,7 +2028,7 @@ SELECT
             {
                 location.StockLevel = await _context.LocationInventories
                     .Where(x => x.LocationId == location.Id && x.IsActive)
-                    .SumAsync(x => (double?)x.Quantity) ?? 0;
+                    .SumAsync(x => x.Quantity);
             }
 
             await _context.SaveChangesAsync();
@@ -2715,7 +2715,7 @@ SELECT
 
                             AssignedOn = a.AssignedOn,
 
-                            AgentLevel =EnumExtensions.GetDisplayName(a.Agent.Tier), 
+                            AgentLevel =EnumExtensions.GetDisplayName(a.Agent.TierLevel), 
                             Status = a.IsActive ? "Active" : "Inactive"
                         })
                         .FirstOrDefault(),
@@ -2856,7 +2856,7 @@ SELECT
                     x.BatchNumber == batchNumber &&
                     x.IsActive);
 
-            double quantityBefore = 0;
+            decimal quantityBefore = 0;
 
             if (inventory == null)
             {
@@ -3002,7 +3002,7 @@ SELECT
 
             var quantityBefore = inventory.Quantity;
 
-            double diff = 0;
+            decimal diff = 0;
 
 
             if (dto.Quantity.HasValue)
