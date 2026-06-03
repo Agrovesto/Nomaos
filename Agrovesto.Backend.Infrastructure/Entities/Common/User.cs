@@ -1,6 +1,7 @@
 ﻿
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
@@ -11,6 +12,32 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
+    public class UserBusiness
+    {
+        [Key]
+        public long Id { get; set; }
+
+        public string UserId { get; set; }
+        public User User { get; set; }
+
+        public long BusinessId { get; set; }
+        public Business Business { get; set; }
+
+        // Role within that tenant
+        public string? Role { get; set; }  //admin, user, etc.
+
+        // Is this the currently selected/default tenant?
+        public bool IsDefault { get; set; }
+
+        // Membership status
+        public bool IsActive { get; set; } = true;
+
+        // Invitation/audit
+        public DateTimeOffset JoinedOn { get; set; }
+            = DateTimeOffset.UtcNow;
+
+        public string? InvitedBy { get; set; }
+    }
     public class User : IdentityUser
     {
         public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
@@ -30,6 +57,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string? Name { get; set; }
         public string? BusinessCode { get; set; }
+        public ICollection<UserBusiness> UserBusinesses
+        { get; set; }
+    = new HashSet<UserBusiness>();
+
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }

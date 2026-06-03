@@ -129,7 +129,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
                 var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
 
-                return Ok(new Response<BulkOnboardingResult>()
+                return Ok(new Response<BulkOnboardingQueueResponse>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,

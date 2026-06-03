@@ -7,6 +7,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using EFCore.BulkExtensions;
+using Hangfire;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -52,34 +53,74 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
             return string.IsNullOrWhiteSpace(normalized) ? phone : normalized;
         }
 
-        public async Task ProcessAsync(string filePath, OnBoardingArgs args, CancellationToken token)
+        [AutomaticRetry(Attempts = 5)]
+        public async Task ProcessAsync(string filePath, OnBoardingArgs args, Guid jobId, CancellationToken token)
         {
-            await ProcessFileAsync(filePath, args, null, token);
+            await ProcessFileAsync(filePath, args, jobId, token);
         }
-        private async Task ProcessFileAsync(string filePath, OnBoardingArgs args, BulkUploadJob job, CancellationToken token)
+        private async Task ProcessFileAsync(
+    string filePath,
+    OnBoardingArgs args,
+    Guid jobId,
+    CancellationToken token)
         {
             args.userType = "Farmer";
 
+            BulkUploadJob? job = null;
+
             try
             {
-                _logger.LogInformation("Bulk processor starting for file {file}", filePath);
+                _logger.LogInformation(
+                    "Bulk processor starting for JobId {jobId}",
+                    jobId);
 
-                // ── 1. PARSE ────────────────────────────────────────────────────────
+                // ── 1. LOAD JOB ─────────────────────────────────────────────────────
+                job = await _context.BulkUploadJobs
+                    .FirstOrDefaultAsync(x => x.Id == jobId, token);
+
+                if (job == null)
+                {
+                    _logger.LogWarning(
+                        "Bulk upload job not found: {jobId}",
+                        jobId);
+
+                    return;
+                }
+
+                job.Status = "Processing";
+
+                await _context.SaveChangesAsync(token);
+
+                // ── 2. PARSE FILE ───────────────────────────────────────────────────
                 using var stream = File.OpenRead(filePath);
+
                 var rows = _excelConverterService.BulkParseExcel(stream);
 
                 if (rows == null || !rows.Any())
                 {
-                    _logger.LogWarning("No rows found in file {file}", filePath);
-                    await FinalizeJobAsync(job, status: "Completed", successful: 0, failed: 0, token);
+                    _logger.LogWarning(
+                        "No rows found in file {file}",
+                        filePath);
+
+                    await FinalizeJobAsync(
+                        job,
+                        status: "Failed",
+                        successful: 0,
+                        failed: 0,
+                        token);
+
                     return;
                 }
 
-                job = await EnsureJobAsync(job, filePath, args, rows.Count, token);
+                job.TotalRows = rows.Count;
 
-                // ── 3. VALIDATE ROWS & BUILD AGGREGATES ─────────────────────────────
+                await _context.SaveChangesAsync(token);
+
+                // ── 3. VALIDATE ROWS & BUILD AGGREGATES ────────────────────────────
                 var aggregates = new List<BulkRowAggregate>();
-                int rowNumber = 2; // row 1 = header
+
+                int rowNumber = 2;
+
                 int parseFailures = 0;
 
                 foreach (var row in rows)
@@ -90,18 +131,21 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
 
                         var salt = EncryptionUtil.GetSalt();
 
-                        var user = BuildUserEntity(new OnboardingRequestModel
-                        {
-                            Email = row.Email,
-                            PhoneNumber = row.PhoneNumber,
-                            Password = "Admin123@",
-                            Pin = "0000",
-                            FirstName = row.FirstName,
-                            MiddleName = row.MiddleName,
-                            LastName = row.LastName,
-                            Bvn = row.BVN,
-                            Nin = row.NIN,
-                        }, args, salt);
+                        var user = BuildUserEntity(
+                            new OnboardingRequestModel
+                            {
+                                Email = row.Email,
+                                PhoneNumber = row.PhoneNumber,
+                                Password = "Admin123@",
+                                Pin = "0000",
+                                FirstName = row.FirstName,
+                                MiddleName = row.MiddleName,
+                                LastName = row.LastName,
+                                Bvn = row.BVN,
+                                Nin = row.NIN,
+                            },
+                            args,
+                            salt);
 
                         var farmer = new Farmer
                         {
@@ -120,13 +164,16 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                             OnBoardedOn = DateTimeOffset.UtcNow
                         };
 
-                        // Normalize email on user too
                         if (!string.IsNullOrWhiteSpace(user.Email))
-                            user.Email = user.Email.Trim().ToLowerInvariant();
+                            user.Email = user.Email
+                                .Trim()
+                                .ToLowerInvariant();
 
-                        // Normalize phone numbers to a canonical form for comparison/lookup
-                        user.PhoneNumber = NormalizePhoneNumber(user.PhoneNumber);
-                        farmer.PhoneNumber = NormalizePhoneNumber(farmer.PhoneNumber);
+                        user.PhoneNumber =
+                            NormalizePhoneNumber(user.PhoneNumber);
+
+                        farmer.PhoneNumber =
+                            NormalizePhoneNumber(farmer.PhoneNumber);
 
                         aggregates.Add(new BulkRowAggregate
                         {
@@ -139,7 +186,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                     catch (Exception ex)
                     {
                         parseFailures++;
-                        _logger.LogWarning("Row {row} skipped: {reason}", rowNumber, ex.Message);
+
+                        _logger.LogWarning(
+                            "Row {row} skipped: {reason}",
+                            rowNumber,
+                            ex.Message);
                     }
                     finally
                     {
@@ -149,12 +200,21 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
 
                 if (!aggregates.Any())
                 {
-                    _logger.LogWarning("No valid rows after validation for file {file}", filePath);
-                    await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+                    _logger.LogWarning(
+                        "No valid rows after validation for file {file}",
+                        filePath);
+
+                    await FinalizeJobAsync(
+                        job,
+                        "Completed",
+                        successful: 0,
+                        failed: rows.Count,
+                        token);
+
                     return;
                 }
 
-                // ── 4. BATCH DUPLICATE CHECK ─────────────────────────────────────────
+                // ── 4. DUPLICATE CHECKS ────────────────────────────────────────────
                 var emails = aggregates
                     .Where(a => !string.IsNullOrWhiteSpace(a.User.Email))
                     .Select(a => a.User.Email)
@@ -167,70 +227,91 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                     .Distinct()
                     .ToList();
 
-                // Single query each — no N+1
-                var existingUsers = await _context.Users.AsNoTracking()
-                    .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
-                    .Select(u => new { u.Id, u.Email, u.PhoneNumber })
+                var existingUsers = await _context.Users
+                    .AsNoTracking()
+                    .Where(u =>
+                        emails.Contains(u.Email) ||
+                        phones.Contains(u.PhoneNumber))
+                    .Select(u => new
+                    {
+                        u.Id,
+                        u.Email,
+                        u.PhoneNumber
+                    })
                     .ToListAsync(token);
 
-                var existingFarmers = await _context.Farmers.AsNoTracking()
-                    .Where(f => emails.Contains(f.Email) || phones.Contains(f.PhoneNumber))
-                    .Select(f => new { f.Id, f.UserId, f.Email, f.PhoneNumber })
+                var existingFarmers = await _context.Farmers
+                    .AsNoTracking()
+                    .Where(f =>
+                        emails.Contains(f.Email) ||
+                        phones.Contains(f.PhoneNumber))
+                    .Select(f => new
+                    {
+                        f.Id,
+                        f.UserId,
+                        f.Email,
+                        f.PhoneNumber
+                    })
                     .ToListAsync(token);
 
                 var existingUserByEmail = existingUsers
-                    .Where(u => !string.IsNullOrWhiteSpace(u.Email))
-                    .ToDictionary(u => u.Email, u => u.Id);
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+                    .ToDictionary(x => x.Email, x => x.Id);
 
                 var existingUserByPhone = existingUsers
-                    .Where(u => !string.IsNullOrWhiteSpace(u.PhoneNumber))
-                    .ToDictionary(u => NormalizePhoneNumber(u.PhoneNumber), u => u.Id);
+                    .Where(x => !string.IsNullOrWhiteSpace(x.PhoneNumber))
+                    .ToDictionary(
+                        x => NormalizePhoneNumber(x.PhoneNumber),
+                        x => x.Id);
 
                 var existingFarmerEmails = existingFarmers
-                    .Where(f => !string.IsNullOrWhiteSpace(f.Email))
-                    .Select(f => f.Email)
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Email))
+                    .Select(x => x.Email)
                     .ToHashSet();
 
                 var existingFarmerPhones = existingFarmers
-                    .Where(f => !string.IsNullOrWhiteSpace(f.PhoneNumber))
-                    .Select(f => NormalizePhoneNumber(f.PhoneNumber))
+                    .Where(x => !string.IsNullOrWhiteSpace(x.PhoneNumber))
+                    .Select(x => NormalizePhoneNumber(x.PhoneNumber))
                     .ToHashSet();
 
-                // ── 5. SPLIT: NEW USERS vs EXISTING USERS ────────────────────────────
+                // ── 5. SPLIT USERS ─────────────────────────────────────────────────
                 var newUsers = new List<User>();
-                var validAggregates = new List<BulkRowAggregate>(); // aggregates that will actually be inserted
+
+                var validAggregates = new List<BulkRowAggregate>();
 
                 foreach (var agg in aggregates)
                 {
                     var email = agg.User.Email;
                     var phone = agg.User.PhoneNumber;
 
-                    // Skip if farmer already exists
-                    if (!string.IsNullOrWhiteSpace(email) && existingFarmerEmails.Contains(email))
+                    if (!string.IsNullOrWhiteSpace(email) &&
+                        existingFarmerEmails.Contains(email))
                     {
-                        _logger.LogInformation("Row {row}: farmer already exists by email {email}, skipping", agg.RowNumber, email);
                         continue;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(phone) && existingFarmerPhones.Contains(phone))
+                    if (!string.IsNullOrWhiteSpace(phone) &&
+                        existingFarmerPhones.Contains(phone))
                     {
-                        _logger.LogInformation("Row {row}: farmer already exists by phone {phone}, skipping", agg.RowNumber, phone);
                         continue;
                     }
 
                     agg.User.UserType = args.userType;
                     agg.User.IsActive = true;
 
-                    // Attach existing user account if found
                     string matchedUserId =
-                        (!string.IsNullOrWhiteSpace(email) && existingUserByEmail.TryGetValue(email, out var eid)) ? eid :
-                        (!string.IsNullOrWhiteSpace(phone) && existingUserByPhone.TryGetValue(phone, out var pid)) ? pid :
-                        null;
+                        (!string.IsNullOrWhiteSpace(email) &&
+                         existingUserByEmail.TryGetValue(email, out var eid))
+                            ? eid
+                            : (!string.IsNullOrWhiteSpace(phone) &&
+                               existingUserByPhone.TryGetValue(phone, out var pid))
+                                ? pid
+                                : null;
 
                     if (matchedUserId != null)
                     {
                         agg.Farmer.UserId = matchedUserId;
-                        agg.User.Id = matchedUserId; // flag: don't insert user
+                        agg.User.Id = matchedUserId;
                     }
                     else
                     {
@@ -242,12 +323,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
 
                 if (!validAggregates.Any())
                 {
-                    _logger.LogInformation("All rows were duplicates for file {file}", filePath);
-                    await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+                    await FinalizeJobAsync(
+                        job,
+                        "Completed",
+                        successful: 0,
+                        failed: rows.Count,
+                        token);
+
                     return;
                 }
 
-                // ── 6. BULK INSERT USERS ─────────────────────────────────────────────
+                // ── 6. BULK INSERT USERS ───────────────────────────────────────────
                 var bulkConfig = new BulkConfig
                 {
                     BatchSize = 5000,
@@ -256,326 +342,682 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                     SetOutputIdentity = true
                 };
 
-                // email→id and phone→id maps — seed with already-known existing users
-                var emailToUserId = new Dictionary<string, string>(existingUserByEmail, StringComparer.OrdinalIgnoreCase);
-                var phoneToUserId = new Dictionary<string, string>(existingUserByPhone);
+                var emailToUserId = new Dictionary<string, string>(
+                    existingUserByEmail,
+                    StringComparer.OrdinalIgnoreCase);
+
+                var phoneToUserId = new Dictionary<string, string>(
+                    existingUserByPhone);
 
                 if (newUsers.Any())
                 {
                     await BulkInsertWithFallbackAsync(
-                        bulkInsert: () => _context.BulkInsertAsync(newUsers, bulkConfig, cancellationToken: token),
+                        bulkInsert: () =>
+                            _context.BulkInsertAsync(
+                                newUsers,
+                                bulkConfig,
+                                cancellationToken: token),
+
                         fallback: async () =>
                         {
-                            foreach (var u in newUsers)
+                            foreach (var batch in newUsers.Chunk(500))
                             {
-                                try
-                                {
-                                    _context.Users.Add(u);
-                                    await _context.SaveChangesAsync(token);
-                                }
-                                catch (Exception ex)
-                                {
-                                    _logger.LogWarning(ex, "Failed individual user insert {email}/{phone}, attempting recovery", u.Email, u.PhoneNumber);
+                                _context.Users.AddRange(batch);
 
-                                    // Race condition: another process inserted between our check and now
-                                    var existing = await _context.Users.AsNoTracking()
-                                        .Where(x =>
-                                            (!string.IsNullOrWhiteSpace(u.Email) && x.Email == u.Email) ||
-                                            (!string.IsNullOrWhiteSpace(u.PhoneNumber) && x.PhoneNumber == u.PhoneNumber))
-                                        .FirstOrDefaultAsync(token);
-
-                                    if (existing != null)
-                                    {
-                                        u.Id = existing.Id; // use recovered id for downstream mapping
-                                    }
-                                }
+                                await _context.SaveChangesAsync(token);
                             }
                         },
-                        logger: _logger,
-                        context: "Users"
-                    );
 
-                    // Populate lookup maps from newly inserted / recovered users
-                    foreach (var u in newUsers)
-                    {
-                        if (string.IsNullOrWhiteSpace(u.Id)) continue;
-                        if (!string.IsNullOrWhiteSpace(u.Email)) emailToUserId[u.Email] = u.Id;
-                        if (!string.IsNullOrWhiteSpace(u.PhoneNumber)) phoneToUserId[u.PhoneNumber] = u.Id;
-                    }
+                        logger: _logger,
+                        context: "Users");
                 }
 
-                // ── 7. WIRE FARMER → USER IDs ────────────────────────────────────────
+                foreach (var u in newUsers)
+                {
+                    if (string.IsNullOrWhiteSpace(u.Id))
+                        continue;
+
+                    if (!string.IsNullOrWhiteSpace(u.Email))
+                        emailToUserId[u.Email] = u.Id;
+
+                    if (!string.IsNullOrWhiteSpace(u.PhoneNumber))
+                        phoneToUserId[u.PhoneNumber] = u.Id;
+                }
+
+                // ── 7. WIRE FARMERS TO USERS ───────────────────────────────────────
                 foreach (var agg in validAggregates)
                 {
                     if (!string.IsNullOrWhiteSpace(agg.User.Id))
                     {
                         agg.Farmer.UserId = agg.User.Id;
+
                         continue;
                     }
 
-                    if (!string.IsNullOrWhiteSpace(agg.User.Email) && emailToUserId.TryGetValue(agg.User.Email, out var uid))
+                    if (!string.IsNullOrWhiteSpace(agg.User.Email) &&
+                        emailToUserId.TryGetValue(
+                            agg.User.Email,
+                            out var uid))
+                    {
                         agg.Farmer.UserId = uid;
-                    else if (!string.IsNullOrWhiteSpace(agg.User.PhoneNumber) && phoneToUserId.TryGetValue(agg.User.PhoneNumber, out var pid))
+                    }
+                    else if (!string.IsNullOrWhiteSpace(agg.User.PhoneNumber) &&
+                             phoneToUserId.TryGetValue(
+                                 agg.User.PhoneNumber,
+                                 out var pid))
+                    {
                         agg.Farmer.UserId = pid;
+                    }
                 }
 
-                // ── 8. BULK INSERT FARMERS ───────────────────────────────────────────
+                // ── 8. INSERT FARMERS ──────────────────────────────────────────────
                 var farmersToInsert = validAggregates
-                    .Where(a => !string.IsNullOrWhiteSpace(a.Farmer.UserId))
-                    .Select(a => a.Farmer)
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Farmer.UserId))
+                    .Select(x => x.Farmer)
                     .ToList();
 
                 if (!farmersToInsert.Any())
                 {
-                    _logger.LogWarning("No farmers had a resolved UserId — nothing inserted for file {file}", filePath);
-                    await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+                    await FinalizeJobAsync(
+                        job,
+                        "Completed",
+                        successful: 0,
+                        failed: rows.Count,
+                        token);
+
                     return;
                 }
 
                 await BulkInsertWithFallbackAsync(
-                    bulkInsert: () => _context.BulkInsertAsync(farmersToInsert, bulkConfig, cancellationToken: token),
+                    bulkInsert: () =>
+                        _context.BulkInsertAsync(
+                            farmersToInsert,
+                            bulkConfig,
+                            cancellationToken: token),
+
                     fallback: async () =>
                     {
-                        foreach (var f in farmersToInsert)
+                        foreach (var batch in farmersToInsert.Chunk(500))
                         {
-                            try
-                            {
-                                _context.Farmers.Add(f);
-                                await _context.SaveChangesAsync(token);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed individual farmer insert {name}", f.Name);
-                            }
+                            _context.Farmers.AddRange(batch);
+
+                            await _context.SaveChangesAsync(token);
                         }
                     },
+
                     logger: _logger,
-                    context: "Farmers"
-                );
+                    context: "Farmers");
 
-                // Build farmer lookup by UserId for downstream steps
-                var farmerByUserId = farmersToInsert
-                    .Where(f => !string.IsNullOrWhiteSpace(f.UserId) && f.Id > 0)
-                    .ToDictionary(f => f.UserId, f => f);
+                int insertedFarmerCount = farmersToInsert.Count(x => x.Id > 0);
 
-                int insertedFarmerCount = farmersToInsert.Count(f => f.Id > 0);
-
-                // ── 9. VALUE CHAIN ITEMS ─────────────────────────────────────────────
-                var valueChainItems = new List<FarmerValueChainItem>();
-
-                foreach (var agg in validAggregates)
-                {
-                    if (!farmerByUserId.TryGetValue(agg.Farmer.UserId ?? "", out var insertedFarmer)) continue;
-                    if (agg.ValueChains == null) continue;
-
-                    foreach (var vc in agg.ValueChains)
-                    {
-                        foreach (var item in vc.Items ?? new())
-                        {
-                            valueChainItems.Add(new FarmerValueChainItem
-                            {
-                                FarmerId = insertedFarmer.Id,
-                                ValueChainType = vc.ValueChainType,
-                                ItemName = item
-                            });
-                        }
-                    }
-                }
-
-                if (valueChainItems.Any())
-                {
-                    await BulkInsertWithFallbackAsync(
-                        bulkInsert: () => _context.BulkInsertAsync(valueChainItems, bulkConfig, cancellationToken: token),
-                        fallback: async () =>
-                        {
-                            foreach (var vc in valueChainItems)
-                            {
-                                try { _context.FarmerValueChainItems.Add(vc); await _context.SaveChangesAsync(token); }
-                                catch (Exception ex) { _logger.LogWarning(ex, "Failed to insert value chain item for farmer {id}", vc.FarmerId); }
-                            }
-                        },
-                        logger: _logger,
-                        context: "ValueChains"
-                    );
-                }
-
-                // ── 10. ORGANIZATION MAPPINGS ────────────────────────────────────────
-                if (!string.IsNullOrWhiteSpace(args.organizationCode))
-                {
-                    var userIds = farmersToInsert.Where(f => !string.IsNullOrWhiteSpace(f.UserId)).Select(f => f.UserId).Distinct().ToList();
-                    var farmerIds = farmersToInsert.Where(f => f.Id > 0).Select(f => f.Id).ToList();
-
-                    // UserOrganizations
-                    var existingUserOrgList = await _context.UserOrganizations.AsNoTracking()
-                        .Where(uo => userIds.Contains(uo.UserId) && uo.OrganizationCode == args.organizationCode)
-                        .Select(uo => uo.UserId)
-                        .ToListAsync(token);
-
-                    var existingUserOrgSet = new HashSet<string>(existingUserOrgList);
-
-                    var userOrgsToInsert = userIds
-                        .Where(uid => !existingUserOrgSet.Contains(uid))
-                        .Select(uid => new UserOrganization
-                        {
-                            UserId = uid,
-                            OrganizationCode = args.organizationCode,
-                            IsActive = true
-                        })
-                        .ToList();
-
-                    if (userOrgsToInsert.Any())
-                    {
-                        await BulkInsertWithFallbackAsync(
-                            bulkInsert: () => _context.BulkInsertAsync(userOrgsToInsert, bulkConfig, cancellationToken: token),
-                            fallback: async () =>
-                            {
-                                foreach (var uo in userOrgsToInsert)
-                                {
-                                    try { _context.UserOrganizations.Add(uo); await _context.SaveChangesAsync(token); }
-                                    catch { }
-                                }
-                            },
-                            logger: _logger,
-                            context: "UserOrganizations"
-                        );
-                    }
-
-                    // FarmerOrganizations
-                    var existingFarmerOrgList = await _context.FarmerOrganizations.AsNoTracking()
-                        .Where(fo => farmerIds.Contains(fo.FarmerId) && fo.OrganizationCode == args.organizationCode)
-                        .Select(fo => fo.FarmerId)
-                        .ToListAsync(token);
-
-                    var existingFarmerOrgSet = new HashSet<long>(existingFarmerOrgList);
-
-                    var farmerOrgsToInsert = farmersToInsert
-                        .Where(f => f.Id > 0 && !existingFarmerOrgSet.Contains(f.Id))
-                        .Select(f => new FarmerOrganization
-                        {
-                            FarmerId = f.Id,
-                            OrganizationCode = args.organizationCode,
-                            OnboardedByUserId = args.OnboardedByUserId,
-                            IsActive = true
-                        })
-                        .ToList();
-
-                    if (farmerOrgsToInsert.Any())
-                    {
-                        await BulkInsertWithFallbackAsync(
-                            bulkInsert: () => _context.BulkInsertAsync(farmerOrgsToInsert, bulkConfig, cancellationToken: token),
-                            fallback: async () =>
-                            {
-                                foreach (var fo in farmerOrgsToInsert)
-                                {
-                                    try { _context.FarmerOrganizations.Add(fo); await _context.SaveChangesAsync(token); }
-                                    catch { }
-                                }
-                            },
-                            logger: _logger,
-                            context: "FarmerOrganizations"
-                        );
-                    }
-                }
-
-                // ── 11. COOPERATIVE ASSIGNMENTS ──────────────────────────────────────
-                if (args.CooperativeIds?.Any() == true)
-                {
-                    _logger.LogInformation("Assigning {count} farmers to cooperatives", farmersToInsert.Count);
-
-                    // Fire cooperative assignments concurrently per farmer, bounded to avoid thread exhaustion
-                    var semaphore = new SemaphoreSlim(10);
-                    var cooperativeTasks = farmersToInsert
-                        .Where(f => !string.IsNullOrWhiteSpace(f.UserId))
-                        .Select(async f =>
-                        {
-                            await semaphore.WaitAsync(token);
-                            try
-                            {
-                                await AssignFarmerToCooperatives(new AssignmentArgs
-                                {
-                                    Id = f.Id,
-                                    UserId = f.UserId,
-                                    CooperativeIds = args.CooperativeIds,
-                                    businessCode = args.businessCode,
-                                    organizationCode = args.organizationCode,
-                                    OnboardedByUserId = args.OnboardedByUserId
-                                }, token);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to assign farmer {userId} to cooperatives", f.UserId);
-                            }
-                            finally
-                            {
-                                semaphore.Release();
-                            }
-                        });
-
-                    await Task.WhenAll(cooperativeTasks);
-                }
-
-                // ── 12. AGENT ASSIGNMENTS ─────────────────────────────────────────────
-                if (args.AgentIds?.Any() == true)
-                {
-                    _logger.LogInformation("Assigning {count} farmers to agents", farmersToInsert.Count);
-
-                    var semaphore = new SemaphoreSlim(10);
-                    var agentTasks = farmersToInsert
-                        .Where(f => !string.IsNullOrWhiteSpace(f.UserId))
-                        .Select(async f =>
-                        {
-                            await semaphore.WaitAsync(token);
-                            try
-                            {
-                                await AssignFarmerToAgents(new AssignmentArgs
-                                {
-                                    Id = f.Id,
-                                    UserId = f.UserId,
-                                    AgentIds = args.AgentIds,
-                                    businessCode = args.businessCode,
-                                    organizationCode = args.organizationCode,
-                                    OnboardedByUserId = args.OnboardedByUserId
-                                }, token);
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(ex, "Failed to assign farmer {userId} to agents", f.UserId);
-                            }
-                            finally
-                            {
-                                semaphore.Release();
-                            }
-                        });
-
-                    await Task.WhenAll(agentTasks);
-                }
-
-                // ── 13. FINALIZE ──────────────────────────────────────────────────────
+                // ── 9. FINALIZE ────────────────────────────────────────────────────
                 _logger.LogInformation(
-                    "Bulk file {file} complete — Total={total} Valid={valid} Inserted={inserted} Skipped={skipped}",
-                    filePath, rows.Count, aggregates.Count, insertedFarmerCount, rows.Count - aggregates.Count + parseFailures);
+                    "Bulk file {file} complete — Total={total} Inserted={inserted}",
+                    filePath,
+                    rows.Count,
+                    insertedFarmerCount);
 
-                await FinalizeJobAsync(job, "Completed", successful: insertedFarmerCount, failed: rows.Count - insertedFarmerCount, token);
+                await FinalizeJobAsync(
+                    job,
+                    "Completed",
+                    successful: insertedFarmerCount,
+                    failed: rows.Count - insertedFarmerCount,
+                    token);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Bulk onboarding processing failed for file {file}", filePath);
-                await SafeMarkJobFailedAsync(filePath, ex.Message, token);
+                _logger.LogError(
+                    ex,
+                    "Bulk onboarding failed for file {file}",
+                    filePath);
+
+                if (job != null)
+                {
+                    job.Status = "Failed";
+                    job.ErrorMessage = ex.Message;
+                    job.CompletedAt = DateTime.UtcNow;
+
+                    await _context.SaveChangesAsync(token);
+                }
             }
             finally
             {
-                // ── 14. CLEANUP TEMP FILE ─────────────────────────────────────────────
                 try
                 {
                     if (File.Exists(filePath))
+                    {
                         File.Delete(filePath);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not delete temp file {file}", filePath);
+                    _logger.LogWarning(
+                        ex,
+                        "Could not delete temp file {file}",
+                        filePath);
                 }
             }
         }
+        //private async Task ProcessFileAsync(string filePath, OnBoardingArgs args, BulkUploadJob job, CancellationToken token)
+        //{
+        //    args.userType = "Farmer";
+
+        //    try
+        //    {
+        //        _logger.LogInformation("Bulk processor starting for file {file}", filePath);
+
+        //        // ── 1. PARSE ────────────────────────────────────────────────────────
+        //        using var stream = File.OpenRead(filePath);
+        //        var rows = _excelConverterService.BulkParseExcel(stream);
+
+        //        if (rows == null || !rows.Any())
+        //        {
+        //            _logger.LogWarning("No rows found in file {file}", filePath);
+        //            await FinalizeJobAsync(job, status: "Completed", successful: 0, failed: 0, token);
+        //            return;
+        //        }
+
+        //        job = await EnsureJobAsync(job, filePath, args, rows.Count, token);
+
+        //        // ── 3. VALIDATE ROWS & BUILD AGGREGATES ─────────────────────────────
+        //        var aggregates = new List<BulkRowAggregate>();
+        //        int rowNumber = 2; // row 1 = header
+        //        int parseFailures = 0;
+
+        //        foreach (var row in rows)
+        //        {
+        //            try
+        //            {
+        //                ValidateRow(row, rowNumber);
+
+        //                var salt = EncryptionUtil.GetSalt();
+
+        //                var user = BuildUserEntity(new OnboardingRequestModel
+        //                {
+        //                    Email = row.Email,
+        //                    PhoneNumber = row.PhoneNumber,
+        //                    Password = "Admin123@",
+        //                    Pin = "0000",
+        //                    FirstName = row.FirstName,
+        //                    MiddleName = row.MiddleName,
+        //                    LastName = row.LastName,
+        //                    Bvn = row.BVN,
+        //                    Nin = row.NIN,
+        //                }, args, salt);
+
+        //                var farmer = new Farmer
+        //                {
+        //                    Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
+        //                    Email = row.Email?.Trim().ToLowerInvariant(),
+        //                    PhoneNumber = row.PhoneNumber?.Trim(),
+        //                    Gender = row.Gender,
+        //                    State = row.StateOfResidence,
+        //                    Lga = row.LGA,
+        //                    Ward = row.Ward,
+        //                    Location = row.ResidentialAddress,
+        //                    FarmerCategory = row.CategoryOfFarmer,
+        //                    YearsInAgric = int.Parse(row.YearsInAgric),
+        //                    Level = FarmerLevel.Level1,
+        //                    HighestLevelOfEducation = row.HighestLevelOfEducation,
+        //                    OnBoardedOn = DateTimeOffset.UtcNow
+        //                };
+
+        //                // Normalize email on user too
+        //                if (!string.IsNullOrWhiteSpace(user.Email))
+        //                    user.Email = user.Email.Trim().ToLowerInvariant();
+
+        //                // Normalize phone numbers to a canonical form for comparison/lookup
+        //                user.PhoneNumber = NormalizePhoneNumber(user.PhoneNumber);
+        //                farmer.PhoneNumber = NormalizePhoneNumber(farmer.PhoneNumber);
+
+        //                aggregates.Add(new BulkRowAggregate
+        //                {
+        //                    RowNumber = rowNumber,
+        //                    User = user,
+        //                    Farmer = farmer,
+        //                    ValueChains = GetValueChains(row)
+        //                });
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                parseFailures++;
+        //                _logger.LogWarning("Row {row} skipped: {reason}", rowNumber, ex.Message);
+        //            }
+        //            finally
+        //            {
+        //                rowNumber++;
+        //            }
+        //        }
+
+        //        if (!aggregates.Any())
+        //        {
+        //            _logger.LogWarning("No valid rows after validation for file {file}", filePath);
+        //            await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+        //            return;
+        //        }
+
+        //        // ── 4. BATCH DUPLICATE CHECK ─────────────────────────────────────────
+        //        var emails = aggregates
+        //            .Where(a => !string.IsNullOrWhiteSpace(a.User.Email))
+        //            .Select(a => a.User.Email)
+        //            .Distinct()
+        //            .ToList();
+
+        //        var phones = aggregates
+        //            .Where(a => !string.IsNullOrWhiteSpace(a.User.PhoneNumber))
+        //            .Select(a => a.User.PhoneNumber)
+        //            .Distinct()
+        //            .ToList();
+
+        //        // Single query each — no N+1
+        //        var existingUsers = await _context.Users.AsNoTracking()
+        //            .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
+        //            .Select(u => new { u.Id, u.Email, u.PhoneNumber })
+        //            .ToListAsync(token);
+
+        //        var existingFarmers = await _context.Farmers.AsNoTracking()
+        //            .Where(f => emails.Contains(f.Email) || phones.Contains(f.PhoneNumber))
+        //            .Select(f => new { f.Id, f.UserId, f.Email, f.PhoneNumber })
+        //            .ToListAsync(token);
+
+        //        var existingUserByEmail = existingUsers
+        //            .Where(u => !string.IsNullOrWhiteSpace(u.Email))
+        //            .ToDictionary(u => u.Email, u => u.Id);
+
+        //        var existingUserByPhone = existingUsers
+        //            .Where(u => !string.IsNullOrWhiteSpace(u.PhoneNumber))
+        //            .ToDictionary(u => NormalizePhoneNumber(u.PhoneNumber), u => u.Id);
+
+        //        var existingFarmerEmails = existingFarmers
+        //            .Where(f => !string.IsNullOrWhiteSpace(f.Email))
+        //            .Select(f => f.Email)
+        //            .ToHashSet();
+
+        //        var existingFarmerPhones = existingFarmers
+        //            .Where(f => !string.IsNullOrWhiteSpace(f.PhoneNumber))
+        //            .Select(f => NormalizePhoneNumber(f.PhoneNumber))
+        //            .ToHashSet();
+
+        //        // ── 5. SPLIT: NEW USERS vs EXISTING USERS ────────────────────────────
+        //        var newUsers = new List<User>();
+        //        var validAggregates = new List<BulkRowAggregate>(); // aggregates that will actually be inserted
+
+        //        foreach (var agg in aggregates)
+        //        {
+        //            var email = agg.User.Email;
+        //            var phone = agg.User.PhoneNumber;
+
+        //            // Skip if farmer already exists
+        //            if (!string.IsNullOrWhiteSpace(email) && existingFarmerEmails.Contains(email))
+        //            {
+        //                _logger.LogInformation("Row {row}: farmer already exists by email {email}, skipping", agg.RowNumber, email);
+        //                continue;
+        //            }
+
+        //            if (!string.IsNullOrWhiteSpace(phone) && existingFarmerPhones.Contains(phone))
+        //            {
+        //                _logger.LogInformation("Row {row}: farmer already exists by phone {phone}, skipping", agg.RowNumber, phone);
+        //                continue;
+        //            }
+
+        //            agg.User.UserType = args.userType;
+        //            agg.User.IsActive = true;
+
+        //            // Attach existing user account if found
+        //            string matchedUserId =
+        //                (!string.IsNullOrWhiteSpace(email) && existingUserByEmail.TryGetValue(email, out var eid)) ? eid :
+        //                (!string.IsNullOrWhiteSpace(phone) && existingUserByPhone.TryGetValue(phone, out var pid)) ? pid :
+        //                null;
+
+        //            if (matchedUserId != null)
+        //            {
+        //                agg.Farmer.UserId = matchedUserId;
+        //                agg.User.Id = matchedUserId; // flag: don't insert user
+        //            }
+        //            else
+        //            {
+        //                newUsers.Add(agg.User);
+        //            }
+
+        //            validAggregates.Add(agg);
+        //        }
+
+        //        if (!validAggregates.Any())
+        //        {
+        //            _logger.LogInformation("All rows were duplicates for file {file}", filePath);
+        //            await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+        //            return;
+        //        }
+
+        //        // ── 6. BULK INSERT USERS ─────────────────────────────────────────────
+        //        var bulkConfig = new BulkConfig
+        //        {
+        //            BatchSize = 5000,
+        //            BulkCopyTimeout = 300,
+        //            UseTempDB = true,
+        //            SetOutputIdentity = true
+        //        };
+
+        //        // email→id and phone→id maps — seed with already-known existing users
+        //        var emailToUserId = new Dictionary<string, string>(existingUserByEmail, StringComparer.OrdinalIgnoreCase);
+        //        var phoneToUserId = new Dictionary<string, string>(existingUserByPhone);
+
+        //        if (newUsers.Any())
+        //        {
+        //            await BulkInsertWithFallbackAsync(
+        //                bulkInsert: () => _context.BulkInsertAsync(newUsers, bulkConfig, cancellationToken: token),
+        //                fallback: async () =>
+        //                {
+        //                    foreach (var u in newUsers)
+        //                    {
+        //                        try
+        //                        {
+        //                            _context.Users.Add(u);
+        //                            await _context.SaveChangesAsync(token);
+        //                        }
+        //                        catch (Exception ex)
+        //                        {
+        //                            _logger.LogWarning(ex, "Failed individual user insert {email}/{phone}, attempting recovery", u.Email, u.PhoneNumber);
+
+        //                            // Race condition: another process inserted between our check and now
+        //                            var existing = await _context.Users.AsNoTracking()
+        //                                .Where(x =>
+        //                                    (!string.IsNullOrWhiteSpace(u.Email) && x.Email == u.Email) ||
+        //                                    (!string.IsNullOrWhiteSpace(u.PhoneNumber) && x.PhoneNumber == u.PhoneNumber))
+        //                                .FirstOrDefaultAsync(token);
+
+        //                            if (existing != null)
+        //                            {
+        //                                u.Id = existing.Id; // use recovered id for downstream mapping
+        //                            }
+        //                        }
+        //                    }
+        //                },
+        //                logger: _logger,
+        //                context: "Users"
+        //            );
+
+        //            // Populate lookup maps from newly inserted / recovered users
+        //            foreach (var u in newUsers)
+        //            {
+        //                if (string.IsNullOrWhiteSpace(u.Id)) continue;
+        //                if (!string.IsNullOrWhiteSpace(u.Email)) emailToUserId[u.Email] = u.Id;
+        //                if (!string.IsNullOrWhiteSpace(u.PhoneNumber)) phoneToUserId[u.PhoneNumber] = u.Id;
+        //            }
+        //        }
+
+        //        // ── 7. WIRE FARMER → USER IDs ────────────────────────────────────────
+        //        foreach (var agg in validAggregates)
+        //        {
+        //            if (!string.IsNullOrWhiteSpace(agg.User.Id))
+        //            {
+        //                agg.Farmer.UserId = agg.User.Id;
+        //                continue;
+        //            }
+
+        //            if (!string.IsNullOrWhiteSpace(agg.User.Email) && emailToUserId.TryGetValue(agg.User.Email, out var uid))
+        //                agg.Farmer.UserId = uid;
+        //            else if (!string.IsNullOrWhiteSpace(agg.User.PhoneNumber) && phoneToUserId.TryGetValue(agg.User.PhoneNumber, out var pid))
+        //                agg.Farmer.UserId = pid;
+        //        }
+
+        //        // ── 8. BULK INSERT FARMERS ───────────────────────────────────────────
+        //        var farmersToInsert = validAggregates
+        //            .Where(a => !string.IsNullOrWhiteSpace(a.Farmer.UserId))
+        //            .Select(a => a.Farmer)
+        //            .ToList();
+
+        //        if (!farmersToInsert.Any())
+        //        {
+        //            _logger.LogWarning("No farmers had a resolved UserId — nothing inserted for file {file}", filePath);
+        //            await FinalizeJobAsync(job, "Completed", successful: 0, failed: rows.Count, token);
+        //            return;
+        //        }
+
+        //        await BulkInsertWithFallbackAsync(
+        //            bulkInsert: () => _context.BulkInsertAsync(farmersToInsert, bulkConfig, cancellationToken: token),
+        //            fallback: async () =>
+        //            {
+        //                foreach (var f in farmersToInsert)
+        //                {
+        //                    try
+        //                    {
+        //                        _context.Farmers.Add(f);
+        //                        await _context.SaveChangesAsync(token);
+        //                    }
+        //                    catch (Exception ex)
+        //                    {
+        //                        _logger.LogWarning(ex, "Failed individual farmer insert {name}", f.Name);
+        //                    }
+        //                }
+        //            },
+        //            logger: _logger,
+        //            context: "Farmers"
+        //        );
+
+        //        // Build farmer lookup by UserId for downstream steps
+        //        var farmerByUserId = farmersToInsert
+        //            .Where(f => !string.IsNullOrWhiteSpace(f.UserId) && f.Id > 0)
+        //            .ToDictionary(f => f.UserId, f => f);
+
+        //        int insertedFarmerCount = farmersToInsert.Count(f => f.Id > 0);
+
+        //        // ── 9. VALUE CHAIN ITEMS ─────────────────────────────────────────────
+        //        var valueChainItems = new List<FarmerValueChainItem>();
+
+        //        foreach (var agg in validAggregates)
+        //        {
+        //            if (!farmerByUserId.TryGetValue(agg.Farmer.UserId ?? "", out var insertedFarmer)) continue;
+        //            if (agg.ValueChains == null) continue;
+
+        //            foreach (var vc in agg.ValueChains)
+        //            {
+        //                foreach (var item in vc.Items ?? new())
+        //                {
+        //                    valueChainItems.Add(new FarmerValueChainItem
+        //                    {
+        //                        FarmerId = insertedFarmer.Id,
+        //                        ValueChainType = vc.ValueChainType,
+        //                        ItemName = item
+        //                    });
+        //                }
+        //            }
+        //        }
+
+        //        if (valueChainItems.Any())
+        //        {
+        //            await BulkInsertWithFallbackAsync(
+        //                bulkInsert: () => _context.BulkInsertAsync(valueChainItems, bulkConfig, cancellationToken: token),
+        //                fallback: async () =>
+        //                {
+        //                    foreach (var vc in valueChainItems)
+        //                    {
+        //                        try { _context.FarmerValueChainItems.Add(vc); await _context.SaveChangesAsync(token); }
+        //                        catch (Exception ex) { _logger.LogWarning(ex, "Failed to insert value chain item for farmer {id}", vc.FarmerId); }
+        //                    }
+        //                },
+        //                logger: _logger,
+        //                context: "ValueChains"
+        //            );
+        //        }
+
+        //        // ── 10. ORGANIZATION MAPPINGS ────────────────────────────────────────
+        //        if (!string.IsNullOrWhiteSpace(args.organizationCode))
+        //        {
+        //            var userIds = farmersToInsert.Where(f => !string.IsNullOrWhiteSpace(f.UserId)).Select(f => f.UserId).Distinct().ToList();
+        //            var farmerIds = farmersToInsert.Where(f => f.Id > 0).Select(f => f.Id).ToList();
+
+        //            // UserOrganizations
+        //            var existingUserOrgList = await _context.UserOrganizations.AsNoTracking()
+        //                .Where(uo => userIds.Contains(uo.UserId) && uo.OrganizationCode == args.organizationCode)
+        //                .Select(uo => uo.UserId)
+        //                .ToListAsync(token);
+
+        //            var existingUserOrgSet = new HashSet<string>(existingUserOrgList);
+
+        //            var userOrgsToInsert = userIds
+        //                .Where(uid => !existingUserOrgSet.Contains(uid))
+        //                .Select(uid => new UserOrganization
+        //                {
+        //                    UserId = uid,
+        //                    OrganizationCode = args.organizationCode,
+        //                    IsActive = true
+        //                })
+        //                .ToList();
+
+        //            if (userOrgsToInsert.Any())
+        //            {
+        //                await BulkInsertWithFallbackAsync(
+        //                    bulkInsert: () => _context.BulkInsertAsync(userOrgsToInsert, bulkConfig, cancellationToken: token),
+        //                    fallback: async () =>
+        //                    {
+        //                        foreach (var uo in userOrgsToInsert)
+        //                        {
+        //                            try { _context.UserOrganizations.Add(uo); await _context.SaveChangesAsync(token); }
+        //                            catch { }
+        //                        }
+        //                    },
+        //                    logger: _logger,
+        //                    context: "UserOrganizations"
+        //                );
+        //            }
+
+        //            // FarmerOrganizations
+        //            var existingFarmerOrgList = await _context.FarmerOrganizations.AsNoTracking()
+        //                .Where(fo => farmerIds.Contains(fo.FarmerId) && fo.OrganizationCode == args.organizationCode)
+        //                .Select(fo => fo.FarmerId)
+        //                .ToListAsync(token);
+
+        //            var existingFarmerOrgSet = new HashSet<long>(existingFarmerOrgList);
+
+        //            var farmerOrgsToInsert = farmersToInsert
+        //                .Where(f => f.Id > 0 && !existingFarmerOrgSet.Contains(f.Id))
+        //                .Select(f => new FarmerOrganization
+        //                {
+        //                    FarmerId = f.Id,
+        //                    OrganizationCode = args.organizationCode,
+        //                    OnboardedByUserId = args.OnboardedByUserId,
+        //                    IsActive = true
+        //                })
+        //                .ToList();
+
+        //            if (farmerOrgsToInsert.Any())
+        //            {
+        //                await BulkInsertWithFallbackAsync(
+        //                    bulkInsert: () => _context.BulkInsertAsync(farmerOrgsToInsert, bulkConfig, cancellationToken: token),
+        //                    fallback: async () =>
+        //                    {
+        //                        foreach (var fo in farmerOrgsToInsert)
+        //                        {
+        //                            try { _context.FarmerOrganizations.Add(fo); await _context.SaveChangesAsync(token); }
+        //                            catch { }
+        //                        }
+        //                    },
+        //                    logger: _logger,
+        //                    context: "FarmerOrganizations"
+        //                );
+        //            }
+        //        }
+
+        //        // ── 11. COOPERATIVE ASSIGNMENTS ──────────────────────────────────────
+        //        if (args.CooperativeIds?.Any() == true)
+        //        {
+        //            _logger.LogInformation("Assigning {count} farmers to cooperatives", farmersToInsert.Count);
+
+        //            // Fire cooperative assignments concurrently per farmer, bounded to avoid thread exhaustion
+        //            var semaphore = new SemaphoreSlim(10);
+        //            var cooperativeTasks = farmersToInsert
+        //                .Where(f => !string.IsNullOrWhiteSpace(f.UserId))
+        //                .Select(async f =>
+        //                {
+        //                    await semaphore.WaitAsync(token);
+        //                    try
+        //                    {
+        //                        await AssignFarmerToCooperatives(new AssignmentArgs
+        //                        {
+        //                            Id = f.Id,
+        //                            UserId = f.UserId,
+        //                            CooperativeIds = args.CooperativeIds,
+        //                            businessCode = args.businessCode,
+        //                            organizationCode = args.organizationCode,
+        //                            OnboardedByUserId = args.OnboardedByUserId
+        //                        }, token);
+        //                    }
+        //                    catch (Exception ex)
+        //                    {
+        //                        _logger.LogWarning(ex, "Failed to assign farmer {userId} to cooperatives", f.UserId);
+        //                    }
+        //                    finally
+        //                    {
+        //                        semaphore.Release();
+        //                    }
+        //                });
+
+        //            await Task.WhenAll(cooperativeTasks);
+        //        }
+
+        //        // ── 12. AGENT ASSIGNMENTS ─────────────────────────────────────────────
+        //        if (args.AgentIds?.Any() == true)
+        //        {
+        //            _logger.LogInformation("Assigning {count} farmers to agents", farmersToInsert.Count);
+
+        //            var semaphore = new SemaphoreSlim(10);
+        //            var agentTasks = farmersToInsert
+        //                .Where(f => !string.IsNullOrWhiteSpace(f.UserId))
+        //                .Select(async f =>
+        //                {
+        //                    await semaphore.WaitAsync(token);
+        //                    try
+        //                    {
+        //                        await AssignFarmerToAgents(new AssignmentArgs
+        //                        {
+        //                            Id = f.Id,
+        //                            UserId = f.UserId,
+        //                            AgentIds = args.AgentIds,
+        //                            businessCode = args.businessCode,
+        //                            organizationCode = args.organizationCode,
+        //                            OnboardedByUserId = args.OnboardedByUserId
+        //                        }, token);
+        //                    }
+        //                    catch (Exception ex)
+        //                    {
+        //                        _logger.LogWarning(ex, "Failed to assign farmer {userId} to agents", f.UserId);
+        //                    }
+        //                    finally
+        //                    {
+        //                        semaphore.Release();
+        //                    }
+        //                });
+
+        //            await Task.WhenAll(agentTasks);
+        //        }
+
+        //        // ── 13. FINALIZE ──────────────────────────────────────────────────────
+        //        _logger.LogInformation(
+        //            "Bulk file {file} complete — Total={total} Valid={valid} Inserted={inserted} Skipped={skipped}",
+        //            filePath, rows.Count, aggregates.Count, insertedFarmerCount, rows.Count - aggregates.Count + parseFailures);
+
+        //        await FinalizeJobAsync(job, "Completed", successful: insertedFarmerCount, failed: rows.Count - insertedFarmerCount, token);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        _logger.LogError(ex, "Bulk onboarding processing failed for file {file}", filePath);
+        //        await SafeMarkJobFailedAsync(filePath, ex.Message, token);
+        //    }
+        //    finally
+        //    {
+        //        // ── 14. CLEANUP TEMP FILE ─────────────────────────────────────────────
+        //        try
+        //        {
+        //            if (File.Exists(filePath))
+        //                File.Delete(filePath);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            _logger.LogWarning(ex, "Could not delete temp file {file}", filePath);
+        //        }
+        //    }
+        //}
 
         // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -812,7 +1254,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                 UserId = job.CreatedByUserId,
                 OnboardedByUserId = job.OnboardedByUserId
             };
-            await ProcessFileAsync(job.FilePath, args, job, token);
+            await ProcessFileAsync(job.FilePath, args, job.Id, token);
         }
 
         //private async Task ProcessFileAsync(string filePath, OnBoardingArgs args, BulkUploadJob job, CancellationToken token)

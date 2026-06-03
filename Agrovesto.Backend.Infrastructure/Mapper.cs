@@ -1768,6 +1768,28 @@ namespace Agrovesto.Backend.Infrastructure
         }
 
 
+        public static LocationCreateResponse CreateViewMap(this OrganizationLocation entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new LocationCreateResponse
+            {
+                Id = entity.Id,
+                Address=entity.Address,
+                StateId=entity.StateId,
+                LgaId=entity.LgaId,
+                LocationName=entity.LocationName,
+                LocationTypeId=entity.LocationTypeId,
+                Capacity = entity.Capacity,
+                CapacityType=entity.CapacityType,
+                StockLevel=entity.StockLevel,
+
+                CreatedOn = entity.CreatedOn,
+            };
+        }
         public static OrganizationLocationModel ViewMap(this OrganizationLocation entity)
         {
             if (entity == null)

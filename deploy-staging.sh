@@ -31,7 +31,9 @@ echo "🏗️ Publishing application..."
 
 dotnet publish \
   -c Release \
+  -r linux-x64 \
   -f net8.0 \
+  --self-contained true \
   -o /var/www/Nomaos/publish \
   --verbosity minimal \
   2>&1 | tee /tmp/publish.log
