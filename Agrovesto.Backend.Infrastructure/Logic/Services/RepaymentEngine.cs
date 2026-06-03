@@ -26,14 +26,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             for (int i = 1; i <= installmentCount; i++)
             {
-                currentDate = AddFrequency(currentDate, request.Frequency);
+                currentDate = AddFrequency(currentDate.Value, request.Frequency);
 
                 var isWithinGrace = currentDate <= request.GracePeriod;
 
                 schedule.Add(new RepaymentSchedule
                 {
                     InstallmentNumber = i,
-                    DueDate = currentDate,
+                    DueDate = currentDate.Value,
                     Amount = amountPerInstallment,
                     IsWithinGracePeriod = isWithinGrace
                 });

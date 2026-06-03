@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -366,8 +367,134 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
   ));
         }
 
+
+
+
         #endregion InputFinancing
 
+
+        #region subscriptions
+        [HttpPost("add-subscriber")]
+        public async Task<IActionResult> AddSubscriberAsync(
+ [FromBody] AddSubscriberRequest model,
+ [FromQuery] InputSubscriptionRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .AddSubscriberAsync(model, args);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Subscriber Added Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+        [HttpPost("approve-subscriber")]
+        public async Task<IActionResult> ApproveSubscriptionAsync(
+            [FromBody] ApproveSubscriptionRequest model,
+            [FromQuery] InputSubscriptionRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .ApproveSubscriptionAsync(model, args);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Subscriber Added Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpPost("get-subscribers")]
+        public async Task<IActionResult> GetSubscriptionsAsync(
+[FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            //if (string.IsNullOrWhiteSpace(model.OrganizationCode))
+            //{
+            //    return Unauthorized(ApiResponse<object>.Fail(
+            //        "Access Denied",
+            //        HttpContext.TraceIdentifier
+            //    ));
+            //}
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetSubscriptionsAsync(filter, filter.PageNumber, filter.PageSize);
+
+          
+            return Ok(ApiResponse<List<SubscriptionDetailDto>>.SuccessPaged(
+    result,
+    "Successful",
+    ResponseCodes.Success,
+    HttpContext.TraceIdentifier
+));
+        }
+        [HttpPost("dashboard")]
+        public async Task<IActionResult> GetInputFinancingDashboardAsync(
+[FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetInputFinancingDashboardAsync(filter);
+
+            return Ok(ApiResponse<InputFinancingDashboardDto>.Success(
+                result,
+                "Subscriber Added Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        #endregion
         /**  /api/financing-packages
 /api/subscriptions
 /api/commitments

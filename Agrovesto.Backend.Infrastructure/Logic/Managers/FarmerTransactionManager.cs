@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -29,9 +30,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IFarmerRepository _farmerRepository;
         private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IConfiguration _configuration;
+
+        private readonly IInputFinancingRepository _inputFinancingRepository;
         public FarmerTransactionManager(IFarmerTransactionRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
            ILogger<FarmerTransactionManager> log,
-           IConfiguration configuration,
+           IConfiguration configuration, IInputFinancingRepository inputFinancingRepository,
            IInputFinancingManagementRepository inputFinancingManagementRepository,
             IAgentRepository agentRepository, DataContext context, IFarmerRepository farmerRepository)
         {
@@ -40,21 +43,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _context = context;
             _repository = repository;
             _log = log;
+
+            _inputFinancingRepository = inputFinancingRepository;
             _configuration = configuration;
             _agentRepository = agentRepository;
             _farmerRepository = farmerRepository;
             _inputFinancingManagementRepository = inputFinancingManagementRepository;
         }
-        public async Task<PagedListResponse<List<FarmerInputObligationDto>>> GetFarmerInputObligations(
+        public async Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(
             ListQueryParams args)
         {
             try
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
-                if (farmer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Farmer not found");
-
-                args.farmerId = farmer.Id;
-                return await _inputFinancingManagementRepository.GetFarmerInputObligations(args);
+               var filter = new SubscriptionQueryFilter
+                {
+                    SubscriberUserId= args.UserId,
+                };
+                return await _inputFinancingRepository.GetSubscriptionObligationsAsync(filter, args.PageNumber, args.PageSize);
             }
             catch (Exception ex)
             {

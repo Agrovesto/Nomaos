@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
@@ -27,20 +28,23 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         private readonly IFarmerTransactionManager _farmerTransactionManager;
+        private readonly IInputFinancingManager _inputFinancingManager;
         public FarmerController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
             INomaOSWalletService walletService,
             IFarmMappingManager farmMappingManager,
             IMembershipManager membershipManager,
             IFarmerTransactionManager farmerTransactionManager,
-            IBusinessManager businessManager) : base(httpContextAccessor)
+            IBusinessManager businessManager,
+            IInputFinancingManager inputFinancingManager) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
             _farmMappingManager = farmMappingManager;
             _walletService = walletService;
-            _farmerTransactionManager=farmerTransactionManager;
+            _farmerTransactionManager = farmerTransactionManager;
+            _inputFinancingManager = inputFinancingManager;
         }
 
         [HttpGet("dashboard")]
@@ -687,15 +691,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                 var result = await _farmerTransactionManager.GetFarmerInputObligations(query);
-                return Ok(new PagedListResponse<List<FarmerInputObligationDto>>()
+                return Ok(new PagedListResponse<List<InputObligationDto>>()
                 {
-                    Data = result.Data,
+                    Data = result.Items,
                     Message = result.Count > 0 ? "Successful" : "No record found",
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
-                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
             catch (BaseException ex)

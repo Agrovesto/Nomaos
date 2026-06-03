@@ -107,10 +107,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class InputPackageConfigArgs
     {
         public long organizationId { get; set; }
-     public bool isSelectedWalletProvisioned { get; set; } = false;
+        public bool isSelectedWalletProvisioned { get; set; } = false;
         public string? createdByUserId { get; set; }
 
         public string? OrganizationCode { get; set; }
+
+        public string BusinessCode { get; set; }
     }
     public class CreateInputPackageRequest
     {
@@ -125,7 +127,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public bool CommitmentRequired { get; set; }
         public CommitmentType CommitmentType { get; set; }
         public decimal CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
-        
+
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
 
@@ -135,25 +137,25 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public int RepaymentDuration { get; set; } //e.g 1 week, 4 month, 1 day etc
         public DateTimeOffset? RepaymentStartDate { get; set; }
         public DateTimeOffset? RepaymentEndDate { get; set; }
-        public DateTimeOffset? RepaymentGracePeriod { get; set; }        
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
         public InputPackageRepaymentMode RepaymentMode { get; set; }
         public decimal RepaymentValue { get; set; }
         public RiskCategory RiskCategory { get; set; }
 
-  
+
 
         public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; } = new();
 
         public decimal TotalFinancingValue { get; set; }
- 
 
-        
 
-        
 
-     
-       
- 
+
+
+
+
+
+
 
         //public bool ApplyInterest { get; set; }
         //public decimal InterestRate { get; set; }
@@ -241,7 +243,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal RepaymentValue { get; set; }
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
-      //  public long RepaymentDuration { get; set; } // calculate the frequency and the supplied duration e.g 6 months, 1 year, etc
+        //  public long RepaymentDuration { get; set; } // calculate the frequency and the supplied duration e.g 6 months, 1 year, etc
         public DateTimeOffset? RepaymentStartDate { get; set; }
         public DateTimeOffset? RepaymentEndDate { get; set; }
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
@@ -249,15 +251,15 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string RiskCategory { get; set; }
         public string RepaymentPeriod { get; set; }
     }
-    public class  InputPackageRepaymentWallet
+    public class InputPackageRepaymentWallet
     {
         public long WalletId { get; set; }
         public string WalletProvider { get; set; }
         public string WalletName { get; set; }
         public string WalletNumber { get; set; }
-        
+
     }
-   public class InputPackageBreakdownDto
+    public class InputPackageBreakdownDto
     {
         public string InputType { get; set; }
         public long InputId { get; set; }
@@ -266,7 +268,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal UnitCost { get; set; }
         public decimal TotalCost { get; set; }
     }
-    
+
     public class InputPackageItemDto
     {
         public long OrganizationProductId { get; set; }
@@ -323,6 +325,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public long Subscribers { get; set; }
         public bool IsActive { get; set; }
+        public string SubscriberType { get; set; }
     }
     public class ReplacePackageItemRequestArgs
     {
@@ -334,7 +337,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     }
 
-public class ReplacePackageItemRequest
+    public class ReplacePackageItemRequest
     {
         [Required]
         public long PackageId { get; set; }
@@ -355,18 +358,176 @@ public class ReplacePackageItemRequest
 
     }
 
-  
+
     public class RepaymentEngineRequest
     {
-        public long PackageId { get; set; }
+        public long InputSubscriptionId { get; set; }
         public RepaymentFrequency Frequency { get; set; }
         public int Duration { get; set; }
 
-        public DateTimeOffset StartDate { get; set; }
-        public DateTimeOffset EndDate { get; set; }
+        public DateTimeOffset? StartDate { get; set; }
+        public DateTimeOffset? EndDate { get; set; }
 
-        public DateTimeOffset GracePeriod { get; set; }
+        public DateTimeOffset? GracePeriod { get; set; }
 
         public decimal TotalAmount { get; set; }
+    }
+
+    public class AddSubscriberRequest
+    {
+        [Required]
+        public long PackageId { get; set; }
+
+        [Required]
+        public string SubscriberUserId { get; set; }
+
+        [Required]
+        [EnumDataType(typeof(InputSubScriptionType))]
+        public InputSubScriptionType SubscriberType { get; set; }
+    }
+    public class InputSubscriptionRequestArgs
+    {
+        public string? UserId { get; set; }
+        public string? OrganizationCode { get; set; }
+        public long? OrganizationId { get; set; }
+
+        public string BusinessCode { get; set; }
+        public long SubscriptionId { get; set; }
+        public string? SubscriberUserId { get; set; }
+    }
+
+
+
+    public class ApproveSubscriptionRequest
+    {
+        public long SubscriptionId { get; set; }
+
+        [Required]
+        [EnumDataType(typeof(ApprovalDecision))]
+        public ApprovalDecision ApprovalState { get; set; }
+
+        public string? RejectionReason { get; set; }
+    }
+    public class RecordCommitmentPaymentRequest
+    {
+        public long SubscriptionId { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public PaymentChannel PaymentChannel { get; set; }
+
+        public string Reference { get; set; }
+
+        public string? ExternalReference { get; set; }
+
+        public long PaidByUserId { get; set; }
+    }
+
+    public class DisburseSubscriptionRequest
+    {
+        public long SubscriptionId { get; set; }
+
+        public decimal? DisbursedAmount { get; set; }
+
+        public string? Reference { get; set; }
+    }
+
+    public class RecordRepaymentRequest
+    {
+        public long SubscriptionId { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string Reference { get; set; }
+
+        public string? ExternalReference { get; set; }
+
+        public PaymentChannel PaymentChannel { get; set; }
+        public string? SubscriberUserId { get; set; }
+    }
+
+
+    public class SubscriptionQueryFilter
+    {
+        public long? PackageId { get; set; }
+        public string? UserId { get; set; }
+
+        [EnumDataType(typeof(SubscriptionStatus))]
+        public SubscriptionStatus? Status { get; set; }
+
+        [EnumDataType(typeof(SubscriptionView))]
+        public SubscriptionView? ViewType { get; set; }
+        public bool? HasPaidCommitment { get; set; }
+        public bool? IsDisbursed { get; set; }
+        public bool? IsActiveOnly { get; set; }
+        public string? SubscriberUserId { get; set; }
+        public string? BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
+        public long? OrganizationId { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+    }
+
+
+    public class InputObligationDto
+    {
+        public DateTimeOffset Date { get; set; }
+
+        public decimal TotalCost { get; set; }
+
+        public decimal AmountPaid { get; set; }
+
+        public decimal RemainingBalance { get; set; }
+
+        public string Name { get; set; }
+
+        public decimal RepaymentProgress { get; set; }
+    }
+
+    public class InputFinancingDashboardDto
+    {
+        public decimal TotalFinancedValue { get; set; }
+        public decimal TotalAmountRepaid { get; set; }
+        public decimal TotalCommitted { get; set; }
+        public decimal TotalOutstandingBalance { get; set; }
+        public decimal RecoveryRate { get; set; }
+        public int TotalActivePackages { get; set; }
+    }
+    public class SubscriptionDetailDto
+    {
+        public long SubscriptionId { get; set; }
+        public string SubscriberName { get; set; }
+        public string SubscriberUserId { get; set; }
+        public InputSubScriptionType SubscriptionType { get; set; }
+        public string CreatedBy { get; set; }
+        public string Location { get; set; }
+        public string PackageName { get; set; }
+
+        public decimal CommitmentValue { get; set; }
+        public decimal TotalFinancingValue { get; set; }
+        public DateTimeOffset? SubscribedOn { get; set; }
+
+        public string CommitmentStatus { get; set; }
+        public SubscriptionStatus Status { get; set; }
+
+        // optional sections
+        public CommitmentInfo Commitment { get; set; }
+        public RepaymentInfo Repayment { get; set; }
+    }
+    public class CommitmentInfo
+    {
+        public decimal CommitmentPaid { get; set; }
+        public decimal CommitmentBalance { get; set; }
+        public int CommitmentDaysLeft { get; set; }
+    }
+    public class RepaymentInfo
+    {
+        public decimal TotalRepaid { get; set; }
+        public decimal OutstandingBalance { get; set; }
+        public decimal RecoveryRate { get; set; }
+        public DateTimeOffset? NextRepaymentDueDate { get; set; }
+        public RiskCategory RiskLevel { get; set; }
+        public int DaysOverdue { get; set; }
+        public DateTimeOffset? CompletedOn { get; set; }
     }
 }

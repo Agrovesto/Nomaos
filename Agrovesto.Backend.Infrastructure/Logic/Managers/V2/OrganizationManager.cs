@@ -68,11 +68,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams query);
         Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query);
-        Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams request, CancellationToken cancellationToken);
-        Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args);
-        Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
-        Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args);
-        Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
+            Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
         Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationAsync(ListQueryParams query);
         Task<LocationResponseDto> GetLocationById(ListQueryParams query);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
@@ -84,7 +80,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams query);
         Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args);
-        Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args, CancellationToken cancellationToken);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
         Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(ListQueryParams query);
@@ -2485,71 +2480,8 @@ DateTimeOffset dateTime)
 
 
         #region input
-        public async Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args)
-        {
-            try
-            {
-                await EnrichFarmerQuery(args);
-
-                return await _inputFinancingManagementRepository.GetInputLoanSummaryAsync(args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args)
-        {
-            try
-            {
-                
-                return await _inputFinancingManagementRepository.GetLoanDetailAsync(args.Id);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args)
-        {
-            try
-            {
-
-                return await _inputFinancingManagementRepository.GetFinancingRepaymentSummaryAsync(args.Id);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(
-     ListQueryParams request, CancellationToken cancellationToken)
-        {
-            try
-            {
-                await EnrichFarmerQuery(request);
-
-                return await _inputFinancingManagementRepository.GetFinancingBreakdownAsync(request);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(
-       long inputAllocationId,
-       ListQueryParams args, CancellationToken cancellationToken)
-        {
-            try
-            {
-
-                return await _inputFinancingManagementRepository.GetRepaymentBreakdownAsync(inputAllocationId, args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
+      
+  
 
         private async Task EnrichFarmerQuery(ListQueryParams request)
         {
