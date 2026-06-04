@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json", optional: false)
+               // .AddJsonFile("appsettings.json", optional: false)
                 .AddJsonFile($"appsettings.{environment}.json", optional: true)
                 .AddEnvironmentVariables()
                 .Build();
@@ -343,6 +343,16 @@ namespace Agrovesto.Backend.Infrastructure.DB
         .HasOne(x => x.InputPackageSubscription)
         .WithMany(x => x.RepaymentSchedules)
         .HasForeignKey(x => x.InputPackageSubscriptionId);
+
+            modelBuilder.Entity<InputPackage>()
+    .HasOne(p => p.CommitmentPlan)
+    .WithOne(c => c.InputPackage)
+    .HasForeignKey<CommitmentPlan>(c => c.InputPackageId);
+
+            modelBuilder.Entity<InputPackage>()
+    .HasOne(p => p.RepaymentPlan)
+    .WithOne(c => c.InputPackage)
+    .HasForeignKey<RepaymentPlan>(c => c.InputPackageId);
         }
 
      
@@ -441,6 +451,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         //public DbSet<InputTransaction> InputTransactions { get; set; }
         //public DbSet<InputAllocation> InputAllocations { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<CommitmentPlan> CommitmentPlans { get; set; }
+        public DbSet<RepaymentPlan> RepaymentPlans { get; set; }
         public DbSet<InputPackageSubscription> InputPackageSubscriptions { get; set; }
         public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
         public DbSet<RepaymentPenalty> RepaymentPenalties { get; set; }

@@ -59,7 +59,47 @@ RepaymentTransaction
         public decimal? OverrideCost { get; set; }
         public bool IsActive { get; set; } = true;
     }
-  
+    public class RepaymentPlan
+    {
+        public long Id { get; set; }
+        public long InputPackageId { get; set; }
+        public InputPackage InputPackage { get; set; }
+        public decimal RepaymentValue { get; set; } // amount farmer has to repay, if repayment mode is cash or hybrid, this is the cash amount, if repayment mode is produce, this is the value of the produce to be repaid
+        public RepaymentScheduleType ScheduleType { get; set; }
+
+        public RepaymentFrequency Frequency { get; set; }
+        public RepaymentFrequency RepaymentFrequency { get; set; }
+        public int RepaymentDuration { get; set; } //how long does the farmer have to repay, in months
+        public InputPackageRepaymentMode RepaymentMode { get; set; } // Low, Medium, High
+        public RiskCategory RiskCategory { get; set; } // Low, Medium, High
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
+        
+
+        public string? PatternType { get; set; }
+        // e.g MonthlyOnFirst, WeeklyOnMonday, CustomDates
+
+        public bool AlignToDisbursement { get; set; } = true;
+
+        //default rule
+        public decimal InterestRate { get; set; } // optional or required
+        public InterestType InterestType { get; set; } // Flat, Daily, Monthly, Compound
+        public bool ApplyInterestOnDefault { get; set; }
+        public decimal DefaultPenaltyRate { get; set; }
+    }
+    public class CommitmentPlan
+    {
+        public long Id { get; set; }
+        public long InputPackageId { get; set; }
+        public InputPackage InputPackage { get; set; }
+
+        public CommitmentType CommitmentType { get; set; } // if commitment required, how is the commitment calculated
+        public decimal CommitmentValue { get; set; } // value of the commitment, either a static fee or percentage
+        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
+        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
+
+    }
     public class InputPackage
     {
         [Key]
@@ -78,30 +118,18 @@ RepaymentTransaction
         public InputPackageStructure PackageStructure { get; set; }
         public List<InputPackageItem> InputPackageItems { get; set; } = new();
         public decimal TotalPackageValue { get; set; } // if package structure is physical, total would be the sum of the cost, if it is monetary, total is the amount entered
-       public bool CommitmentRequired { get; set; } // if true, farmer must commit to repay before receiving the package
-        public CommitmentType CommitmentType { get; set; } // if commitment required, how is the commitment calculated
-        public decimal CommitmentValue { get; set; } // value of the commitment, either a static fee or percentage
-        public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
-        public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
-        public decimal RepaymentValue { get; set; } // amount farmer has to repay, if repayment mode is cash or hybrid, this is the cash amount, if repayment mode is produce, this is the value of the produce to be repaid
+        public bool CommitmentRequired { get; set; } = false;// if true, farmer must commit to repay before receiving the package
+        public bool RepaymentRequired { get; set; } = false;
         public long? UserWalletId { get; set; } // if wallet has not been provisioned, it should be null, this allows for package configuration before wallet setup, and also allows for packages that do not require wallet disbursement (e.g. physical input delivery by 3rd party)
         public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
 
         public long? WalletProviderId { get; set; }
         public WalletProvider WalletProvider { get; set; }
 
-        public RepaymentFrequency RepaymentFrequency { get; set; }
-        public int RepaymentDuration { get; set; } //how long does the farmer have to repay, in months
-        public InputPackageRepaymentMode RepaymentMode { get; set; } // Low, Medium, High
-        public RiskCategory RiskCategory { get; set; } // Low, Medium, High
-        public DateTimeOffset? RepaymentStartDate { get; set; }
-        public DateTimeOffset? RepaymentEndDate { get; set; }
-        public DateTimeOffset? RepaymentGracePeriod { get; set; }
         public bool IsSelectedWalletProvisioned { get; set; } // indicates if the user wallet for disbursement has been provisioned, this is important for package activation and disbursement readiness
         public decimal AdditionalCostAmount { get; set; } // total of all additional costs, this is important for calculating total repayment amount and for farmer commitment
         public List<AdditionalInputPackageCost> AdditionalCosts { get; set; } = new();
         public decimal TotalFinancingValue { get; set; }// => TotalPackageValue + AdditionalCostAmount; // total cost of the package including additional costs, this is important for calculating total repayment amount and for farmer commitment
-        public RepaymentScheduleType ScheduleType { get; set; }
         public string Currency { get; set; } = "NGN";
 
        // public InputPackageStatus Status { get; set; }
@@ -128,11 +156,16 @@ RepaymentTransaction
         public bool IsGeneratedFromEop { get; set; } =false;
         public bool IsEditable { get; set; } = true;
         public DateTimeOffset? PublishedOn { get; set; }
-
-        public decimal? InterestRate { get; set; }
         public string? BusinessCode { get; set; }
+
+        public RepaymentPlan RepaymentPlan { get; set; }
+
+        public CommitmentPlan CommitmentPlan { get; set; }
+
+      
     }
-  public class AdditionalInputPackageCost
+    
+    public class AdditionalInputPackageCost
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
@@ -398,4 +431,5 @@ RepaymentTransaction
 
         public decimal PrincipalPortion { get; set; }
     }
-}
+    //repayment schedule == repaymentplan + subscription + disbursement
+  }

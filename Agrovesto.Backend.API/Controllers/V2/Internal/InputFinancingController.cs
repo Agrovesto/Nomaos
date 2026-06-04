@@ -49,29 +49,29 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
             }
         }
-        [HttpPost("package/generate-from-eop")]
-        public async Task<IActionResult> GenerateInputPackageFromEopAsync([FromBody] GenerateInputPackageRequest model, [FromQuery] ListQueryParams args)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
+        //[HttpPost("package/generate-from-eop")]
+        //public async Task<IActionResult> GenerateInputPackageFromEopAsync([FromBody] GenerateInputPackageRequest model, [FromQuery] ListQueryParams args)
+        //{
+        //    if (!ModelState.IsValid)
+        //        return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
 
-            try
-            {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+        //    try
+        //    {
+        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
+        //        if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
 
-                var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
-                return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-            }
-        }
+        //        var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
+        //        return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+        //    }
+        //}
         [HttpGet("eop")]
         public async Task<IActionResult> GetEopByIdAsync([FromQuery] ListQueryParams args)
         {
@@ -438,7 +438,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-        [HttpPost("get-subscribers")]
+        [HttpGet("get-subscribers")]
         public async Task<IActionResult> GetSubscriptionsAsync(
 [FromQuery] SubscriptionQueryFilter filter)
         {
@@ -470,7 +470,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     HttpContext.TraceIdentifier
 ));
         }
-        [HttpPost("dashboard")]
+        [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
 [FromQuery] SubscriptionQueryFilter filter)
         {
@@ -493,6 +493,41 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 "Subscriber Added Successfully",
                 HttpContext.TraceIdentifier
             ));
+        }
+        [HttpPost("export-subscription")]
+        public async Task<IActionResult> ExportSubscriptions(
+[FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetInputFinancingDashboardAsync(filter);
+
+            var fileBytes = await _inputFinancingManager.ExportSubscriptionsAsync(filter, format);
+
+            var (contentType, fileName) = format switch
+            {
+                ExportFormat.Excel =>
+                    ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                     $"subscriptions_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx"),
+
+                ExportFormat.Pdf =>
+                    ("application/pdf",
+                     $"subscriptions_{DateTime.UtcNow:yyyyMMddHHmmss}.pdf"),
+
+                _ => throw new NotSupportedException("Unsupported format")
+            };
+
+            return File(fileBytes, contentType, fileName);
         }
 
         //subscriber details for
