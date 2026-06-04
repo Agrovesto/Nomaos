@@ -9,9 +9,11 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using ClosedXML.Excel;
 using DocumentFormat.OpenXml.Office2010.Excel;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
+using QuestPDF.Fluent;
 using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
@@ -32,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, InputPackageConfigArgs args);
         Task<bool> DeactivatePackageAsync(long packageId, long organizationId);
         Task<bool> DisburseSubscriptionAsync(DisburseSubscriptionRequest request, InputSubscriptionRequestArgs args);
-        Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
+        //Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request);
         Task<EopDto> GetEopByIdAsync(long id);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request);
         Task<PagedResult<FinancingBreakdownDto>> GetFinancingBreakdownAsync(
@@ -56,6 +58,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> RemoveItemFromPackage(long packageId, long itemId);
         Task<bool> ReplacePackageItemAsync(ReplacePackageItemRequest request, ReplacePackageItemRequestArgs args);
         Task<bool> UpdateInputPackageConfig(long packageId, UpdateInputPackageConfigRequest request, InputPackageConfigArgs args);
+
+        Task<byte[]> ExportSubscriptionsAsync(SubscriptionQueryFilter filter, ExportFormat format);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -153,35 +157,31 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
          */
 
         public async Task<bool> CreateInputFinancingPackageConfig(
-        CreateInputPackageRequest request,
-        InputPackageConfigArgs args)
+    CreateInputPackageRequest request,
+    InputPackageConfigArgs args)
         {
+            if (request == null)
+                throw new Exception("Request cannot be null");
+
             var strategy = _context.Database.CreateExecutionStrategy();
 
             return await strategy.ExecuteAsync(async () =>
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
-                    if (request == null)
-                        throw new Exception("Request cannot be null");
-
                     var isPhysical = request.PackageStructure == InputPackageStructure.Physical;
 
                     var requestItems = request.InputPackageItems ?? new List<CreateInputPackageItemRequest>();
                     var requestAdditionalCosts = request.AdditionalCosts ?? new List<CreateAdditionalCostRequest>();
 
-                    if (isPhysical)
-                    {
-                        if (!requestItems.Any())
-                            throw new Exception("Physical package must have items");
-                    }
-                    else
-                    {
-                        if (requestItems.Any())
-                            throw new Exception("Non-physical package cannot have items");
-                    }
+                    if (isPhysical && !requestItems.Any())
+                        throw new Exception("Physical package must have items");
+
+                    if (!isPhysical && requestItems.Any())
+                        throw new Exception("Non-physical package cannot have items");
+
 
                     var items = isPhysical
                         ? requestItems.Select(x => new InputPackageItem
@@ -192,7 +192,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         }).ToList()
                         : new List<InputPackageItem>();
 
-                    var additionalCosts = requestAdditionalCosts?.Select(x => new AdditionalInputPackageCost
+
+                    var additionalCosts = requestAdditionalCosts.Select(x => new AdditionalInputPackageCost
                     {
                         Name = x.Name,
                         Description = x.Description,
@@ -200,7 +201,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         IsPerUnit = x.IsPerUnit,
                         Quantity = x.Quantity,
                         Type = x.Type
-                    }).ToList() ?? new List<AdditionalInputPackageCost>();
+                    }).ToList();
+
 
                     var additionalCostsTotal = additionalCosts.Sum(x => x.Amount);
 
@@ -211,21 +213,18 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     if (isPhysical &&
                         request.TotalPackageValue > 0 &&
                         Math.Round(request.TotalPackageValue, 2) != Math.Round(itemsTotal, 2))
+                    {
                         throw new Exception("TotalPackageValue mismatch");
-
-
+                    }
 
                     var totalPackageValue = itemsTotal;
                     var totalFinancingValue = totalPackageValue + additionalCostsTotal;
 
-                    if(request.TotalFinancingValue > 0 && Math.Round(request.TotalFinancingValue, 2) != Math.Round(totalFinancingValue, 2))
+                    if (request.TotalFinancingValue > 0 &&
+                        Math.Round(request.TotalFinancingValue, 2) != Math.Round(totalFinancingValue, 2))
+                    {
                         throw new Exception("TotalFinancingValue mismatch");
-
-                    var commitment = request.CommitmentRequired
-                       ? (request.CommitmentType == CommitmentType.PercentageOfTotalValue
-                           ? totalPackageValue * (request.CommitmentValue / 100m)
-                           : request.CommitmentValue)
-                       : 0;
+                    }
 
 
                     var package = new InputPackage
@@ -238,38 +237,64 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         InputTarget = request.InputTarget,
                         InputSeason = request.InputSeason,
                         PackageStructure = request.PackageStructure,
+
                         InputPackageItems = items,
                         AdditionalCosts = additionalCosts,
+
                         TotalPackageValue = totalPackageValue,
                         AdditionalCostAmount = additionalCostsTotal,
-                        TotalFinancingValue = request.TotalFinancingValue > 0 ? request.TotalFinancingValue : totalFinancingValue,
+                        TotalFinancingValue = request.TotalFinancingValue > 0
+                            ? request.TotalFinancingValue
+                            : totalFinancingValue,
+
                         CommitmentRequired = request.CommitmentRequired,
-                        CommitmentType = request.CommitmentType,
-                        CommitmentValue = commitment,
-                        CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
-                        CommitmentPaymentEndDate = request.CommitmentPaymentEndDate,
+                        RepaymentRequired = request.RepaymentRequired,
+
                         UserWalletId = request.UserWalletId,
                         WalletProviderId = request.PaybackWalletId,
-                        RepaymentFrequency = request.RepaymentFrequency,
-                        RepaymentDuration = request.RepaymentDuration,
-                        RepaymentStartDate = request.RepaymentStartDate,
-                        RepaymentEndDate = request.RepaymentEndDate,
-                        RepaymentGracePeriod = request.RepaymentGracePeriod,
-                        RepaymentMode = request.RepaymentMode,
-                        RepaymentValue = request.RepaymentValue,
-                        RiskCategory = request.RiskCategory,
+
                         IsSelectedWalletProvisioned = args.isSelectedWalletProvisioned,
+
                         Currency = request.Currency,
                         IsGeneratedFromEop = false,
                         Version = 1,
                         CreatedOn = DateTimeOffset.UtcNow,
                         IsActive = true,
-                        BusinessCode= args.BusinessCode,
-                        
+                        BusinessCode = args.BusinessCode
                     };
 
+                    if (request.CommitmentRequired)
+                    {
+                        var commitmentValue =
+                            request.CommitmentType == CommitmentType.PercentageOfTotalValue
+                                ? totalPackageValue * (request.CommitmentValue / 100m)
+                                : request.CommitmentValue;
+
+                        package.CommitmentPlan = new CommitmentPlan
+                        {
+                            CommitmentType = request.CommitmentType,
+                            CommitmentValue = commitmentValue,
+                            CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
+                            CommitmentPaymentEndDate = request.CommitmentPaymentEndDate
+                        };
+                    }
+
+                    if (request.RepaymentRequired)
+                    {
+                        package.RepaymentPlan = new RepaymentPlan
+                        {
+                            RepaymentFrequency = request.RepaymentFrequency,
+                            RepaymentDuration = request.RepaymentDuration,
+                            RepaymentStartDate = request.RepaymentStartDate,
+                            RepaymentEndDate = request.RepaymentEndDate,
+                            RepaymentGracePeriod = request.RepaymentGracePeriod,
+                            RepaymentMode = request.RepaymentMode,
+                            RepaymentValue = request.RepaymentValue,
+                            RiskCategory = request.RiskCategory
+                        };
+                    }
+
                     _context.InputPackages.Add(package);
-                    await _context.SaveChangesAsync();
 
                     var outboxEvent = new OutboxMessage
                     {
@@ -280,21 +305,20 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         Payload = JsonSerializer.Serialize(new InputPackageCreatedEvent
                         {
                             PackageId = package.Id,
-                            OrganizationId = package.OrganizationId.HasValue ? package.OrganizationId.Value : null,
-
-
+                            OrganizationId = package.OrganizationId,
                             CreatedByUserId = package.CreatedByUserId
                         })
                     };
 
                     _context.OutboxMessages.Add(outboxEvent);
+
                     await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
 
                     return true;
                 }
-                catch(Exception ex)
+                catch
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -303,70 +327,118 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         }
 
         public async Task<bool> UpdateInputPackageConfig(
-        long packageId,
-        UpdateInputPackageConfigRequest request,
-        InputPackageConfigArgs args)
+    long packageId,
+    UpdateInputPackageConfigRequest request,
+    InputPackageConfigArgs args)
         {
+            if (request == null)
+                throw new Exception("Request cannot be null");
+
             var strategy = _context.Database.CreateExecutionStrategy();
 
             return await strategy.ExecuteAsync(async () =>
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
-                    if (request == null)
-                        throw new Exception("Request cannot be null");
-
                     var package = await _context.InputPackages
-                        .FirstOrDefaultAsync(x => x.Id == packageId
-                                               && x.OrganizationId == args.organizationId);
+                        .Include(x => x.CommitmentPlan)
+                        .Include(x => x.RepaymentPlan)
+                        .FirstOrDefaultAsync(x =>
+                            x.Id == packageId &&
+                            x.OrganizationId == args.organizationId);
 
                     if (package == null)
                         throw new Exception("Package not found");
 
-                    if (request.CommitmentPaymentStartDate >= request.CommitmentPaymentEndDate)
-                        throw new Exception("Invalid commitment payment date range");
-
-                    if (request.RepaymentStartDate >= request.RepaymentEndDate)
-                        throw new Exception("Invalid repayment date range");
-
-                    if (request.RepaymentGracePeriod < request.RepaymentStartDate)
-                        throw new Exception("Grace period cannot be before repayment start date");
-
                     if (!package.IsActive)
                         throw new Exception("Cannot update configuration for inactive package");
 
-                    package.CommitmentPaymentStartDate = request.CommitmentPaymentStartDate;
-                    package.CommitmentPaymentEndDate = request.CommitmentPaymentEndDate;
+                    if (request.CommitmentRequired)
+                    {
+                        if (request.CommitmentPaymentStartDate >= request.CommitmentPaymentEndDate)
+                            throw new Exception("Invalid commitment payment date range");
+                    }
 
-                    package.RepaymentFrequency = request.RepaymentFrequency;
-                    package.RepaymentDuration = request.RepaymentDuration;
+                    
+                    if (request.RepaymentRequired)
+                    {
+                        if (request.RepaymentStartDate >= request.RepaymentEndDate)
+                            throw new Exception("Invalid repayment date range");
 
-                    package.RepaymentStartDate = request.RepaymentStartDate;
-                    package.RepaymentEndDate = request.RepaymentEndDate;
-                    package.RepaymentGracePeriod = request.RepaymentGracePeriod;
+                        if (request.RepaymentGracePeriod < request.RepaymentStartDate)
+                            throw new Exception("Grace period cannot be before repayment start date");
+                    }
+
+
+                    package.CommitmentRequired = request.CommitmentRequired;
+                    package.RepaymentRequired = request.RepaymentRequired;
+
+
+                    if (request.CommitmentRequired)
+                    {
+                        var commitmentValue =
+                            request.CommitmentType == CommitmentType.PercentageOfTotalValue
+                                ? package.TotalPackageValue * (request.CommitmentValue / 100m)
+                                : request.CommitmentValue;
+
+
+                        if (package.CommitmentPlan == null)
+                        {
+                            package.CommitmentPlan = new CommitmentPlan
+                            {
+                                InputPackageId = package.Id
+                            };
+                        }
+
+                        package.CommitmentPlan.CommitmentType = request.CommitmentType;
+                        package.CommitmentPlan.CommitmentValue = commitmentValue;
+                        package.CommitmentPlan.CommitmentPaymentStartDate = request.CommitmentPaymentStartDate;
+                        package.CommitmentPlan.CommitmentPaymentEndDate = request.CommitmentPaymentEndDate;
+                    }
+                    else
+                    {
+                        // REMOVE EXISTING PLAN IF DISABLED
+                        if (package.CommitmentPlan != null)
+                        {
+                            _context.CommitmentPlans.Remove(package.CommitmentPlan);
+                        }
+                    }
+
+                    if (request.RepaymentRequired)
+                    {
+                        if (package.RepaymentPlan == null)
+                        {
+                            package.RepaymentPlan = new RepaymentPlan
+                            {
+                                InputPackageId = package.Id
+                            };
+                        }
+
+                        package.RepaymentPlan.RepaymentFrequency = request.RepaymentFrequency;
+                        package.RepaymentPlan.RepaymentDuration = request.RepaymentDuration;
+
+                        package.RepaymentPlan.RepaymentStartDate = request.RepaymentStartDate;
+                        package.RepaymentPlan.RepaymentEndDate = request.RepaymentEndDate;
+                        package.RepaymentPlan.RepaymentGracePeriod = request.RepaymentGracePeriod;
+
+                        package.RepaymentPlan.RepaymentMode = request.RepaymentMode;
+                        package.RepaymentPlan.RepaymentValue = request.RepaymentValue;
+                        package.RepaymentPlan.RiskCategory = request.RiskCategory;
+                    }
+                    else
+                    {
+                        // REMOVE EXISTING PLAN IF DISABLED
+                        if (package.RepaymentPlan != null)
+                        {
+                            _context.RepaymentPlans.Remove(package.RepaymentPlan);
+                        }
+                    }
 
                     package.UpdatedOn = DateTimeOffset.UtcNow;
                     package.UpdatedByUserId = args.createdByUserId;
 
-                    await _context.SaveChangesAsync();
-
-                    //var scheduleRequest = new RepaymentEngineRequest
-                    //{
-                    //    PackageId = package.Id,
-                    //    Frequency = request.RepaymentFrequency,
-                    //    Duration = request.RepaymentDuration,
-                    //    StartDate = request.RepaymentStartDate,
-                    //    EndDate = request.RepaymentEndDate,
-                    //    GracePeriod = request.RepaymentGracePeriod,
-                    //    TotalAmount = package.TotalFinancingValue
-                    //};
-
-                    //var schedule = _repaymentEngine.GenerateSchedule(scheduleRequest);
-                    //_context.RepaymentSchedules.AddRange(schedule);
-
-                    await _context.SaveChangesAsync();
                     var outboxEvent = new OutboxMessage
                     {
                         Id = Guid.NewGuid(),
@@ -376,11 +448,12 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         Payload = JsonSerializer.Serialize(new InputPackageConfigurationUpdatedEvent
                         {
                             PackageId = package.Id,
-                            OrganizationId = package.OrganizationId.HasValue ? package.OrganizationId.Value : null
+                            OrganizationId = package.OrganizationId
                         })
                     };
 
                     _context.OutboxMessages.Add(outboxEvent);
+
                     await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
@@ -397,90 +470,126 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
         public async Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams request)
         {
+            var pageNumber = Math.Max(1, request.PageNumber);
+            var pageSize = Math.Max(1, request.PageSize);
+
             var query = _context.InputPackages
-                .Include(x => x.InputFinancingCategory)
-                
-                .Where(x => x.OrganizationId == request.OrganizationId
-               // && x.IsActive
-                );
+                .Where(x => x.OrganizationId == request.OrganizationId);
 
             var totalCount = await query.CountAsync();
 
-            var items = await query
+            var data = await query
                 .OrderByDescending(x => x.Id)
-                .Skip((request.PageNumber - 1) * request.PageSize)
-                .Take(request.PageSize)
-                .Select(x => new InputPackageListModel
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new
                 {
-                    Id = x.Id,
-                    Name = x.Name,
-                    FinancingCategory= x.InputFinancingCategory.Name,
-                    InputTarget= x.InputTarget,
-                    TotalFinancingValue = x.TotalFinancingValue,
-                    CommitmentValue = x.CommitmentValue,
-                    RepaymentModel= EnumExtensions.GetDisplayName(x.RepaymentMode),
-                    RiskCategory= EnumExtensions.GetDisplayName(x.RiskCategory),
-                    Subscribers= 0,//update on subscribers added
-                    IsActive= x.IsActive,
-                    SubscriberType = EnumExtensions.GetDisplayName(x.SubScriptionType)
+                    x.Id,
+                    x.Name,
+                    FinancingCategory = x.InputFinancingCategory.Name,
+                    x.InputTarget,
+                    x.TotalFinancingValue,
+                    CommitmentValue = x.CommitmentPlan != null ? x.CommitmentPlan.CommitmentValue : 0,
+                    RepaymentMode = x.RepaymentPlan != null ? x.RepaymentPlan.RepaymentMode : (InputPackageRepaymentMode?)null,
+                    RiskCategory = x.RepaymentPlan != null ? x.RepaymentPlan.RiskCategory : (RiskCategory?)null,
+                    x.IsActive,
+                    x.SubScriptionType
                 })
                 .ToListAsync();
 
             return new PagedResult<InputPackageListModel>
             {
-                Items = items,
+                Items = data.Select(x => new InputPackageListModel
+                {
+                    Id = x.Id,
+                    Name = x.Name,
+                    FinancingCategory = x.FinancingCategory,
+                    InputTarget = x.InputTarget,
+                    TotalFinancingValue = x.TotalFinancingValue,
+                    CommitmentValue = x.CommitmentValue,
+                    RepaymentModel = x.RepaymentMode.HasValue ? EnumExtensions.GetDisplayName(x.RepaymentMode.Value) : null,
+                    RiskCategory = x.RiskCategory.HasValue ? EnumExtensions.GetDisplayName(x.RiskCategory.Value) : null,
+                    Subscribers = 0,
+                    IsActive = x.IsActive,
+                    SubscriberType = EnumExtensions.GetDisplayName(x.SubScriptionType)
+                }).ToList(),
+
                 Count = totalCount,
-                PageNumber = request.PageNumber,
-                PageSize = request.PageSize
+                PageNumber = pageNumber,
+                PageSize = pageSize
             };
         }
         public async Task<InputPackageDto> GetPackageByIdAsync(long id)
         {
             var package = await _context.InputPackages
-                .Include(x=> x.InputFinancingCategory)
+                .Include(x => x.InputFinancingCategory)
                 .Include(x => x.InputPackageItems)
-                .ThenInclude(x => x.OrganizationProduct)
+                    .ThenInclude(x => x.OrganizationProduct)
                 .Include(x => x.AdditionalCosts)
+                .Include(x => x.CommitmentPlan)
+                .Include(x => x.RepaymentPlan)
                 .FirstOrDefaultAsync(x => x.Id == id);
 
             if (package == null)
                 return null;
 
+            var commitment = package.CommitmentPlan;
+            var repayment = package.RepaymentPlan;
+
             return new InputPackageDto
             {
-                IsActive= package.IsActive,
-               WalletProviderId= package.WalletProviderId ?? 0,
+                IsActive = package.IsActive,
+                WalletProviderId = package.WalletProviderId ?? 0,
+
                 Id = package.Id,
                 Name = package.Name,
-                IsRepaymentWalletConfigured =package.IsSelectedWalletProvisioned,
-                SubscriptionType= EnumExtensions.GetDisplayName(package.SubScriptionType),
-                InputSeason=package.InputSeason,
-                InputTarget=package.InputTarget,
-                FinancingCategory=package.InputFinancingCategory.Name,
+                IsRepaymentWalletConfigured = package.IsSelectedWalletProvisioned,
+
+                SubscriptionType = EnumExtensions.GetDisplayName(package.SubScriptionType),
+                InputSeason = package.InputSeason,
+                InputTarget = package.InputTarget,
+
+                FinancingCategory = package.InputFinancingCategory?.Name,
+
                 FinancialStructure = new InputPackageFinancingStructureDto
                 {
                     TotalFinancingValue = package.TotalFinancingValue,
                     CommitmentRequired = package.CommitmentRequired,
-                    CommitmentValue = package.CommitmentValue,                   
-                    RepaymentEndDate=package.RepaymentEndDate,
-                    RepaymentGracePeriod=package.RepaymentGracePeriod,
-                    CommitmentPaymentStartDate=package.CommitmentPaymentStartDate,
-                    CommitmentPaymentEndDate=package.CommitmentPaymentEndDate,
-                    RepaymentModel= EnumExtensions.GetDisplayName(package.RepaymentMode),
-                    RepaymentStartDate=package.RepaymentStartDate,
-                    RepaymentValue= package.RepaymentValue,
-                    RepaymentPeriod = GetRepaymentPeriod(package.RepaymentFrequency, package.RepaymentDuration),
-                    RiskCategory = EnumExtensions.GetDisplayName(package.RiskCategory)
+
+                    CommitmentValue = commitment?.CommitmentValue ?? 0,
+
+                    CommitmentPaymentStartDate = commitment?.CommitmentPaymentStartDate,
+                    CommitmentPaymentEndDate = commitment?.CommitmentPaymentEndDate,
+
+                    RepaymentStartDate = repayment?.RepaymentStartDate,
+                    RepaymentEndDate = repayment?.RepaymentEndDate,
+                    RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
+
+                    RepaymentModel = repayment != null
+                        ? EnumExtensions.GetDisplayName(repayment.RepaymentMode)
+                        : null,
+
+                    RiskCategory = repayment != null
+                        ? EnumExtensions.GetDisplayName(repayment.RiskCategory)
+                        : null,
+
+                    RepaymentValue = repayment?.RepaymentValue ?? 0,
+
+                    RepaymentPeriod = repayment != null
+                        ? GetRepaymentPeriod(repayment.RepaymentFrequency, repayment.RepaymentDuration)
+                        : null
                 },
+
                 PackageInputs = package.InputPackageItems.Select(i => new InputPackageBreakdownDto
                 {
                     OrganizationProductId = i.OrganizationProductId,
-                    InputId=i.Id,
-                    InputType = i.OrganizationProduct.ProductName,
+                    InputId = i.Id,
+
+                    InputType = i.OrganizationProduct?.ProductName,
+
                     Quantity = i.Quantity,
                     UnitCost = i.UnitCost,
-                    TotalCost = i.Quantity * i.UnitCost,
-                    
+                    TotalCost = i.Quantity * i.UnitCost
                 }).ToList(),
 
                 AdditionalCosts = package.AdditionalCosts.Select(c => new AdditionalCostDto
@@ -490,7 +599,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 }).ToList()
             };
         }
-
         public async Task<bool> DeactivatePackageAsync(long packageId, long organizationId)
         {
             var package = await _context.InputPackages
@@ -598,24 +706,28 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
          * */
 
         #region Input Subscriber
-        public async Task<bool> AddSubscriberAsync(AddSubscriberRequest request, InputSubscriptionRequestArgs args)
+        public async Task<bool> AddSubscriberAsync(
+    AddSubscriberRequest request,
+    InputSubscriptionRequestArgs args)
         {
+            if (request == null)
+                throw new Exception("Request cannot be null");
+
             var strategy = _context.Database.CreateExecutionStrategy();
 
             return await strategy.ExecuteAsync(async () =>
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
                     var package = await _context.InputPackages
+                        .Include(x => x.CommitmentPlan)
+                        .Include(x => x.RepaymentPlan)
                         .FirstOrDefaultAsync(x => x.Id == request.PackageId);
 
                     if (package == null)
                         throw new Exception("Package not found");
-
-                    if (!package.IsActive)
-                        throw new Exception("Package is not active");
 
                     if (!package.IsActive)
                         throw new Exception("Only active packages can accept subscribers");
@@ -625,50 +737,62 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     {
                         throw new Exception("This package does not allow group subscriptions");
                     }
+
                     var alreadySubscribed = await _context.InputPackageSubscriptions
-    .AnyAsync(x =>
-        x.InputPackageId == request.PackageId &&
-        x.SubscriberUserId == request.SubscriberUserId &&
-        x.IsActive);
+                        .AnyAsync(x =>
+                            x.InputPackageId == request.PackageId &&
+                            x.SubscriberUserId == request.SubscriberUserId &&
+                            x.IsActive);
 
                     if (alreadySubscribed)
                     {
-                        throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST, "Subscriber already added to this package");
+                        throw new BaseException(
+                            Core.Enums.ExceptionType.ALREADY_EXIST,
+                            "Subscriber already added to this package");
                     }
+
+                    var repayment = package.RepaymentPlan;
+                    var commitment = package.CommitmentPlan;
+
+                    if (package.RepaymentRequired && repayment == null)
+                        throw new Exception("Repayment plan is required for subscription");
+
+                    if (package.CommitmentRequired && commitment == null)
+                        throw new Exception("Commitment plan is required for subscription");
+
                     var subscription = new InputPackageSubscription
                     {
                         InputPackageId = package.Id,
                         SubscriberUserId = request.SubscriberUserId,
                         SubscriberType = request.SubscriberType,
                         AddedByUserId = args.UserId,
-                        OrganizationId = args.OrganizationId.HasValue ? args.OrganizationId.Value : null,
-
+                        OrganizationId = args.OrganizationId,
                         Status = SubscriptionStatus.PendingApproval,
                         IsActive = true,
                         SubscribedOn = DateTimeOffset.UtcNow,
 
-
-                        RepaymentFrequency = package.RepaymentFrequency,
-                        RepaymentDuration = package.RepaymentDuration,
-                        RepaymentStartDate = package.RepaymentStartDate,
-                        RepaymentEndDate = package.RepaymentEndDate,
-                        RepaymentGracePeriod = package.RepaymentGracePeriod,
-                        RepaymentMode = package.RepaymentMode,
-
                         TotalFinancingValue = package.TotalFinancingValue,
 
                         CommitmentRequired = package.CommitmentRequired,
-                        CommitmentValue = package.CommitmentValue,
-                        CommitmentPaymentStartDate = package.CommitmentPaymentStartDate,
-                        CommitmentPaymentEndDate = package.CommitmentPaymentEndDate,
+                        CommitmentValue = commitment?.CommitmentValue ?? 0,
+                        CommitmentPaymentStartDate = commitment?.CommitmentPaymentStartDate,
+                        CommitmentPaymentEndDate = commitment?.CommitmentPaymentEndDate,
 
-                        BusinessCode= args.BusinessCode
+                        RepaymentFrequency = repayment?.RepaymentFrequency ?? default,
+                        RepaymentDuration = repayment?.RepaymentDuration ?? 0,
+                        RepaymentStartDate = repayment?.RepaymentStartDate,
+                        RepaymentEndDate = repayment?.RepaymentEndDate,
+                        RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
+                        RepaymentMode = repayment?.RepaymentMode ?? default,
+
+                        BusinessCode = args.BusinessCode
                     };
 
                     _context.InputPackageSubscriptions.Add(subscription);
 
                     await _context.SaveChangesAsync();
 
+                    // OUTBOX EVENT
                     var outboxEvent = new OutboxMessage
                     {
                         Id = Guid.NewGuid(),
@@ -683,8 +807,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             Status = SubscriptionStatus.PendingApproval.ToString(),
                             SubscriberType = request.SubscriberType.ToString(),
                             CommitmentRequired = package.CommitmentRequired,
-                            CommitmentValue = package.CommitmentValue,
-                            OccurredOn= DateTime.UtcNow
+                            CommitmentValue = commitment?.CommitmentValue ?? 0,
+                            OccurredOn = DateTime.UtcNow
                         })
                     };
 
@@ -703,6 +827,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 }
             });
         }
+
+
         public async Task<bool> ApproveSubscriptionAsync(ApproveSubscriptionRequest request, InputSubscriptionRequestArgs args)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -762,7 +888,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     }
 
                     subscription.Status = subscription.InputPackage.CommitmentRequired
-                        ? SubscriptionStatus.PendingCommitment
+                        ? SubscriptionStatus.PendingCommitment   //this should be approved
                         : SubscriptionStatus.PendingDisbursement;
 
                     subscription.ApprovedByUserId = args.UserId;
@@ -906,38 +1032,44 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 }
             });
         }
-        
-        
+
+
         //for this disbursement, the input might be physical commodity based on 
         //the input package configuration, so to disburse that kind of input, we 
         //need to deduct the disbursed input package items from the organization product in
         // the warehouse so as to track when there is no more inventory to fulfil disbursement
         //however, if it is just monetary, then you can log the disbursement amount.
         //rework this disburse subscription to cater for that
-        
+
         public async Task<bool> DisburseSubscriptionAsync(
-        DisburseSubscriptionRequest request,
-        InputSubscriptionRequestArgs args)
+     DisburseSubscriptionRequest request,
+     InputSubscriptionRequestArgs args)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
 
             return await strategy.ExecuteAsync(async () =>
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
+                await using var transaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
                     var subscription = await _context.InputPackageSubscriptions
                         .Include(x => x.InputPackage)
                             .ThenInclude(x => x.InputPackageItems)
-                       .FirstOrDefaultAsync(x => x.Id == request.SubscriptionId && x.SubscriberUserId == args.SubscriberUserId);
-
+                        .Include(x => x.InputPackage)
+                            .ThenInclude(x => x.RepaymentPlan)
+                        .FirstOrDefaultAsync(x =>
+                            x.Id == request.SubscriptionId &&
+                            x.SubscriberUserId == args.SubscriberUserId);
 
                     if (subscription == null)
                         throw new Exception("Subscription not found");
 
                     if (subscription.Status != SubscriptionStatus.PendingDisbursement)
                         throw new Exception("Subscription not ready for disbursement");
+
+                    if (subscription.InputPackage.RepaymentPlan == null)
+                        throw new Exception("Repayment plan is required for disbursement");
 
                     var alreadyDisbursed = await _context.InputSubscriptionDisbursements
                         .AnyAsync(x => x.SubscriptionId == subscription.Id);
@@ -946,8 +1078,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         throw new Exception("Subscription already disbursed");
 
                     decimal disbursedAmount;
-
-                       if (subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
+                    
+                    if (subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
                     {
                         foreach (var item in subscription.InputPackage.InputPackageItems)
                         {
@@ -962,43 +1094,27 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             if (inventory.Quantity < item.Quantity)
                                 throw new Exception($"Insufficient inventory for {inventory.OrganizationProduct.ProductName}");
 
-                            var before = inventory.Quantity;
-
-                            // deduct stock
                             inventory.Quantity -= item.Quantity;
 
-                            var after = inventory.Quantity;
-
-                            _context.LocationInventories.Update(inventory);
-
-                            // log transaction
-                            var inventoryLog = new InventoryTransaction
+                            _context.InventoryTransactions.Add(new InventoryTransaction
                             {
                                 OrganizationProductId = inventory.OrganizationProductId,
                                 Quantity = item.Quantity,
-                                QuantityBefore = before,
-                                QuantityAfter = after,
+                                QuantityBefore = inventory.Quantity + item.Quantity,
+                                QuantityAfter = inventory.Quantity,
                                 TransactionType = InventoryTransactionType.Disbursement,
                                 ReferenceNumber = request.Reference,
                                 SubscriptionId = subscription.Id,
                                 TransactionDate = DateTimeOffset.UtcNow
-                            };
-
-                            _context.InventoryTransactions.Add(inventoryLog);
+                            });
                         }
 
                         await _context.SaveChangesAsync();
 
-                        //  derive total AFTER all inventory operations
-                        //disbursedAmount = await _context.InventoryTransactions
-                        //    .Where(x => x.SubscriptionId == subscription.Id
-                        //             && x.TransactionType == InventoryTransactionType.Disbursement)
-                        //    .SumAsync(x => x.Quantity * x.UnitCost);
-
                         disbursedAmount = subscription.InputPackage.InputPackageItems
-                                    .Sum(x => x.Quantity * x.UnitCost);
+                            .Sum(x => x.Quantity * x.UnitCost);
                     }
-                         else
+                    else
                     {
                         if (!request.DisbursedAmount.HasValue)
                             throw new Exception("Disbursed amount is required for monetary packages");
@@ -1006,53 +1122,45 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         disbursedAmount = request.DisbursedAmount.Value;
                     }
 
-                    var disbursement = new InputSubscriptionDisbursement
+                    _context.InputSubscriptionDisbursements.Add(new InputSubscriptionDisbursement
                     {
                         SubscriptionId = subscription.Id,
                         Amount = disbursedAmount,
                         Reference = request.Reference,
                         DisbursedByUserId = args.UserId,
                         DisbursedOn = DateTimeOffset.UtcNow
-                    };
-
-                    _context.InputSubscriptionDisbursements.Add(disbursement);
-
-                    await _context.SaveChangesAsync();
+                    });
 
                     subscription.Status = SubscriptionStatus.Active;
                     subscription.DisbursedOn = DateTimeOffset.UtcNow;
 
-                    _context.InputPackageSubscriptions.Update(subscription);
-
-                    await _context.SaveChangesAsync();
+                    var plan = subscription.InputPackage.RepaymentPlan;
 
                     var schedule = _repaymentEngine.GenerateSchedule(
                         new RepaymentEngineRequest
                         {
                             InputSubscriptionId = subscription.Id,
-                            Frequency = subscription.RepaymentFrequency,
-                            Duration = subscription.RepaymentDuration,
-                            StartDate = subscription.RepaymentStartDate,
-                            EndDate = subscription.RepaymentEndDate,
-                            GracePeriod = subscription.RepaymentGracePeriod,
-                            TotalAmount = disbursedAmount  
+                            Frequency = plan.RepaymentFrequency,
+                            Duration = plan.RepaymentDuration,
+                            StartDate = plan.RepaymentStartDate,
+                            EndDate = plan.RepaymentEndDate,
+                            GracePeriod = plan.RepaymentGracePeriod,
+                            TotalAmount = disbursedAmount
                         });
 
-                    var repaymentEntities = schedule.Select(x => new RepaymentSchedule
-                    {
-                        InputPackageSubscriptionId = subscription.Id,
-                        InstallmentNumber = x.InstallmentNumber,
-                        DueDate = x.DueDate,
-                        Amount = x.Amount,
-                        IsWithinGracePeriod = x.IsWithinGracePeriod,
-                        IsPaid = false
-                    }).ToList();
+                    _context.RepaymentSchedules.AddRange(
+                        schedule.Select(x => new RepaymentSchedule
+                        {
+                            InputPackageSubscriptionId = subscription.Id,
+                            InstallmentNumber = x.InstallmentNumber,
+                            DueDate = x.DueDate,
+                            Amount = x.Amount,
+                            IsWithinGracePeriod = x.IsWithinGracePeriod,
+                            IsPaid = false
+                        })
+                    );
 
-                    _context.RepaymentSchedules.AddRange(repaymentEntities);
-
-                    await _context.SaveChangesAsync();
-
-                     var outboxEvent = new OutboxMessage
+                    _context.OutboxMessages.Add(new OutboxMessage
                     {
                         Id = Guid.NewGuid(),
                         EventType = nameof(SubscriptionDisbursedEvent),
@@ -1064,14 +1172,11 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             PackageId = subscription.InputPackageId,
                             Amount = disbursedAmount
                         })
-                    };
-
-                    _context.OutboxMessages.Add(outboxEvent);
+                    });
 
                     await _context.SaveChangesAsync();
 
                     await transaction.CommitAsync();
-
                     return true;
                 }
                 catch
@@ -1081,6 +1186,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 }
             });
         }
+
         public async Task<bool> RecordSubscriptionRepaymentAsync(RecordRepaymentRequest request)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
@@ -1320,10 +1426,18 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     case SubscriptionView.PendingCommitment:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingCommitment ||
+                            x.Status == SubscriptionStatus.PendingCommitment);
+                            break;
+                    case SubscriptionView.PendingDisbursement:
+                         query = query.Where(x =>
+                            x.Status == SubscriptionStatus.PendingDisbursement ||
                             x.Status == SubscriptionStatus.Approved);
                         break;
 
+                    case SubscriptionView.Approved:
+                        query = query.Where(x =>
+                           x.Status == SubscriptionStatus.Approved);
+                        break;
                     case SubscriptionView.Active:
                         query = query.Where(x => x.Status == SubscriptionStatus.Active);
                         break;
@@ -1442,6 +1556,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Take(pageSize)
                 .Select(x => new SubscriptionDetailDto
                 {
+                    PackageId= x.InputPackageId,
                     SubscriptionId =x.Id,
                     SubscriberUserId= x.SubscriberUserId,
                     SubscriberName =
@@ -1570,61 +1685,70 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var subscription = await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
                     .ThenInclude(x => x.InputPackageItems)
+                        .ThenInclude(x => x.OrganizationProduct)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.CommitmentPlan)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.RepaymentPlan)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
             if (subscription == null)
                 throw new Exception("Subscription not found");
-            var inputs = new List<InputBreakdownDto>();
 
-            if (subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
-            {
-                inputs = subscription.InputPackage.InputPackageItems
-                    .Select(x => new InputBreakdownDto
-                    {
-                        InputName = x.OrganizationProduct?.ProductName ?? "Unknown",
-                        Quantity = x.Quantity,
-                        UnitPrice = x.UnitCost,
-                        TotalCost = x.Quantity * x.UnitCost
-                    })
-                    .ToList();
-            }
+            var package = subscription.InputPackage;
+            var repayment = package.RepaymentPlan;
+
+            var inputs = package.PackageStructure == InputPackageStructure.Physical
+                ? package.InputPackageItems.Select(x => new InputBreakdownDto
+                {
+                    InputName = x.OrganizationProduct?.ProductName ?? "Unknown",
+                    Quantity = x.Quantity,
+                    UnitPrice = x.UnitCost,
+                    TotalCost = x.Quantity * x.UnitCost
+                }).ToList()
+                : new List<InputBreakdownDto>();
+
             var installments = await _context.InputPackageSubscriptionPayments
-    .Where(x =>
-        x.SubscriptionId == subscriptionId &&
-        x.Status == TransactionStatus.Successful &&
-        x.PaymentType == PaymentType.Repayment)
-    .OrderBy(x => x.PaidOn)
-    .Select(x => new InstallmentDto
-    {
-        PaymentDate = x.PaidOn,
-        Amount = x.AmountPaid,
-        Reference = x.Reference
-    })
-    .ToListAsync();
+                .Where(x =>
+                    x.SubscriptionId == subscriptionId &&
+                    x.Status == TransactionStatus.Successful &&
+                    x.PaymentType == PaymentType.Repayment)
+                .OrderBy(x => x.PaidOn)
+                .Select(x => new InstallmentDto
+                {
+                    PaymentDate = x.PaidOn,
+                    Amount = x.AmountPaid,
+                    Reference = x.Reference
+                })
+                .ToListAsync();
+
             var schedules = await _context.RepaymentSchedules
-    .Where(x => x.InputPackageSubscriptionId == subscriptionId)
-    .OrderBy(x => x.InstallmentNumber)
-    .Select(x => new RepaymentScheduleDto
-    {
-        InstallmentNo = x.InstallmentNumber,
-        DueDate = x.DueDate,
-        ExpectedAmount = x.Amount,
-        IsPaid = x.IsPaid
-    })
-    .ToListAsync();
+                .Where(x => x.InputPackageSubscriptionId == subscriptionId)
+                .OrderBy(x => x.InstallmentNumber)
+                .Select(x => new RepaymentScheduleDto
+                {
+                    InstallmentNo = x.InstallmentNumber,
+                    DueDate = x.DueDate,
+                    ExpectedAmount = x.Amount,
+                    IsPaid = x.IsPaid
+                })
+                .ToListAsync();
+
             return new LoanDetailDto
             {
-                LoanName = subscription.InputPackage.Name,
+                LoanName = package.Name,
                 LoanAmount = subscription.TotalFinancingValue,
                 DateIssued = subscription.DisbursedOn ?? subscription.SubscribedOn,
-                DueDate = subscription.RepaymentEndDate,
-                InterestRate = subscription.InputPackage?.InterestRate ?? 0,
+
+                DueDate = repayment?.RepaymentEndDate,
+
+                InterestRate = repayment?.InterestRate ?? 0,
+
                 Inputs = inputs,
                 InstallmentsPaid = installments,
                 RepaymentSchedule = schedules
             };
         }
-
         public async Task<PagedResult<FinancingBreakdownDto>> GetFinancingBreakdownAsync(
      string subscriberUserId,
      int pageNumber,
@@ -1912,6 +2036,196 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         }
 
         #region Input Subscription reporting
+
+        public async Task<byte[]> ExportSubscriptionsAsync(
+    SubscriptionQueryFilter filter,
+    ExportFormat format)
+        {
+            var baseQuery = _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(x => x.BusinessCode == filter.BusinessCode)
+                .Include(x => x.InputPackage)
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.AddedByUser)
+                .AsQueryable();
+
+            // apply filters (reuse your existing logic)
+            baseQuery = ApplyFilters(baseQuery, filter);
+
+            // 🔥 pre-aggregate payments once
+            var payments = _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.Status == TransactionStatus.Successful)
+                .GroupBy(p => p.SubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    CommitmentPaid = g
+                        .Where(x => x.PaymentType == PaymentType.Commitment)
+                        .Sum(x => (decimal?)x.AmountPaid) ?? 0m
+                });
+
+            var data = await (
+                from sub in baseQuery
+                join pay in payments
+                    on sub.Id equals pay.SubscriptionId into payGroup
+                from p in payGroup.DefaultIfEmpty()
+                select new SubscriptionDetailDto
+                {
+                    PackageId = sub.InputPackageId,
+                    SubscriptionId = sub.Id,
+                    SubscriberUserId = sub.SubscriberUserId,
+
+                    SubscriberName =
+                        sub.SubscriberUser == null
+                            ? sub.SubscriberUserId
+                            : !string.IsNullOrWhiteSpace(sub.SubscriberUser.Name)
+                                ? sub.SubscriberUser.Name
+                                : !string.IsNullOrWhiteSpace(sub.SubscriberUser.PhoneNumber)
+                                    ? sub.SubscriberUser.PhoneNumber
+                                    : sub.SubscriberUser.Email,
+
+                    CreatedBy =
+                        sub.AddedByUser == null
+                            ? sub.AddedByUserId
+                            : !string.IsNullOrWhiteSpace(sub.AddedByUser.Name)
+                                ? sub.AddedByUser.Name
+                                : !string.IsNullOrWhiteSpace(sub.AddedByUser.PhoneNumber)
+                                    ? sub.AddedByUser.PhoneNumber
+                                    : sub.AddedByUser.Email,
+
+                    SubscriptionType = sub.SubscriberType,
+                    Location = sub.Organization != null ? sub.Organization.CompanyName : null,
+                    PackageName = sub.InputPackage.Name,
+                    CommitmentValue = sub.CommitmentValue,
+                    TotalFinancingValue = sub.TotalFinancingValue,
+                    SubscribedOn = sub.SubscribedOn,
+                    Status = sub.Status,
+
+                    CommitmentStatus =
+                        (p.CommitmentPaid >= sub.CommitmentValue)
+                            ? "Paid"
+                            : "Pending"
+                })
+                .ToListAsync();
+
+            return format switch
+            {
+                ExportFormat.Excel => ExportToExcel(data),
+                ExportFormat.Pdf => ExportToPdf(data),
+                _ => throw new NotSupportedException("Format not supported")
+            };
+        }
+        private IQueryable<InputPackageSubscription> ApplyFilters(
+    IQueryable<InputPackageSubscription> query,
+    SubscriptionQueryFilter filter)
+        {
+            if (!string.IsNullOrEmpty(filter.SubscriberUserId))
+                query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
+
+            if (filter.PackageId.HasValue)
+                query = query.Where(x => x.InputPackageId == filter.PackageId);
+
+            if (filter.OrganizationId.HasValue)
+                query = query.Where(x => x.OrganizationId == filter.OrganizationId);
+
+            if (filter.Status.HasValue)
+                query = query.Where(x => x.Status == filter.Status);
+
+            if (filter.IsActiveOnly == true)
+                query = query.Where(x => x.IsActive);
+
+            if (filter.ViewType.HasValue)
+            {
+                switch (filter.ViewType.Value)
+                {
+                    case SubscriptionView.PendingApproval:
+                        query = query.Where(x => x.Status == SubscriptionStatus.PendingApproval);
+                        break;
+
+                    case SubscriptionView.PendingCommitment:
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.PendingCommitment ||
+                            x.Status == SubscriptionStatus.Approved);
+                        break;
+
+                    case SubscriptionView.Active:
+                        query = query.Where(x => x.Status == SubscriptionStatus.Active);
+                        break;
+
+                    case SubscriptionView.Completed:
+                        query = query.Where(x => x.Status == SubscriptionStatus.RepaymentCompleted);
+                        break;
+
+                    case SubscriptionView.Defaulted:
+                        query = query.Where(x => x.Status == SubscriptionStatus.Defaulted);
+                        break;
+                }
+            }
+
+            return query;
+        }
+        private byte[] ExportToExcel(List<SubscriptionDetailDto> data)
+        {
+            using var workbook = new XLWorkbook();
+            var ws = workbook.Worksheets.Add("Subscriptions");
+
+            ws.Cell(1, 1).Value = "Subscription Id";
+            ws.Cell(1, 2).Value = "Subscriber";
+            ws.Cell(1, 3).Value = "Package";
+            ws.Cell(1, 4).Value = "Commitment";
+            ws.Cell(1, 5).Value = "Status";
+
+            var row = 2;
+
+            foreach (var item in data)
+            {
+                ws.Cell(row, 1).Value = item.SubscriptionId;
+                ws.Cell(row, 2).Value = item.SubscriberName;
+                ws.Cell(row, 3).Value = item.PackageName;
+                ws.Cell(row, 4).Value = item.CommitmentValue;
+                ws.Cell(row, 5).Value = item.Status.ToString();
+                row++;
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return stream.ToArray();
+        }
+        private byte[] ExportToPdf(List<SubscriptionDetailDto> data)
+        {
+            var document = Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Content().Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(100);
+                            columns.RelativeColumn();
+                            columns.RelativeColumn();
+                        });
+
+                        table.Header(header =>
+                        {
+                            header.Cell().Text("ID");
+                            header.Cell().Text("Subscriber");
+                            header.Cell().Text("Package");
+                        });
+
+                        foreach (var item in data)
+                        {
+                            table.Cell().Text(item.SubscriptionId.ToString());
+                            table.Cell().Text(item.SubscriberName);
+                            table.Cell().Text(item.PackageName);
+                        }
+                    });
+                });
+            });
+
+            return document.GeneratePdf();
+        }
         /**
          * PendingApproval
 → PendingCommitment
@@ -2007,7 +2321,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             };
         }
 
-        public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
+        /**public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request)
         {
             var eop = await _context.EconomicsOfProductions
                 .Include(x => x.CostItems)
@@ -2114,7 +2428,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return true;
         }
-
+        **/
         public async Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request)
         {
             var query = _context.EconomicsOfProductions

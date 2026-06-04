@@ -29,5 +29,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok("result");
 
         }
+        //[HttpPost("run-commitmentPlan")]
+        //public async Task<IActionResult> RunCommitmentPlanMigrationAsync()
+        //{
+            
+        //     await _migrationService.RunCommitmentPlanMigrationAsync();
+        //    return Ok("result");
+
+        //}
+        //[HttpPost("run-repaymentPlan")]
+        //public async Task<IActionResult> RunRepaymentPlanMigrationAsync()
+        //{
+            
+        //     await _migrationService.RunRepaymentPlanMigrationAsync();
+        //    return Ok("result");
+
+        //}
     }
 }

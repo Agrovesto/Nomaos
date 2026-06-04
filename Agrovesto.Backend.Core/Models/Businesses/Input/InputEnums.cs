@@ -255,10 +255,26 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     {
         All=0,
         PendingApproval=1,
-        PendingCommitment=2,
-        PendingDisbursement=3,
-        Active=4,
-        Completed=5,
-        Defaulted=6
+        Approved =2,
+        PendingCommitment=3,
+        PendingDisbursement=4,
+        Active=5,
+        Completed=6,
+        Defaulted=7
+    }
+
+    public enum ExportFormat
+    {
+        Excel=1,
+        Pdf=2
+    }
+
+    public enum InterestType
+    {
+        Flat =1,
+        Dailt=2,
+        Weekly=3,
+        Monthly=4,
+        Compound=5,
     }
 }

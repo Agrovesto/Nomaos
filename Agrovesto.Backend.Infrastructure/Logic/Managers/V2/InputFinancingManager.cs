@@ -25,7 +25,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<EopResponseDto> CreateEopAsync(CreateEopRequest request, ListQueryParams query);
         Task<bool> CreateInputFinancingPackageConfig(CreateInputPackageRequest request, ListQueryParams query);
         Task<bool> DeactivateInputPackage(ReplacePackageItemRequestArgs query);
-        Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query);
+        Task<byte[]> ExportSubscriptionsAsync(SubscriptionQueryFilter filter, ExportFormat format);
+      //  Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query);
         Task<EopDto> GetEopByIdAsync(ListQueryParams query);
         Task<PagedResult<EopDto>> GetEopsAsync(EopFilterRequest request, ListQueryParams query);
         Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(SubscriptionQueryFilter filter, int pageNumber, int pageSize);
@@ -135,16 +136,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
         }
 
-        public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query)
-        {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-            if (hasOrg != null)
-            {
-                request.OrganizationId = hasOrg.OrganizaionId;
-            }
+        //public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query)
+        //{
+        //    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+        //    if (hasOrg != null)
+        //    {
+        //        request.OrganizationId = hasOrg.OrganizaionId;
+        //    }
 
-            return await _inputFinancingRepository.GenerateInputPackageFromEopAsync(request);
-        }
+        //    return await _inputFinancingRepository.GenerateInputPackageFromEopAsync(request);
+        //}
 
         public async Task<EopDto> GetEopByIdAsync(ListQueryParams query)
         {
@@ -329,6 +330,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             return await _inputFinancingRepository.GetInputFinancingDashboardAsync(filter);
         }
+        public async Task<byte[]> ExportSubscriptionsAsync(SubscriptionQueryFilter filter, ExportFormat format)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+            if (hasOrg != null)
+            {
+                filter.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.ExportSubscriptionsAsync(filter,format);
+        }
 
         public async Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(
       SubscriptionQueryFilter filter,
@@ -366,6 +376,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return await _inputFinancingRepository.GetFinancingRepaymentSummaryAsync(args.Id);
            
         }
+
+
+
+        #endregion
+
+        #region reporting
 
         #endregion
     }

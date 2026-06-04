@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -70,6 +70,7 @@
 
     <!-- Caching & Search -->
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.1" />
+    <PackageReference Include="QuestPDF" Version="2026.5.0" />
     <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="8.4.1" />
 
     <!-- Geospatial -->
