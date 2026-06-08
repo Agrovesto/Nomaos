@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.API.HealthChecks;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -8,6 +9,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon;
 using Amazon.Rekognition;
 using Amazon.S3;
 using AWS.Logger;
@@ -23,7 +25,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OfficeOpenXml;
 using Serilog;
+using System;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using VaultSharp;
@@ -317,26 +322,11 @@ builder.Services.AddCors(options =>
 });
 
 
-    // =====================
-    // APP SERVICES (extension method)
-    // =====================
-    builder.Services.AddAppServices(builder.Configuration);
-    builder.Services.AddControllers();
-    builder.Services.AddHttpClient();
+var app = builder.Build();
 
-    // =====================
-    // BUILD
-    // =====================
-    var app = builder.Build();
-
-    AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
-
-    // =====================
-    // MIDDLEWARE PIPELINE  (order matters)
-    // =====================
-    app.UseForwardedHeaders();
-    app.UseHttpsRedirection();
-    app.UseStaticFiles();
+AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
+app.UseForwardedHeaders();
+// Configure the HTTP request pipeline.
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
@@ -390,15 +380,6 @@ app.UseAuthorization();
 // The health check endpoints are now handled by the HealthController
 // No additional mapping needed as we're using controller routes
 
-    app.MapControllers();
+app.MapControllers();
 
-    app.Run();
-}
-catch (Exception ex)
-{
-    Log.Fatal(ex, "Application terminated unexpectedly");
-}
-finally
-{
-    Log.CloseAndFlush();
-}
+app.Run();

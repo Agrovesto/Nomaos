@@ -17,7 +17,7 @@ COPY Agrovesto.Backend.Core/*.csproj               Agrovesto.Backend.Core/
 COPY Agrovesto.Backend.Infrastructure/*.csproj     Agrovesto.Backend.Infrastructure/
 
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+    dotnet restore Agrovesto.Backend.sln \
       --runtime linux-x64 \
       --locked-mode \
       /p:EnableSourceLink=false \
