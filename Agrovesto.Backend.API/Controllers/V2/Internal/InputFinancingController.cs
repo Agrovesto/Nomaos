@@ -8,6 +8,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi.Extensions;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
@@ -494,7 +495,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-        [HttpPost("export-subscription")]
+        [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(
 [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
         {
@@ -505,31 +506,41 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
+    "Access Denied",
+    ResponseCodes.Failed,
+    HttpContext.TraceIdentifier
+));
             }
             var result = await _inputFinancingManager
                 .GetInputFinancingDashboardAsync(filter);
 
             var fileBytes = await _inputFinancingManager.ExportSubscriptionsAsync(filter, format);
 
-            var (contentType, fileName) = format switch
+            var fileName = GenerateExportFileName(filter, format);
+
+            var contentType = format switch
             {
-                ExportFormat.Excel =>
-                    ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                     $"subscriptions_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx"),
-
-                ExportFormat.Pdf =>
-                    ("application/pdf",
-                     $"subscriptions_{DateTime.UtcNow:yyyyMMddHHmmss}.pdf"),
-
-                _ => throw new NotSupportedException("Unsupported format")
+                ExportFormat.Excel => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExportFormat.Pdf => "application/pdf",
+                _ => "application/octet-stream"
             };
 
-            return File(fileBytes, contentType, fileName);
-        }
+            Response.Headers.Add("Content-Disposition", $"attachment; filename={fileName}");
 
+            return File(fileBytes, contentType);
+        }
+        private string GenerateExportFileName(SubscriptionQueryFilter filter, ExportFormat format)
+        {
+            var status = filter.ViewType.HasValue
+     ? EnumExtensions.GetDisplayName(filter.ViewType.Value).ToLower()
+     : "all";
+
+            var date = DateTime.UtcNow.ToString("ddMMyyyy");
+
+            var extension = format == ExportFormat.Excel ? "xlsx" : "pdf";
+
+            return $"{status}_subscriptions_{date}.{extension}";
+        }
         //subscriber details for
         //pending commitment (1) endpoint
         //active commitment (2) endpoint

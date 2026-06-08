@@ -26,6 +26,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
+using QuestPDF.Infrastructure;
 using Serilog;
 using System;
 using System.Reflection;
@@ -198,6 +199,7 @@ builder.Services.Configure<FormOptions>(o =>
     o.MultipartBodyLengthLimit = int.MaxValue;
     o.MemoryBufferThreshold = int.MaxValue;
 });
+QuestPDF.Settings.License = LicenseType.Community;
 
 
 builder.Services.AddControllers();

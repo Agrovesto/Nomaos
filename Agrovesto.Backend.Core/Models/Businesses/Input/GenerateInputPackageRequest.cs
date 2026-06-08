@@ -520,7 +520,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public DateTimeOffset? SubscribedOn { get; set; }
 
         public string CommitmentStatus { get; set; }
-        public SubscriptionStatus Status { get; set; }
+        public SubscriptionStatus SubscriptionStatus { get; set; }
+        public string SubscriptionStatusName { get; set; }
 
         // optional sections
         public CommitmentInfo Commitment { get; set; }

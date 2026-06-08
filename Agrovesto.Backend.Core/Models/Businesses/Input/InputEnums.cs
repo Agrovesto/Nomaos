@@ -253,14 +253,30 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public enum SubscriptionView
     {
+        [Display(Name = "All")]
         All=0,
-        PendingApproval=1,
+
+        [Display(Name = "Pending Approval")]
+        PendingApproval =1,
+
+        [Display(Name = "Approved")]
         Approved =2,
-        PendingCommitment=3,
-        PendingDisbursement=4,
-        Active=5,
-        Completed=6,
-        Defaulted=7
+
+        [Display(Name = "Pending Commitment")]
+        PendingCommitment =3,
+
+        [Display(Name = "Pending Disbursement")]
+        PendingDisbursement =4,
+
+        [Display(Name = "Active")]
+        Active =5,
+
+        [Display(Name = "Repayment Completed")]
+        Completed =6,
+
+
+        [Display(Name = "Defaulted")]
+        Defaulted =7
     }
 
     public enum ExportFormat
