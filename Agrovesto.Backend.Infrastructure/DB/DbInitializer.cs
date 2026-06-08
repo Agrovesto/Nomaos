@@ -18,6 +18,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
 {
     public static class DbInitializer
     {
+
+
+
         public static async Task SeedWeight(IServiceProvider serviceProvider)
         {
             // var logger = serviceProvider.GetRequiredService<ILogger<DbInitializer>>();

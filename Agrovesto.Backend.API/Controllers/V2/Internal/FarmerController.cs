@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
@@ -27,21 +28,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         private readonly IFarmerTransactionManager _farmerTransactionManager;
+        private readonly IInputFinancingManager _inputFinancingManager;
         public FarmerController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
             INomaOSWalletService walletService,
             IFarmMappingManager farmMappingManager,
             IMembershipManager membershipManager,
             IFarmerTransactionManager farmerTransactionManager,
-            IBusinessManager businessManager) : base(httpContextAccessor)
+            IBusinessManager businessManager,
+            IInputFinancingManager inputFinancingManager) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
             _farmMappingManager = farmMappingManager;
             _walletService = walletService;
-            _farmerTransactionManager=farmerTransactionManager;
+            _farmerTransactionManager = farmerTransactionManager;
+            _inputFinancingManager = inputFinancingManager;
         }
+
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
@@ -132,6 +137,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+      
         [HttpGet("membership-detail")]
         public async Task<IActionResult> GetMembershipDetail([FromQuery] ListQueryParams query)
         {
@@ -183,7 +189,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-
         [HttpGet("wallets")]
         public async Task<IActionResult> GetWallets([FromQuery] UserWalletParams query)
         {
@@ -223,7 +228,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
-
 
         [HttpPost("create-wallet")]
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
@@ -345,8 +349,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("wallet-topup")]
-        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, 
-            [FromQuery] WalletQueryParams args)
+        public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, [FromQuery] WalletQueryParams args)
         {
             try
             {
@@ -380,7 +383,41 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+        [HttpPost("wallet-withdraw")]
+        public async Task<IActionResult> WithdrawWallet([FromBody] WithdrawWalletRequest request, [FromQuery] WalletQueryParams args)
+        {
+            try
+            {
+                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                var response = await _walletService.WithdrawWallet(request, args);
+                return Ok(new Response<ProviderResponse>()
+                {
+                    Data = response,
+                    Message = "Successful",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
+            }
 
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+      
         [HttpGet("farms")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
@@ -597,6 +634,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+      
         [HttpGet("user-wallet-transaction")]
         public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
         {
@@ -653,15 +691,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                 var result = await _farmerTransactionManager.GetFarmerInputObligations(query);
-                return Ok(new PagedListResponse<List<FarmerInputObligationDto>>()
+                return Ok(new PagedListResponse<List<InputObligationDto>>()
                 {
-                    Data = result.Data,
+                    Data = result.Items,
                     Message = result.Count > 0 ? "Successful" : "No record found",
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
-                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
             catch (BaseException ex)

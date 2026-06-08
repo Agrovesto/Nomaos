@@ -8,19 +8,59 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common
 {
+    public class EditOrganizationProductDto
+    {
+        public string? ProductName { get; set; }
+        public string? ProductCode { get; set; }
+        public string? BusinessCode { get; set; }
+        public long? ProductCategoryId { get; set; }
+        public string? Season { get; set; }
+        public string? UnitType { get; set; }
+        public double MinimumOrderQuantity { get; set; }
+        public double MaximumOrderQuantity { get; set; }
+        public string? Description { get; set; }
+    }
+    public class OrganizationProductDto
+    {
+        public long Id { get; set; }
+        public long OrganizationId { get; set; }
+        public long ProductCategoryId { get; set; }
+        public string ProductName { get; set; }
+        public string ProductCode { get; set; }
+        public string? Season { get; set; }
+        public string? UnitType { get; set; }
+        public string? BusinessCode { get; set; }
+        public bool IsActive { get; set; }
+         public DateTimeOffset CreatedOn { get; set; }
+        public string? ProductCategory { get; set; } // for response only
+        public double MinimumOrderQuantity { get; set; }
+        public double MaximumOrderQuantity { get; set; }
+        public string? Description { get; set; }
+
+    }
+    public class ProductCategoryDto
+    {
+        public long Id { get; set; }
+        public string CategoryName { get; set; }
+        public string Description { get; set; }
+        public string? BusinessCode { get; set; }
+       
+    }
+
     public class LocationUtilizationDto
     {
         public long LocationId { get; set; }
         public string LocationName { get; set; }
-        public double Capacity { get; set; }
-        public double StockLevel { get; set; }
-        public double UtilizationRate { get; set; }
+        public decimal Capacity { get; set; }
+        public decimal StockLevel { get; set; }
+        public decimal UtilizationRate { get; set; }
     }
     public class LocationDashboardFullDto
     {
         // LOCATION
         public int TotalWarehouses { get; set; }
         public int TotalSubWarehouses { get; set; }
+        public int TotalInventory { get; set; }
 
         // CAPACITY
         public double TotalCapacity { get; set; }
@@ -31,18 +71,22 @@ namespace Agrovesto.Backend.Core.Models.Common
         // AGENTS
         public int ActiveAgents { get; set; }
         public int InactiveAgents { get; set; }
-        public int PrimaryAgents { get; set; }
-        public int SupportingAgents { get; set; }
+        //public int PrimaryAgents { get; set; }
+        //public int SupportingAgents { get; set; }
 
-        // INVENTORY HEALTH
-        public int ExpiringSoonCount { get; set; }
-        public int ExpiredCount { get; set; }
+        //// INVENTORY HEALTH
+        //public int ExpiringSoonCount { get; set; }
+        //public int ExpiredCount { get; set; }
+        public double TotalIncomingInventory { get; set; }
+        public double TotalOutgoingInventory { get; set; }
+        public int TotalInventoryRecords { get; set; }
+        public double TotalInventoryQuantity { get; set; }
 
-        // ALERTS
-        public int OverCapacityLocations { get; set; }
+        //// ALERTS
+        //public int OverCapacityLocations { get; set; }
 
-        // TOP LOCATIONS
-        public List<LocationUtilizationDto> TopUtilizedLocations { get; set; } = new();
+        //// TOP LOCATIONS
+        //public List<LocationUtilizationDto> TopUtilizedLocations { get; set; } = new();
     }
     public class LocationTypeModel
     {
@@ -66,9 +110,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public long LgaId { get; set; }
         public string? Address { get; set; }
         public bool IsActive { get; set; }
-        public double Capacity { get; set; }
-        public double Allocation { get; set; }
-        public double AvailableCapacity { get; set; }
+        public decimal Capacity { get; set; }
+        public decimal Allocation { get; set; }
+        public decimal AvailableCapacity { get; set; }
       
         public string? CapacityType { get; set; }
         public string? BusinessCode { get; set; }
@@ -102,26 +146,26 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class CreateSubLocationDto
     {
-        public string LocationName { get; set; }
         public long ParentLocationId { get; set; }
-        public string LocationStatus { get; set; }
+        public string LocationName { get; set; }
         public long LocationTypeId { get; set; }
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
-        public double Capacity { get; set; }
-        public string? CapacityType { get; set; } = "Bag";
-
+        [Required(ErrorMessage = "Ownership type is required")]
+        public string OwnerShipType { get; set; }
+        public List<long> ModuleIds { get; set; } = new();
         public long StateId { get; set; }
         public long LgaId { get; set; }
+        public long WardId { get; set; }
         public string? Address { get; set; }
-
-        public DateTime? DateOfCommissioning { get; set; }
-
-        public bool HasTemperatureControl { get; set; }
-        public long? TemperatureControlTypeId { get; set; }
-
-        public List<long> ModuleIds { get; set; } = new();
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
         public List<long> StorageCategoryIds { get; set; } = new();
+        public decimal Capacity { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
+        public string LocationStatus { get; set; }
+        public DateTime? DateOfCommissioning { get; set; }
+        public bool HasTemperatureControl { get; set; }
+        public long? TemperatureControlTypeId { get; set; }      
+       
         public string? CreatedByUserId { get; set; }
     }
     public class OrganizationLocationModel
@@ -133,10 +177,10 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public string LocationName { get; set; }
 
-        public double Capacity { get; set; }
+        public decimal Capacity { get; set; }
         public string? CapacityType { get; set; } = "Bag";
 
-        public double StockLevel { get; set; }
+        public decimal StockLevel { get; set; }
 
         public long LocationTypeId { get; set; }
         public string? LocationTypeName { get; set; } // for response only
@@ -161,39 +205,63 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class LocationCreateResponse
     {
-        public OrganizationLocationModel Location { get; set; }
+        public long Id { get; set; }
 
-        public bool AgentAssigned { get; set; }
-        public string? AgentWarning { get; set; }
-    }
-    public class CreateLocationDto
-    {
+
         public string LocationName { get; set; }
-        public long? OrganizationId { get; set; }
-        public string? BusinessCode { get; set; }
-        public string LocationStatus { get; set; }
-        public long LocationTypeId { get; set; }
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
-        public double Capacity { get; set; }
+
+        public decimal Capacity { get; set; }
         public string? CapacityType { get; set; } = "Bag";
 
+        public decimal StockLevel { get; set; }
+
+        public long LocationTypeId { get; set; }
+
         public long StateId { get; set; }
+
         public long LgaId { get; set; }
+
         public string? Address { get; set; }
 
-        public DateTime? DateOfCommissioning { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+    }
+   
 
+    public class CreateLocationDto
+    {
+        public long? OrganizationId { get; set; }
+        public string? BusinessCode { get; set; }
+        public string LocationName { get; set; }
+        public long LocationTypeId { get; set; }
+        public string OwnerShipType { get; set; }
+        public List<long> ModuleIds { get; set; } = new();
+        public long StateId { get; set; }
+        public long LgaId { get; set; }
+        public long WardId { get; set; }
+        public string? Address { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public List<long> StorageCategoryIds { get; set; } = new();
+        public decimal Capacity { get; set; }
+        public string? CapacityType { get; set; } = "Bag";
         public bool HasTemperatureControl { get; set; }
         public long? TemperatureControlTypeId { get; set; }
+        public DateTime? DateOfCommissioning { get; set; }
 
-        public List<long> ModuleIds { get; set; } = new();
-        public List<long> StorageCategoryIds { get; set; } = new();
 
+
+        public string? LocationStatus { get; set; }     
+       
         public string? CreatedByUserId { get; set; }
 
-        public string? MainAgentUserId { get; set; }
-        public string? SupportinAgentUserId { get; set; }
+        //public string? MainAgentUserId { get; set; }
+        //public string? SupportinAgentUserId { get; set; }
+    }
+    public class LocationAgentAssignment
+    {
+        public string AgentUserId { get; set; }
+        public bool IsPrimary { get; set; }
+        public long? OrganizationId { get; set; }
     }
     public class OrganizationRoleModel
     {
@@ -212,6 +280,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string UserId { get; set; }
         public string Message { get; set; }
         public bool RequiresProfileCompletion { get; set; }
+        public bool IsExisting { get; set; }
     }
     public class FarmerFlatRow
     {
@@ -264,7 +333,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public int TotalFarmers { get; set; }
         public int ActiveFarmers { get; set; }
-        public int PendingFarmers { get; set; }
+       // public int IncompleteProfile { get; set; }
         public int FarmersWithLoans { get; set; }
         public decimal RecoveryRate { get; set; }
     }
@@ -323,24 +392,26 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long Id { get; set; }
 
-        public string LocationName { get; set; }
+        public string? LocationName { get; set; }
 
-        public double Capacity { get; set; }
+        public decimal? Capacity { get; set; }
         public string? CapacityType { get; set; }
 
-        public long StateId { get; set; }
-        public long LgaId { get; set; }
+        public long? StateId { get; set; }
+        public long? LgaId { get; set; }
+        public long? WardId { get; set; }
         public string? Address { get; set; }
 
         public DateTime? DateOfCommissioning { get; set; }
 
         public bool HasTemperatureControl { get; set; }
-        public long? TemperatureControlTypeId { get; set; }
+        public long TemperatureControlTypeId { get; set; }
 
-        public List<long> ModuleIds { get; set; } = new();
-        public List<long> StorageCategoryIds { get; set; } = new();
-        public double Latitude { get; set; }
-        public double Longitude { get; set; }
+        public List<long>? ModuleIds { get; set; }
+
+        public List<long>? StorageCategoryIds { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
     }
     public class EditSubLocationDto : EditLocationDto
     {
@@ -354,20 +425,40 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? UserId { get; set; }
     }
 
+    public class LocationListResponseDto
+    {
+        public bool IsActive { get; set; }
+        public long Id { get; set; }
+        public string LocationName { get; set; }
+        public string? Address { get; set; }
+        public long LocationTypeId { get; set; }
+        public string LocationTypeName { get; set; }
+
+        public decimal Capacity { get; set; }
+        public string CapacityType { get; set; }
+        public decimal StockLevel { get; set; }
+
+        
+        public List<AgentDto> Agents { get; set; } = new();
+        public AgentDto PrimaryAgent { get; set; }
+        public string LocationStatus { get; set; }
+    }
+
+
+
     public class LocationResponseDto
     {
         public long Id { get; set; }
         public string LocationName { get; set; }
-
         public long LocationTypeId { get; set; }
         public string LocationTypeName { get; set; }
 
-        public double Capacity { get; set; }
+        public decimal Capacity { get; set; }
         public string CapacityType { get; set; }
-        public double StockLevel { get; set; }
+        public decimal StockLevel { get; set; }
 
         public string? Address { get; set; }
-
+        public bool IsActive { get; set; }
         public bool HasTemperatureControl { get; set; }
         public string? TemperatureControlType { get; set; }
 
@@ -401,7 +492,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? AssignedAgentName { get; set; } // Primary agent
         public string? AssignedAgentUserId { get; set; }
 
-        public double Capacity { get; set; }
+        public decimal Capacity { get; set; }
         public string? CapacityType { get; set; }
 
         public bool IsActive { get; set; }
@@ -428,6 +519,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class OtherAgentDto
     {
         public long AgentId { get; set; }
+        public string UserId { get; set; }
         public string Name { get; set; }
 
         public DateTimeOffset AssignedOn { get; set; }
@@ -437,7 +529,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class ReassignPrimaryAgentDto
     {
         public long LocationId { get; set; }
-        public string NewPrimaryUserId { get; set; }
+        public string NewPrimaryAgentUserId { get; set; }
         public string? PerformedByUserId { get; set; }
     }
 
@@ -452,12 +544,12 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public long LocationId { get; set; }
 
-        public string? InventoryCode { get; set; }
+        public long ProductId { get; set; }
         public string? BatchNumber { get; set; }
 
-        public string InventoryOwner { get; set; }
+        public string? InventoryOwner { get; set; }
 
-        public double Quantity { get; set; }
+        public decimal Quantity { get; set; }
         public string? QuantityType { get; set; }
 
         public string? Description { get; set; }
@@ -473,12 +565,15 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class EditInventoryDto
     {
+        public string? Reason { get; set; }
+
+        public string? UpdatedByUserId { get; set; }
         public long Id { get; set; }
 
-        public double Quantity { get; set; }
+        public decimal? Quantity { get; set; }
         public string? QuantityType { get; set; }
 
-        public string InventoryOwner { get; set; }
+        public string? InventoryOwner { get; set; }
 
         public string? Description { get; set; }
 
@@ -488,16 +583,36 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? QualityGrade { get; set; }
         public string? BusinessCode { get; set; }
     }
+    public class InventoryTransactionDto
+    {
+        public long Id { get; set; }
+
+        public string ProductName { get; set; }
+
+        public string TransactionType { get; set; }
+
+        public decimal Quantity { get; set; }
+
+        public decimal QuantityBefore { get; set; }
+
+        public decimal QuantityAfter { get; set; }
+
+        public string BatchNumber { get; set; }
+
+        public string Reason { get; set; }
+
+        public DateTimeOffset TransactionDate { get; set; }
+    }
     public class InventoryListDto
     {
         public long Id { get; set; }
 
-        public string? InventoryCode { get; set; }
+        public string? ProductCode { get; set; }
         public string? BatchNumber { get; set; }
 
         public string InventoryOwner { get; set; }
 
-        public double Quantity { get; set; }
+        public decimal Quantity { get; set; }
         public string? QuantityType { get; set; }
 
         public DateTimeOffset? StorageDate { get; set; }

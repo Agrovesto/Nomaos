@@ -29,6 +29,69 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _membershipManager = membershipManager;
             _businessManager = businessManager;
         }
+
+        [HttpPut("update-farmer-profile")]
+        public async Task<IActionResult> UpdateFarmerProfile([FromBody] MemberShipModel model, [FromQuery] string? userId)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+            try
+            {
+            
+
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+
+                if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "MemberShip"))
+                {
+                    return StatusCode(400, new Response<string>
+                    {
+                        Message = "The supplied user is not a Membership user.",
+                        Succeeded = false
+                    });
+                }
+                var result = await _onBoardingManager.UpdateMembershipProfile(targetUserId, model);
+
+                return Ok(new Response<MemberShipUpdateResultDto>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = result.Success,
+                    Message = result.Message,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+
         [HttpPost("bulk-onboard")]
         public async Task<IActionResult> BulkOnboard(
         IFormFile file,
@@ -63,9 +126,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                 using var stream = file.OpenReadStream();
-                var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+               // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
+                var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
 
-                return Ok(new Response<BulkOnboardingResult>()
+                return Ok(new Response<BulkOnboardingQueueResponse>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -448,7 +512,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("update-membership-profile")]
-        public async Task<IActionResult> CreateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
+        public async Task<IActionResult> UpdateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
 
             if (!ModelState.IsValid)

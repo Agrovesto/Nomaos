@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -31,10 +32,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
         Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference);
         Task<string> InitiateWalletTopUp(long userWalletId, decimal amount, string? description = "Wallet Top-up");
+        Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal");
+        Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
+        Task ValidateTransactionPin(long walletId, string inputPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
         Task UpdateWalletBalance(UserWallet wallet);
+        Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -43,6 +48,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
 
+        }
+        public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
+        {
+
+            var query = _context.UserWallets
+                .Where(uw =>
+                    uw.UserId == args.UserId &&
+                    uw.WalletProviderId == args.Id &&
+                    uw.BelongToBusinessCode == args.businessCode &&
+                    !uw.IsDeleted);
+
+
+
+            var wallet = await query
+                .Select(uw => new UserWalletDetailResponseModel
+                {
+                    Id = uw.Id,
+                    UserId = uw.UserId,
+                    WalletProviderId = uw.WalletProviderId,
+                    ProviderName = uw.WalletProvider.Name,
+                    WalletNumber = uw.WalletNumber,
+                    WalletBalance = uw.WalletBalance,
+                    Currency = uw.Currency,
+                    IsActive = uw.IsActive,
+                    BelongToBusinessCode = uw.BelongToBusinessCode,
+
+                    Contexts = uw.WalletContexts
+                        .Select(c => new UserWalletContextModel
+                        {
+                            ContextType = c.ContextType.ToString(),
+                            ContextReferenceId = c.ContextReferenceId,
+                            IsDefault = c.IsDefault
+                        })
+                        .ToList()
+                })
+                .FirstOrDefaultAsync();
+
+            return wallet;
         }
 
         public async Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args)
@@ -84,49 +127,110 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return wallet;
         }
 
+        //public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
+        //{
+        //    var userId = args.UserId;
+
+        //    var totalWalletBalance = await _context.UserWallets
+        //        .Where(w => w.UserId == userId &&
+        //                    w.BelongToBusinessCode == args.businessCode &&
+        //                    !w.IsDeleted)
+        //        .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+
+        //    var inputStats = await _context.InputTransactions
+        //        .Where(t => t.Farmer.UserId == userId)
+        //        .GroupBy(t => 1)
+        //        .Select(g => new
+        //        {
+        //            TotalDisbursement = g
+        //                .Where(x => x.TransactionType == InputTransactionType.Disbursement)
+        //                .Sum(x => (decimal?)x.Amount) ?? 0m,
+
+        //            TotalRepayment = g
+        //                .Where(x => x.TransactionType == InputTransactionType.Repayment)
+        //                .Sum(x => (decimal?)x.Amount) ?? 0m
+        //        })
+        //        .FirstOrDefaultAsync();
+
+        //    var totalDisbursement = inputStats?.TotalDisbursement ?? 0m;
+        //    var totalRepayment = inputStats?.TotalRepayment ?? 0m;
+        //    var outstandingDebt = totalDisbursement - totalRepayment;
+
+        //    var nextRepayment = await _context.InputTransactions
+        //        .Where(t => t.Farmer.UserId == userId &&
+        //                    t.TransactionType == InputTransactionType.Repayment &&
+        //                    t.TransactionDate > DateTime.UtcNow)
+        //        .OrderBy(t => t.TransactionDate)
+        //        .Select(t => new { t.Amount, t.TransactionDate })
+        //        .FirstOrDefaultAsync();
+
+        //    return new FarmerFinancialSummaryDto
+        //    {
+        //        TotalWalletBalance = totalWalletBalance,
+        //        OutstandingInputDebt = outstandingDebt,
+        //        NextRepaymentAmount = nextRepayment?.Amount ?? 0m,
+        //        NextRepaymentDate = nextRepayment?.TransactionDate
+        //    };
+        //}
+       
+        
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
-            var userId = args.UserId;
+            var subscriberUserId = args.UserId;
+
+            if (string.IsNullOrWhiteSpace(subscriberUserId))
+                throw new ArgumentException("SubscriberUserId is required");
 
             var totalWalletBalance = await _context.UserWallets
-                .Where(w => w.UserId == userId &&
-                            w.BelongToBusinessCode == args.businessCode &&
-                            !w.IsDeleted)
-                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+               .Where(w => w.UserId == subscriberUserId &&
+                           w.BelongToBusinessCode == args.businessCode &&
+                           !w.IsDeleted)
+               .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
 
-            var inputStats = await _context.InputTransactions
-                .Where(t => t.Farmer.UserId == userId)
-                .GroupBy(t => 1)
-                .Select(g => new
+            var subscriptionIds = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(x =>
+                    x.SubscriberUserId == subscriberUserId &&
+                    x.Status == SubscriptionStatus.Active)
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (!subscriptionIds.Any())
+            {
+                return new FarmerFinancialSummaryDto
                 {
-                    TotalDisbursement = g
-                        .Where(x => x.TransactionType == InputTransactionType.Disbursement)
-                        .Sum(x => (decimal?)x.Amount) ?? 0m,
+                    OutstandingInputDebt = 0,
+                    NextRepaymentAmount = 0,
+                    NextRepaymentDate = null
+                };
+            }
 
-                    TotalRepayment = g
-                        .Where(x => x.TransactionType == InputTransactionType.Repayment)
-                        .Sum(x => (decimal?)x.Amount) ?? 0m
+            var outstandingInputDebt = await _context.RepaymentSchedules
+                .Where(x =>
+                    subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+                    !x.IsPaid)
+                .SumAsync(x => (decimal?)(
+                    x.Amount - x.AmountPaid
+                )) ?? 0;
+
+            var nextRepayment = await _context.RepaymentSchedules
+                .Where(x =>
+                    subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+                    !x.IsPaid)
+                .OrderBy(x => x.DueDate)
+                .Select(x => new
+                {
+                    x.DueDate,
+                    RemainingAmount = x.Amount - x.AmountPaid
                 })
-                .FirstOrDefaultAsync();
-
-            var totalDisbursement = inputStats?.TotalDisbursement ?? 0m;
-            var totalRepayment = inputStats?.TotalRepayment ?? 0m;
-            var outstandingDebt = totalDisbursement - totalRepayment;
-
-            var nextRepayment = await _context.InputTransactions
-                .Where(t => t.Farmer.UserId == userId &&
-                            t.TransactionType == InputTransactionType.Repayment &&
-                            t.TransactionDate > DateTime.UtcNow)
-                .OrderBy(t => t.TransactionDate)
-                .Select(t => new { t.Amount, t.TransactionDate })
                 .FirstOrDefaultAsync();
 
             return new FarmerFinancialSummaryDto
             {
-                TotalWalletBalance = totalWalletBalance,
-                OutstandingInputDebt = outstandingDebt,
-                NextRepaymentAmount = nextRepayment?.Amount ?? 0m,
-                NextRepaymentDate = nextRepayment?.TransactionDate
+                TotalWalletBalance= totalWalletBalance,
+                OutstandingInputDebt = outstandingInputDebt,
+                NextRepaymentAmount = nextRepayment?.RemainingAmount ?? 0,
+                NextRepaymentDate = nextRepayment?.DueDate
             };
         }
         public  async Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId)
@@ -541,6 +645,113 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
 
             return transactionReference;
+        }
+
+        public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal")
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than zero");
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == userWalletId && !x.IsDeleted);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            if (wallet.WalletBalance < amount)
+                throw new Exception("Insufficient balance");
+
+            var transactionReference = Guid.NewGuid().ToString();
+
+            var transaction = new UserWalletTransactions
+            {
+                UserWalletId = wallet.Id,
+                WalletTransactionType = WalletTransactionType.Debit,
+                TransactionAmount = amount,
+                CommissionFee = 0,
+                TransactionFee = 0,
+                Currency = wallet.Currency,
+                TransactionDescription = description,
+                TransactionDate = DateTimeOffset.UtcNow,
+                WalletTransactionStatus = WalletTransactionStatus.Pending,
+                TransactionReference = transactionReference,
+                BalanceBefore = wallet.WalletBalance,
+                BalanceAfter = wallet.WalletBalance, // unchanged until processed
+                ProviderStatus = "INITIATED"
+            };
+
+            _context.UserWalletTransactions.Add(transaction);
+            await _context.SaveChangesAsync();
+
+            return transactionReference;
+        }
+
+        public async Task CompleteWalletWithdrawal(
+            string transactionReference,
+            bool isSuccessful,
+            string? providerReference,
+            string? providerStatus)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var transaction = await _context.UserWalletTransactions
+                        .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+                    if (transaction == null)
+                        throw new Exception("Transaction not found");
+
+                    if (transaction.WalletTransactionStatus != WalletTransactionStatus.Pending)
+                        throw new Exception("Transaction already processed");
+
+                    var wallet = await _context.UserWallets
+                        .FirstOrDefaultAsync(x => x.Id == transaction.UserWalletId);
+
+                    if (wallet == null)
+                        throw new Exception("Wallet not found");
+
+                    transaction.ProviderReference = providerReference;
+                    transaction.ProviderStatus = providerStatus;
+
+                    if (!isSuccessful)
+                    {
+                        transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
+                        await _context.SaveChangesAsync();
+                        await dbTransaction.CommitAsync();
+                        return;
+                    }
+
+                    var balanceBefore = wallet.WalletBalance;
+                    var netAmount = transaction.TransactionAmount
+                                    + transaction.TransactionFee
+                                    + transaction.CommissionFee;
+
+                    if (wallet.WalletBalance < netAmount)
+                        throw new Exception("Insufficient balance");
+
+                    wallet.WalletBalance -= netAmount;
+
+                    transaction.BalanceBefore = balanceBefore;
+                    transaction.BalanceAfter = wallet.WalletBalance;
+                    transaction.WalletTransactionStatus = WalletTransactionStatus.Successful;
+
+                    _context.UserWallets.Update(wallet);
+                    _context.UserWalletTransactions.Update(transaction);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
 
         public async Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference)

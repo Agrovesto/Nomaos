@@ -18,6 +18,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Hangfire;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -31,6 +32,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using BulkUploadJob = Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob;
 using DateTime = System.DateTime;
 using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
@@ -44,7 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task AssignAgentLocation(ProfileRequestModel model, OrganizationAgentArgs args);
         Task<bool> AssignAgentToTole(ProfileRequestModel model, OrganizationAgentArgs args);
         Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args);
-        Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
+        Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<CreateFarmerResponseModel> CreateFarmerAsync(CreateFarmerRequest model, OnBoardingArgs args);
         Task<LocationCreateResponse> CreateLocation(
@@ -66,12 +68,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<OrganizationAgentSubscriberModel>>> GetAgentSubscribers(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationAgentTransactionHistory>>> GetAgentTransactionHistory(ListQueryParams query);
         Task<Response<OrganizationFarmerDetailResponse>> GetFarmerDetailsAsync(ListQueryParams query);
-        Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(ListQueryParams request, CancellationToken cancellationToken);
-        Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args);
-        Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args);
-        Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args);
-        Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
-        Task<PagedListResponse<List<LocationResponseDto>>> GetLocationAsync(ListQueryParams query);
+            Task<PagedListResponse<List<LocationActivityLogResponse>>> GetLocationActivityLogsAsync(ListQueryParams args);
+        Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationAsync(ListQueryParams query);
         Task<LocationResponseDto> GetLocationById(ListQueryParams query);
         Task<PagedListResponse<List<LocationInventoryBreakdownResponse>>> GetLocationInventoryBreakdownAsync(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetMembershipsByOrganization(ListQueryParams query);
@@ -82,7 +80,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationFarmerSalesSummary> GetOrganizationFarmerSalesSummary(ListQueryParams args);
         Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams query);
         Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams args);
-        Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(long inputAllocationId, ListQueryParams args, CancellationToken cancellationToken);
         Task<OrganizationRoleModel> GetRoleById(ListQueryParams query);
         Task<List<OrganizationRoleModel>> GetRolesAsync(ListQueryParams query);
         Task<PagedListResponse<List<FarmerSalesHistoryModel>>> GetSalesHistoryByFarmer(ListQueryParams query);
@@ -97,6 +94,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto model, ListQueryParams query);
         Task<PagedListResponse<List<InventoryListDto>>> GetInventoryByLocationAsync(ListQueryParams query);
         Task<LocationDashboardFullDto> GetFullDashboardAsync(ListQueryParams query);
+        Task<OrganizationProductCategory> CreateProductCategoryAsync(ProductCategoryDto model, ListQueryParams query);
+        Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query);
+        Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto model, ListQueryParams query);
+        Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query);
+        Task<OrganizationProductDto> GetorganizationProductById(ListQueryParams query);
+        Task<bool> EditProductAsync(ListQueryParams query, EditOrganizationProductDto request);
+        Task<bool> DeactivateProductAsync(ListQueryParams query);
+        Task<(bool Success, string Message)> AssignAgentToLocation(LocationAgentAssignment model, ListQueryParams query);
+        Task DeleteInventory(DeleteLocationDto model, ListQueryParams query);
+        Task SyncLocationStockLevels(ListQueryParams query);
+        Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -239,318 +247,175 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         #endregion salesTracker
         #region bulkupload
-
-        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
-            Stream excelStream,
-            OnBoardingArgs args)
+        public async Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(
+    Stream excelStream,
+    OnBoardingArgs args)
         {
             if (excelStream == null)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
-            // Copy stream to memory so we can both inspect and save to disk for background processing
-            using var ms = new MemoryStream();
-            await excelStream.CopyToAsync(ms);
-            ms.Position = 0;
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "Excel file is required.");
 
-            var rows = _excelConverterService.BulkParseExcel(ms);
-
-            if (!rows.Any())
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
-
-            var result = new BulkOnboardingResult
+            // Ensure services exist
+            if (_taskQueue == null || _scopeFactory == null)
             {
-                Total = rows.Count,
-                Errors = new List<BulkOnboardingError>(),
-                Successful = 0
-            };
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Background processing is not configured.");
+            }
 
-            // Persist file to temp location for background worker
+            // Save file directly to disk
             var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+
             Directory.CreateDirectory(tempDir);
-            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
-            ms.Position = 0;
-            await using (var fs = File.Create(tmpFile))
+
+            var filePath = Path.Combine(
+                tempDir,
+                $"bulk_{Guid.NewGuid()}.xlsx");
+
+            await using (var fs = File.Create(filePath))
             {
-                ms.Position = 0;
-                await ms.CopyToAsync(fs);
+                await excelStream.CopyToAsync(fs);
                 await fs.FlushAsync();
             }
 
-            // Validate background queue and scope factory to avoid NullReferenceException
-            if (_taskQueue == null || _scopeFactory == null)
+            // Create job immediately
+            var job = new BulkUploadJob
             {
-                // Fail fast with a clear message instead of allowing a NullReferenceException
-                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
-            }
+                Id = Guid.NewGuid(),
+                FilePath = filePath,
+                OrganizationCode = args.organizationCode,
+                CreatedByUserId = args.UserId ?? args.OnboardedByUserId ?? "system",
+                OnboardedByUserId = args.OnboardedByUserId ?? args.UserId ?? "system",
+                Status = "Queued",
+                ErrorMessage = string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                TotalRows = 0,
+                Successful = 0,
+                Failed = 0
+            };
 
-            // Queue background work item that calls processor
-            _taskQueue.QueueTask(async cancellationToken =>
+            _context.BulkUploadJobs.Add(job);
+
+            await _context.SaveChangesAsync();
+
+            BackgroundJob.Enqueue<BulkOnboardingProcessor>(
+          x => x.ProcessAsync(
+              filePath,
+              args,
+              job.Id,
+              CancellationToken.None));
+            //_taskQueue.QueueTask(async cancellationToken =>
+            //{
+            //    try
+            //    {
+            //        using var scope = _scopeFactory.CreateScope();
+
+            //        var processor = scope.ServiceProvider
+            //            .GetRequiredService<BulkOnboardingProcessor>();
+
+            //        await processor.ProcessAsync(
+            //            filePath,
+            //            args,
+            //            job.Id,
+            //            cancellationToken);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        using var scope = _scopeFactory.CreateScope();
+
+            //        var logger = scope.ServiceProvider
+            //            .GetRequiredService<ILogger<OrganizationManager>>();
+
+            //        logger.LogError(
+            //            ex,
+            //            "Queued bulk onboarding failed for JobId {jobId}",
+            //            job.Id);
+            //    }
+            //});
+
+            return new BulkOnboardingQueueResponse
             {
-                try
-                {
-                    if (_scopeFactory == null)
-                    {
-                        // Should not happen due to the earlier check, but guard anyway
-                        return;
-                    }
+                JobId = job.Id,
+                Status = "Queued",
+                Message = "Bulk onboarding queued successfully."
+            };
+        }
+        /**   public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+               Stream excelStream,
+               OnBoardingArgs args)
+           {
+               if (excelStream == null)
+                   throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+               using var ms = new MemoryStream();
+               await excelStream.CopyToAsync(ms);
+               ms.Position = 0;
 
-                    using var scope = _scopeFactory.CreateScope();
-                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+               var rows = _excelConverterService.BulkParseExcel(ms);
 
-                 
-                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
-                      }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        if (_scopeFactory != null)
-                        {
-                            using var scope = _scopeFactory.CreateScope();
-                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
-                        }
-                    }
-                    catch { }
-                }
-            });
-            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+               if (!rows.Any())
+                   throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
 
-            return result; 
-    }
+               var result = new BulkOnboardingResult
+               {
+                   Total = rows.Count,
+                   Errors = new List<BulkOnboardingError>(),
+                   Successful = 0
+               };
 
-    /** public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args)
-     {
-         if (excelStream == null)
-             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+               var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+               Directory.CreateDirectory(tempDir);
+               var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+               ms.Position = 0;
+               await using (var fs = File.Create(tmpFile))
+               {
+                   ms.Position = 0;
+                   await ms.CopyToAsync(fs);
+                   await fs.FlushAsync();
+               }
 
-         var rows = _excelConverterService.BulkParseExcel(excelStream);
+               if (_taskQueue == null || _scopeFactory == null)
+               {
+                   throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
+               }
 
-         if (!rows.Any())
-             throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+               _taskQueue.QueueTask(async cancellationToken =>
+               {
+                   try
+                   {
+                       if (_scopeFactory == null)
+                       {
+                           return;
+                       }
 
-         var result = new BulkOnboardingResult
-         {
-             Total = rows.Count,
-             Errors = new List<BulkOnboardingError>()
-         };
+                       using var scope = _scopeFactory.CreateScope();
+                       var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                       var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                       logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
 
-         const int batchSize = 500;
-         int rowNumber = 2;
-
-         foreach (var batch in rows.Select((x, i) => new { x, i })
-                                   .GroupBy(x => x.i / batchSize)
-                                   .Select(g => g.Select(v => v.x).ToList()))
-         {
-             using var transaction = await _context.Database.BeginTransactionAsync();
-
-             try
-             {
-                 var usersToCreate = new List<User>();
-                 var farmersToCreate = new List<Farmer>();
-
-                 // ---------------------------
-                 // STEP 1: VALIDATE + BUILD
-                 // ---------------------------
-                 foreach (var row in batch)
-                 {
-                     try
-                     {
-                         if (string.IsNullOrWhiteSpace(row.FirstName) || string.IsNullOrWhiteSpace(row.LastName))
-                             throw new Exception("FirstName and LastName are required.");
-
-                         if (!long.TryParse(row.YearsInAgric, out var years) || years < 0 || years > 100)
-                             throw new Exception($"Invalid YearsInAgric: {row.YearsInAgric}");
-
-                         if (string.IsNullOrWhiteSpace(row.Email) && string.IsNullOrWhiteSpace(row.PhoneNumber))
-                             throw new Exception("Either PhoneNumber or Email is required.");
-
-                         var valueChains = GetValueChains(row);
-
-                         var farmer = new Farmer
-                         {
-                             Name = $"{row.FirstName} {row.MiddleName} {row.LastName}".Trim(),
-                             Email = row.Email,
-                             PhoneNumber = row.PhoneNumber,
-                             Gender = row.Gender,
-                             State = row.StateOfResidence,
-                             Lga = row.LGA,
-                             Ward = row.Ward,
-                             Location = row.ResidentialAddress,
-                             FarmerCategory = row.CategoryOfFarmer,
-                             YearsInAgric = years,
-                             Level = FarmerLevel.Level1,
-                             HighestLevelOfEducation = row.HighestLevelOfEducation,
-                             OnBoardedOn = DateTimeOffset.UtcNow,
-                             SelectedItems = valueChains
-                         };
-
-                         farmersToCreate.Add(farmer);
-
-                         var salt = EncryptionUtil.GetSalt();
-
-                         var user = BuildUserEntity(new OnboardingRequestModel
-                         {
-                             Email = row.Email,
-                             PhoneNumber = row.PhoneNumber,
-                             Password = "Admin123@",
-                             Pin = "0000",
-                             FirstName = row.FirstName,
-                             MiddleName = row.MiddleName,
-                             LastName = row.LastName
-                         }, args, salt);
-
-                         usersToCreate.Add(user);
-                     }
-                     catch (Exception ex)
-                     {
-                         result.Errors.Add(new BulkOnboardingError
-                         {
-                             RowNumber = rowNumber,
-                             Email = row.Email,
-                             Error = ex.Message
-                         });
-                     }
-
-                     rowNumber++;
-                 }
-
-                 // ---------------------------
-                 // STEP 2: HANDLE DUPLICATES
-                 // ---------------------------
-                 var emails = usersToCreate.Where(x => x.Email != null).Select(x => x.Email).ToList();
-                 var phones = usersToCreate.Where(x => x.PhoneNumber != null).Select(x => x.PhoneNumber).ToList();
-
-                 var existingUsers = await _context.Users
-                     .Where(u => emails.Contains(u.Email) || phones.Contains(u.PhoneNumber))
-                     .ToListAsync();
-
-                 foreach (var user in usersToCreate.ToList())
-                 {
-                     var existing = existingUsers.FirstOrDefault(x =>
-                         x.Email == user.Email || x.PhoneNumber == user.PhoneNumber);
-
-                     if (existing != null)
-                     {
-                         var farmer = farmersToCreate.First(f =>
-                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                         farmer.UserId = existing.Id;
-                         usersToCreate.Remove(user);
-                     }
-                 }
-
-                 // ---------------------------
-                 // STEP 3: SAVE USERS
-                 // ---------------------------
-                 if (usersToCreate.Any())
-                 {
-                     await _context.Users.AddRangeAsync(usersToCreate);
-                     await _context.SaveChangesAsync();
-
-                     foreach (var user in usersToCreate)
-                     {
-                         var farmer = farmersToCreate.First(f =>
-                             f.Email == user.Email || f.PhoneNumber == user.PhoneNumber);
-
-                         farmer.UserId = user.Id;
-                     }
-                 }
-
-                 // ---------------------------
-                 // STEP 4: SAVE FARMERS
-                 // ---------------------------
-                 if (farmersToCreate.Any())
-                 {
-                     await _context.Farmers.AddRangeAsync(farmersToCreate);
-                     await _context.SaveChangesAsync();
-                 }
-
-                 // ---------------------------
-                 // STEP 5: VALUE CHAINS
-                 // ---------------------------
-                 var valueChainItems = new List<FarmerValueChainItem>();
-
-                 foreach (var farmer in farmersToCreate)
-                 {
-                     foreach (var vc in farmer.SelectedItems ?? new())
-                     {
-                         foreach (var item in vc.Items ?? new())
-                         {
-                             valueChainItems.Add(new FarmerValueChainItem
-                             {
-                                 FarmerId = farmer.Id,
-                                 ValueChainType = vc.ValueChainType,
-                                 ItemName = item
-                             });
+                    
+                       await processor.ProcessAsync(tmpFile, args, cancellationToken);
                          }
-                     }
-                 }
+                   catch (Exception ex)
+                   {
+                       try
+                       {
+                           if (_scopeFactory != null)
+                           {
+                               using var scope = _scopeFactory.CreateScope();
+                               var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                               logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                           }
+                       }
+                       catch { }
+                   }
+               });
+               result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
 
-                 if (valueChainItems.Any())
-                 {
-                     await _context.FarmerValueChainItems.AddRangeAsync(valueChainItems);
-                     await _context.SaveChangesAsync();
-                 }
-
-                 // ---------------------------
-                 // STEP 6: FARMER ORGANIZATION
-                 // ---------------------------
-                 var farmerOrgMappings = farmersToCreate
-                     .Select(f => new FarmerOrganization
-                     {
-                         FarmerId = f.Id,
-                         OrganizationCode = args.organizationCode,
-                         OnboardedByUserId = args.OnboardedByUserId
-                     })
-                     .ToList();
-
-                 var farmerIds = farmerOrgMappings.Select(x => x.FarmerId).ToList();
-
-                 var existingMappings = await _context.FarmerOrganizations
-                     .Where(x => farmerIds.Contains(x.FarmerId) &&
-                                 x.OrganizationCode == args.organizationCode)
-                     .ToListAsync();
-
-                 var existingSet = new HashSet<string>(
-                     existingMappings.Select(x => $"{x.FarmerId}-{x.OrganizationCode}")
-                 );
-
-                 var newMappings = farmerOrgMappings
-                     .Where(m => !existingSet.Contains($"{m.FarmerId}-{m.OrganizationCode}"))
-                     .ToList();
-
-                 if (newMappings.Any())
-                 {
-                     await _context.FarmerOrganizations.AddRangeAsync(newMappings);
-                     await _context.SaveChangesAsync();
-                 }
-
-                 // ✅ COMMIT BATCH
-                 await transaction.CommitAsync();
-
-                 result.Successful += farmersToCreate.Count;
-             }
-             catch (Exception ex)
-             {
-                 await transaction.RollbackAsync();
-
-                 result.Errors.Add(new BulkOnboardingError
-                 {
-                     RowNumber = rowNumber,
-                     Error = "Batch failed: " + ex.Message
-                 });
-
-                 result.Failed += batch.Count;
-             }
-         }
-
-         return result;
-     }  // --- Helpers ---
-    
-     **/
-    private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
+               return result; 
+       }
+           **/
+        private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
         {
             if (string.IsNullOrWhiteSpace(row.PartOfAgriculture))
                 return new List<ValueChainSelectionDto>();
@@ -960,65 +825,180 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
+        #region product
+        public async Task<OrganizationProductCategory> CreateProductCategoryAsync(ProductCategoryDto model, ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+                model.BusinessCode = business.BusinessCode;
+                var response = await _organizationRepository.CreateCategory(model);
+                return response;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<PagedListResponse<List<ProductCategoryDto>>> GetCategories(ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+                return await _organizationRepository.GetCategories(query);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task<ProductCategoryDto> GetCategoryById(long id)
+        {
+            try
+            {
+                return await _organizationRepository.GetCategoryById(id);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+
+        #endregion product
+        #region organization product
+        public async Task<OrganizationProduct> CreateOrganizationProduct(OrganizationProductDto model, ListQueryParams query)
+        {
+            try
+            {
+                var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+                if (business == null)
+                    throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found");
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                model.BusinessCode = business.BusinessCode;
+
+                return await _organizationRepository.CreateOrganizationProduct(model);
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+
+        public async Task<PagedListResponse<List<OrganizationProductDto>>> GetOrganizationProductList(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            await FetchOrganizationDetails(query);
+            return await _organizationRepository.GetOrganizationProductList(query);
+        }
+
+        public async Task<OrganizationProductDto> GetorganizationProductById(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+
+            return await _organization_repository_compat_GetById(query.Id);
+        }
+
+        // small compatibility shim to call repository (keeps logic readable in one place)
+        private async Task<OrganizationProductDto> _organization_repository_compat_GetById(long id)
+        {
+            return await _organizationRepository.GetorganizationProductById(id);
+        }
+
+        public async Task<bool> EditProductAsync(ListQueryParams query, EditOrganizationProductDto request)
+        {
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+            return await _organizationRepository.EditProductAsync(query.Id, request);
+        }
+
+        public async Task<bool> DeactivateProductAsync(ListQueryParams query)
+        {
+            if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Product Id is required");
+            return await _organizationRepository.DeactivateProductAsync(query.Id);
+        }
+        #endregion organization product
         #region location
         public async Task<LocationCreateResponse> CreateLocation(
         CreateLocationDto model,
         ListQueryParams query)
         {
-            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
-            if (business == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+      ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
 
-            var locationType = await _businessRepository.GetLocationByIAsync(model.LocationTypeId);
-            if (locationType == null)
-                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Invalid location type");
+            var locationType = await _businessRepository.GetLocationByIAsync(model.LocationTypeId)
+          ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Invalid location type");
 
             var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-            if (organization != null)
-                model.OrganizationId = organization.OrganizaionId;
-
+            model.OrganizationId = organization?.OrganizaionId;
             model.BusinessCode = business.BusinessCode;
             model.CreatedByUserId = query.UserId;
 
             var location = await _organizationRepository.CreateLocationAsync(model);
 
-            var agentResult = await TryAssignAgentsSafe(location.Id, model, query);
+            //var agentResult = await TryAssignAgentsSafe(location.Id, model, query);
 
-            return new LocationCreateResponse
-            {
-                Location = location.ViewMap(),
-                AgentAssigned = agentResult.Success,
-                AgentWarning = agentResult.Message
-            };
+            return location.CreateViewMap();
+               // AgentAssigned = agentResult.Success,
+                //AgentWarning = agentResult.Message
+          
         }
+        public async Task<(bool Success, string Message)> AssignAgentToLocation(
+        LocationAgentAssignment model,
+        ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode)
+      ?? throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Business record not found");
+
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            model.OrganizationId = organization?.OrganizaionId;
+
+            var assignAgent = await TryAssignAgentsSafe(query.Id, model, query);
+
+            return assignAgent;
+               // AgentAssigned = agentResult.Success,
+                //AgentWarning = agentResult.Message
+          
+        }
+
         private async Task<(bool Success, string Message)> TryAssignAgentsSafe(
         long locationId,
-        CreateLocationDto model,
+        LocationAgentAssignment model,
         ListQueryParams query)
         {
             try
             {
                 bool assignedAny = false;
 
-                if (!string.IsNullOrWhiteSpace(model.MainAgentUserId))
+
+                if (!string.IsNullOrWhiteSpace(model.AgentUserId))
                 {
-                    var mainAgent = await _agentRepository.GetAgentDetailByUserId(model.MainAgentUserId);
+                    var mainAgent = await _agentRepository.GetAgentDetailByUserId(model.AgentUserId);
                     if (mainAgent != null)
                     {
-                        await AssignAgent(locationId, model.OrganizationId.Value, model.MainAgentUserId, query.UserId, true);
+                        await AssignAgent(locationId, model.OrganizationId.Value, model.AgentUserId, query.UserId, model.IsPrimary);
                         assignedAny = true;
                     }
                 }
 
-                if (!string.IsNullOrWhiteSpace(model.SupportinAgentUserId))
-                {
-                    var supportAgent = await _agentRepository.GetAgentDetailByUserId(model.SupportinAgentUserId);
-                    if (supportAgent != null)
-                    {
-                        await AssignAgent(locationId, model.OrganizationId.Value, model.SupportinAgentUserId, query.UserId, false);
-                        assignedAny = true;
-                    }
-                }
+                //if (!string.IsNullOrWhiteSpace(model.SupportinAgentUserId))
+                //{
+                //    var supportAgent = await _agentRepository.GetAgentDetailByUserId(model.SupportinAgentUserId);
+                //    if (supportAgent != null)
+                //    {
+                //        await AssignAgent(locationId, model.OrganizationId.Value, model.SupportinAgentUserId, query.UserId, false);
+                //        assignedAny = true;
+                //    }
+                //}
 
                 return assignedAny
                     ? (true, "Agent(s) assigned successfully.")
@@ -1029,6 +1009,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return (false, $"Location created but agent assignment failed: {ex.Message}");
             }
         }
+
+
         private async Task AssignAgent(
             long locationId,
             long organizationId,
@@ -1056,7 +1038,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Location Id is required");
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
-
+                model.Id = query.Id;
                 var response = await _organizationRepository.EditLocationAsync(model);
 
                 return response.ViewMap();
@@ -1084,7 +1066,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw;
             }
         }
-        public async Task<PagedListResponse<List<LocationResponseDto>>> GetLocationAsync(ListQueryParams query)
+        public async Task<PagedListResponse<List<LocationListResponseDto>>> GetLocationAsync(ListQueryParams query)
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
@@ -1107,6 +1089,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
             await FetchOrganizationDetails(query);
             return await _organizationRepository.GetFullDashboardAsync(query.Id);
+
+        }
+        public async Task SyncLocationStockLevels(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            await FetchOrganizationDetails(query);
+             await _organizationRepository.SyncLocationStockLevels();
 
         }
         public async Task<bool> ReassignPrimaryAgentAsync(ReassignPrimaryAgentDto dto)
@@ -1157,7 +1147,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Location Id is required");
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
-
+                model.Id = query.Id;
                 var response = await _organizationRepository.EditSubLocationAsync(model);
 
                 return response.ViewMap();
@@ -1175,6 +1165,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
                 if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
                 model.UserId = query.UserId;
+                model.Id = query.Id;
                 await _organizationRepository.DeleteSubLocationAsync(model);
                 return true;
 
@@ -1189,7 +1180,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
-            query.Id = query.Id <= 0 ? throw new BaseException(ExceptionType.BAD_REQUEST, "Parent Location Id is required") : query.Id;
+            //query.Id = query.Id <= 0 ? throw new BaseException(ExceptionType.BAD_REQUEST, "Parent Location Id is required") : query.Id;
             return await _organizationRepository.GetSubLocationsAsync(query);
 
         }
@@ -1252,9 +1243,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Inventory Id is required");
                 model.Id = query.Id;
+                model.UpdatedByUserId = query.UserId;
                 var response = await _organizationRepository.EditInventoryAsync(model);
 
                 return response;
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+        public async Task DeleteInventory(DeleteLocationDto model, ListQueryParams query)
+        {
+            try
+            {
+                if (query.Id <= 0) throw new BaseException(ExceptionType.BAD_REQUEST, "Inventory Id is required");
+                model.Id = query.Id;
+                model.UserId = query.UserId;
+                 await _organizationRepository.DeleteInventory(model);
+
             }
             catch (Exception ex)
             {
@@ -1490,7 +1497,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 LocationId = model.LocationId!.Value,
                 OnboardedById = args.OnboardedById,
                 OrganizationId = model.OrganizationId,
-                UserId = args.UserId
+                UserId = args.UserId,
+                IsPrimary= args.IsPrimary,
+                RoleId= model.RoleId.HasValue ? model.RoleId.Value : 0,
             };
 
             await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
@@ -1547,6 +1556,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
+        public async Task<bool> EditAgentUser(
+            ProfileRequestModel model,
+            OnBoardingArgs args)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(args.UserId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+                ValidateRequest(model, args);
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                var onboardingRequest = BuildOnboardingRequest(model);
+
+                await _onboardingRepository.UpdateUserDetails(onboardingRequest, args);
+
+                var agent = await CreateAgent(model, args, args.UserId);
+                await AssignAgentToOrganization(model, args, args.UserId);
+
+                return true;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+      
         public async Task<CreateAgentResponseModel> CreateAgentUser(
             ProfileRequestModel model,
             OnBoardingArgs args)
@@ -1581,8 +1627,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     AgentId = agent.data.Id,
                     AgentUserId = registerUser.model.Id,
                     RequiresProfileCompletion = true,
-                    Message= registerUser.message
+                    Message= registerUser.message,
+                    IsExisting=registerUser.IsExisting
                 };
+               
             }
             catch (BaseException)
             {
@@ -1595,6 +1643,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Unable to complete onboarding at the moment.");
             }
         }
+      
+        
         private async Task EnsureWalletExists(OnboardingRequestModel model, BusinessModel business)
         {
             var subAccount =
@@ -1791,7 +1841,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 user.model.LogDescription = $"Added Farmer {model.FirstName} {model.LastName}";
                 user.model.ActivityName = $"New Farmer Added";
 
-                // ✅ Non-critical (safe)
                 await RunNonCriticalSteps(
                     model, args, business, user.model, dateTime);
 
@@ -1799,8 +1848,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 {
                     UserId = user.model.Id,
                     RequiresProfileCompletion = true,
-                    Message = user.message
+                    
+                    IsExisting = user.IsExisting,
+                    Message = user.IsExisting
+      ? user.message
+      : $"User created successfully."
                 };
+               
             }
             catch (BaseException)
             {
@@ -1935,11 +1989,11 @@ DateTimeOffset dateTime)
         //    }
         //}
 
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterFarmerOrFail(
+        private async Task<CreateUserResult> RegisterFarmerOrFail(
          CreateFarmerRequest model,
          OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+            var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -2254,7 +2308,11 @@ DateTimeOffset dateTime)
                     UserId = user.model.Id,
                     MembershipId = membership.data.Id,
                     RequiresProfileCompletion = true,
-                    Message = user.message,
+                    Message = user.IsExisting
+      ? user.message
+      : $"User created successfully.",
+                    IsExisting =user.IsExisting,
+
                 };
             }
             catch (BaseException)
@@ -2396,11 +2454,11 @@ DateTimeOffset dateTime)
                 ContactPerson = $"{model.MembershipLeaderFirstName} {model.MembershipLeaderMiddleName} {model.MembershipLeaderLastName}"
             });
         }
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterMembershipLeaderOrFail(
+        private async Task<CreateUserResult> RegisterMembershipLeaderOrFail(
            MemberShipRequestModel model,
            OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+            var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -2422,71 +2480,8 @@ DateTimeOffset dateTime)
 
 
         #region input
-        public async Task<InputLoanSummaryDto> GetInputLoanSummaryAsync(ListQueryParams args)
-        {
-            try
-            {
-                await EnrichFarmerQuery(args);
-
-                return await _inputFinancingManagementRepository.GetInputLoanSummaryAsync(args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<LoanDetailDto> GetLoanDetailAsync(ListQueryParams args)
-        {
-            try
-            {
-                
-                return await _inputFinancingManagementRepository.GetLoanDetailAsync(args.Id);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<FinancingRepaymentSummaryDto> GetFinancingRepaymentSummaryAsync(ListQueryParams args)
-        {
-            try
-            {
-
-                return await _inputFinancingManagementRepository.GetFinancingRepaymentSummaryAsync(args.Id);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<FinancingBreakdownDto>>> GetFinancingBreakdownAsync(
-     ListQueryParams request, CancellationToken cancellationToken)
-        {
-            try
-            {
-                await EnrichFarmerQuery(request);
-
-                return await _inputFinancingManagementRepository.GetFinancingBreakdownAsync(request);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
-        public async Task<PagedListResponse<List<RepaymentBreakdownDto>>> GetRepaymentBreakdownAsync(
-       long inputAllocationId,
-       ListQueryParams args, CancellationToken cancellationToken)
-        {
-            try
-            {
-
-                return await _inputFinancingManagementRepository.GetRepaymentBreakdownAsync(inputAllocationId, args);
-            }
-            catch (Exception ex)
-            {
-                throw;
-            }
-        }
+      
+  
 
         private async Task EnrichFarmerQuery(ListQueryParams request)
         {

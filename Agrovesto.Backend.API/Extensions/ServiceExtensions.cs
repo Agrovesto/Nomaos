@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
@@ -16,6 +17,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 
@@ -35,7 +37,10 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddHttpContextAccessor();
 
             services.AddScoped<IHttpService, HttpService>();
-            services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+            services.Configure<SerilogServiceOptions>(
+    configuration.GetSection("AppLogs"));
+            //services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+
             services.AddSingleton<ILogService, SerilogService>();
            
             services.AddScoped<IBusinessRepository, BusinessRepository>();
@@ -90,6 +95,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
+            services.AddScoped<IRepaymentEngine, RepaymentEngine>();
          
             services.AddScoped<IOtpService, OtpService>();
             services.AddScoped<IOnBoardingManager, OnBoardingManager>();
@@ -115,6 +121,7 @@ namespace Agrovesto.Backend.API.Extensions
             //services.AddHttpClient<FCMBWalletService>();
             //services.AddHttpClient<CafeOneWalletService>();
             //  services.AddHttpClient<CredoService>();
+            services.AddScoped<IFarmerQueryService, FarmerQueryService>();
             services.AddScoped<IUserWalletRepository, UserWalletRepository>();
             services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
 
@@ -143,6 +150,18 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IStorageCategoryRepository, StorageCategoryRepository>();
             services.AddScoped<ITemperatureControlType, TemperatureControlTypeRepository>();
             services.AddScoped<IModuleRepository, ModuleRepository>();
+            services.AddScoped<IInputFinancingManager, InputFinancingManager>();
+            services.AddScoped<IInputFinancingRepository, InputFinancingRepository>();
+
+            services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
+            services.AddScoped<ILicenseService, LicenseService>();
+            services.AddScoped<IModuleAccessService, SystemModuleAccessService>();
+            services.AddScoped<IMigrationService, MigrationService>();
+
+            services.AddScoped<RepaymentOverdueProcessor>();
+            services.AddHostedService<JobSchedulerService>();
+
+            services.AddTransient<OverdueRepaymentJob>();
         }
     }
 }

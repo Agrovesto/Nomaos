@@ -32,42 +32,44 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
             _cache = cache;
         }
-        private IQueryable<Farmer> BuildFarmerQuery(FarmerFilter filter)
+        public IQueryable<Farmer> BuildFarmerQuery(FarmerFilter filter)
         {
-            var query =
-                from fc in _context.FarmerCooperatives.AsNoTracking()
-                join f in _context.Farmers.AsNoTracking()
-                    on fc.FarmerId equals f.Id
-                where fc.CooperativeId == filter.CooperativeId
-                select f;
-
+            var query = _context.Farmers.AsNoTracking()
+                .Where(f =>
+                    _context.FarmerCooperatives.Any(fc =>
+                        fc.FarmerId == f.Id &&
+                        fc.CooperativeId == filter.CooperativeId));
             if (!string.IsNullOrWhiteSpace(filter.BusinessCode))
-                query = query.Where(x => x.BelongToBusinessCode == filter.BusinessCode);
+            {
+                query = query.Where(f => f.BelongToBusinessCode == filter.BusinessCode);
+            }
 
             if (!string.IsNullOrWhiteSpace(filter.State))
-                query = query.Where(x => x.State == filter.State);
+            {
+                query = query.Where(f => f.State == filter.State);
+            }
 
             if (filter.Id.HasValue && filter.Id > 0)
-                query = query.Where(x => x.Id == filter.Id);
+            {
+                query = query.Where(f => f.Id == filter.Id);
+            }
 
             if (filter.StartDate.HasValue || filter.EndDate.HasValue)
             {
                 var start = filter.StartDate?.Date ?? DateTime.MinValue.Date;
                 var end = filter.EndDate?.Date ?? DateTime.UtcNow.Date;
 
-                query = query.Where(x =>
-                    x.OnBoardedOn.Date >= start &&
-                    x.OnBoardedOn.Date <= end);
+                query = query.Where(f =>
+                    f.OnBoardedOn.Date >= start &&
+                    f.OnBoardedOn.Date <= end);
             }
 
             if (!string.IsNullOrWhiteSpace(filter.OrganizationCode))
             {
-                query =
-                    from f in query
-                    join fo in _context.FarmerOrganizations.AsNoTracking()
-                        on f.Id equals fo.FarmerId
-                    where fo.OrganizationCode == filter.OrganizationCode
-                    select f;
+                query = query.Where(f =>
+                    _context.FarmerOrganizations.Any(fo =>
+                        fo.FarmerId == f.Id &&
+                        fo.OrganizationCode == filter.OrganizationCode));
             }
 
             return query.Distinct();
@@ -120,7 +122,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return updatedMembership.Map();
         }
-
         public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
     string membershipUserId,
     string organizationCode = null)
@@ -152,12 +153,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var baseQuery = BuildFarmerQuery(filter);
 
-            var farmerIds = await baseQuery
-                .Select(x => x.Id)
-                .ToListAsync();
+            var farmers = await baseQuery.ToListAsync();
 
-            var farmers = await _context.Farmers
-                .Where(f => farmerIds.Contains(f.Id))
+            var farmerIds = farmers.Select(f => f.Id).ToList();
+
+            var farms = await _context.Farms
+                .Where(f => farmerIds.Contains(f.FarmerId))
                 .ToListAsync();
 
             var totalFarmers = farmers.Count;
@@ -165,16 +166,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var totalVerifiedFarmers = farmers.Count(x => x.Level != FarmerLevel.Level1);
             var totalUnverifiedFarmers = farmers.Count(x => x.Level == FarmerLevel.Level1);
 
-            var farms = await _context.Farms
-                .Where(f => farmerIds.Contains(f.FarmerId))
-                .ToListAsync();
-
             var totalFarms = farms.Count;
             var totalFarmSize = farms.Sum(x => x.FarmSizeInSqMetre);
 
             var farmsMapped = farms.Count(x => x.MappingStatus == MappingStatus.Verified);
-            var inProgress = farms.Count(x => x.MappingStatus == MappingStatus.Mapped);
-            var notStarted = farms.Count(x => x.MappingStatus == MappingStatus.UnMapped);
 
             var totalAgents = await _context.MemberShipAgents
                 .AsNoTracking()
@@ -186,7 +181,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return new MembershipDashboardDto
             {
                 Membership = membership,
-
                 Summary = new MemberSummaryDto
                 {
                     TotalAgents = totalAgents,
@@ -202,126 +196,89 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
             };
         }
-        //  public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
-        //string membershipuserId,
-        //string organizationCode = null)
-        //  {
-        //      var membership = await _context.MemberShips
-        //          .AsNoTracking()
-        //          .Where(m => m.UserId == membershipuserId)
-        //          .Select(m => new MembershipInfoDto
-        //          {
-        //              UserId = m.UserId,
-        //              MembershipId = m.Id,
-        //              Name = m.Name,
-        //              MembershipType = m.MemberShipType.Name,
-        //              Status = m.IsActive ? "Active" : "Inactive",
-        //              DateCreated = m.OnBoardedOn,
-        //              Location = m.Location,
-        //              LeaderName = m.MembershipLeaderFirstName + " " + m.MembershipLeaderLastName
-        //          })
-        //          .FirstOrDefaultAsync();
+        /**  public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
+      string membershipUserId,
+      string organizationCode = null)
+          {
+              var membership = await _context.MemberShips
+                  .AsNoTracking()
+                  .Where(m => m.UserId == membershipUserId)
+                  .Select(m => new MembershipInfoDto
+                  {
+                      UserId = m.UserId,
+                      MembershipId = m.Id,
+                      Name = m.Name,
+                      MembershipType = m.MemberShipType.Name,
+                      Status = m.IsActive ? "Active" : "Inactive",
+                      DateCreated = m.OnBoardedOn,
+                      Location = m.Location,
+                      LeaderName = m.MembershipLeaderFirstName + " " + m.MembershipLeaderLastName
+                  })
+                  .FirstOrDefaultAsync();
 
-        //      if (membership == null)
-        //          throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+              if (membership == null)
+                  throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
 
-        //      var membershipId = membership.MembershipId;
+              var filter = new FarmerFilter
+              {
+                  CooperativeId = membership.MembershipId,
+                  OrganizationCode = organizationCode
+              };
 
-        //      var baseFarmers =
-        //          from fc in _context.FarmerCooperatives.AsNoTracking()
-        //          join f in _context.Farmers.AsNoTracking()
-        //              on fc.FarmerId equals f.Id
-        //          where fc.CooperativeId == membershipId
-        //          select new { fc.FarmerId, f };
+              var baseQuery = BuildFarmerQuery(filter);
 
-        //      if (!string.IsNullOrWhiteSpace(organizationCode))
-        //      {
-        //          baseFarmers =
-        //              from x in baseFarmers
-        //              join fo in _context.FarmerOrganizations.AsNoTracking()
-        //                  on x.FarmerId equals fo.FarmerId
-        //              where fo.OrganizationCode == organizationCode
-        //              select x;
-        //      }
+              var farmerIds = await baseQuery
+                  .Select(x => x.Id)
+                  .ToListAsync();
 
-        //      var farmerIdsQuery = baseFarmers.Select(x => x.FarmerId).Distinct();
+              var farmers = await _context.Farmers
+                  .Where(f => farmerIds.Contains(f.Id))
+                  .ToListAsync();
 
-        //      var farmStats = await (
-        //          from f in _context.Farmers
-        //          where farmerIdsQuery.Contains(f.Id)
-        //          group f by 1 into g
-        //          select new
-        //          {
-        //              TotalFarmers = g.Count(),
+              var totalFarmers = farmers.Count;
 
-        //              TotalVerifiedFarmers = g.Count(x => x.Level != FarmerLevel.Level1),
+              var totalVerifiedFarmers = farmers.Count(x => x.Level != FarmerLevel.Level1);
+              var totalUnverifiedFarmers = farmers.Count(x => x.Level == FarmerLevel.Level1);
 
-        //              TotalUnverifiedFarmers = g.Count(x => x.Level == FarmerLevel.Level1),
+              var farms = await _context.Farms
+                  .Where(f => farmerIds.Contains(f.FarmerId))
+                  .ToListAsync();
 
-        //              TotalFarms =
-        //                  _context.Farms.Count(fr => g.Select(x => x.Id).Contains(fr.FarmerId)),
+              var totalFarms = farms.Count;
+              var totalFarmSize = farms.Sum(x => x.FarmSizeInSqMetre);
 
-        //              TotalFarmSize =
-        //                  _context.Farms
-        //                      .Where(fr => g.Select(x => x.Id).Contains(fr.FarmerId))
-        //                      .Sum(fr => (double?)fr.FarmSizeInSqMetre) ?? 0,
+              var farmsMapped = farms.Count(x => x.MappingStatus == MappingStatus.Verified);
+              var inProgress = farms.Count(x => x.MappingStatus == MappingStatus.Mapped);
+              var notStarted = farms.Count(x => x.MappingStatus == MappingStatus.UnMapped);
 
-        //              Completed =
-        //                  _context.Farms.Count(fr =>
-        //                      g.Select(x => x.Id).Contains(fr.FarmerId) &&
-        //                      fr.MappingStatus == MappingStatus.Verified),
+              var totalAgents = await _context.MemberShipAgents
+                  .AsNoTracking()
+                  .Where(x => x.MemberShipId == membership.MembershipId)
+                  .Select(x => x.AgentId)
+                  .Distinct()
+                  .CountAsync();
 
-        //              InProgress =
-        //                  _context.Farms.Count(fr =>
-        //                      g.Select(x => x.Id).Contains(fr.FarmerId) &&
-        //                      fr.MappingStatus == MappingStatus.Mapped),
+              return new MembershipDashboardDto
+              {
+                  Membership = membership,
 
-        //              NotStarted =
-        //                  _context.Farms.Count(fr =>
-        //                      g.Select(x => x.Id).Contains(fr.FarmerId) &&
-        //                      fr.MappingStatus == MappingStatus.UnMapped)
-        //          }
-        //      ).FirstOrDefaultAsync();
-
-        //      farmStats ??= new
-        //      {
-        //          TotalFarmers = 0,
-        //          TotalVerifiedFarmers = 0,
-        //          TotalUnverifiedFarmers = 0,
-        //          TotalFarms = 0,
-        //          TotalFarmSize = 0.0,
-        //          Completed = 0,
-        //          InProgress = 0,
-        //          NotStarted = 0
-        //      };
-
-        //      var totalAgents = await _context.MemberShipAgents
-        //          .AsNoTracking()
-        //          .Where(x => x.MemberShipId == membershipId)
-        //          .Select(x => x.AgentId)
-        //          .Distinct()
-        //          .CountAsync();
-
-        //      return new MembershipDashboardDto
-        //      {
-        //          Membership = membership,
-
-        //          Summary = new MemberSummaryDto
-        //          {
-        //              TotalAgents = totalAgents,
-        //              TotalFarmers = farmStats.TotalFarmers,
-        //              TotalVerifiedFarmers = farmStats.TotalVerifiedFarmers,
-        //              TotalUnverifiedFarmers = farmStats.TotalUnverifiedFarmers,
-        //              TotalFarms = farmStats.TotalFarms,
-        //              TotalFarmSize = farmStats.TotalFarmSize,
-        //              FarmsMapped = farmStats.Completed,
-        //              MappingProgressPercentage = farmStats.TotalFarms == 0
-        //                  ? 0
-        //                  : (int)Math.Round((double)farmStats.Completed / farmStats.TotalFarms * 100)
-        //          }
-        //      };
-        //  }
-
+                  Summary = new MemberSummaryDto
+                  {
+                      TotalAgents = totalAgents,
+                      TotalFarmers = totalFarmers,
+                      TotalVerifiedFarmers = totalVerifiedFarmers,
+                      TotalUnverifiedFarmers = totalUnverifiedFarmers,
+                      TotalFarms = totalFarms,
+                      TotalFarmSize = totalFarmSize,
+                      FarmsMapped = farmsMapped,
+                      MappingProgressPercentage = totalFarms == 0
+                          ? 0
+                          : (int)Math.Round((double)farmsMapped / totalFarms * 100)
+                  }
+              };
+          }
+        
+          **/
         public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
         {
             var type = await _context.MemberShipTypes
@@ -483,8 +440,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         await _context.SaveChangesAsync();
                     }
                 }
-
                 var isModified = false;
+                if (!string.IsNullOrWhiteSpace(data.NIN) || !string.IsNullOrWhiteSpace(data.BVN))
+                {
+                  
+                    var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == entity.UserId);
+                    if (user != null)
+                    {
+                        if (!string.IsNullOrWhiteSpace(data.NIN) && data.NIN != user.NIN)
+                        {
+                            user.NIN = data.NIN;
+                            _context.Users.Update(user);
+                            isModified = true;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(data.BVN) && data.BVN != user.BVN)
+                        {
+                            user.BVN = data.BVN;
+                            _context.Users.Update(user);
+                            isModified = true;
+                        }
+                    }
+                }
+
+             
                 isModified = await AssignAgentToMembership(data, entity, isModified);
 
                 await _context.SaveChangesAsync();
@@ -505,7 +484,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         private async Task<bool> AssignAgentToMembership(MemberShipModel data, MemberShip existingCooperative, bool isModified)
         {
-            if (data.AgentIds.Count > 0)
+            if (data.AgentIds.Any())
             {
                 var existingAgents = _context.MemberShipAgents
                     .Where(fa => fa.MemberShipId == existingCooperative.Id);
@@ -827,7 +806,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     PhoneNumber = s.PhoneNumber,
                     UserId = s.UserId,
                     IsLeaderAFarmer = s.IsLeaderAFarmer,
-                    Tier=EnumExtensions.GetDisplayName(s.Tier),
+                    Tier=EnumExtensions.GetDisplayName(s.TierLevel),
                     MembershipType= s.MemberShipType.Name,
                     MembershipLeaderFirstName=s.MembershipLeaderLastName,
                     MembershipLeaderGender=s.MembershipLeaderGender ,

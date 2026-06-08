@@ -1,11 +1,118 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.Core.CoreUtils
 {
+
+    public class ApiResponse<T>
+    {
+        public bool Succeeded { get; set; }
+        public string Message { get; set; }
+        public T Data { get; set; }
+        public string Code { get; set; }
+        public string TraceId { get; set; }
+        public int? Count { get; set; }
+        public int? PageNumber { get; set; }
+        public int? PageSize { get; set; }
+        public int? TotalPages { get; set; }
+
+        public Dictionary<string, string[]> Errors { get; set; }
+        public static ApiResponse<T> Success(T data, string code, string message = "Success", string traceId = null)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = true,
+                Message = message,
+                Data = data,
+                TraceId = traceId,
+                Code= ResponseCodes.Success
+            };
+        }
+
+        public static ApiResponse<T> Fail(string message, string code, string traceId = null, T data = default )
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = false,
+                Message = message,
+                Data = data,
+                TraceId = traceId,
+                Code =ResponseCodes.Failed
+            };
+        }
+        public static ApiResponse<T> ValidationFail(
+       string message,
+        string code,
+       Dictionary<string, string[]> errors,
+       string traceId = null)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = false,
+                Message = message,
+                Errors = errors,
+                TraceId = traceId,
+                Code = ResponseCodes.Failed
+            };
+        }
+        public static ApiResponse<T> SuccessPaged<TItem>(
+        PagedResult<TItem> paged,
+        string message = "Success",
+        string code = null,
+        string traceId = null)
+        {
+            return new ApiResponse<T>
+            {
+                Succeeded = true,
+                Message = message,
+                Data = (T)(object)paged.Items,
+
+                Count = paged.Count,
+                PageNumber = paged.PageNumber,
+                PageSize = paged.PageSize,
+                TotalPages = paged.TotalPages,
+
+                Code = code ?? ResponseCodes.Success,
+                TraceId = traceId
+            };
+        }
+    }
+    public class ApiResponse
+    {
+        public bool Succeeded { get; set; }
+        public string Message { get; set; }
+        public string TraceId { get; set; }
+        public int? Count { get; set; }
+        public int? PageNumber { get; set; }
+        public int? PageSize { get; set; }
+        public int? TotalPages { get; set; }
+
+        public string Code { get; set; }
+        public static ApiResponse Success(string message = "Success", string traceId = null)
+        {
+            return new ApiResponse
+            {
+                Succeeded = true,
+                Message = message,
+                TraceId = traceId
+            };
+        }
+
+        public static ApiResponse Fail(string message, string traceId = null)
+        {
+            return new ApiResponse
+            {
+                Succeeded = false,
+                Message = message,
+                TraceId = traceId
+            };
+        }
+    }
     public class ResponseDto
     {
         public bool Status { get; set; }
