@@ -784,7 +784,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         RepaymentEndDate = repayment?.RepaymentEndDate,
                         RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
                         RepaymentMode = repayment?.RepaymentMode ?? default,
-
+                        
                         BusinessCode = args.BusinessCode
                     };
 
@@ -1425,19 +1425,22 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         break;
 
                     case SubscriptionView.PendingCommitment:
+                    case SubscriptionView.Approved:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingCommitment);
+                            x.Status == SubscriptionStatus.PendingCommitment || x.Status == SubscriptionStatus.Approved);
                             break;
                     case SubscriptionView.PendingDisbursement:
                          query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingDisbursement ||
-                            x.Status == SubscriptionStatus.Approved);
+                            x.Status == SubscriptionStatus.PendingDisbursement 
+                            //||
+                           // x.Status == SubscriptionStatus.Approved
+                            );
                         break;
 
-                    case SubscriptionView.Approved:
-                        query = query.Where(x =>
-                           x.Status == SubscriptionStatus.Approved);
-                        break;
+                    //case SubscriptionView.Approved:
+                    //    query = query.Where(x =>
+                    //       x.Status == SubscriptionStatus.Approved);
+                    //    break;
                     case SubscriptionView.Active:
                         query = query.Where(x => x.Status == SubscriptionStatus.Active);
                         break;
@@ -1449,6 +1452,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     case SubscriptionView.Defaulted:
                         query = query.Where(x => x.Status == SubscriptionStatus.Defaulted);
                         break;
+
                 }
             }
 
@@ -1498,9 +1502,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var totalFinancedValue = await subscriptionsQuery
                 .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
 
-            var totalCommitted = await subscriptionsQuery
-                .Where(x => x.CommitmentRequired)
-                .SumAsync(x => (decimal?)x.CommitmentValue) ?? 0m;
+            //var totalCommitted = await subscriptionsQuery
+            //    .Where(x => x.CommitmentRequired)
+            //    .SumAsync(x => (decimal?)x.CommitmentValue) ?? 0m;
 
             var totalActivePackages = await _context.InputPackages
       .Where(p =>
@@ -1535,7 +1539,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             {
                 TotalFinancedValue = totalFinancedValue,
                 TotalAmountRepaid = totalRepaid,
-                TotalCommitted = totalCommitted,
+                TotalCommitted = totalCommitmentPaid,
                 TotalOutstandingBalance = totalOutstanding,
                 RecoveryRate = Math.Round(recoveryRate, 2),
                 TotalActivePackages = totalActivePackages
@@ -1584,17 +1588,18 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentValue = x.CommitmentValue,
                     TotalFinancingValue = x.TotalFinancingValue,
                     SubscribedOn = x.SubscribedOn,
-                    Status = x.Status,
-
-                    CommitmentStatus =
-                        (_context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) ?? 0m) >= x.CommitmentValue
-                        ? "Paid"
-                        : "Pending"
+                    SubscriptionStatus = x.Status,
+                    SubscriptionStatusName= EnumExtensions.GetDisplayName(x.Status),
+                    CommitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
+                                       ? "Not Required"
+                                        : ((_context.InputPackageSubscriptionPayments
+                .Where(p =>
+                    p.SubscriptionId == x.Id &&
+                    p.PaymentType == PaymentType.Commitment &&
+                    p.Status == TransactionStatus.Successful)
+                .Sum(p => (decimal?)p.AmountPaid) ?? 0m) >= x.CommitmentValue)
+            ? "Paid"
+            : "Pending"
                 })
                 .ToListAsync();
 
@@ -2048,11 +2053,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.SubscriberUser)
                 .Include(x => x.AddedByUser)
                 .AsQueryable();
-
-            // apply filters (reuse your existing logic)
-            baseQuery = ApplyFilters(baseQuery, filter);
-
-            // 🔥 pre-aggregate payments once
+baseQuery = ApplyFilters(baseQuery, filter);
             var payments = _context.InputPackageSubscriptionPayments
                 .AsNoTracking()
                 .Where(p => p.Status == TransactionStatus.Successful)
@@ -2100,7 +2101,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentValue = sub.CommitmentValue,
                     TotalFinancingValue = sub.TotalFinancingValue,
                     SubscribedOn = sub.SubscribedOn,
-                    Status = sub.Status,
+                    SubscriptionStatus = sub.Status,
 
                     CommitmentStatus =
                         (p.CommitmentPaid >= sub.CommitmentValue)
@@ -2170,11 +2171,15 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("Subscriptions");
 
+            // HEADER
             ws.Cell(1, 1).Value = "Subscription Id";
             ws.Cell(1, 2).Value = "Subscriber";
             ws.Cell(1, 3).Value = "Package";
             ws.Cell(1, 4).Value = "Commitment";
-            ws.Cell(1, 5).Value = "Status";
+            ws.Cell(1, 5).Value = "Created By";
+            ws.Cell(1, 6).Value = "Total Financing";
+          //  ws.Cell(1, 7).Value = "Subscribed On";
+            ws.Cell(1, 7).Value = "Status";
 
             var row = 2;
 
@@ -2183,10 +2188,24 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 ws.Cell(row, 1).Value = item.SubscriptionId;
                 ws.Cell(row, 2).Value = item.SubscriberName;
                 ws.Cell(row, 3).Value = item.PackageName;
+
                 ws.Cell(row, 4).Value = item.CommitmentValue;
-                ws.Cell(row, 5).Value = item.Status.ToString();
+                ws.Cell(row, 4).Style.NumberFormat.Format = "#,##0.00";
+
+                ws.Cell(row, 5).Value = item.CreatedBy;
+
+                ws.Cell(row, 6).Value = item.TotalFinancingValue;
+                ws.Cell(row, 6).Style.NumberFormat.Format = "#,##0.00";
+
+                //ws.Cell(row, 7).Value = item.SubscribedOn;
+                //ws.Cell(row, 7).Style.DateFormat.Format = "yyyy-MM-dd";
+
+                ws.Cell(row, 7).Value = item.SubscriptionStatus.ToString();
+
                 row++;
             }
+
+            ws.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
@@ -2198,35 +2217,56 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             {
                 container.Page(page =>
                 {
+                    page.Margin(20);
+
                     page.Content().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.ConstantColumn(100);
-                            columns.RelativeColumn();
-                            columns.RelativeColumn();
+                            columns.ConstantColumn(50);   // ID
+                            columns.RelativeColumn();     // Subscriber
+                            columns.RelativeColumn();     // Type
+                            columns.RelativeColumn();     // CreatedBy
+                            columns.RelativeColumn();     // Location
+                            columns.RelativeColumn();     // Package
+                            columns.ConstantColumn(100);   // Commitment
+                            columns.ConstantColumn(120);   // Total Finance
+                            columns.ConstantColumn(120);   // Date
                         });
 
                         table.Header(header =>
                         {
                             header.Cell().Text("ID");
                             header.Cell().Text("Subscriber");
+                            header.Cell().Text("Type");
+                            header.Cell().Text("Created By");
+                            header.Cell().Text("Location");
                             header.Cell().Text("Package");
+                            header.Cell().Text("Commitment");
+                            header.Cell().Text("Total Finance");
+                            header.Cell().Text("Date Submitted");
                         });
 
                         foreach (var item in data)
                         {
                             table.Cell().Text(item.SubscriptionId.ToString());
                             table.Cell().Text(item.SubscriberName);
+                            table.Cell().Text(EnumExtensions.GetDisplayName(item.SubscriptionType));
+                            table.Cell().Text(item.CreatedBy ?? "-");
+                            table.Cell().Text(item.Location ?? "-");
                             table.Cell().Text(item.PackageName);
+
+                            table.Cell().Text(item.CommitmentValue.ToString("N2"));
+                            table.Cell().Text(item.TotalFinancingValue.ToString("N2"));
+
+                            table.Cell().Text(item.SubscribedOn.HasValue ?  item.SubscribedOn.Value.ToString("yyyy-MM-dd") : null);
                         }
                     });
                 });
             });
 
             return document.GeneratePdf();
-        }
-        /**
+        }  /**
          * PendingApproval
 → PendingCommitment
 → PendingDisbursement
