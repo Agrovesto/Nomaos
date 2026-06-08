@@ -2171,11 +2171,15 @@ baseQuery = ApplyFilters(baseQuery, filter);
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("Subscriptions");
 
+            // HEADER
             ws.Cell(1, 1).Value = "Subscription Id";
             ws.Cell(1, 2).Value = "Subscriber";
             ws.Cell(1, 3).Value = "Package";
             ws.Cell(1, 4).Value = "Commitment";
-            ws.Cell(1, 5).Value = "Status";
+            ws.Cell(1, 5).Value = "Created By";
+            ws.Cell(1, 6).Value = "Total Financing";
+          //  ws.Cell(1, 7).Value = "Subscribed On";
+            ws.Cell(1, 7).Value = "Status";
 
             var row = 2;
 
@@ -2184,10 +2188,24 @@ baseQuery = ApplyFilters(baseQuery, filter);
                 ws.Cell(row, 1).Value = item.SubscriptionId;
                 ws.Cell(row, 2).Value = item.SubscriberName;
                 ws.Cell(row, 3).Value = item.PackageName;
+
                 ws.Cell(row, 4).Value = item.CommitmentValue;
-                ws.Cell(row, 5).Value = item.SubscriptionStatus.ToString();
+                ws.Cell(row, 4).Style.NumberFormat.Format = "#,##0.00";
+
+                ws.Cell(row, 5).Value = item.CreatedBy;
+
+                ws.Cell(row, 6).Value = item.TotalFinancingValue;
+                ws.Cell(row, 6).Style.NumberFormat.Format = "#,##0.00";
+
+                //ws.Cell(row, 7).Value = item.SubscribedOn;
+                //ws.Cell(row, 7).Style.DateFormat.Format = "yyyy-MM-dd";
+
+                ws.Cell(row, 7).Value = item.SubscriptionStatus.ToString();
+
                 row++;
             }
+
+            ws.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
@@ -2199,35 +2217,56 @@ baseQuery = ApplyFilters(baseQuery, filter);
             {
                 container.Page(page =>
                 {
+                    page.Margin(20);
+
                     page.Content().Table(table =>
                     {
                         table.ColumnsDefinition(columns =>
                         {
-                            columns.ConstantColumn(100);
-                            columns.RelativeColumn();
-                            columns.RelativeColumn();
+                            columns.ConstantColumn(50);   // ID
+                            columns.RelativeColumn();     // Subscriber
+                            columns.RelativeColumn();     // Type
+                            columns.RelativeColumn();     // CreatedBy
+                            columns.RelativeColumn();     // Location
+                            columns.RelativeColumn();     // Package
+                            columns.ConstantColumn(100);   // Commitment
+                            columns.ConstantColumn(120);   // Total Finance
+                            columns.ConstantColumn(120);   // Date
                         });
 
                         table.Header(header =>
                         {
                             header.Cell().Text("ID");
                             header.Cell().Text("Subscriber");
+                            header.Cell().Text("Type");
+                            header.Cell().Text("Created By");
+                            header.Cell().Text("Location");
                             header.Cell().Text("Package");
+                            header.Cell().Text("Commitment");
+                            header.Cell().Text("Total Finance");
+                            header.Cell().Text("Date Submitted");
                         });
 
                         foreach (var item in data)
                         {
                             table.Cell().Text(item.SubscriptionId.ToString());
                             table.Cell().Text(item.SubscriberName);
+                            table.Cell().Text(EnumExtensions.GetDisplayName(item.SubscriptionType));
+                            table.Cell().Text(item.CreatedBy ?? "-");
+                            table.Cell().Text(item.Location ?? "-");
                             table.Cell().Text(item.PackageName);
+
+                            table.Cell().Text(item.CommitmentValue.ToString("N2"));
+                            table.Cell().Text(item.TotalFinancingValue.ToString("N2"));
+
+                            table.Cell().Text(item.SubscribedOn.HasValue ?  item.SubscribedOn.Value.ToString("yyyy-MM-dd") : null);
                         }
                     });
                 });
             });
 
             return document.GeneratePdf();
-        }
-        /**
+        }  /**
          * PendingApproval
 → PendingCommitment
 → PendingDisbursement
