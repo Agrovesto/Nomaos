@@ -85,6 +85,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PublishReadyToRunExclude Include="Pomelo.EntityFrameworkCore.MySql.dll" />
+  </ItemGroup>
+  
+  <ItemGroup>
     <ProjectReference Include="..\Agrovesto.Backend.Core\Agrovesto.Backend.Core.csproj" />
   </ItemGroup>
 

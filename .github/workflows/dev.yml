@@ -24,7 +24,7 @@ jobs:
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
           
-      - name: SSH and Deploy
+      - name: Trigger Blue/Green Deployment
         run: |
           ssh -tt ubuntu@${{ secrets.EC2_HOST_DEV }} \
-          'bash -x /var/www/Nomaos/deploy-staging.sh'
+          'bash  /var/www/Nomaos/deploy-staging.sh'
