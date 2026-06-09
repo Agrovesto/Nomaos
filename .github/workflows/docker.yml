@@ -1,0 +1,142 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - devops
+
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: agrovesto
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/GitHubActionsECRDeployRole # ${{ secrets.DEV_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create repository if ∄
+        # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ecr/create-repository.html
+        shell: bash
+        run: |
+          LIFECYCLE_POLICY_FILE=$(mktemp)
+
+          echo '{
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the last 3 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 3
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }' > "$LIFECYCLE_POLICY_FILE"
+
+          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1; then
+            echo "Repository does not exist. Creating repository..."
+            aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+
+            echo "Applying lifecycle policy..."
+            aws ecr put-lifecycle-policy \
+                --repository-name ${{ env.ECR_REPOSITORY }} \
+                --lifecycle-policy file://$LIFECYCLE_POLICY_FILE
+          else
+            echo "Repository already exists."
+          fi
+
+          rm "$LIFECYCLE_POLICY_FILE"  
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate Image Tag
+        shell: bash
+        run: |
+          calculatedSha=$(echo ${{ github.sha }} | cut -c 1-12)
+          echo "SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # sha for v4.0.0
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push Docker Image
+        id: build-and-push
+        uses: docker/build-push-action@v6
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify Image Exists
+        shell: bash
+        run: |
+          aws ecr describe-images \
+            --repository-name "${ECR_REPOSITORY}" \
+            --image-ids imageTag="${SHORT_SHA}"          
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.SHORT_SHA }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+        with:
+          host: ${{ secrets.EC2_HOST_DEV }}
+          username: ubuntu
+          key: ${{ secrets.EC2_PRIVATE_KEY_DEV }}
+          envs: IMAGE,AWS_REGION
+          script: |
+            set -euo pipefail
+
+            echo "Deploying image: $IMAGE"
+
+            REGISTRY=$(echo "$IMAGE" | cut -d/ -f1)
+
+            aws ecr get-login-password --region $AWS_REGION \
+              | docker login \
+                  --username AWS \
+                  --password-stdin $REGISTRY
+
+            docker pull $IMAGE
+
+            cd /opt/agrovesto
+
+            chmod +x deploy.sh
+
+            ./docker.sh $IMAGE
+
+      - name: Deployment Complete
+        run: |
+          echo "Successfully deployed ${SHORT_SHA}"
