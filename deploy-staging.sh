@@ -68,7 +68,7 @@ echo "✅ Canary passed"
 # 7. switch traffic gradually
 echo "🔄 Switching traffic..."
 
-cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
 upstream nomaos_backend {
     server 127.0.0.1:5000 weight=50;
     server 127.0.0.1:5002 weight=50;
