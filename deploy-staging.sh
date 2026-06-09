@@ -1,75 +1,89 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-echo "🚀 Blue/Green deployment starting..."
+echo "🚀 Blue/Green Deployment Starting..."
 
 BASE_DIR="/var/www/Nomaos"
+RELEASES_DIR="$BASE_DIR/releases"
+
 APP_NAME="Agrovesto.Backend.API"
-PROJECT_FILE="/var/www/Nomaos/${APP_NAME}.csproj"
+PROJECT_FILE="$BASE_DIR/$APP_NAME.csproj"
 
 cd "$BASE_DIR"
 
-# Ensure git is up to date
-echo "📡 Syncing repository..."
+# -----------------------------
+# 1. Sync repo
+# -----------------------------
 git fetch origin
 git checkout staging
 git reset --hard origin/staging
 
-# Ensure active-slot exists (CRITICAL FIX)
+# -----------------------------
+# 2. Determine slot
+# -----------------------------
 if [ ! -f "$BASE_DIR/active-slot" ]; then
   echo "blue" | sudo tee "$BASE_DIR/active-slot" > /dev/null
 fi
 
 ACTIVE=$(cat "$BASE_DIR/active-slot")
-echo "🔵 Current active slot: $ACTIVE"
 
-# Flip target safely
 if [ "$ACTIVE" = "blue" ]; then
   TARGET="green"
   TARGET_PORT=5002
-  ACTIVE_PORT=5000
 else
   TARGET="blue"
   TARGET_PORT=5000
-  ACTIVE_PORT=5002
 fi
 
-echo "📦 Deploying to slot: $TARGET"
+echo "📌 Active: $ACTIVE"
+echo "🎯 Target: $TARGET"
 
-TARGET_DIR="$BASE_DIR/$TARGET"
+# -----------------------------
+# 3. Create immutable release
+# -----------------------------
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RELEASE_DIR="$RELEASES_DIR/$TIMESTAMP"
 
-# Ensure directory exists cleanly
-sudo rm -rf "$TARGET_DIR"
-sudo mkdir -p "$TARGET_DIR"
-sudo chown -R www-data:www-data "$TARGET_DIR"
+mkdir -p "$RELEASE_DIR"
 
-echo "🏗️ Publishing .NET application..."
-
+echo "🏗️ Publishing..."
 dotnet publish "$PROJECT_FILE" \
   -c Release \
   -r linux-x64 \
   -f net8.0 \
   --self-contained true \
-  -o "$TARGET_DIR" \
-  --verbosity minimal
+  -o "$RELEASE_DIR"
 
-# Verify publish output (CRITICAL FIX)
-if [ ! -f "$TARGET_DIR/$APP_NAME.dll" ]; then
-  echo "❌ Publish failed: DLL not found in $TARGET_DIR"
+if [ ! -f "$RELEASE_DIR/$APP_NAME.dll" ]; then
+  echo "❌ Publish failed"
   exit 1
 fi
 
-echo "📂 Publish verified successfully"
+echo "📦 Release ready: $RELEASE_DIR"
 
-echo "▶️ Starting target service..."
-sudo systemctl start "Agrovesto.Backend.API-$TARGET.service"
+# -----------------------------
+# 4. Switch slot pointer FIRST (safe because no traffic yet)
+# -----------------------------
+echo "$TARGET" | sudo tee "$BASE_DIR/active-slot" > /dev/null
 
-echo "⏳ Running health checks on http://127.0.0.1:$TARGET_PORT/health"
+# IMPORTANT: update SLOT symlink (NOT global current)
+SLOT_DIR="$BASE_DIR/$TARGET"
+ln -sfn "$RELEASE_DIR" "$SLOT_DIR/current"
 
+echo "🔗 Slot updated: $TARGET → $RELEASE_DIR"
+
+# -----------------------------
+# 5. Restart only target service
+# -----------------------------
+sudo systemctl restart "Agrovesto.Backend.API-$TARGET.service"
+
+# -----------------------------
+# 6. Health check
+# -----------------------------
 HEALTH_OK=false
 
 for i in {1..30}; do
-  if curl -sf "http://127.0.0.1:$TARGET_PORT/health" > /dev/null; then
+  if curl -sf "http://127.0.0.1:$TARGET_PORT/health"; then
     HEALTH_OK=true
     break
   fi
@@ -77,18 +91,23 @@ for i in {1..30}; do
 done
 
 if [ "$HEALTH_OK" = false ]; then
-  echo "❌ Health check failed — rolling back"
+  echo "❌ Health failed — rolling back"
 
-  sudo systemctl stop "Agrovesto.Backend.API-$TARGET.service" || true
+  OLD_RELEASE=$(ls -dt "$RELEASES_DIR"/* | sed -n '2p' || true)
+
+  if [ -n "$OLD_RELEASE" ]; then
+    ln -sfn "$OLD_RELEASE" "$BASE_DIR/$TARGET/current"
+  fi
+
+  sudo systemctl restart "Agrovesto.Backend.API-$TARGET.service"
   exit 1
 fi
 
-echo "✅ Target is healthy"
+echo "✅ Healthy"
 
-echo "🔁 Switching active slot to $TARGET"
-echo "$TARGET" | sudo tee "$BASE_DIR/active-slot" > /dev/null
-
-echo "🔄 Updating nginx upstream..."
+# -----------------------------
+# 7. Update nginx
+# -----------------------------
 sudo tee /etc/nginx/conf.d/nomaos_upstream.conf > /dev/null <<EOF
 upstream nomaos_backend {
     server 127.0.0.1:$TARGET_PORT;
@@ -97,7 +116,9 @@ EOF
 
 sudo nginx -s reload
 
-echo "🧹 Stopping old service..."
+# -----------------------------
+# 8. Stop old slot
+# -----------------------------
 sudo systemctl stop "Agrovesto.Backend.API-$ACTIVE.service" || true
 
-echo "🎉 Deployment completed successfully (active: $TARGET)"
+echo "🎉 Deployment successful: $TARGET"
