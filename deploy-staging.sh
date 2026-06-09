@@ -80,13 +80,13 @@ sleep 15
 
 # full switch
 if [ "$TARGET" = "green" ]; then
-cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
 upstream nomaos_backend {
     server 127.0.0.1:5002;
 }
 EOF
 else
-cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
 upstream nomaos_backend {
     server 127.0.0.1:5000;
 }
