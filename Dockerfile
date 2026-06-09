@@ -17,12 +17,8 @@ COPY Agrovesto.Backend.Core/*.csproj               Agrovesto.Backend.Core/
 COPY Agrovesto.Backend.Infrastructure/*.csproj     Agrovesto.Backend.Infrastructure/
 
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore Agrovesto.Backend.sln \
-      --runtime linux-x64 \
-      --locked-mode \
-      /p:EnableSourceLink=false \
-      /p:EnableSourceControlManagerQueries=false
-
+    dotnet restore Agrovesto.Backend.sln 
+ 
 
 ########################################
 # STAGE 2 — build + publish
@@ -36,21 +32,12 @@ COPY . .
 
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
-      --no-restore \
       -c Release \
-      --runtime linux-x64 \
-      --self-contained false \
       -o /app/publish \
+      --no-restore \
       /p:UseAppHost=false \
-      /p:PublishReadyToRun=true \
-      /p:PublishTrimmed=false \
-      /p:ContinuousIntegrationBuild=true \
-      /p:EnableSourceLink=false \
-      /p:EnableSourceControlManagerQueries=false \
-      /p:Deterministic=true \
-      /p:PathMap=/src=. \
-      /p:DebugType=none \
-      /p:DebugSymbols=false
+      /p:EnableSourceControlManagerQueries=false
+
 
 
 ########################################
@@ -70,7 +57,7 @@ WORKDIR /app
 # come from ECS task def / docker run / Kubernetes secrets.
 ENV ASPNETCORE_URLS=http://+:5000 \
     ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true \
     DOTNET_RUNNING_IN_CONTAINER=true \
     # Tune the GC for container memory limits
     DOTNET_GCConserveMemory=5 \
