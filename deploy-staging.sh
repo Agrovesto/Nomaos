@@ -7,7 +7,7 @@ BASE_DIR="/var/www/Nomaos"
 RELEASES_DIR="$BASE_DIR/releases"
 
 APP_NAME="Agrovesto.Backend.API"
-PROJECT_FILE="$BASE_DIR/$APP_NAME.csproj"
+PROJECT_FILE="$BASE_DIR/$APP_NAME/$APP_NAME.csproj"
 
 cd "$BASE_DIR"
 
