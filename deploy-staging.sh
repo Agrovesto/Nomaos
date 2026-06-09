@@ -38,7 +38,7 @@ dotnet publish \
   --verbosity minimal
 
 echo "▶️ Starting target service..."
-sudo systemctl start Agrovesto-$TARGET.service
+sudo systemctl start Agrovesto.Backend.API-$TARGET.service
 
 echo "⏳ Health check..."
 for i in {1..30}; do
@@ -52,7 +52,7 @@ done
 if ! curl -sf "http://127.0.0.1:$TARGET_PORT/health"; then
   echo "❌ Health check failed — rolling back"
 
-  sudo systemctl stop Agrovesto-$TARGET.service || true
+  sudo systemctl stop Agrovesto.Backend.API-$TARGET.service || true
   exit 1
 fi
 
@@ -60,8 +60,8 @@ echo "🔁 Switching traffic to $TARGET"
 
 echo "$TARGET" | sudo tee /var/www/Nomaos/active-slot
 
-sudo tee /etc/nginx/conf.d/agrovesto_upstream.conf > /dev/null <<EOF
-upstream agrovesto_backend {
+sudo tee /etc/nginx/conf.d/nomaos_upstream.conf > /dev/null <<EOF
+upstream nomaos_backend {
     server 127.0.0.1:$TARGET_PORT;
 }
 EOF
@@ -69,6 +69,6 @@ EOF
 sudo nginx -s reload
 
 echo "🧹 Stopping old service..."
-sudo systemctl stop Agrovesto-$ACTIVE.service || true
+sudo systemctl stop Agrovesto.Backend.API-$ACTIVE.service || true
 
 echo "🎉 Deployment successful (active: $TARGET)"
