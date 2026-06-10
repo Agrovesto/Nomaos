@@ -68,7 +68,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             throw new NotImplementedException();
         }
 
-        public Task<WalletResponseService<PaymentResponse>> DisburseAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public Task<WalletResponseService<PaymentResponse>> DisburseAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             throw new NotImplementedException();
         }

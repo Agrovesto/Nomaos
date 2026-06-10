@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace Agrovesto.Backend.Core.Models.Businesses.Input
 {
@@ -405,6 +406,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string BusinessCode { get; set; }
         public long SubscriptionId { get; set; }
         public string? SubscriberUserId { get; set; }
+        public string? Env { get; set; }
     }
 
 
@@ -422,6 +424,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class RecordCommitmentPaymentRequest
     {
         public long SubscriptionId { get; set; }
+        public string SubscriberUserId { get; set; }
 
         public decimal Amount { get; set; }
 
@@ -431,9 +434,21 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public string? ExternalReference { get; set; }
 
-        public long PaidByUserId { get; set; }
+        public string? PaidByUserId { get; set; }
+        public long WalletProviderId { get; set; }
     }
-
+    public class CommitmentReminderDto
+    {
+        public long SubscriptionId { get; set; }
+        public string SubscriberUserId { get; set; }
+        public decimal TotalCommitment { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal OutstandingAmount { get; set; }
+        public string Message { get; set; }
+        public bool RequiresReminder { get; set; }
+        public string Email { get; set; }
+        public string PhoneNumber { get; set; }
+    }
     public class DisburseSubscriptionRequest
     {
         public long SubscriptionId { get; set; }
@@ -477,6 +492,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public long? OrganizationId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
+        public long SubscriptionId { get; set; }
     }
 
 
@@ -542,5 +558,147 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public RiskCategory RiskLevel { get; set; }
         public int DaysOverdue { get; set; }
         public DateTimeOffset? CompletedOn { get; set; }
+    }
+
+    public class SubscriptionFullDetailDto
+    {
+        public SubscriberInfoDto Subscriber { get; set; }
+        public PackageInfoDto Package { get; set; }
+    }
+
+    public class SubscriberInfoDto
+    {
+        public string Name { get; set; }
+        public string Type { get; set; }
+        public string Agent { get; set; }
+        public string Location { get; set; }
+        public string VerificationStatus { get; set; }
+        public DateTimeOffset EnrollmentDate { get; set; }
+    }
+
+    public class PackageInfoDto
+    {
+        public string PackageName { get; set; }
+        public decimal TotalValue { get; set; }
+        public bool CommitmentRequired { get; set; }
+        public decimal CommitmentValue { get; set; }
+        public string RepaymentDuration { get; set; }
+        public string RepaymentModel { get; set; }
+        public string RiskCategory { get; set; }
+    }
+
+    public class SubscriptionDocument
+    {
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+
+        public DocumentType Type { get; set; } // CommissionLetter
+
+        public string FileName { get; set; }
+        public string FilePath { get; set; }   // or BlobUrl
+
+        public DateTimeOffset UploadedOn { get; set; }
+    }
+
+    public class ApproveDisbursementRequestDto
+    {
+        public long? RequestId { get; set; }
+        public long? SubscriptionId { get; set; }
+        public string? Reference { get; set; }
+        public decimal? Amount { get; set; }
+    }
+
+    public class SubscriptionReviewResponseDto
+    {
+        public SubscriberInfoDto Subscriber { get; set; }
+
+        public PackageInfoDto Package { get; set; }
+
+        public FinancingSnapshotDto FinancingSnapshot { get; set; }
+
+        public List<RepaymentHistoryDto> RepaymentHistory { get; set; }
+    }
+
+    public class FinancingSnapshotDto
+    {
+        public decimal TotalFinancedValue { get; set; }
+
+        public decimal CommitmentPaid { get; set; }
+
+        public decimal CommitmentAmountRequired { get; set; }
+
+        public decimal CommitmentOutstandingBalance { get; set; }
+        public bool RepaymentRequired { get; set; }
+        public bool CommitmentRequired { get; set; }
+        public int? CommitmentDaysLeft { get; set; }
+
+        public decimal TotalRepaidAmount { get; set; }
+
+        public decimal TotalRepaymentRequired { get; set; }
+
+        public decimal TotalRepaymentBalance { get; set; }
+
+        public int? RepaymentDaysLeft { get; set; }
+        public string RepaymentDuration { get; set; }
+        public string RepaymentModel { get; set; }
+        public string RiskCategory { get; set; }
+    }
+
+    public class RepaymentHistoryDto
+    {
+        public DateTimeOffset? PaymentDate { get; set; }
+
+        public decimal AmountPaid { get; set; }
+
+        public string PaymentMethod { get; set; }
+
+        public string RecordedBy { get; set; }
+    }
+
+    public class WalletTransferResponse
+    {
+        public bool IsSuccessful { get; set; }
+
+        public string Message { get; set; }
+
+        public string ExternalReference { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string ProviderTransactionId { get; set; }
+    }
+    
+    public class PaymentInitiationResult
+    {
+        public bool RequiresRedirect { get; set; }
+        public string RedirectUrl { get; set; }
+        public bool RequiresManualAction { get; set; }
+        public string Reference { get; set; }
+        public string Message { get; set; }
+    }
+    public class CreateCommitmentPaymentRequest
+    {
+        public long SubscriptionId { get; set; }
+        public decimal Amount { get; set; }
+        public PaymentChannel PaymentChannel { get; set; }
+        public string? Reference { get; set; }
+        public string? ExternalReference { get; set; }
+        public long WalletProviderId { get; set; }
+    }
+    public class PaymentConfirmationRequest
+    {
+        public TransactionStatus Status { get; set; }
+
+        public string ExternalReference { get; set; }
+
+        public string ResponsePayload { get; set; }
+    }
+
+    public class AddPackageItemRequest
+    {
+        public long OrganizationProductId { get; set; }
+        public decimal Quantity { get; set; }
+        public decimal UnitCost { get; set; }
+        public string UnitOfMeasure { get; set; }
     }
 }

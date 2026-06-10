@@ -148,9 +148,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPatch("update-package")]
         public async Task<IActionResult> UpdateInputPackageConfig(
-   [FromBody] UpdateInputPackageConfigRequest model,
-   [FromQuery] ReplacePackageItemRequestArgs args,
-   [FromQuery] InputPackageConfigArgs query)
+            [FromBody] UpdateInputPackageConfigRequest model,
+            [FromQuery] ReplacePackageItemRequestArgs args,
+            [FromQuery] InputPackageConfigArgs query)
         {
             query.OrganizationCode ??= OrganizationCode;
             query.createdByUserId = CurrentUserId;
@@ -215,7 +215,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
 
-
         [HttpPatch("change-package-input")]
         public async Task<IActionResult> ReplacePackageItemAsync([FromBody] ReplacePackageItemRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
         {
@@ -231,6 +230,36 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
             var result = await _inputFinancingManager.ReplacePackageItemAsync(request,args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpPost("add-package-input")]
+        public async Task<IActionResult> AddItemToPackageAsync([FromBody] AddPackageItemRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+          //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) )
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.AddItemToPackageAsync(request,args);
 
             if (result == null)
             {
@@ -277,6 +306,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
+       
+        //add-package-input
+
         [HttpDelete("deactivate-package")]
         public async Task<IActionResult> DeactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
@@ -377,8 +409,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         #region subscriptions
         [HttpPost("add-subscriber")]
         public async Task<IActionResult> AddSubscriberAsync(
- [FromBody] AddSubscriberRequest model,
- [FromQuery] InputSubscriptionRequestArgs args)
+        [FromBody] AddSubscriberRequest model,
+        [FromQuery] InputSubscriptionRequestArgs args)
         {
             args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
@@ -439,20 +471,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-        [HttpGet("get-subscribers")]
+            [HttpGet("get-subscribers")]
         public async Task<IActionResult> GetSubscriptionsAsync(
-[FromQuery] SubscriptionQueryFilter filter)
+            [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
-            //if (string.IsNullOrWhiteSpace(model.OrganizationCode))
-            //{
-            //    return Unauthorized(ApiResponse<object>.Fail(
-            //        "Access Denied",
-            //        HttpContext.TraceIdentifier
-            //    ));
-            //}
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -471,9 +503,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     HttpContext.TraceIdentifier
 ));
         }
+       
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
-[FromQuery] SubscriptionQueryFilter filter)
+            [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
@@ -497,7 +530,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(
-[FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
+            [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
         {
             filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
@@ -529,6 +562,114 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return File(fileBytes, contentType);
         }
+        
+        [HttpGet("review-subscription")]
+        public async Task<IActionResult> ReviewSubscription(
+            [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .FetchSubscriptionForReview(filter);
+
+
+            return Ok(ApiResponse<SubscriptionFullDetailDto>.Success(
+                 result,
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+        [HttpGet("subscription-detail")]
+        public async Task<IActionResult> GetSubscriptionDetail(
+            [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetSubscriptionDetail(filter);
+
+
+            return Ok(ApiResponse<SubscriptionReviewResponseDto>.Success(
+                 result,
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+       
+        [HttpGet("subscription/commission-letter")]
+        public async Task<IActionResult> DownloadCommissionLetter([FromQuery]long subscriptionId)
+        {
+            var result =
+                await _inputFinancingManager.DownloadCommissionLetterAsync(subscriptionId);
+
+            return File(result.FileBytes, "application/pdf", result.FileName);
+        }
+        //upload commission letter
+        [HttpPost("subscription/commitment-reminder")]
+        public async Task<IActionResult> SendCommitmentReminderAsync(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            await _inputFinancingManager
+                .SendCommitmentReminderAsync(filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
         private string GenerateExportFileName(SubscriptionQueryFilter filter, ExportFormat format)
         {
             var status = filter.ViewType.HasValue
@@ -543,6 +684,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         //subscriber details for
         //pending commitment (1) endpoint
+
         //active commitment (2) endpoint
         //pending approval (3) endpoint // print commission letter
         //confirm input release (4) endpoint // approve disbursement

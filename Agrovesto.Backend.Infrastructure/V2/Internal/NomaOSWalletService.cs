@@ -217,76 +217,6 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         }
 
 
-        /**    public async Task<(bool status, string message)> CreateWallet(WalletQueryParams args)
-   {
-   
-       try
-       {
-           var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-           if (business == null)
-               return (false, $"Business with code {args.businessCode} does not exist");
-
-           var getUserCred = await _onboardingRepository.GetUserProfile(args.UserId);
-           if (getUserCred == null)
-               return (false, "User not found");
-
-           var userModel = getUserCred;
-
-           var providerType = args.WalletProviderCode.ToEnum<WalletProviderType>();
-           var providerService = _factory.GetService(providerType);
-
-           var providerParams = await RetrieveParams(args.WalletProviderCode, args.env);
-          
-
-           // Build a UserProfileResponse expected by wallet provider services
-           var userProfile = new Agrovesto.Backend.Core.V2.Onboarding.UserProfileResponse
-           {
-               UserId = userModel.UserId,
-               Email = userModel.Email,
-               PhoneNumber = userModel.Phone
-           };
-
-           var validationResponse = await providerService.ValidateAccountAsync(userProfile, providerParams, args.env);
-
-           if (validationResponse == null || !validationResponse.IsSucess)
-           {
-               return (false, validationResponse?.Message ?? "Account validation failed");
-           }
-
-           var walletNumber = validationResponse.Data?.WalletNumber;
-
-           if (string.IsNullOrEmpty(walletNumber))
-               return (false, "Provider did not return a valid wallet number");
-
-           var wallet = new UserWalletModel
-           {
-               UserId = args.UserId,
-               WalletBalance = 0,
-               IsDefault = args.IsDefault,
-               WalletNumber = walletNumber,
-               Currency = providerParams
-           .FirstOrDefault(x => x.Key == "Currency")?.Value ?? "NGN",
-               WalletProviderId = providerParams
-           .Select(x => x.ProviderId)
-           .FirstOrDefault()
-           };
-
-             await _userWalletRepository.CreateUserWallet(wallet, new UserWalletParams
-               {
-                   businessCode=args.businessCode,
-                   Env= args.env,
-                   UserId= args.UserId,
-               });
-
-
-
-           return (true, "Wallet created successfully");
-       }
-       catch (Exception ex)
-       {
-           return (false, $"Error creating wallet: {ex.Message}");
-       }
-   }**/
         private static string ExtractDomain(string email)
         {
             if (string.IsNullOrWhiteSpace(email) || !email.Contains("@"))
@@ -386,7 +316,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     Message = $"Top-up for wallet {wallet.WalletNumber}"
                 };
 
-                var providerResponse = await providerService.InitiateTopUpAsync(
+                var providerResponse = await providerService.InitiateWalletTopUpAsync(
                     providerRequest,
                     providerParams,
                     args.env);
@@ -448,7 +378,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 if (transaction == null)
                     return;
 
-                if (transaction.WalletTransactionStatus == WalletTransactionStatus.Successful ||
+                if (transaction.WalletTransactionStatus == WalletTransactionStatus.Completed ||
                     transaction.WalletTransactionStatus == WalletTransactionStatus.Reversed)
                     return;
 
@@ -492,7 +422,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
                     transaction.BalanceBefore = balanceBefore;
                     transaction.BalanceAfter = wallet.WalletBalance;
-                    transaction.WalletTransactionStatus = WalletTransactionStatus.Successful;
+                    transaction.WalletTransactionStatus = WalletTransactionStatus.Completed;
                     
                     await _userWalletRepository.UpdateWalletBalance(new UserWallet
                     {
@@ -509,7 +439,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
                 await _userWalletRepository.UpdateTransactionStatus(
                     transaction.TransactionReference,
-                    WalletTransactionStatus.Pending);
+                    WalletTransactionStatus.DebitPending);
 
                 await dbTransaction.CommitAsync();
             }
@@ -566,7 +496,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 // create pending withdrawal transaction
                 var transactionReference = await _userWalletRepository.InitiateWalletWithdrawal(request.UserWalletId, request.Amount, request.Description ?? "Withdrawal");
 
-                var disbursementRequest = new DisbursementRequest
+                var disbursementRequest = new TransferRequest
                 {
                     AccountNumber = request.RecipientAccount ?? wallet.WalletNumber,
                     Amount = $"{request.Amount}",
@@ -575,7 +505,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     Reference = transactionReference
                 };
 
-                var providerResponse = await providerService.InitiateWalletWithdrawalAsync(
+                var providerResponse = await providerService.InitiateWalletTransferAsync(
                     disbursementRequest,
                     providerParams, args.env);
 

@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
     public interface IAWSService
     {
         Task CreateTemplateAsync();
+        Task SendCommitmentPaymentNotificationAsync(string senderEmail, string recipientEmail, string subject, string bodyHtml, string bodyText);
         Task SendEmailAsync(string senderEmail, string recipientEmail, string subject, string bodyHtml, string bodyText);
         Task SendSignupSms(string phoneNumber, string userName);
         Task SendTemplatedEmailAsync(string senderEmail, string recipientEmail, string templateName, object templateData);
@@ -141,6 +142,37 @@ Login to your account </a>
             }
         }
         public async Task SendEmailAsync(string senderEmail,string recipientEmail,  string subject,  string bodyHtml,  string bodyText)
+        {
+            var sendRequest = new SendEmailRequest
+            {
+                Source = senderEmail, // Must be verified in SES
+                Destination = new Destination
+                {
+                    ToAddresses = new List<string> { recipientEmail }
+                },
+                Message = new Message
+                {
+                    Subject = new Content(subject),
+                    Body = new Body
+                    {
+                        Html = new Content(bodyHtml),
+                        Text = new Content(bodyText)
+                    }
+                }
+            };
+            try
+            {
+                var response = await _sesClient.SendEmailAsync(sendRequest);
+                Console.WriteLine($"Email sent! Message ID: {response.MessageId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error sending email: {ex.Message}");
+            }
+        }
+        public async Task SendCommitmentPaymentNotificationAsync(string senderEmail,
+            string recipientEmail, 
+            string subject,  string bodyHtml,  string bodyText)
         {
             var sendRequest = new SendEmailRequest
             {

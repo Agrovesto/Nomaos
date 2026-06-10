@@ -1213,71 +1213,8 @@ SELECT
 
             return result;
         }
-        /// <summary>
-        /// TODO: REVERT if it fails
-        /// </summary>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        /**public async Task<OrganizationAgentDetailResponse> GetOrganizationAgentDetail(ListQueryParams args)
-        {
-            var agent = await _context.Agents
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.UserId == args.UserId);
-
-            if (agent == null)
-                return null;
-
-            var orgAgents = await _context.OrganizationAgents
-                .AsNoTracking()
-                .Where(x => x.AgentId == agent.Id && x.IsActive)
-                .ToListAsync();
-
-            if (!orgAgents.Any())
-                return null;
-
-            var orgAgentIds = orgAgents.Select(x => x.Id).ToList();
-            var locationIds = orgAgents.Select(x => x.LocationId).Distinct().ToList();
-
-            var locations = await _context.OrganizationLocations
-                .AsNoTracking()
-                .Where(x => locationIds.Contains(x.Id))
-                .Select(x => new OrganizationLocationDto
-                {
-                    LocationId = x.Id,
-                    LocationName = x.LocationName,
-                    LocationType = x.LocationType.Type,
-                    State = x.State.State,
-                    Lga = x.LGA.Name
-                })
-                .ToListAsync();
-
-            var roles = await _context.OrganizationAgentRoles
-                .AsNoTracking()
-                .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
-                .Select(x => new OrganiationRoleDto
-                {
-                    RoleId = x.RoleId,
-                    RoleName = x.OrganizationRole.RoleName
-                })
-                .Distinct()
-                .ToListAsync();
-
-            return new OrganizationAgentDetailResponse
-            {
-                AgentId = agent.Id,
-                UserId = agent.UserId,
-                Name = agent.Name,
-                Email = agent.Email,
-                PhoneNumber = agent.PhoneNumber,
-                State = agent.State,
-                Lga = agent.Lga,
-                Ward = agent.Ward,
-                OnBoardedOn = agent.OnBoardedOn,
-                Locations = locations,
-                Roles = roles
-            };
-        }
-        **/
+      
+        
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
         {
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
@@ -1346,107 +1283,14 @@ SELECT
                 PageNumber = args.PageNumber,
                 PageSize = args.PageSize,
                 Count = totalCount,
-                Data = result
+                Data = result,
+                Succeeded=true,
+
             };
         }
 
         #region Location
-        /// <summary>
-        /// TODO: revert if fails
-        /// </summary>
-        /// <param name="args"></param>
-        /// <returns></returns>
-        /**  public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
-          {
-              var query =
-      from oa in _context.OrganizationAgents.AsNoTracking()
-      where oa.OrganizationId == args.Id && oa.IsActive
-
-      group oa by oa.AgentId into g
-
-      select new
-      {
-          AgentId = g.Key,
-
-          LocationCount = g
-              .Where(x => x.LocationId > 0)
-              .Select(x => x.LocationId)
-              .Distinct()
-              .Count(),
-
-          OrganizationAgentIds = g.Select(x => x.Id)
-      };
-              var totalCount = await query.CountAsync();
-
-              var pagedAgents = await query
-                  .OrderByDescending(x => x.AgentId)
-                  .Skip((args.PageNumber - 1) * args.PageSize)
-                  .Take(args.PageSize)
-                  .ToListAsync();
-
-              var agentIds = pagedAgents.Select(x => x.AgentId).ToList();
-
-              var agents = await _context.Agents
-                  .AsNoTracking()
-                  .Where(x => agentIds.Contains(x.Id))
-                  .ToDictionaryAsync(x => x.Id);
-
-              var orgAgentIds = pagedAgents
-                  .SelectMany(x => x.OrganizationAgentIds)
-                  .ToList();
-
-              var roleCounts = await _context.OrganizationAgentRoles
-                  .AsNoTracking()
-                  .Where(x => orgAgentIds.Contains(x.OrganizationAgentId))
-                  .GroupBy(x => x.OrganizationAgentId)
-                  .Select(g => new
-                  {
-                      OrganizationAgentId = g.Key,
-                      Count = g.Count()
-                  })
-                  .ToListAsync();
-
-              var roleCountDict = roleCounts.ToDictionary(x => x.OrganizationAgentId, x => x.Count);
-
-              var result = pagedAgents.Select(x =>
-              {
-                  var agent = agents.GetValueOrDefault(x.AgentId);
-
-                  var totalRoles = x.OrganizationAgentIds
-                      .Sum(id => roleCountDict.GetValueOrDefault(id, 0));
-
-                  return new OrganizationAgentResponse
-                  {
-                      AgentId = agent?.Id ?? 0,
-                      UserId = agent?.UserId,
-                      Name = agent?.Name,
-                      Email = agent?.Email,
-                      PhoneNumber = agent?.PhoneNumber,
-                      State = agent?.State,
-                      Lga = agent?.Lga,
-                      Ward = agent?.Ward,
-                      OnBoardedOn = agent?.OnBoardedOn ?? DateTimeOffset.MinValue,
-
-                      LocationCount = x.LocationCount,
-                      RoleCount = totalRoles,
-                      Subscribers = 0, //TODO:update when you have subscribers 
-                      InputDisbursed = 0, //TODO:update when you have data
-                      EquityPaid = 0, //TODO:update when you have data
-                      ProductSold = 0 //TODO:update when you have data
-
-                  };
-              }).ToList();
-
-              return new PagedListResponse<List<OrganizationAgentResponse>>
-              {
-                  PageNumber = args.PageNumber,
-                  PageSize = args.PageSize,
-                  Count = totalCount,
-                  Data = result
-              };
-          }
-        **/
-
+        
         private async Task ValidateModules(List<long> moduleIds)
         {
             if (moduleIds.Count > 4)
