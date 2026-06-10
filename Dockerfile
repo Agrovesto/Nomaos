@@ -34,7 +34,6 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     dotnet publish Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
       -c Release \
       -o /app/publish \
-      --no-restore \
       /p:UseAppHost=false \
       /p:EnableSourceControlManagerQueries=false
 
