@@ -31,7 +31,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class InstallmentDto
     {
-        public DateTimeOffset PaymentDate { get; set; }
+        public DateTimeOffset? PaymentDate { get; set; }
         public decimal Amount { get; set; }
         public string Reference { get; set; }
     }

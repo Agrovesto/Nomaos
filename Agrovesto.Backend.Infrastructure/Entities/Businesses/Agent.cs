@@ -23,7 +23,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public LocationInventory LocationInventory { get; set; }
 
         // Product
-        public long OrganizationProductId { get; set; }
+        public long? OrganizationProductId { get; set; }
         public OrganizationProduct OrganizationProduct { get; set; }
 
         // Source and destination locations
@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public long? ToLocationId { get; set; }
         public OrganizationLocation? ToLocation { get; set; }
-
+        public string? Notes { get; set; }
         // IN or OUT
         public InventoryTransactionType TransactionType { get; set; }
         // STOCK_IN

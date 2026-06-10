@@ -15,7 +15,7 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string AccountNumber { get; set; } // MSISDN
         public string Message { get; set; }
     }
-    public class DisbursementRequest
+    public class TransferRequest
     {
         public string Amount { get; set; }
         public string Currency { get; set; }

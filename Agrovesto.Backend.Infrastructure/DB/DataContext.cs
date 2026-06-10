@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using DocumentFormat.OpenXml.Bibliography;
@@ -16,6 +17,7 @@ using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
+using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
@@ -448,17 +450,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<WalletSecurity> WalletSecurities { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
-        //public DbSet<InputTransaction> InputTransactions { get; set; }
-        //public DbSet<InputAllocation> InputAllocations { get; set; }
+        public DbSet<ProviderWalletTransaction> ProviderWalletTransactions { get; set; }
+        public DbSet<ProviderWalletTransactionLog> ProviderWalletTransactionLogs { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
         public DbSet<CommitmentPlan> CommitmentPlans { get; set; }
         public DbSet<RepaymentPlan> RepaymentPlans { get; set; }
         public DbSet<InputPackageSubscription> InputPackageSubscriptions { get; set; }
+        public DbSet<SubscriptionDocument> SubscriptionDocuments { get; set; }
         public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
         public DbSet<RepaymentPenalty> RepaymentPenalties { get; set; }
         public DbSet<PenaltyPolicy> PenaltyPolicies { get; set; }
         public DbSet<SubscriptionPaymentAllocation> SubscriptionPaymentAllocations { get; set; }
         public DbSet<InputPackageSubscriptionPayment> InputPackageSubscriptionPayments { get; set; }
+        public DbSet<PaymentReconciliation> PaymentReconciliation { get; set; }
         public DbSet<InputSubscriptionDisbursement> InputSubscriptionDisbursements { get; set; }
         public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Module> Modules { get; set; }
