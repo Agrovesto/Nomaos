@@ -68,9 +68,24 @@ namespace Agrovesto.Backend.Core.V2.Events
         public decimal Amount { get; set; }
 
         public string PaidByUserId { get; set; }
+        
 
+        public string SubscriberUserId { get; set; }
+
+        public string AgentUserId { get; set; }
+
+        public long? OrganizationId { get; set; }
+
+        public decimal AmountPaid { get; set; }
+
+        public decimal OutstandingBalance { get; set; }
+
+        public string PackageName { get; set; }
+
+        public bool FullyPaid { get; set; }
         public DateTime OccurredOn { get; set; } = DateTime.UtcNow;
     }
+ 
     public class CommitmentFullyPaidEvent
     {
         public long SubscriptionId { get; set; }

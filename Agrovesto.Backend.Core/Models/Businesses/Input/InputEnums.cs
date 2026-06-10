@@ -24,7 +24,15 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Other")]
         Other = 5
     }
-
+    public enum AdditionalCostTreatmentType
+    {
+        [Display(Name ="Internal")]
+        Internal = 1,
+        [Display(Name = "Paid To User")]
+        PaidOutToUser = 2,
+        [Display(Name = "Paid To Vendor")]
+        VendorPaid = 3
+    }
     public enum RepaymentScheduleType
     {
         [Display(Name = "Installment")]
@@ -179,13 +187,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public enum DisbursementStatus
     {
         [Display(Name = "Pending")]
-        Pending = 1,
+        PendingApproval = 1,
 
-        [Display(Name = "Completed")]
-        Completed = 2,
+        [Display(Name = "Approved")]
+        Approved = 2,
+
+        [Display(Name = "Rejected")]
+        Rejected = 3,
+
+
+        [Display(Name = "Disbursed")]
+        Disbursed = 4,
 
         [Display(Name = "Failed")]
-        Failed = 3
+        Failed = 5
     }
 
     public enum RepaymentType
@@ -202,14 +217,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Wallet")]
         Wallet = 1,
 
-        [Display(Name = "Bank Transfer")]
-        BankTransfer = 2,
+        [Display(Name = "Offline Bank Transfer")]
+        OffilineBankTransfer = 2,
 
         [Display(Name = "Cash")]
         Cash = 3,
 
+        [Display(Name = "Payment Gateway")]
+        PaymentGateway = 4,
+
         [Display(Name = "Offtake")]
-        Offtake = 4
+        Offtake = 5,
+
+        [Display(Name = "POS")]
+        POS = 6,
+
+
     }
 
     public enum TransactionStatus
@@ -217,11 +240,29 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Pending")]
         Pending = 1,
 
+        [Display(Name = "Processing")]
+        Processing = 2,
+
         [Display(Name = "Successful")]
-        Successful = 2,
+        Successful = 3,
 
         [Display(Name = "Failed")]
-        Failed = 3
+        Failed = 4,
+
+        [Display(Name ="Cancelled")]
+        Cancelled = 5,
+
+        [Display(Name = "Awaiting Confirmation")]
+        AwaitingConfirmation = 6,
+
+        [Display(Name = "Awaiting Reconciliation")]
+        AwaitingReconciliation = 7,
+    }
+    public enum DocumentType
+    {
+        [Display(Name = "Commission Letter")]
+        CommissionLetter =1,
+
     }
 
     public enum ApprovalDecision

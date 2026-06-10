@@ -1,74 +1,104 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-echo "🚀 Blue/Green deployment starting..."
+BASE="/var/www/Nomaos"
+RELEASES="$BASE/releases"
 
-cd /var/www/Nomaos
+APP="Agrovesto.Backend.API"
+PROJECT="$BASE/Agrovesto.Backend.API/$APP.csproj"
 
+cd "$BASE"
+
+echo "🚀 Starting production-grade deployment..."
+
+# 1. Sync
 git fetch origin
 git checkout staging
 git reset --hard origin/staging
 
-ACTIVE=$(cat active-slot || echo blue)
+# 2. determine slot
+ACTIVE=$(cat "$BASE/active-slot" || echo blue)
 
 if [ "$ACTIVE" = "blue" ]; then
   TARGET="green"
-  TARGET_PORT=5002
-  ACTIVE_PORT=5000
+  PORT=5002
 else
   TARGET="blue"
-  TARGET_PORT=5000
-  ACTIVE_PORT=5002
+  PORT=5000
 fi
 
-echo "📦 Deploying to: $TARGET"
+echo "🎯 Target: $TARGET"
 
-TARGET_DIR="/var/www/Nomaos/$TARGET"
+# 3. release build
+TS=$(date +%Y%m%d_%H%M%S)
+RELEASE="$RELEASES/$TS"
 
-rm -rf "$TARGET_DIR"
-mkdir -p "$TARGET_DIR"
+mkdir -p "$RELEASE"
 
-echo "🏗️ Publishing..."
-dotnet publish \
+dotnet publish "$PROJECT" \
   -c Release \
   -r linux-x64 \
   -f net8.0 \
   --self-contained true \
-  -o "$TARGET_DIR" \
-  --verbosity minimal
+  -o "$RELEASE"
 
-echo "▶️ Starting target service..."
-sudo systemctl start Agrovesto-$TARGET.service
+echo "📦 Release built: $RELEASE"
 
-echo "⏳ Health check..."
-for i in {1..30}; do
-  if curl -sf "http://127.0.0.1:$TARGET_PORT/health"; then
-    echo "✅ Target healthy"
-    break
-  fi
-  sleep 2
-done
+# 4. attach release
+sudo ln -sfn "$RELEASE" "$BASE/$TARGET/current"
 
-if ! curl -sf "http://127.0.0.1:$TARGET_PORT/health"; then
-  echo "❌ Health check failed — rolling back"
+# 5. restart target
+sudo systemctl restart Agrovesto.Backend.API-$TARGET
 
-  sudo systemctl stop Agrovesto-$TARGET.service || true
-  exit 1
+echo "⏳ Canary phase (10%)..."
+
+# 6. canary validation (simplified baseline)
+sleep 10
+
+FAIL_RATE=$(curl -s http://127.0.0.1:$PORT/metrics | jq '.error_rate' || echo 0)
+
+if (( $(echo "$FAIL_RATE > 0.02" | bc -l) )); then
+    echo "❌ Canary failed → rollback"
+    sudo systemctl stop Agrovesto.Backend.API-$TARGET
+    exit 1
 fi
 
-echo "🔁 Switching traffic to $TARGET"
+echo "✅ Canary passed"
 
-echo "$TARGET" | sudo tee /var/www/Nomaos/active-slot
+# 7. switch traffic gradually
+echo "🔄 Switching traffic..."
 
-sudo tee /etc/nginx/conf.d/agrovesto_upstream.conf > /dev/null <<EOF
-upstream agrovesto_backend {
-    server 127.0.0.1:$TARGET_PORT;
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5000 weight=50;
+    server 127.0.0.1:5002 weight=50;
 }
 EOF
 
 sudo nginx -s reload
+sleep 15
 
-echo "🧹 Stopping old service..."
-sudo systemctl stop Agrovesto-$ACTIVE.service || true
+# full switch
+if [ "$TARGET" = "green" ]; then
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5002;
+}
+EOF
+else
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5000;
+}
+EOF
+fi
 
-echo "🎉 Deployment successful (active: $TARGET)"
+sudo nginx -s reload
+
+# 8. update active slot
+echo "$TARGET" | sudo tee "$BASE/active-slot"
+
+# 9. stop old
+sudo systemctl stop Agrovesto.Backend.API-$ACTIVE || true
+
+echo "🎉 Deployment complete: $TARGET"

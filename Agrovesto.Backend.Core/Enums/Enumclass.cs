@@ -52,6 +52,10 @@ namespace Agrovesto.Backend.Core.Enums
         Delete,
 
         [Display(Name = "Input Disbursement")]
-        Disbursement
+        Disbursement,
+
+
+        [Display(Name = "Additional Cost Disbursement")]
+        AdditionalCostDisbursement
     }
 }

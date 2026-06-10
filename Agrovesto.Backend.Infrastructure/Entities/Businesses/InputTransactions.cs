@@ -179,6 +179,7 @@ RepaymentTransaction
         public AdditionalCostType Type { get; set; }
         public bool IsPerUnit { get; set; } // e.g. per hectare
         public decimal? Quantity { get; set; }
+        public AdditionalCostTreatmentType AdditionalCostTreatmentType { get; set; } = AdditionalCostTreatmentType.Internal;
     }
 
     // public ICollection<InputAllocation> InputAllocations { get; set; }
@@ -339,28 +340,16 @@ RepaymentTransaction
 
         public string Reference { get; set; }
 
-        public DateTimeOffset PaidOn { get; set; }
-
+        public DateTimeOffset? PaidOn { get; set; }
+        public string RecordedByUserId { get; set; }
+        public User RecordedByUser { get; set; }
         public string? ExternalReference { get; set; }
+        public string? TransactionResponse { get; set; }
+        public long? WalletProviderId { get; set; }
+        public WalletProvider WalletProvider { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
     }
-    public class InputSubscriptionDisbursement
-    {
-        [Key]
-        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-
-        public long Id { get; set; }
-
-        public long SubscriptionId { get; set; }
-
-        public decimal Amount { get; set; }
-
-        public string Reference { get; set; }
-
-        public DateTimeOffset DisbursedOn { get; set; }
-
-        public string DisbursedByUserId { get; set; }
-    }
-
+    
     public class RepaymentPenalty
     {
         [Key]
@@ -432,4 +421,58 @@ RepaymentTransaction
         public decimal PrincipalPortion { get; set; }
     }
     //repayment schedule == repaymentplan + subscription + disbursement
-  }
+  
+public class SubscriptionDocument
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public InputPackageSubscription Subscription { get; set; }
+        public DocumentType DocumentType { get; set; }
+        public DateTimeOffset UploadedOn { get; set; }
+        public string UploadedBy { get; set; }
+        public string FilePath { get; set; }
+        public string FileName { get; set; }
+    }
+
+    public class InputSubscriptionDisbursement
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public InputPackageSubscription Subscription { get; set; }
+        public decimal? RequestedAmount { get; set; }
+        public string? RequestedByUserId { get; set; }
+        public User RequestByUser { get; set; }
+        public string? Reference { get; set; }
+        public DateTimeOffset RequestCreatedOn { get; set; } = DateTimeOffset.UtcNow;
+        public string? ApprovedByUserId { get; set; }
+        public User ApprovedByUser { get; set; }
+        public decimal? ApprovedAmount { get; set; }
+        public DateTimeOffset? ApprovedOn { get; set; } = DateTimeOffset.Now;
+        public DateTimeOffset? DisbursedOn { get; set; }
+        public string? DisbursedByUserId { get; set; }
+        public User DisbursedByUser { get; set; }
+        public decimal? DisbursedAmount { get; set; }
+        public decimal? RemainingBalance { get; set; }
+        public DisbursementStatus Status { get; set; } = DisbursementStatus.PendingApproval;
+    }
+
+    public class PaymentReconciliation
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+        public long PaymentId { get; set; }
+        public InputPackageSubscriptionPayment Payment { get; set; }
+        public string ReviewedByUserId { get; set; }
+        public bool IsConfirmed { get; set; }
+        public string Notes { get; set; }
+        public DateTimeOffset ReviewedOn { get; set; }
+    }
+
+}

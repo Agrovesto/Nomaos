@@ -13,16 +13,30 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
     }
     public static class EnumExtensions
     {
-        public static string GetDisplayName(this Enum enumValue)
+        //public static string GetDisplayName(this Enum enumValue)
+        //{
+        //    var member = enumValue.GetType()
+        //        .GetMember(enumValue.ToString())
+        //        .FirstOrDefault();
+
+        //    var attribute = member?
+        //        .GetCustomAttribute<DisplayAttribute>();
+
+        //    return attribute?.Name ?? enumValue.ToString();
+        //}
+
+        public static string GetDisplayName(Enum value)
         {
-            var member = enumValue.GetType()
-                .GetMember(enumValue.ToString())
-                .FirstOrDefault();
+            if (value == null)
+                return null;
+            
+            var field = value.GetType().GetField(value.ToString());
+            if (field == null)
+                return value.ToString();
 
-            var attribute = member?
-                .GetCustomAttribute<DisplayAttribute>();
+            var attribute = Attribute.GetCustomAttribute(field, typeof(DisplayAttribute)) as DisplayAttribute;
 
-            return attribute?.Name ?? enumValue.ToString();
+            return attribute?.Name ?? value.ToString();
         }
     }
 }
