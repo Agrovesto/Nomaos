@@ -1,10 +1,8 @@
 name: Build and Deploy
-
 on:
   push:
     branches:
       - devops
-
 env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: nomaos
@@ -28,7 +26,7 @@ jobs:
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/GitHubActionsECRDeployRole # ${{ secrets.DEV_ROLE_ARN }}
+          role-to-assume: ${{ secrets.DEV_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Create repository if ∄
