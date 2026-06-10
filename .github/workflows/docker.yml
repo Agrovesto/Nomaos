@@ -7,7 +7,7 @@ on:
 
 env:
   AWS_REGION: eu-west-1
-  ECR_REPOSITORY: agrovesto
+  ECR_REPOSITORY: nomaos
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
