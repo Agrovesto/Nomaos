@@ -22,7 +22,10 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
+      - name: Debug OIDC Context
+        run: |
+          echo "repo = ${{ github.repository }}"
+          echo "ref = ${{ github.ref }}"
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
