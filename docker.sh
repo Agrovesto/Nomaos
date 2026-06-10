@@ -1,93 +1,57 @@
 #!/bin/bash
-
 set -euo pipefail
 
-IMAGE="$1"
+IMAGE=$1
 
-APP_NAME="agrovesto"
-STATE_FILE="/opt/agrovesto/current"
-NGINX_UPSTREAM="/etc/nginx/conf.d/upstream.conf"
+APP_NAME="nomaos-api"
+NEW_CONTAINER="${APP_NAME}_new"
+OLD_CONTAINER="${APP_NAME}_old"
+PORT=5000
 
-ACTIVE=$(cat "$STATE_FILE" 2>/dev/null || echo "blue")
+echo "=============================="
+echo "Deploying: $IMAGE"
+echo "=============================="
 
-if [ "$ACTIVE" = "blue" ]; then
-    NEW="green"
-    OLD="blue"
-    NEW_PORT=5006
-else
-    NEW="blue"
-    OLD="green"
-    NEW_PORT=5005
-fi
+echo "Logging into ECR..."
+REGISTRY=$(echo "$IMAGE" | cut -d/ -f1)
 
-echo "====================================="
-echo "Current: $ACTIVE"
-echo "Deploying: $NEW"
-echo "Image: $IMAGE"
-echo "====================================="
+aws ecr get-login-password --region eu-west-1 \
+  | docker login --username AWS --password-stdin $REGISTRY
 
-# Pull latest image
+echo "Pulling image..."
 docker pull "$IMAGE"
 
-# Remove failed/stale deployment container
-docker rm -f "${APP_NAME}-${NEW}" >/dev/null 2>&1 || true
-
 echo "Starting new container..."
-
 docker run -d \
-  --name "${APP_NAME}-${NEW}" \
+  --name "$NEW_CONTAINER" \
   --restart unless-stopped \
-  -p ${NEW_PORT}:5005 \
-  -e ASPNETCORE_ENVIRONMENT=Staging \
+  -p $PORT:$PORT \
   "$IMAGE"
 
-echo "Waiting for application startup..."
-
-HEALTHY=false
-
+echo "Waiting for health check..."
 for i in {1..30}; do
-
-    if curl -fs "http://localhost:${NEW_PORT}/health" >/dev/null 2>&1; then
-        HEALTHY=true
-        echo "Health check passed"
-        break
-    fi
-
-    echo "Attempt $i/30 - waiting..."
-    sleep 5
+  if curl -fs http://localhost:$PORT/health; then
+    echo "Health check passed"
+    break
+  fi
+  sleep 2
 done
 
-if [ "$HEALTHY" != "true" ]; then
+echo "Switching traffic..."
 
-    echo "Deployment failed"
-
-    docker logs "${APP_NAME}-${NEW}" || true
-
-    docker rm -f "${APP_NAME}-${NEW}" || true
-
-    exit 1
+# Rename current running container to old
+if docker ps --format '{{.Names}}' | grep -q "^$APP_NAME$"; then
+  docker rename "$APP_NAME" "$OLD_CONTAINER" || true
 fi
 
-echo "Switching nginx..."
-
-cat > "$NGINX_UPSTREAM" <<EOF
-upstream agrovesto_api {
-    server 127.0.0.1:${NEW_PORT};
-}
-EOF
-
-nginx -t
-
-systemctl reload nginx
-
-echo "Traffic switched"
-
-sleep 10
+# Promote new container
+docker rename "$NEW_CONTAINER" "$APP_NAME"
 
 echo "Stopping old container..."
+docker stop "$OLD_CONTAINER" || true
+docker rm "$OLD_CONTAINER" || true
 
-docker rm -f "${APP_NAME}-${OLD}" >/dev/null 2>&1 || true
-
-echo "$NEW" > "$STATE_FILE"
+echo "Cleaning unused images..."
+docker image prune -f || true
 
 echo "Deployment successful"
