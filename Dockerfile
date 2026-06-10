@@ -35,14 +35,16 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
       -c Release \
       -o /app/publish \
       /p:UseAppHost=false \
-      /p:EnableSourceControlManagerQueries=false
+      /p:EnableSourceControlManagerQueries=false \
+      /p:PublishTrimmed=false
+
 
 
 
 ########################################
 # STAGE 3 — runtime (minimal + hardened)
 ########################################
-FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy-chiseled AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy AS runtime
 
 # ── Security: non-root by default in chiseled; make it explicit ──
 # chiseled images already run as UID 1654 (app), no USER line needed,
@@ -56,13 +58,14 @@ WORKDIR /app
 # come from ECS task def / docker run / Kubernetes secrets.
 ENV ASPNETCORE_URLS=http://+:5000 \
     ASPNETCORE_ENVIRONMENT=Production \
-    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=true \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_RUNNING_IN_CONTAINER=true \
     # Tune the GC for container memory limits
     DOTNET_GCConserveMemory=5 \
     DOTNET_GCHeapHardLimitPercent=75 \
     # ThreadPool — prevents cold-start latency on first burst
     DOTNET_ThreadPool_UnfairSemaphoreSpinLimit=6
+    
 
 # ── Healthcheck (Docker / ECS / compose native) ──
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
@@ -71,6 +74,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 COPY --from=publish /app/publish .
 
 EXPOSE 5000
+
+USER app
 
 # Use array form — no shell spawned, signals go directly to dotnet
 ENTRYPOINT ["dotnet", "Agrovesto.Backend.API.dll"]
