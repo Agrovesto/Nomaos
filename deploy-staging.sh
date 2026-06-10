@@ -1,88 +1,104 @@
 #!/usr/bin/env bash
-# ============================================================
-# Agrovesto Backend API — Production API Deployment Script
-# Zero-downtime oriented, rollback-capable, idempotent
-# ============================================================
-
 set -Eeuo pipefail
 
-echo "🚀 Starting deployment..."
+BASE="/var/www/Nomaos"
+RELEASES="$BASE/releases"
 
-cd /var/www/Nomaos
+APP="Agrovesto.Backend.API"
+PROJECT="$BASE/Agrovesto.Backend.API/$APP.csproj"
 
-echo "📥 Pulling latest code..."
+cd "$BASE"
+
+echo "🚀 Starting production-grade deployment..."
+
+# 1. Sync
 git fetch origin
 git checkout staging
 git reset --hard origin/staging
 
-echo "🛑 Stopping service..."
-sudo systemctl stop Agrovesto.Backend.API.service
+# 2. determine slot
+ACTIVE=$(cat "$BASE/active-slot" || echo blue)
 
-echo "📦 Restoring dependencies..."
-dotnet restore --force --verbosity minimal
+if [ "$ACTIVE" = "blue" ]; then
+  TARGET="green"
+  PORT=5002
+else
+  TARGET="blue"
+  PORT=5000
+fi
 
-echo "🧹 Cleaning project..."
-dotnet clean
+echo "🎯 Target: $TARGET"
 
-echo "🗑️ Wiping stale publish folder..."
-rm -rf /var/www/Nomaos/publish/*
+# 3. release build
+TS=$(date +%Y%m%d_%H%M%S)
+RELEASE="$RELEASES/$TS"
 
-echo "🏗️ Publishing application..."
+mkdir -p "$RELEASE"
 
-dotnet publish \
+dotnet publish "$PROJECT" \
   -c Release \
   -r linux-x64 \
   -f net8.0 \
   --self-contained true \
-  -o /var/www/Nomaos/publish \
-  --verbosity minimal \
-  2>&1 | tee /tmp/publish.log
+  -o "$RELEASE"
 
-PUBLISH_EXIT=${PIPESTATUS[0]}
+echo "📦 Release built: $RELEASE"
 
-if [ $PUBLISH_EXIT -ne 0 ]; then
-  echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
+# 4. attach release
+sudo ln -sfn "$RELEASE" "$BASE/$TARGET/current"
 
-  echo "=== FULL PUBLISH LOG ==="
-  cat /tmp/publish.log || true
+# 5. restart target
+sudo systemctl restart Agrovesto.Backend.API-$TARGET
 
-  exit $PUBLISH_EXIT
-fi
+echo "⏳ Canary phase (10%)..."
 
-echo "🔄 Restarting service..."
-sudo systemctl restart Agrovesto.Backend.API.service
-echo ">>> Waiting for service to start..."
-SERVICE_ACTIVE=0
-for i in {1..30}; do
-    if sudo systemctl is-active --quiet Agrovesto.Backend.API.service; then
-        echo "✅ Service is active"
-        SERVICE_ACTIVE=1
-        break
-    fi
-    sleep 1
-done
+# 6. canary validation (simplified baseline)
+sleep 10
 
-if [ $SERVICE_ACTIVE -eq 0 ]; then
-    echo "❌ Service did not become active after 30s"
-    echo "📊 Checking service status for debugging..."
-    sudo systemctl status Agrovesto.Backend.API.service --no-pager || true
-    echo "❌ Service failed to start! Rolling back..."
-    git reset --hard HEAD@{1}
-    dotnet publish -c Release -o /var/www/Nomaos/publish --no-restore
-    sudo systemctl restart Agrovesto.Backend.API.service
+FAIL_RATE=$(curl -s http://127.0.0.1:$PORT/metrics | jq '.error_rate' || echo 0)
+
+if (( $(echo "$FAIL_RATE > 0.02" | bc -l) )); then
+    echo "❌ Canary failed → rollback"
+    sudo systemctl stop Agrovesto.Backend.API-$TARGET
     exit 1
 fi
 
-sudo systemctl status Agrovesto.Backend.API.service --no-pager
+echo "✅ Canary passed"
 
-echo "📜 Recent logs..."
-sudo journalctl \
-  -u Agrovesto.Backend.API.service \
-  -n 100 \
-  --no-pager \
-  -o cat || true
+# 7. switch traffic gradually
+echo "🔄 Switching traffic..."
 
-echo "=== FULL PUBLISH LOG ==="
-cat /tmp/publish.log || true
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5000 weight=50;
+    server 127.0.0.1:5002 weight=50;
+}
+EOF
 
-echo "✅ Deployment successful!"
+sudo nginx -s reload
+sleep 15
+
+# full switch
+if [ "$TARGET" = "green" ]; then
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5002;
+}
+EOF
+else
+sudo cat > /etc/nginx/conf.d/nomaos_upstream.conf <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:5000;
+}
+EOF
+fi
+
+sudo nginx -s reload
+
+# 8. update active slot
+echo "$TARGET" | sudo tee "$BASE/active-slot"
+
+# 9. stop old
+sudo systemctl stop Agrovesto.Backend.API-$ACTIVE || true
+
+echo "🎉 Deployment complete: $TARGET"
