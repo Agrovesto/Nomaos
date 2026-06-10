@@ -57,7 +57,7 @@ WORKDIR /app
 # These are documentation + validation anchors; real values
 # come from ECS task def / docker run / Kubernetes secrets.
 ENV ASPNETCORE_URLS=http://+:5000 \
-    ASPNETCORE_ENVIRONMENT=Production \
+    ASPNETCORE_ENVIRONMENT=Staging \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_RUNNING_IN_CONTAINER=true \
     # Tune the GC for container memory limits
