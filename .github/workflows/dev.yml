@@ -23,6 +23,55 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      # ── Who raised and approved this PR? ─────────────────────────────────────
+      - name: Resolve PR author and approver
+        id: pr_meta
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the PR that was merged into staging by this exact commit
+          PR_DATA=$(gh pr list \
+            --state merged \
+            --base staging \
+            --json number,author,reviews \
+            --jq "map(select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\" or .headRefOid == \"${{ env.COMMIT_SHA }}\")) | first" \
+            2>/dev/null || echo "{}")
+
+          # Fallback: search by the commit message merge ref
+          if [[ "$PR_DATA" == "{}" || "$PR_DATA" == "null" || -z "$PR_DATA" ]]; then
+            PR_NUMBER=$(gh pr list \
+              --state merged \
+              --base staging \
+              --json number,mergeCommit \
+              --jq ".[] | select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\") | .number" \
+              2>/dev/null || echo "")
+
+            if [[ -n "$PR_NUMBER" ]]; then
+              PR_DATA=$(gh pr view "$PR_NUMBER" \
+                --json number,author,reviews \
+                2>/dev/null || echo "{}")
+            fi
+          fi
+
+          # Extract author
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login // "unknown"')
+
+          # Extract the first approving reviewer
+          PR_APPROVER=$(echo "$PR_DATA" | jq -r '
+            .reviews
+            | map(select(.state == "APPROVED"))
+            | sort_by(.submittedAt)
+            | last
+            | .author.login // "unknown"
+          ')
+
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // "N/A"')
+
+          echo "pr_author=$PR_AUTHOR"     >> "$GITHUB_OUTPUT"
+          echo "pr_approver=$PR_APPROVER" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER"     >> "$GITHUB_OUTPUT"
+
+          echo "📋 PR #$PR_NUMBER | Author: $PR_AUTHOR | Approver: $PR_APPROVER"
       # ── Build artifact in CI (never on the server) ──────────────────────────
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
@@ -48,6 +97,17 @@ jobs:
             --self-contained true \
             --no-restore \
             -o ${{ env.PUBLISH_DIR }}
+
+          # Stamp the artifact with full deployment metadata
+          cat > ${{ env.PUBLISH_DIR }}/.deploy-meta <<EOF
+          commit=${{ env.COMMIT_SHA }}
+          pr_number=${{ steps.pr_meta.outputs.pr_number }}
+          pr_author=${{ steps.pr_meta.outputs.pr_author }}
+          pr_approver=${{ steps.pr_meta.outputs.pr_approver }}
+          deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          deployed_by=${{ github.actor }}
+          branch=${{ github.ref_name }}
+          EOF
 
           # Stamp the build with the commit SHA for traceability
           echo "${{ env.COMMIT_SHA }}" > ${{ env.PUBLISH_DIR }}/.commit-sha
@@ -82,3 +142,18 @@ jobs:
           ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
               ubuntu@${{ secrets.EC2_HOST_DEV }} \
               "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
+
+      # ── Deployment summary ────────────────────────────────────────────────────
+      - name: Write deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| PR | #${{ steps.pr_meta.outputs.pr_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Raised by | \`${{ steps.pr_meta.outputs.pr_author }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Approved by | \`${{ steps.pr_meta.outputs.pr_approver }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Merged by | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ env.COMMIT_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u) |" >> $GITHUB_STEP_SUMMARY
