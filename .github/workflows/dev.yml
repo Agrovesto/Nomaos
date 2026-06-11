@@ -27,7 +27,7 @@ jobs:
       - name: Resolve PR author and approver
         id: pr_meta
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GIT_SECRET_TOKEN}}
         run: |
           # Find the PR that was merged into staging by this exact commit
           PR_DATA=$(gh pr list \
