@@ -1,30 +1,84 @@
 name: CI/CD Deploy Agrovesto.Backend.API
+
 on:
   push:
     branches:
       - staging
-      
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-  
+
 jobs:
-  deploy-staging:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
+
+    env:
+      APP: Agrovesto.Backend.API
+      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      PUBLISH_DIR: ${{ github.workspace }}/publish
+      COMMIT_SHA: ${{ github.sha }}
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # ── Build artifact in CI (never on the server) ──────────────────────────
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT_PATH }} --locked-mode
+
+      - name: Publish (self-contained, linux-x64)
+        run: |
+          dotnet publish ${{ env.PROJECT_PATH }} \
+            -c Release \
+            -r linux-x64 \
+            -f net8.0 \
+            --self-contained true \
+            --no-restore \
+            -o ${{ env.PUBLISH_DIR }}
+
+          # Stamp the build with the commit SHA for traceability
+          echo "${{ env.COMMIT_SHA }}" > ${{ env.PUBLISH_DIR }}/.commit-sha
+
+      # ── Ship artifact to EC2 via rsync ───────────────────────────────────────
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-          
+
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
-          
-      - name: Trigger Blue/Green Deployment
+
+      - name: Rsync artifact to EC2 (incoming staging area)
         run: |
-          ssh -tt ubuntu@${{ secrets.EC2_HOST_DEV }} \
-          'bash  /var/www/Nomaos/deploy-staging.sh'
+          # Rsync to a per-commit staging area so the live service is never touched
+          # during transfer. The swap happens atomically via symlink in the next step.
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+
+          rsync -az --delete \
+            --checksum \
+            ${{ env.PUBLISH_DIR }}/ \
+            ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
+
+      # ── Atomic slot-swap on EC2 (no compiling, just symlink + systemctl) ─────
+      - name: Swap slot
+        run: |
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
