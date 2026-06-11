@@ -2,7 +2,7 @@ name: Build and Deploy
 on:
   push:
     branches:
-      - devops
+      # - devops
 env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: nomaos
