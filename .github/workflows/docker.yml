@@ -1,13 +1,11 @@
 name: Build and Deploy
-
 on:
   push:
     branches:
       - devops
-
 env:
   AWS_REGION: eu-west-1
-  ECR_REPOSITORY: agrovesto
+  ECR_REPOSITORY: nomaos
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
@@ -24,11 +22,14 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
+      - name: Debug OIDC Context
+        run: |
+          echo "repo = ${{ github.repository }}"
+          echo "ref = ${{ github.ref }}"
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/GitHubActionsECRDeployRole # ${{ secrets.DEV_ROLE_ARN }}
+          role-to-assume: ${{ secrets.DEV_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Create repository if ∄
@@ -105,38 +106,63 @@ jobs:
         run: |
           aws ecr describe-images \
             --repository-name "${ECR_REPOSITORY}" \
-            --image-ids imageTag="${SHORT_SHA}"          
+            --image-ids imageTag="${GITHUB_SHA}"          
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.2.0
-        env:
-          IMAGE: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.SHORT_SHA }}
-          AWS_REGION: ${{ env.AWS_REGION }}
-        with:
-          host: ${{ secrets.EC2_HOST_DEV }}
-          username: ubuntu
-          key: ${{ secrets.EC2_PRIVATE_KEY_DEV }}
-          envs: IMAGE,AWS_REGION
-          script: |
-            set -euo pipefail
-
-            echo "Deploying image: $IMAGE"
-
-            REGISTRY=$(echo "$IMAGE" | cut -d/ -f1)
-
-            aws ecr get-login-password --region $AWS_REGION \
-              | docker login \
-                  --username AWS \
-                  --password-stdin $REGISTRY
-
-            docker pull $IMAGE
-
-            cd /opt/agrovesto
-
-            chmod +x deploy.sh
-
-            ./docker.sh $IMAGE
-
-      - name: Deployment Complete
+      - name: Deploy via SSM (Atomic + Track Status)
+        shell: bash
         run: |
-          echo "Successfully deployed ${SHORT_SHA}"
+          set -euo pipefail
+
+          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+
+          echo "Triggering SSM deployment for image: $IMAGE"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --region $AWS_REGION \
+            --comment "Deploy ${{ github.sha }}" \
+            --parameters commands="[
+              'set -euo pipefail',
+              'cd /opt/agrovesto',
+              'sudo chmod +x docker.sh',
+              './docker.sh $IMAGE'
+            ]" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          echo "Waiting for command to complete..."
+
+          # Poll execution status
+          for i in {1..30}; do
+            STATUS=$(aws ssm list-command-invocations \
+              --command-id "$COMMAND_ID" \
+              --details \
+              --query "CommandInvocations[0].Status" \
+              --output text)
+
+            echo "Attempt $i - Status: $STATUS"
+
+            if [[ "$STATUS" == "Success" ]]; then
+              echo "Deployment succeeded"
+              exit 0
+            fi
+
+            if [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" || "$STATUS" == "TimedOut" ]]; then
+              echo "Deployment failed with status: $STATUS"
+              aws ssm list-command-invocations \
+                --command-id "$COMMAND_ID" \
+                --details
+              exit 1
+            fi
+
+            sleep 5
+          done
+
+          echo "Timeout waiting for SSM command"
+          exit 1
+
+      - name: Done
+        run: echo "Deployment triggered via SSM"
