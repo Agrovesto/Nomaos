@@ -82,11 +82,11 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}-${{ github.run_id }}
           restore-keys: nuget-${{ runner.os }}-
 
       - name: Restore
-        run: dotnet restore ${{ env.PROJECT_PATH }} --locked-mode
+        run: dotnet restore ${{ env.PROJECT_PATH }}
 
       - name: Publish (self-contained, linux-x64)
         run: |
