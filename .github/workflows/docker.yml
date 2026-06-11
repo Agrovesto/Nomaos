@@ -1,168 +1,168 @@
-name: Build and Deploy
-on:
-  push:
-    branches:
-      # - devops
-env:
-  AWS_REGION: eu-west-1
-  ECR_REPOSITORY: nomaos
+# name: Build and Deploy
+# on:
+#   push:
+#     branches:
+#       # - devops
+# env:
+#   AWS_REGION: eu-west-1
+#   ECR_REPOSITORY: nomaos
 
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-  cancel-in-progress: true
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+#   cancel-in-progress: true
 
-permissions:
-  id-token: write
-  contents: read
+# permissions:
+#   id-token: write
+#   contents: read
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-      - name: Debug OIDC Context
-        run: |
-          echo "repo = ${{ github.repository }}"
-          echo "ref = ${{ github.ref }}"
-      - name: Configure AWS Credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.DEV_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+#     steps:
+#       - name: Checkout source
+#         uses: actions/checkout@v4
+#       - name: Debug OIDC Context
+#         run: |
+#           echo "repo = ${{ github.repository }}"
+#           echo "ref = ${{ github.ref }}"
+#       - name: Configure AWS Credentials (OIDC)
+#         uses: aws-actions/configure-aws-credentials@v4
+#         with:
+#           role-to-assume: ${{ secrets.DEV_ROLE_ARN }}
+#           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create repository if ∄
-        # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ecr/create-repository.html
-        shell: bash
-        run: |
-          LIFECYCLE_POLICY_FILE=$(mktemp)
+#       - name: Create repository if ∄
+#         # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ecr/create-repository.html
+#         shell: bash
+#         run: |
+#           LIFECYCLE_POLICY_FILE=$(mktemp)
 
-          echo '{
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Keep only the last 3 images",
-                "selection": {
-                  "tagStatus": "any",
-                  "countType": "imageCountMoreThan",
-                  "countNumber": 3
-                },
-                "action": {
-                  "type": "expire"
-                }
-              }
-            ]
-          }' > "$LIFECYCLE_POLICY_FILE"
+#           echo '{
+#             "rules": [
+#               {
+#                 "rulePriority": 1,
+#                 "description": "Keep only the last 3 images",
+#                 "selection": {
+#                   "tagStatus": "any",
+#                   "countType": "imageCountMoreThan",
+#                   "countNumber": 3
+#                 },
+#                 "action": {
+#                   "type": "expire"
+#                 }
+#               }
+#             ]
+#           }' > "$LIFECYCLE_POLICY_FILE"
 
-          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1; then
-            echo "Repository does not exist. Creating repository..."
-            aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+#           if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1; then
+#             echo "Repository does not exist. Creating repository..."
+#             aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
 
-            echo "Applying lifecycle policy..."
-            aws ecr put-lifecycle-policy \
-                --repository-name ${{ env.ECR_REPOSITORY }} \
-                --lifecycle-policy file://$LIFECYCLE_POLICY_FILE
-          else
-            echo "Repository already exists."
-          fi
+#             echo "Applying lifecycle policy..."
+#             aws ecr put-lifecycle-policy \
+#                 --repository-name ${{ env.ECR_REPOSITORY }} \
+#                 --lifecycle-policy file://$LIFECYCLE_POLICY_FILE
+#           else
+#             echo "Repository already exists."
+#           fi
 
-          rm "$LIFECYCLE_POLICY_FILE"  
+#           rm "$LIFECYCLE_POLICY_FILE"  
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+#       - name: Login to Amazon ECR
+#         id: login-ecr
+#         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Generate Image Tag
-        shell: bash
-        run: |
-          calculatedSha=$(echo ${{ github.sha }} | cut -c 1-12)
-          echo "SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+#       - name: Generate Image Tag
+#         shell: bash
+#         run: |
+#           calculatedSha=$(echo ${{ github.sha }} | cut -c 1-12)
+#           echo "SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
       
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # sha for v4.0.0
+#       - name: Set up QEMU
+#         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # sha for v4.0.0
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+#       - name: Set up Docker Buildx
+#         uses: docker/setup-buildx-action@v3
 
-      - name: Build and Push Docker Image
-        id: build-and-push
-        uses: docker/build-push-action@v6
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-        with:
-          context: .
-          push: true
-          provenance: false
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+#       - name: Build and Push Docker Image
+#         id: build-and-push
+#         uses: docker/build-push-action@v6
+#         env:
+#           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+#           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+#         with:
+#           context: .
+#           push: true
+#           provenance: false
+#           tags: |
+#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+#           cache-from: type=gha
+#           cache-to: type=gha,mode=max
 
-      - name: Verify Image Exists
-        shell: bash
-        run: |
-          aws ecr describe-images \
-            --repository-name "${ECR_REPOSITORY}" \
-            --image-ids imageTag="${GITHUB_SHA}"          
+#       - name: Verify Image Exists
+#         shell: bash
+#         run: |
+#           aws ecr describe-images \
+#             --repository-name "${ECR_REPOSITORY}" \
+#             --image-ids imageTag="${GITHUB_SHA}"          
 
-      - name: Deploy via SSM (Atomic + Track Status)
-        shell: bash
-        run: |
-          set -euo pipefail
+#       - name: Deploy via SSM (Atomic + Track Status)
+#         shell: bash
+#         run: |
+#           set -euo pipefail
 
-          IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+#           IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
 
-          echo "Triggering SSM deployment for image: $IMAGE"
+#           echo "Triggering SSM deployment for image: $IMAGE"
 
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
-            --document-name "AWS-RunShellScript" \
-            --region $AWS_REGION \
-            --comment "Deploy ${{ github.sha }}" \
-            --parameters commands="[
-              'set -euo pipefail',
-              'cd /opt/agrovesto',
-              'sudo chmod +x docker.sh',
-              './docker.sh $IMAGE'
-            ]" \
-            --query "Command.CommandId" \
-            --output text)
+#           COMMAND_ID=$(aws ssm send-command \
+#             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+#             --document-name "AWS-RunShellScript" \
+#             --region $AWS_REGION \
+#             --comment "Deploy ${{ github.sha }}" \
+#             --parameters commands="[
+#               'set -euo pipefail',
+#               'cd /opt/agrovesto',
+#               'sudo chmod +x docker.sh',
+#               './docker.sh $IMAGE'
+#             ]" \
+#             --query "Command.CommandId" \
+#             --output text)
 
-          echo "SSM Command ID: $COMMAND_ID"
+#           echo "SSM Command ID: $COMMAND_ID"
 
-          echo "Waiting for command to complete..."
+#           echo "Waiting for command to complete..."
 
-          # Poll execution status
-          for i in {1..30}; do
-            STATUS=$(aws ssm list-command-invocations \
-              --command-id "$COMMAND_ID" \
-              --details \
-              --query "CommandInvocations[0].Status" \
-              --output text)
+#           # Poll execution status
+#           for i in {1..30}; do
+#             STATUS=$(aws ssm list-command-invocations \
+#               --command-id "$COMMAND_ID" \
+#               --details \
+#               --query "CommandInvocations[0].Status" \
+#               --output text)
 
-            echo "Attempt $i - Status: $STATUS"
+#             echo "Attempt $i - Status: $STATUS"
 
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "Deployment succeeded"
-              exit 0
-            fi
+#             if [[ "$STATUS" == "Success" ]]; then
+#               echo "Deployment succeeded"
+#               exit 0
+#             fi
 
-            if [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" || "$STATUS" == "TimedOut" ]]; then
-              echo "Deployment failed with status: $STATUS"
-              aws ssm list-command-invocations \
-                --command-id "$COMMAND_ID" \
-                --details
-              exit 1
-            fi
+#             if [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" || "$STATUS" == "TimedOut" ]]; then
+#               echo "Deployment failed with status: $STATUS"
+#               aws ssm list-command-invocations \
+#                 --command-id "$COMMAND_ID" \
+#                 --details
+#               exit 1
+#             fi
 
-            sleep 5
-          done
+#             sleep 5
+#           done
 
-          echo "Timeout waiting for SSM command"
-          exit 1
+#           echo "Timeout waiting for SSM command"
+#           exit 1
 
-      - name: Done
-        run: echo "Deployment triggered via SSM"
+#       - name: Done
+#         run: echo "Deployment triggered via SSM"
