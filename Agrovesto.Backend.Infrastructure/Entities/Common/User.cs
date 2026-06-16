@@ -73,6 +73,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
             public bool HasDefaultPassword { get; set; } = false;
        // public string? DefaultPin { get; set; }
         public bool HasDefaultPin { get; set; } = false;
+
+        // Add this to your User class
+        public bool IsLeaderProfileComplete { get; set; } = false;
     }
 
     public class UserOrganization
@@ -82,6 +85,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
     }
+   
+    
     public class OneTimePassword
     {
         public long Id { get; set; }

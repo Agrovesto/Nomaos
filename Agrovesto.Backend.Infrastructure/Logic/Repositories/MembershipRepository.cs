@@ -7,14 +7,18 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime.Internal.Util;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Logging;
 using PhoneNumbers;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -27,11 +31,279 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     {
         private readonly DataContext _context;
         private readonly IDistributedCache _cache;
-        public MembershipRepository(DataContext context, IDistributedCache cache)
+        private readonly ILogger<MembershipRepository> _logger;
+        public MembershipRepository(DataContext context, 
+            IDistributedCache cache,
+            ILogger<MembershipRepository> logger)
         {
             _context = context;
             _cache = cache;
+            _logger = logger;
         }
+
+
+
+        public async Task<MembershipResponse> CreateMembershipAsync(
+        CreateMembershipDto dto,
+       OnBoardingArgs args
+            )
+        {
+            // ── Validate businesses exist ─────────────────────────────
+            var business = await _context.Businesses
+                .Where(b => b.BusinessCode == args.businessCode && b.IsActive).FirstOrDefaultAsync()
+                ;
+
+            if (business == null)
+                throw new ValidationException(
+                    $"Business not found: {args.businessCode}");
+
+            // ── Validate MemberShipType belongs to one of these businesses ─
+            var membershipType = await _context.MemberShipTypes
+                .FirstOrDefaultAsync(t =>
+                    t.Id == dto.MemberShipTypeId &&
+                    t.BusinessCode == args.businessCode);
+
+            if (membershipType is null)
+                throw new ValidationException(
+                    "MembershipType not found for the given business.");
+
+            // ── Validate organization if provided ─────────────────────
+            Organization? organization = null;
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
+            {
+                organization = await _context.Organizations
+                    .FirstOrDefaultAsync(o =>
+                        o.BusinessCode == args.organizationCode && o.IsActive);
+
+                if (organization is null)
+                    throw new ValidationException(
+                        $"Organization '{args.organizationCode}' not found.");
+            }
+
+            // ── Validate agent if provided ────────────────────────────
+            if (args.AgentIds.Any())
+            {
+                var agentExists = await _context.Agents
+                    .AnyAsync(a => args.AgentIds.Contains(a.Id) && a.IsActive);
+
+                if (!agentExists)
+                    throw new ValidationException(
+                        $"Agent {args.AgentIds} not found.");
+            }
+
+            await using var transaction = await _context.Database
+                .BeginTransactionAsync(IsolationLevel.ReadCommitted);
+            try
+            {
+                // ── 1. Create stub User (leader details filled later) ──
+                var stubUser = new User
+                {
+                    UserType = "MemberShip",
+                    IsActive = false,          // inactive until leader is assigned
+                    IsLeaderProfileComplete = false,
+                    CreatedOn = DateTimeOffset.UtcNow,
+                    CreatedBy = args.UserId,
+                    BusinessCode = args.businessCode, // primary business
+                };
+                await _context.Users.AddAsync(stubUser);
+
+                // ── 2. Create Membership ───────────────────────────────
+                var membership = new MemberShip
+                {
+                    Name = dto.Name,
+                    State = dto.State,
+                    Lga = dto.Lga,
+                    Ward = dto.Ward,
+                    Location = dto.Location,
+                    ContactPerson = dto.ContactPerson,
+                    Email = dto.Email,
+                    PhoneNumber = dto.PhoneNumber,
+                    UserId = stubUser.Id,
+                    BelongToBusinessCode = args.businessCode, // primary
+                    MemberShipTypeId = dto.MemberShipTypeId,
+                    OnboardedById = args.UserId,
+                    TierLevel = Tier.Tier1,
+                    OnBoardedOn = DateTimeOffset.UtcNow,
+                    IsActive = true,
+                };
+                await _context.MemberShips.AddAsync(membership);
+
+                // ── 3. UserBusiness — one row per business (required) ──
+                
+                    await _context.UserBusinesses.AddAsync(new UserBusiness
+                    {
+                        UserId = stubUser.Id,
+                        BusinessId = business.BusinessId,
+                        IsDefault = business.BusinessCode == args.businessCode,
+                        IsActive = true,
+                        JoinedOn = DateTimeOffset.UtcNow,
+                        InvitedBy = args.UserId,
+                    });
+                
+
+                // ── 4. Organization links (conditional) ───────────────
+                if (organization is not null)
+                {
+                    await _context.UserOrganizations.AddAsync(new UserOrganization
+                    {
+                        UserId = stubUser.Id,
+                        OrganizationCode = organization.OrganizationCode,
+                        IsActive = true,
+                    });
+
+                    await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+                    {
+                        OrganizationId = organization.OrganizationId,
+                        MemberShip = membership,  // EF resolves FK
+                        AssignedByUserId = args.UserId,
+                        IsActive = true,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                    });
+                }
+
+                // ── 5. Agent link (conditional) ───────────────────────
+                if (args.AgentIds.Any())
+                {
+                    await _context.MemberShipAgents.AddAsync(new MemberShipAgent
+                    {
+                        AgentId = args.AgentIds.FirstOrDefault().Value,
+                        MemberShip = membership,  // EF resolves FK
+                        OnboardedByUserId = args.UserId,
+                        IsActive = true,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                    });
+
+                    membership.HasbeenAssignedAgent = true;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Membership {Name} created with stub user {UserId}",
+                    membership.Name, stubUser.Id);
+
+                return MapToResponse(membership, stubUser, business, organization);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+
+        }
+        public async Task<MembershipResponse> AssignLeaderAsync(
+        AssignLeaderDto dto,
+        string updatedById)
+        {
+            // ── Load membership with its current stub user ─────────────
+            var membership = await _context.MemberShips
+                .Include(m => m.MemberShipType)
+                .FirstOrDefaultAsync(m => m.Id == dto.MembershipId && m.IsActive);
+
+            if (membership is null)
+                throw new NotFoundException("Membership not found.");
+
+            await using var transaction = await _context.Database
+                .BeginTransactionAsync(IsolationLevel.ReadCommitted);
+            try
+            {
+                User leader;
+
+                if (!string.IsNullOrWhiteSpace(dto.ExistingUserId))
+                {
+                    // ── Path A: link an existing platform user as leader ──
+                    leader = await _context.Users.FindAsync(dto.ExistingUserId)
+                        ?? throw new NotFoundException(
+                            $"User '{dto.ExistingUserId}' not found.");
+
+                    // If membership already had a different stub user, deactivate it
+                    if (membership.UserId != dto.ExistingUserId)
+                    {
+                        var oldStub = await _context.Users.FindAsync(membership.UserId);
+                        if (oldStub is not null && !oldStub.IsLeaderProfileComplete)
+                        {
+                            // It was a stub — safe to deactivate
+                            oldStub.IsActive = false;
+                            oldStub.ModifiedBy = updatedById;
+                            oldStub.DateModified = DateTimeOffset.UtcNow;
+                        }
+                    }
+
+                    membership.UserId = leader.Id;
+                }
+                else
+                {
+                    // ── Path B: update the existing stub user ─────────────
+                    leader = await _context.Users.FindAsync(membership.UserId)
+                        ?? throw new NotFoundException(
+                            "Stub user for this membership not found.");
+                }
+
+                // ── Update User with leader details ────────────────────
+                leader.Name = $"{dto.FirstName} {dto.LastName}".Trim();
+                leader.PhoneNumber = dto.PhoneNumber;
+                leader.Email = dto.Email ?? leader.Email;
+                leader.IsActive = true;
+                leader.IsLeaderProfileComplete = true;
+                leader.ModifiedBy = updatedById;
+                leader.DateModified = DateTimeOffset.UtcNow;
+
+                // ── Update Membership leader fields ────────────────────
+                membership.MembershipLeaderFirstName = dto.FirstName;
+                membership.MembershipLeaderMiddleName = dto.MiddleName;
+                membership.MembershipLeaderLastName = dto.LastName;
+                membership.MembershipLeaderGender = dto.Gender;
+                membership.IsLeaderAFarmer = dto.IsLeaderAFarmer;
+                membership.PhoneNumber = dto.PhoneNumber;
+                membership.Email = dto.Email ?? membership.Email;
+                membership.UserId = leader.Id;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Leader '{Name}' assigned to membership {MembershipId}",
+                    leader.Name, membership.Id);
+
+                var businesses = await _context.UserBusinesses
+                    .Include(ub => ub.Business)
+                    .Where(ub => ub.UserId == leader.Id && ub.IsActive)
+                    .Select(ub => ub.Business.BusinessCode)
+                    .ToListAsync();
+
+                return MapToResponse(membership, leader, null, null,
+                    businessCodes: businesses);
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+
+        private static MembershipResponse MapToResponse(
+            MemberShip membership,
+            User user,
+            Business? businesses,
+            Organization? org,
+            List<string>? businessCodes = null)
+        {
+            return new MembershipResponse
+            {
+                Id = membership.Id,
+                Name = membership.Name,
+                UserId = user.Id,
+                IsLeaderProfileComplete = user.IsLeaderProfileComplete,
+                State = membership.State,
+                Location = membership.Location,
+                BusinessCode = businesses.BusinessCode,
+                HasbeenAssignedAgent = membership.HasbeenAssignedAgent,
+            };
+        }
+
+
+
         public IQueryable<Farmer> BuildFarmerQuery(FarmerFilter filter)
         {
             var query = _context.Farmers.AsNoTracking()

@@ -706,6 +706,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("CommitmentPaymentStartDate")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<decimal>("CommitmentPercentage")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("CommitmentType")
                         .HasColumnType("int");
 
@@ -1612,7 +1615,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("AgentId");
 
-                    b.HasIndex("FarmerId");
+                    b.HasIndex("FarmerId", "AgentId");
 
                     b.ToTable("FarmerAgents");
                 });
@@ -1654,7 +1657,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FarmerId");
+                    b.HasIndex("FarmerId", "CooperativeId");
 
                     b.ToTable("FarmerCooperatives");
                 });
@@ -1764,11 +1767,11 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("OrganizationCode")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FarmerId");
+                    b.HasIndex("FarmerId", "OrganizationCode");
 
                     b.ToTable("FarmerOrganizations");
                 });
@@ -5660,6 +5663,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsLeaderProfileComplete")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsPhoneVerified")
                         .HasColumnType("bit");
 
@@ -5705,7 +5711,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PhoneNumber")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<bool>("PhoneNumberConfirmed")
                         .HasColumnType("bit");
@@ -5744,6 +5750,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex")
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique()
+                        .HasFilter("[PhoneNumber] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });
@@ -6686,7 +6696,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackage", "InputPackage")
-                        .WithMany()
+                        .WithMany("Subscriptions")
                         .HasForeignKey("InputPackageId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -7565,6 +7575,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Navigation("RepaymentPlan")
                         .IsRequired();
+
+                    b.Navigation("Subscriptions");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscription", b =>

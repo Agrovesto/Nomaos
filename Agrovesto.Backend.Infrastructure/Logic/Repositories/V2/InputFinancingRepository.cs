@@ -73,6 +73,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task FlagPendingCashApprovalAsync(long paymentId);
         Task<long> CreatePendingPaymentAsync(CreateCommitmentPaymentRequest request);
         Task<bool> AddItemToPackageAsync(long packageId, AddPackageItemRequest request);
+        Task<bool> AddAdditionalCostToPackageAsync(long packageId, AddAdditionalCostRequest request);
+        Task<bool> RemoveAdditionalCostFromPackageAsync(long packageId, long additionalCostId);
+        Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs args);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -358,6 +361,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var package = await _context.InputPackages
                         .Include(x => x.CommitmentPlan)
                         .Include(x => x.RepaymentPlan)
+                       
                         .FirstOrDefaultAsync(x =>
                             x.Id == packageId &&
                             x.OrganizationId == args.organizationId);
@@ -367,6 +371,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     if (!package.IsActive)
                         throw new Exception("Cannot update configuration for inactive package");
+
+                    await EnsurePackageIsEditable(package);
+
 
                     if (request.CommitmentRequired)
                     {
@@ -387,8 +394,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     package.CommitmentRequired = request.CommitmentRequired;
                     package.RepaymentRequired = request.RepaymentRequired;
-
-
                     if (request.CommitmentRequired)
                     {
                         var commitmentValue =
@@ -396,28 +401,28 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                                 ? package.TotalPackageValue * (request.CommitmentValue / 100m)
                                 : request.CommitmentValue;
 
-
-                        if (package.CommitmentPlan == null)
+                        package.CommitmentPlan = new CommitmentPlan
                         {
-                            package.CommitmentPlan = new CommitmentPlan
-                            {
-                                InputPackageId = package.Id
-                            };
-                        }
+                            CommitmentType = request.CommitmentType,
 
-                        package.CommitmentPlan.CommitmentType = request.CommitmentType;
-                        package.CommitmentPlan.CommitmentValue = commitmentValue;
-                        package.CommitmentPlan.CommitmentPaymentStartDate = request.CommitmentPaymentStartDate;
-                        package.CommitmentPlan.CommitmentPaymentEndDate = request.CommitmentPaymentEndDate;
+                            CommitmentPercentage =
+                                request.CommitmentType == CommitmentType.PercentageOfTotalValue
+                                    ? request.CommitmentValue
+                                    : 0m,
+                            CommitmentValue = commitmentValue,
+                            CommitmentPaymentStartDate = request.CommitmentPaymentStartDate,
+                            CommitmentPaymentEndDate = request.CommitmentPaymentEndDate
+                        };
                     }
-                    else
-                    {
-                        // REMOVE EXISTING PLAN IF DISABLED
-                        if (package.CommitmentPlan != null)
-                        {
-                            _context.CommitmentPlans.Remove(package.CommitmentPlan);
-                        }
-                    }
+
+               
+                    //else
+                    //{
+                    //    if (package.CommitmentPlan != null)
+                    //    {
+                    //        _context.CommitmentPlans.Remove(package.CommitmentPlan);
+                    //    }
+                    //}
 
                     if (request.RepaymentRequired)
                     {
@@ -440,14 +445,13 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         package.RepaymentPlan.RepaymentValue = request.RepaymentValue;
                         package.RepaymentPlan.RiskCategory = request.RiskCategory;
                     }
-                    else
-                    {
-                        // REMOVE EXISTING PLAN IF DISABLED
-                        if (package.RepaymentPlan != null)
-                        {
-                            _context.RepaymentPlans.Remove(package.RepaymentPlan);
-                        }
-                    }
+                    //else
+                    //{
+                    //    if (package.RepaymentPlan != null)
+                    //    {
+                    //        _context.RepaymentPlans.Remove(package.RepaymentPlan);
+                    //    }
+                    //}
 
                     package.UpdatedOn = DateTimeOffset.UtcNow;
                     package.UpdatedByUserId = args.createdByUserId;
@@ -570,10 +574,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentRequired = package.CommitmentRequired,
 
                     CommitmentValue = commitment?.CommitmentValue ?? 0,
-
+                    
                     CommitmentPaymentStartDate = commitment?.CommitmentPaymentStartDate,
                     CommitmentPaymentEndDate = commitment?.CommitmentPaymentEndDate,
-
+                    CommitmentPercentage = commitment?.CommitmentPercentage ?? 0,
                     RepaymentStartDate = repayment?.RepaymentStartDate,
                     RepaymentEndDate = repayment?.RepaymentEndDate,
                     RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
@@ -650,7 +654,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.CommitmentPlan)
                 .FirstOrDefaultAsync(x => x.Id == packageId);
 
-            EnsurePackageIsEditable(package);
+            await EnsurePackageIsEditable(package);
 
             var item = package.InputPackageItems
                 .FirstOrDefault(x => x.Id == itemId);
@@ -677,7 +681,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.CommitmentPlan)
                 .FirstOrDefaultAsync(x => x.Id == args.PackageId);
 
-            EnsurePackageIsEditable(package);
+            await EnsurePackageIsEditable(package);
 
             var item = package.InputPackageItems
                 .FirstOrDefault(x => x.Id == args.InputId);
@@ -714,7 +718,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.CommitmentPlan)
                 .FirstOrDefaultAsync(x => x.Id == packageId);
 
-            EnsurePackageIsEditable(package);
+           await EnsurePackageIsEditable(package);
 
             var product = await _context.OrganizationProducts
                 .FirstOrDefaultAsync(x => x.Id == request.OrganizationProductId
@@ -741,6 +745,99 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return true;
         }
+
+        public async Task<bool> AddAdditionalCostToPackageAsync(
+    long packageId,
+    AddAdditionalCostRequest request)
+        {
+            var package = await _context.InputPackages
+                .Include(x => x.InputPackageItems)
+                .Include(x => x.AdditionalCosts)
+                .Include(x => x.CommitmentPlan)
+                .FirstOrDefaultAsync(x => x.Id == packageId);
+
+            await EnsurePackageIsEditable(package);
+
+            var additionalCost = new AdditionalInputPackageCost
+            {
+                InputPackageId = packageId,
+                Name = request.Name,
+                Description = request.Description,
+                Amount = request.Amount,
+                IsPerUnit = request.IsPerUnit,
+                Quantity = request.Quantity,
+                Type = request.Type
+            };
+
+            _context.AdditionalInputPackageCosts.Add(additionalCost);
+
+            package.AdditionalCosts.Add(additionalCost);
+
+            RecalculatePackageFinancials(package);
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+        public async Task<bool> RemoveAdditionalCostFromPackageAsync(
+    long packageId,
+    long additionalCostId)
+        {
+            var package = await _context.InputPackages
+                .Include(x => x.InputPackageItems)
+                .Include(x => x.AdditionalCosts)
+                .Include(x => x.CommitmentPlan)
+                .FirstOrDefaultAsync(x => x.Id == packageId);
+
+           await EnsurePackageIsEditable(package);
+
+            var additionalCost = package.AdditionalCosts
+                .FirstOrDefault(x => x.Id == additionalCostId);
+
+            if (additionalCost == null)
+                throw new Exception("Additional cost not found in package");
+
+            _context.AdditionalInputPackageCosts.Remove(additionalCost);
+
+            RecalculatePackageFinancials(package);
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        public async Task<bool> UpdateAdditionalCostAsync(
+    UpdateAdditionalCostRequest request,
+    UpdateAdditionalCostArgs args)
+        {
+            var package = await _context.InputPackages
+                .Include(x => x.InputPackageItems)
+                .Include(x => x.AdditionalCosts)
+                .Include(x => x.CommitmentPlan)
+                .FirstOrDefaultAsync(x => x.Id == args.PackageId);
+
+            await EnsurePackageIsEditable(package);
+
+            var additionalCost = package.AdditionalCosts
+                .FirstOrDefault(x => x.Id == args.AdditionalCostId);
+
+            if (additionalCost == null)
+                throw new Exception("Additional cost not found in package");
+
+            additionalCost.Name = request.Name;
+            additionalCost.Description = request.Description;
+            additionalCost.Amount = request.Amount;
+            additionalCost.IsPerUnit = request.IsPerUnit;
+            additionalCost.Quantity = request.Quantity;
+            additionalCost.Type = request.Type;
+
+            RecalculatePackageFinancials(package);
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
         private void RecalculatePackageFinancials(InputPackage package)
         {
             var isPhysical = package.PackageStructure == InputPackageStructure.Physical;
@@ -753,22 +850,15 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             package.TotalPackageValue = itemsTotal;
             package.AdditionalCostAmount = additionalCostsTotal;
+            package.TotalFinancingValue = itemsTotal + additionalCostsTotal;
 
-            var totalFinancingValue = itemsTotal + additionalCostsTotal;
-
-            package.TotalFinancingValue = totalFinancingValue;
-
-            // Optional: if commitments depend on total value, recompute here too
-            if (package.CommitmentPlan != null)
+            if (package.CommitmentPlan != null &&
+                package.CommitmentPlan.CommitmentType == CommitmentType.PercentageOfTotalValue)
             {
-                if (package.CommitmentPlan.CommitmentType == CommitmentType.PercentageOfTotalValue)
-                {
-                    package.CommitmentPlan.CommitmentValue =
-                        itemsTotal * (package.CommitmentPlan.CommitmentValue / 100m);
-                }
+                package.CommitmentPlan.CommitmentValue =
+                    itemsTotal * (package.CommitmentPlan.CommitmentPercentage / 100m);
             }
         }
-
 
 
         /**
@@ -3129,7 +3219,8 @@ baseQuery = ApplyFilters(baseQuery, filter);
 → Defaulted
          **/
         #endregion
-        private void EnsurePackageIsEditable(InputPackage package)
+     
+        private async Task EnsurePackageIsEditable(InputPackage package)
         {
             if (package == null)
                 throw new Exception("Package not found");
@@ -3137,6 +3228,15 @@ baseQuery = ApplyFilters(baseQuery, filter);
             if (!package.IsActive)
             {
                 throw new Exception("This package is not editable because it is deactivated.");
+            }
+
+            var hasSubscribers = await _context.InputPackageSubscriptions
+                .AnyAsync(x => x.InputPackageId == package.Id);
+
+            if (hasSubscribers)
+            {
+                throw new Exception(
+                    "This package is no longer editable because it already has subscribers.");
             }
         }
         private static string GetRepaymentPeriod(RepaymentFrequency frequency, int duration)

@@ -68,6 +68,26 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+
+
+            modelBuilder.Entity<User>()
+       .HasIndex(u => u.PhoneNumber)       
+       .IsUnique();
+
+            modelBuilder.Entity<UserOrganization>()
+                .HasKey(uo => new { uo.UserId, uo.OrganizationCode });
+
+            modelBuilder.Entity<FarmerOrganization>()
+                .HasIndex(fo => new { fo.FarmerId, fo.OrganizationCode });
+
+            modelBuilder.Entity<FarmerCooperative>()
+                .HasIndex(fc => new { fc.FarmerId, fc.CooperativeId });
+
+            modelBuilder.Entity<FarmerAgent>()
+                .HasIndex(fa => new { fa.FarmerId, fa.AgentId });
+
+
+
             modelBuilder.Entity<OrganizationLocation>()
        .HasOne(l => l.ParentLocation)
        .WithMany(l => l.SubLocations)

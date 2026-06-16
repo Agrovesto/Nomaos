@@ -252,6 +252,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal TotalFinancingValue { get; set; }
         public bool CommitmentRequired { get; set; }
         public decimal CommitmentValue { get; set; }
+        public decimal CommitmentPercentage { get; set; }
         public decimal RepaymentValue { get; set; }
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
@@ -342,6 +343,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class ReplacePackageItemRequestArgs
     {
         public long PackageId { get; set; }
+        public long AdditionalCostId { get; set; }
 
         public long InputId { get; set; }
         public string? OrganizationCode { get; set; }
@@ -700,5 +702,41 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal Quantity { get; set; }
         public decimal UnitCost { get; set; }
         public string UnitOfMeasure { get; set; }
+    }
+    public class UpdateAdditionalCostRequest
+    {
+        public string Name { get; set; }
+
+        public string Description { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public bool IsPerUnit { get; set; }
+
+        public decimal Quantity { get; set; }
+
+        public AdditionalCostType Type { get; set; }
+    }
+    public class AddAdditionalCostRequest
+    {
+        public string Name { get; set; }
+
+        public string Description { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public bool IsPerUnit { get; set; }
+
+        public decimal Quantity { get; set; }
+
+        public AdditionalCostType Type { get; set; }
+    }
+    public class UpdateAdditionalCostArgs
+    {
+        public string? OrganizationCode { get; set; }
+        public long OrganizationId { get; set; }
+        public long PackageId { get; set; }
+
+        public long AdditionalCostId { get; set; }
     }
 }

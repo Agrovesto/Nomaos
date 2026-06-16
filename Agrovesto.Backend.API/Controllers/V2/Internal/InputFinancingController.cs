@@ -400,6 +400,96 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
   ));
         }
 
+        [HttpPost("package/add-additional-cost")]
+        public async Task<IActionResult> AddAdditionalCostToPackageAsync([FromBody] AddAdditionalCostRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.AddAdditionalCostToPackageAsync(request, args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpPatch("package/update-additional-cost")]
+        public async Task<IActionResult> UpdateAdditionalCostAsync([FromBody] UpdateAdditionalCostRequest request, [FromQuery] UpdateAdditionalCostArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.UpdateAdditionalCostAsync(request, args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
+        [HttpDelete("package/remove-additional-cost")]
+        public async Task<IActionResult> RemoveAdditionalCostFromPackageAsync([FromQuery] ReplacePackageItemRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            //  args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            var result = await _inputFinancingManager.RemoveAdditionalCostFromPackageAsync(args);
+
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(
+                    "No record found",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+
+            return Ok(ApiResponse<bool>.Success(
+                result,
+                "Successful",
+                HttpContext.TraceIdentifier
+            ));
+        }
 
 
 
@@ -637,6 +727,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return File(result.FileBytes, "application/pdf", result.FileName);
         }
         //upload commission letter
+        //escalate default
+        //release input
+        //pay commitment fee
+        //request input release
+        //disburse input
+        //repay financing
         [HttpPost("subscription/commitment-reminder")]
         public async Task<IActionResult> SendCommitmentReminderAsync(
            [FromQuery] SubscriptionQueryFilter filter)
