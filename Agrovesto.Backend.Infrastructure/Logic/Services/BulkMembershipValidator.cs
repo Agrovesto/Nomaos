@@ -10,7 +10,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Services
 {
-    public class BulkMembershipValidator
+    public interface IBulkMembershipValidator
+    {
+        Task<List<RowError>> ValidateAllAsync(List<BulkMembershipRowDto> rows, OnBoardingArgs args);
+    }
+    public class BulkMembershipValidator : IBulkMembershipValidator
     {
         private readonly DataContext _db;
 
