@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -34,11 +35,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task<BulkUploadResult> ProcessBulkMembershipUploadAsync(
-    List<BulkMembershipRowDto> rows, OnBoardingArgs args)
+     List<BulkMembershipRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkUploadResult { TotalRows = rows.Count };
 
-            // Prefetch lookup tables once (outside transaction)
+            // Prefetch lookup tables
             var membershipTypeMap = await _db.MemberShipTypes
                 .Where(t => t.BusinessCode == args.businessCode)
                 .ToDictionaryAsync(t => t.Name.ToLower(), t => t);
@@ -61,17 +62,59 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     .ToDictionaryAsync(o => o.OrganizationCode, o => o);
             }
 
-            var chunks = rows
+            // ── Pre-validate duplicates (2 DB calls, no transactions) ────
+            var incomingPhones = rows.Select(r => r.LeaderPhoneNumber).ToList();
+            var existingPhones = (await _db.Users
+                .Where(u => incomingPhones.Contains(u.PhoneNumber)
+                         && u.BusinessCode == args.businessCode)
+                .Select(u => u.PhoneNumber)
+                .ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var incomingNames = rows.Select(r => r.MembershipName).ToList();
+            var existingNames = (await _db.MemberShips
+                .Where(m => incomingNames.Contains(m.Name)
+                         && m.BelongToBusinessCode == args.businessCode)
+                .Select(m => m.Name)
+                .ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var row in rows)
+            {
+                if (existingPhones.Contains(row.LeaderPhoneNumber))
+                    result.Errors.Add(new MembershipRowError
+                    {
+                        RowNumber = row.RowNumber,
+                        PhoneNumber = row.LeaderPhoneNumber,
+                        Messages = new List<string>
+                    { $"Row {row.RowNumber}: phone number '{row.LeaderPhoneNumber}' already exists." }
+                    });
+
+                if (existingNames.Contains(row.MembershipName))
+                    result.Errors.Add(new MembershipRowError
+                    {
+                        RowNumber = row.RowNumber,
+                        MembershipName = row.MembershipName,
+                        Messages = new List<string>
+                    { $"Row {row.RowNumber}: membership name '{row.MembershipName}' already exists." }
+                    });
+            }
+
+            result.FailureCount = result.Errors.Count; // ← sync failure count from pre-validation
+
+            // ── Only chunk and process rows that passed ───────────────────
+            var validRows = rows.Where(r =>
+                !result.Errors.Any(e => e.RowNumber == r.RowNumber)).ToList();
+
+            var validChunks = validRows
                 .Select((row, i) => new { row, i })
                 .GroupBy(x => x.i / ChunkSize)
                 .Select(g => g.Select(x => x.row).ToList());
 
-            // ✅ Grab the strategy once — reuse it per chunk
             var strategy = _db.Database.CreateExecutionStrategy();
 
-            foreach (var chunk in chunks)
+            foreach (var chunk in validChunks)
             {
-                // Capture for the lambda (closure safety)
                 var currentChunk = chunk;
 
                 await strategy.ExecuteAsync(async () =>
@@ -88,9 +131,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
                         await _db.SaveChangesAsync();
                         await transaction.CommitAsync();
-
-                        // ✅ Must update result inside the lambda
                         result.SuccessCount += currentChunk.Count;
+                    }
+                    catch (DuplicateMembershipException ex)
+                    {
+                        await transaction.RollbackAsync();
+                        result.Errors.Add(new MembershipRowError
+                        {
+                            RowNumber = ex.RowNumber,
+                            MembershipName = currentChunk
+                                .FirstOrDefault(r => r.RowNumber == ex.RowNumber)?.MembershipName,
+                            Messages = new List<string> { ex.Message }
+                        });
+                        result.FailureCount++;
                     }
                     catch (Exception ex)
                     {
@@ -101,19 +154,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
                         foreach (var row in currentChunk)
                         {
-                            result.Errors.Add(new RowError
+                            result.Errors.Add(new MembershipRowError
                             {
                                 RowNumber = row.RowNumber,
                                 MembershipName = row.MembershipName,
-                                Messages = new List<string>
-                            { "Chunk failed: " + ex.Message }
+                                Messages = new List<string> { "Chunk failed: " + ex.Message }
                             });
                         }
 
                         result.FailureCount += currentChunk.Count;
-
-                        // ✅ Re-throw only transient errors — the strategy will retry.
-                        // Swallow business/validation errors so other chunks continue.
                         throw;
                     }
                 });
@@ -121,15 +170,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             return result;
         }
-        // ---------------------------------------------------------------
-        // Single-row orchestration (runs inside an active transaction)
-        // ---------------------------------------------------------------
         private async Task ProcessSingleRowAsync(
             BulkMembershipRowDto row,
             Dictionary<string, MemberShipType> typeMap,
             Dictionary<string, Business> businessMap,
             Dictionary<string, Organization> orgMap, OnBoardingArgs args)
         {
+
             // ── Split leader name into parts ──────────────────────────
             var nameParts = (row.LeaderName ?? "").Split(' ',
                 StringSplitOptions.RemoveEmptyEntries);

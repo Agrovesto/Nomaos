@@ -32,13 +32,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int TotalRows { get; set; }
         public int SuccessCount { get; set; }
         public int FailureCount { get; set; }
-        public List<RowError> Errors { get; set; } = new();
+        public List<MembershipRowError> Errors { get; set; } = new();
     }
 
-    public class RowError
+    public class MembershipRowError
     {
         public int RowNumber { get; set; }
         public string MembershipName { get; set; }
+        public string PhoneNumber { get; set; }
         public List<string> Messages { get; set; } = new();
     }
 

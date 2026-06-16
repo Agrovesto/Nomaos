@@ -12,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 {
     public interface IBulkMembershipValidator
     {
-        Task<List<RowError>> ValidateAllAsync(List<BulkMembershipRowDto> rows, OnBoardingArgs args);
+        Task<List<MembershipRowError>> ValidateAllAsync(List<BulkMembershipRowDto> rows, OnBoardingArgs args);
     }
     public class BulkMembershipValidator : IBulkMembershipValidator
     {
@@ -20,10 +20,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
         public BulkMembershipValidator(DataContext db) => _db = db;
 
-        public async Task<List<RowError>> ValidateAllAsync(
+        public async Task<List<MembershipRowError>> ValidateAllAsync(
             List<BulkMembershipRowDto> rows, OnBoardingArgs args)
         {
-            var errors = new List<RowError>();
+            var errors = new List<MembershipRowError>();
 
             var validTypes = (await _db.MemberShipTypes
      .Where(t => t.BusinessCode == args.businessCode)
@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
                
                 if (rowErrors.Any())
-                    errors.Add(new RowError
+                    errors.Add(new MembershipRowError
                     {
                         RowNumber = row.RowNumber,
                         MembershipName = row.MembershipName,
