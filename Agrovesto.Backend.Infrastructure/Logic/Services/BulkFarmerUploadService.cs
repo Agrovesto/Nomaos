@@ -55,7 +55,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 var validationErrors = BulkFarmerRowValidator.Validate(row);
                 if (validationErrors.Any())
                 {
-                    RecordFailure(result, row, string.Join(" | ", validationErrors));
+                    Failure.RecordFailure(result, row, string.Join(" | ", validationErrors));
                     continue;
                 }
 
@@ -80,7 +80,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     catch (DuplicatePhoneException ex)
                     {
                         await tx.RollbackAsync();
-                        RecordFailure(result, currentRow, ex.Message); // ← already correct, nothing to change
+                        Failure.RecordFailure(result, currentRow, ex.Message); // ← already correct, nothing to change
                         _logger.LogWarning("Row {Row}: duplicate – {Msg}", currentRow.RowIndex, ex.Message);
                     }
                     catch (Exception ex)
@@ -95,7 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 if (rowSucceeded)
                     result.Succeeded++;
                 else if (!result.Errors.Any(e => e.RowIndex == currentRow.RowIndex))
-                    RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
+                    Failure.RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
             }
 
             return result;
