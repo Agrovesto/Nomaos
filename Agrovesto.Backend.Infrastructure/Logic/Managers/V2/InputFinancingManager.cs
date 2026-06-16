@@ -311,7 +311,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
             if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
-            if (query.InputId <= 0) throw new ArgumentException("Invalid InputId", nameof(query.InputId));
            if (request == null) throw new ArgumentNullException(nameof(request));
            if(request.OrganizationProductId <= 0) throw new ArgumentException("Invalid OrganizationProductId", nameof(request.OrganizationProductId));
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);

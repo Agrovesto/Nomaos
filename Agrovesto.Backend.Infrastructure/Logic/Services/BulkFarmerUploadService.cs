@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -54,7 +55,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 var validationErrors = BulkFarmerRowValidator.Validate(row);
                 if (validationErrors.Any())
                 {
-                    RecordFailure(result, row, string.Join(" | ", validationErrors));
+                    Failure.RecordFailure(result, row, string.Join(" | ", validationErrors));
                     continue;
                 }
 
@@ -79,10 +80,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     catch (DuplicatePhoneException ex)
                     {
                         await tx.RollbackAsync();
-                        RecordFailure(result, currentRow, ex.Message);
-                        _logger.LogWarning(
-                            "Row {Row}: duplicate – {Msg}", currentRow.RowIndex, ex.Message);
-                  
+                        Failure.RecordFailure(result, currentRow, ex.Message); // ← already correct, nothing to change
+                        _logger.LogWarning("Row {Row}: duplicate – {Msg}", currentRow.RowIndex, ex.Message);
                     }
                     catch (Exception ex)
                     {
@@ -96,7 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 if (rowSucceeded)
                     result.Succeeded++;
                 else if (!result.Errors.Any(e => e.RowIndex == currentRow.RowIndex))
-                    RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
+                    Failure.RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
             }
 
             return result;
@@ -109,7 +108,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             if (phoneExists)
                 throw new DuplicatePhoneException(
-                    $"Phone number '{row.PhoneNumber}' already exists.");
+                    $"Phone number '{row.PhoneNumber}' already exists.", row.RowIndex);
 
             var (defaultPassword, salt) = GenerateDefaultCredentials();
 
@@ -341,17 +340,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             return (password, salt);
         }
 
-        private static void RecordFailure(
-            BulkFarmerUploadResultDto result, BulkFarmerRowDto row, string reason)
-        {
-            result.Failed++;
-            result.Errors.Add(new FarmerRowErrorDto
-            {
-                RowIndex = row.RowIndex,
-                PhoneNumber = row.PhoneNumber ?? "(missing)",
-                Reason = reason,
-            });
-        }
+        
 
 
         private List<ValueChainSelectionDto> GetValueChains(BulkOnboardingExcelRow row)
@@ -369,8 +358,5 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             };
         }
     }
-    public sealed class DuplicatePhoneException : Exception
-    {
-        public DuplicatePhoneException(string message) : base(message) { }
-    }
+   
 }
