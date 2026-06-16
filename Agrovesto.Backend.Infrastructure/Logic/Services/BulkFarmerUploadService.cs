@@ -43,7 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
     IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkFarmerUploadResultDto { TotalRows = rows.Count };
-            \
+            
             var strategy = _db.Database.CreateExecutionStrategy();
 
             for (int i = 0; i < rows.Count; i++)
