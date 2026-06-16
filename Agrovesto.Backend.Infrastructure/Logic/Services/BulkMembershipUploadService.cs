@@ -34,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task<BulkUploadResult> ProcessBulkMembershipUploadAsync(
-            List<BulkMembershipRowDto> rows, OnBoardingArgs args)
+    List<BulkMembershipRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkUploadResult { TotalRows = rows.Count };
 
@@ -61,54 +61,66 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     .ToDictionaryAsync(o => o.OrganizationCode, o => o);
             }
 
-            // Process in chunks — each chunk is one atomic transaction
             var chunks = rows
                 .Select((row, i) => new { row, i })
                 .GroupBy(x => x.i / ChunkSize)
                 .Select(g => g.Select(x => x.row).ToList());
 
+            // ✅ Grab the strategy once — reuse it per chunk
+            var strategy = _db.Database.CreateExecutionStrategy();
+
             foreach (var chunk in chunks)
             {
-                await using var transaction = await _db.Database
-                    .BeginTransactionAsync(
-                        System.Data.IsolationLevel.ReadCommitted);
-                try
-                {
-                    foreach (var row in chunk)
-                    {
-                        await ProcessSingleRowAsync(
-                            row, membershipTypeMap, businessMap, orgMap, args);
-                    }
+                // Capture for the lambda (closure safety)
+                var currentChunk = chunk;
 
-                    await _db.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    result.SuccessCount += chunk.Count;
-                }
-                catch (Exception ex)
+                await strategy.ExecuteAsync(async () =>
                 {
-                    await transaction.RollbackAsync();
-                    _logger.LogError(ex,
-                        "Chunk starting at row {Row} failed and was rolled back.",
-                        chunk[0].RowNumber);
-
-                    foreach (var row in chunk)
+                    await using var transaction = await _db.Database
+                        .BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
+                    try
                     {
-                        result.Errors.Add(new RowError
+                        foreach (var row in currentChunk)
                         {
-                            RowNumber = row.RowNumber,
-                            MembershipName = row.MembershipName,
-                            Messages = new List<string>
-                            { "Chunk failed: " + ex.Message }
-                        });
-                    }
+                            await ProcessSingleRowAsync(
+                                row, membershipTypeMap, businessMap, orgMap, args);
+                        }
 
-                    result.FailureCount += chunk.Count;
-                }
+                        await _db.SaveChangesAsync();
+                        await transaction.CommitAsync();
+
+                        // ✅ Must update result inside the lambda
+                        result.SuccessCount += currentChunk.Count;
+                    }
+                    catch (Exception ex)
+                    {
+                        await transaction.RollbackAsync();
+                        _logger.LogError(ex,
+                            "Chunk starting at row {Row} failed and was rolled back.",
+                            currentChunk[0].RowNumber);
+
+                        foreach (var row in currentChunk)
+                        {
+                            result.Errors.Add(new RowError
+                            {
+                                RowNumber = row.RowNumber,
+                                MembershipName = row.MembershipName,
+                                Messages = new List<string>
+                            { "Chunk failed: " + ex.Message }
+                            });
+                        }
+
+                        result.FailureCount += currentChunk.Count;
+
+                        // ✅ Re-throw only transient errors — the strategy will retry.
+                        // Swallow business/validation errors so other chunks continue.
+                        throw;
+                    }
+                });
             }
 
             return result;
         }
-
         // ---------------------------------------------------------------
         // Single-row orchestration (runs inside an active transaction)
         // ---------------------------------------------------------------

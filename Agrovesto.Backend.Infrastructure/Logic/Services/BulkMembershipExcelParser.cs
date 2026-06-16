@@ -8,8 +8,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Services
 {
-
-    public class BulkMembershipExcelParser
+    public interface IBulkMembershipExcelParser
+    {
+        List<BulkMembershipRowDto> Parse(Stream fileStream, string businessCode, string onboardedById, string? organizationCode = null, long? agentId = null);
+    }
+    public class BulkMembershipExcelParser : IBulkMembershipExcelParser
     {
         // Expected headers: S/N, MembershipName, MembershipType, State,
         //                   LGA, Location, LeaderName, LeaderPhoneNumber

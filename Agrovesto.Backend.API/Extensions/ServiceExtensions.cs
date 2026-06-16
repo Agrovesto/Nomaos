@@ -43,7 +43,10 @@ namespace Agrovesto.Backend.API.Extensions
 
             services.AddSingleton<ILogService, SerilogService>();
            
+
             services.AddScoped<IBulkFarmerUploadService, BulkFarmerUploadService>();
+            services.AddScoped<IBulkMembershipValidator, BulkMembershipValidator>();
+            services.AddScoped<IBulkMembershipExcelParser, BulkMembershipExcelParser>();
             services.AddScoped<IBulkMembershipUploadService, BulkMembershipUploadService>();
             services.AddScoped<IBusinessRepository, BusinessRepository>();
             services.AddScoped<IRoleRepository, RoleRepository>();

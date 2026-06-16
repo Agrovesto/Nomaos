@@ -31,8 +31,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         private readonly IMembershipManager _membershipManager;
-        private readonly BulkMembershipExcelParser _parser;
-        private readonly BulkMembershipValidator _validator;
+        private readonly IBulkMembershipExcelParser _parser;
+        private readonly IBulkMembershipValidator _validator;
         private readonly IBulkMembershipUploadService _memberShipUploadService;
 
         private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -42,8 +42,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IMembershipManager membershipManager,
 
                 IBulkFarmerUploadService bulkFarmerUploadService,
-        BulkMembershipExcelParser parser,
-        BulkMembershipValidator validator,
+        IBulkMembershipExcelParser parser,
+        IBulkMembershipValidator validator,
         IBulkMembershipUploadService memberShipUploadService) : base(httpContextAccessor)
         {
            _agentManager = agentManager;

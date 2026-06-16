@@ -40,8 +40,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IInputFinancingManager _inputFinancingManager;
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
-        private readonly BulkMembershipExcelParser _parser;
-        private readonly BulkMembershipValidator _validator;
+        private readonly IBulkMembershipExcelParser _parser;
+        private readonly IBulkMembershipValidator _validator;
         private readonly IBulkMembershipUploadService _memberShipUploadService;
 
         private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -57,8 +57,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
              IFarmMappingManager farmMappingManager,
 
                 IBulkFarmerUploadService bulkFarmerUploadService,
-        BulkMembershipExcelParser parser,
-        BulkMembershipValidator validator,
+        IBulkMembershipExcelParser parser,
+        IBulkMembershipValidator validator,
         IBulkMembershipUploadService memberShipUploadService) : base(httpContextAccessor)
         {
                 _walletService = walletService;
@@ -2796,7 +2796,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         #endregion AgentMgt
 
         #region Membership
-        [HttpPost("")]
+        [HttpPost("upload-bulk-membership")]
         [RequestSizeLimit(MaxFileSizeBytes)] // 10 MB cap
         public async Task<IActionResult> BulkMembershipUpload(
        IFormFile file,

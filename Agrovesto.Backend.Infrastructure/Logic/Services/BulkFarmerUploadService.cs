@@ -37,18 +37,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             _logger = logger;
         }
 
-       
+
         /// <param name="rows">Parsed rows from the uploaded file.</param>
         public async Task<BulkFarmerUploadResultDto> ProcessAsync(
-            IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
+    IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkFarmerUploadResultDto { TotalRows = rows.Count };
+            
+            var strategy = _db.Database.CreateExecutionStrategy();
 
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
-                row.RowIndex = i + 1; 
-                
+                row.RowIndex = i + 1;
 
                 var validationErrors = BulkFarmerRowValidator.Validate(row);
                 if (validationErrors.Any())
@@ -57,35 +58,49 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     continue;
                 }
 
-                await using var tx = await _db.Database.BeginTransactionAsync();
-                try
-                {
-                    await OnboardSingleFarmerAsync(row, args);
-                    await _db.SaveChangesAsync();
-                    await tx.CommitAsync();
-                    result.Succeeded++;
+                var currentRow = row;
 
-                    _logger.LogInformation(
-                        "Row {Row}: farmer {Phone} onboarded successfully.",
-                        row.RowIndex, row.PhoneNumber);
-                }
-                catch (DuplicatePhoneException ex)
+                var rowSucceeded = false;
+
+                await strategy.ExecuteAsync(async () =>
                 {
-                    await tx.RollbackAsync();
-                    RecordFailure(result, row, ex.Message);
-                    _logger.LogWarning("Row {Row}: duplicate – {Msg}", row.RowIndex, ex.Message);
-                }
-                catch (Exception ex)
-                {
-                    await tx.RollbackAsync();
-                    RecordFailure(result, row, "Unexpected error: " + ex.Message);
-                    _logger.LogError(ex, "Row {Row}: unhandled exception.", row.RowIndex);
-                }
+                    await using var tx = await _db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        await OnboardSingleFarmerAsync(currentRow, args);
+                        await _db.SaveChangesAsync();
+                        await tx.CommitAsync();
+                        rowSucceeded = true;
+
+                        _logger.LogInformation(
+                            "Row {Row}: farmer {Phone} onboarded successfully.",
+                            currentRow.RowIndex, currentRow.PhoneNumber);
+                    }
+                    catch (DuplicatePhoneException ex)
+                    {
+                        await tx.RollbackAsync();
+                        RecordFailure(result, currentRow, ex.Message);
+                        _logger.LogWarning(
+                            "Row {Row}: duplicate – {Msg}", currentRow.RowIndex, ex.Message);
+                  
+                    }
+                    catch (Exception ex)
+                    {
+                        await tx.RollbackAsync();
+                        _logger.LogError(ex, "Row {Row}: unhandled exception.", currentRow.RowIndex);
+                      
+                        throw;
+                    }
+                });
+
+                if (rowSucceeded)
+                    result.Succeeded++;
+                else if (!result.Errors.Any(e => e.RowIndex == currentRow.RowIndex))
+                    RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
             }
 
             return result;
         }
-
         private async Task OnboardSingleFarmerAsync(
             BulkFarmerRowDto row, OnBoardingArgs args)
         {
