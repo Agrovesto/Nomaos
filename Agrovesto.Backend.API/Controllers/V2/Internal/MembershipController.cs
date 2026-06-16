@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,14 +22,72 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IMembershipManager _membershipManager;
         private readonly IBusinessManager _businessManager;
         private readonly IOnBoardingManager _onBoardingManager;
+
+        private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
+        private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         public MembershipController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
+
+                IBulkFarmerUploadService bulkFarmerUploadService,
             IMembershipManager membershipManager, IBusinessManager businessManager) : base(httpContextAccessor)
         {
             _onBoardingManager=onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
+
+            _bulkFarmerUploadService = bulkFarmerUploadService;
         }
+
+
+        [HttpPost("bulk-onboard")]
+        [RequestSizeLimit(MaxFileSizeBytes)]
+        public async Task<IActionResult> BulkUpload(
+            IFormFile file,
+            [FromQuery] OnBoardingArgs args)
+        {
+            // ── Basic input checks ────────────────────────────────────────
+            if (file is null || file.Length == 0)
+                return BadRequest("No file uploaded.");
+
+            if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                return BadRequest("Only CSV files are accepted.");
+
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                return BadRequest("businessCode is required.");
+
+            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.UserId))
+                return Unauthorized("Access Denied");
+            args.organizationCode = OrganizationCode;
+            await EnrichCooperativeAsync(args);
+
+
+            List<BulkFarmerRowDto> rows;
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                rows = BulkFarmerCsvParser.Parse(stream);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Could not parse CSV: {ex.Message}");
+            }
+
+            if (rows.Count == 0)
+                return BadRequest("The uploaded file contains no data rows.");
+
+            var uploadedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+
+            var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
+
+            int statusCode = result.Failed > 0 ? StatusCodes.Status207MultiStatus
+                                               : StatusCodes.Status200OK;
+
+            return StatusCode(statusCode, result);
+        }
+
 
         [HttpPut("update-farmer-profile")]
         public async Task<IActionResult> UpdateFarmerProfile([FromBody] MemberShipModel model, [FromQuery] string? userId)
@@ -92,7 +151,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
 
-        [HttpPost("bulk-onboard")]
+      /**  [HttpPost("bulk-onboard")]
         public async Task<IActionResult> BulkOnboard(
         IFormFile file,
         [FromQuery] OnBoardingArgs args)
@@ -158,6 +217,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+        **/
+
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)

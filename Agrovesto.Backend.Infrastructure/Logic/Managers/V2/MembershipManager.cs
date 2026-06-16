@@ -24,7 +24,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
     public interface IMembershipManager
     {
+        Task<MembershipResponse> AssignLeaderAsync(AssignLeaderDto dto, OnBoardingArgs args);
         Task<CreateMembershipResponseModel> CreateFarmerAsync(CreateFarmerRequest model, OnBoardingArgs args);
+        Task<MembershipResponse> CreateMembershipAsync(CreateMembershipDto dto, OnBoardingArgs args);
         Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
@@ -70,6 +72,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _sMSService = notificationService;
             _agentRepository = agentRepository;
             _otpService = otpService;
+        }
+
+        public async Task<MembershipResponse> CreateMembershipAsync(
+     CreateMembershipDto dto,
+   OnBoardingArgs args)
+        {
+            return await _membershipRepository.CreateMembershipAsync(dto, args);
+        }
+        public async Task<MembershipResponse> AssignLeaderAsync(
+       AssignLeaderDto dto,
+        OnBoardingArgs args)
+        {
+            return await _membershipRepository.AssignLeaderAsync(dto, args.UserId);
         }
         private static void ValidateQuickOnboarding(OnboardingRequestModel model)
         {

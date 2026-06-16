@@ -93,7 +93,7 @@ RepaymentTransaction
         public long Id { get; set; }
         public long InputPackageId { get; set; }
         public InputPackage InputPackage { get; set; }
-
+        public decimal CommitmentPercentage { get; set; }
         public CommitmentType CommitmentType { get; set; } // if commitment required, how is the commitment calculated
         public decimal CommitmentValue { get; set; } // value of the commitment, either a static fee or percentage
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
@@ -161,8 +161,9 @@ RepaymentTransaction
         public RepaymentPlan RepaymentPlan { get; set; }
 
         public CommitmentPlan CommitmentPlan { get; set; }
+        public ICollection<InputPackageSubscription> Subscriptions { get; set; }
+    = new List<InputPackageSubscription>();
 
-      
     }
     
     public class AdditionalInputPackageCost

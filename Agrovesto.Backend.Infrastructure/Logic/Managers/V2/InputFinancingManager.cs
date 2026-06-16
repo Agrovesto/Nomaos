@@ -64,6 +64,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task SendCommitmentReminderAsync(SubscriptionQueryFilter filter);
         Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter);
         Task<bool> AddItemToPackageAsync(AddPackageItemRequest request, ReplacePackageItemRequestArgs query);
+        Task<bool> AddAdditionalCostToPackageAsync(AddAdditionalCostRequest request, ReplacePackageItemRequestArgs query);
+        Task<bool> RemoveAdditionalCostFromPackageAsync(ReplacePackageItemRequestArgs query);
+        Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs query);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -289,7 +292,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if(query.InputId <= 0) throw new ArgumentException("Invalid InputId", nameof(query.InputId));
             return await _inputFinancingRepository.RemoveItemFromPackage(query.PackageId, query.InputId);
         }
-
+       
         public async Task<bool> ReplacePackageItemAsync(ReplacePackageItemRequest request, ReplacePackageItemRequestArgs query)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
@@ -317,6 +320,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 query.OrganizationId = hasOrg.OrganizaionId;
             }
             return await _inputFinancingRepository.AddItemToPackageAsync(query.PackageId, request);
+        }
+        public async Task<bool> RemoveAdditionalCostFromPackageAsync(ReplacePackageItemRequestArgs query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            if (query.AdditionalCostId <= 0) throw new ArgumentException("Invalid Additional Cost", nameof(query.InputId));
+            return await _inputFinancingRepository.RemoveAdditionalCostFromPackageAsync(query.PackageId, query.AdditionalCostId);
+        }
+
+        public async Task<bool> AddAdditionalCostToPackageAsync(AddAdditionalCostRequest request, ReplacePackageItemRequestArgs query)
+        {
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+           
+            if (request == null) throw new ArgumentNullException(nameof(request));
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.AddAdditionalCostToPackageAsync(query.PackageId, request);
+        }
+
+        public async Task<bool> UpdateAdditionalCostAsync(
+  UpdateAdditionalCostRequest request,
+  UpdateAdditionalCostArgs query)
+        { 
+            if (query == null) throw new ArgumentNullException(nameof(query));
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+            if (query.AdditionalCostId <= 0) throw new ArgumentException("Invalid Additional Cost Id", nameof(query.AdditionalCostId));
+           if (request == null) throw new ArgumentNullException(nameof(request));
+           
+            
+            return await _inputFinancingRepository.UpdateAdditionalCostAsync(request, query);
         }
 
 
