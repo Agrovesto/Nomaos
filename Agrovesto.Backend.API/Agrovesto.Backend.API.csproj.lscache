@@ -761,7 +761,7 @@ Program.cs
  npgsql.entityframeworkcore.postgresql/8.0.0/lib/net8.0/Npgsql.EntityFrameworkCore.PostgreSQL.dll
  npgsql/8.0.0/lib/net8.0/Npgsql.dll
  pipelines.sockets.unofficial/2.2.8/lib/net5.0/Pipelines.Sockets.Unofficial.dll
- pomelo.entityframeworkcore.mysql/7.0.0/lib/net7.0/Pomelo.EntityFrameworkCore.MySql.dll
+ pomelo.entityframeworkcore.mysql/8.0.2/lib/net8.0/Pomelo.EntityFrameworkCore.MySql.dll
  rbush/4.0.0/lib/net8.0/RBush.dll
  sendgrid/9.29.3/lib/netstandard2.0/SendGrid.dll
  serilog.aspnetcore/8.0.3/lib/net8.0/Serilog.AspNetCore.dll
