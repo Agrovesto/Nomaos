@@ -576,6 +576,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string Location { get; set; }
         public string VerificationStatus { get; set; }
         public DateTimeOffset EnrollmentDate { get; set; }
+        public string Package { get; set; }
+        public string WarehouseAssigned { get; set; }
     }
 
     public class PackageInfoDto

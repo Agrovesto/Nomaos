@@ -498,6 +498,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #region subscriptions
         [HttpPost("add-subscriber")]
+        [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> AddSubscriberAsync(
         [FromBody] AddSubscriberRequest model,
         [FromQuery] InputSubscriptionRequestArgs args)
@@ -561,7 +562,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
-            [HttpGet("get-subscribers")]
+          
+        
+        [HttpGet("get-subscribers")]
+
+        [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
@@ -618,6 +623,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 HttpContext.TraceIdentifier
             ));
         }
+        
         [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(
             [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
@@ -685,7 +691,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  HttpContext.TraceIdentifier
                  ));
         }
+       
         [HttpGet("subscription-detail")]
+        [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionDetail(
             [FromQuery] SubscriptionQueryFilter filter)
         {

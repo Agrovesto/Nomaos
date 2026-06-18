@@ -67,7 +67,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter);
         Task<long> RequestInputDisbursementApprovalAsync(long subscriptionId, decimal? requestedAmount, string? reference, InputSubscriptionRequestArgs args);
         Task<decimal> GetTotalCommitmentPaidAsync(long subscriptionId);
-       // Task<bool> RecordSuccessfulPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args);
+        // Task<bool> RecordSuccessfulPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args);
         Task<bool> RecordSuccessfulPaymentAsync(long paymentId, PaymentConfirmationRequest request);
         Task FlagPendingBankTransferAsync(long paymentId);
         Task FlagPendingCashApprovalAsync(long paymentId);
@@ -100,8 +100,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var cat = new InputFinancingCategory
             {
                 BusinessCode = dto.BusinessCode,
-                Description=dto.Description,
-                
+                Description = dto.Description,
+
                 Name = dto.CategoryName,
                 IsActive = true,
                 CreatedOn = DateTimeOffset.Now,
@@ -361,7 +361,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var package = await _context.InputPackages
                         .Include(x => x.CommitmentPlan)
                         .Include(x => x.RepaymentPlan)
-                       
+
                         .FirstOrDefaultAsync(x =>
                             x.Id == packageId &&
                             x.OrganizationId == args.organizationId);
@@ -381,7 +381,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             throw new Exception("Invalid commitment payment date range");
                     }
 
-                    
+
                     if (request.RepaymentRequired)
                     {
                         if (request.RepaymentStartDate >= request.RepaymentEndDate)
@@ -415,7 +415,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         };
                     }
 
-               
+
                     //else
                     //{
                     //    if (package.CommitmentPlan != null)
@@ -574,7 +574,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentRequired = package.CommitmentRequired,
 
                     CommitmentValue = commitment?.CommitmentValue ?? 0,
-                    
+
                     CommitmentPaymentStartDate = commitment?.CommitmentPaymentStartDate,
                     CommitmentPaymentEndDate = commitment?.CommitmentPaymentEndDate,
                     CommitmentPercentage = commitment?.CommitmentPercentage ?? 0,
@@ -718,7 +718,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.CommitmentPlan)
                 .FirstOrDefaultAsync(x => x.Id == packageId);
 
-           await EnsurePackageIsEditable(package);
+            await EnsurePackageIsEditable(package);
 
             var product = await _context.OrganizationProducts
                 .FirstOrDefaultAsync(x => x.Id == request.OrganizationProductId
@@ -789,7 +789,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.CommitmentPlan)
                 .FirstOrDefaultAsync(x => x.Id == packageId);
 
-           await EnsurePackageIsEditable(package);
+            await EnsurePackageIsEditable(package);
 
             var additionalCost = package.AdditionalCosts
                 .FirstOrDefault(x => x.Id == additionalCostId);
@@ -965,7 +965,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         RepaymentEndDate = repayment?.RepaymentEndDate,
                         RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
                         RepaymentMode = repayment?.RepaymentMode ?? default,
-                        
+
                         BusinessCode = args.BusinessCode
                     };
 
@@ -1436,7 +1436,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             var subscription = await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
-                .Include(x => x.SubscriberUser) 
+                .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
             if (subscription == null)
@@ -1537,8 +1537,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 SubscriptionId = subscriptionId,
                 RequestedAmount = subscription.TotalFinancingValue,
                 RequestedByUserId = args.UserId,
-                RequestCreatedOn= DateTimeOffset.Now,
-                Reference= reference,
+                RequestCreatedOn = DateTimeOffset.Now,
+                Reference = reference,
                 Status = DisbursementStatus.PendingApproval,
             };
             _context.InputSubscriptionDisbursements.Add(request);
@@ -1590,7 +1590,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             disbursementRequest.ApprovedOn = DateTimeOffset.UtcNow;
             disbursementRequest.Subscription.Status = SubscriptionStatus.PendingDisbursement;
             disbursementRequest.ApprovedAmount = request.Amount.HasValue ? request.Amount.Value : disbursementRequest.RequestedAmount;
-            
+
             await _context.SaveChangesAsync();
 
             return true;
@@ -1923,7 +1923,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         SubscriptionQueryFilter filter)
         {
             var query = _context.InputPackageSubscriptions
-                .Where(x=>x.BusinessCode == filter.BusinessCode)
+                .Where(x => x.BusinessCode == filter.BusinessCode)
                 .Include(x => x.InputPackage)
                 .AsQueryable();
 
@@ -2014,13 +2014,13 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     case SubscriptionView.Approved:
                         query = query.Where(x =>
                             x.Status == SubscriptionStatus.PendingCommitment || x.Status == SubscriptionStatus.Approved);
-                            break;
+                        break;
                     case SubscriptionView.PendingDisbursement:
-                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingDisbursement 
-                            //||
+                        query = query.Where(x =>
+                           x.Status == SubscriptionStatus.PendingDisbursement
+                           //||
                            // x.Status == SubscriptionStatus.Approved
-                            );
+                           );
                         break;
 
                     //case SubscriptionView.Approved:
@@ -2138,6 +2138,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             var query = BuildSubscriptionQuery(filter);
 
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 10 : pageSize;
+
             var count = await query.CountAsync();
 
             var items = await query
@@ -2146,9 +2149,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Take(pageSize)
                 .Select(x => new SubscriptionDetailDto
                 {
-                    PackageId= x.InputPackageId,
-                    SubscriptionId =x.Id,
-                    SubscriberUserId= x.SubscriberUserId,
+                    PackageId = x.InputPackageId,
+                    SubscriptionId = x.Id,
+                    SubscriberUserId = x.SubscriberUserId,
                     SubscriberName =
     x.SubscriberUser == null
         ? x.SubscriberUserId
@@ -2175,7 +2178,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     TotalFinancingValue = x.TotalFinancingValue,
                     SubscribedOn = x.SubscribedOn,
                     SubscriptionStatus = x.Status,
-                    SubscriptionStatusName= EnumExtensions.GetDisplayName(x.Status),
+                    SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
                     CommitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
                                        ? "Not Required"
                                         : ((_context.InputPackageSubscriptionPayments
@@ -2197,6 +2200,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 PageSize = pageSize
             };
         }
+
+
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {
             var subscription = await _context.InputPackageSubscriptions
@@ -2295,12 +2300,14 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     RepaymentDuration = RepaymentPeriod,//repaymentPlan?.RepaymentDuration ?? 0,
 
-                    RepaymentModel =EnumExtensions.GetDisplayName(repaymentPlan?.Frequency),
+                    RepaymentModel = EnumExtensions.GetDisplayName(repaymentPlan?.Frequency),
 
-                    RiskCategory =EnumExtensions.GetDisplayName(repaymentPlan?.RiskCategory)
+                    RiskCategory = EnumExtensions.GetDisplayName(repaymentPlan?.RiskCategory)
                 }
             };
         }
+
+        //currently on this
         public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(
        SubscriptionQueryFilter filter
             )
@@ -2370,6 +2377,40 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         : null;
             var repayment = package.RepaymentPlan;
 
+
+            var agentRoleId = await _context.Roles
+    .Where(r => r.Name == "Agent")
+    .Select(r => r.Id)
+    .FirstOrDefaultAsync();
+
+            string? warehouseAssigned = null;
+            bool isAgent = false;
+
+            if (!string.IsNullOrEmpty(agentRoleId) &&
+                !string.IsNullOrEmpty(subscription.AddedByUserId))
+            {
+                isAgent = await _context.UserRoles
+                    .AnyAsync(ur =>
+                        ur.UserId == subscription.AddedByUserId &&
+                        ur.RoleId == agentRoleId);
+
+                if (isAgent)
+                {
+                    var agent = await _context.Agents.FirstOrDefaultAsync(x => x.UserId == subscription.AddedByUserId);
+                    if (agent != null)
+                    {
+                        warehouseAssigned = await (
+     from oa in _context.OrganizationAgents
+     join a in _context.Agents on oa.AgentId equals a.Id
+     where a.UserId == subscription.AddedByUserId
+           && oa.OrganizationId == orgId
+     select oa.Location.LocationName
+ ).FirstOrDefaultAsync();
+                    }
+                }
+            }
+
+
             var subscriberInfo = new SubscriberInfoDto
             {
                 Name = subscription.SubscriberUser?.Name
@@ -2385,7 +2426,9 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                 VerificationStatus = verificationStatus,
 
-                EnrollmentDate = subscription.SubscribedOn
+                EnrollmentDate = subscription.SubscribedOn,
+                Package = package.Name,
+                WarehouseAssigned = warehouseAssigned
             };
 
             var response = new SubscriptionReviewResponseDto
@@ -2393,34 +2436,34 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 Subscriber = subscriberInfo
             };
 
-        //    if (
-                //filter.ViewType == SubscriptionView.PendingCommitment ||
-               // filter.ViewType == SubscriptionView.Approved ||
-      //          filter.ViewType == SubscriptionView.Active)
-    //        {
-                response.Package = new PackageInfoDto
-                {
-                    PackageName = package?.Name,
+            //    if (
+            //filter.ViewType == SubscriptionView.PendingCommitment ||
+            // filter.ViewType == SubscriptionView.Approved ||
+            //          filter.ViewType == SubscriptionView.Active)
+            //        {
+            response.Package = new PackageInfoDto
+            {
+                PackageName = package?.Name,
 
-                    TotalValue = package?.TotalFinancingValue ?? 0m,
+                TotalValue = package?.TotalFinancingValue ?? 0m,
 
-                    CommitmentRequired = package?.CommitmentRequired ?? false,
+                CommitmentRequired = package?.CommitmentRequired ?? false,
 
-                    CommitmentValue =
-                        package?.CommitmentPlan?.CommitmentValue ?? 0m,
+                CommitmentValue =
+                    package?.CommitmentPlan?.CommitmentValue ?? 0m,
 
-                    RepaymentDuration = RepaymentPeriod,
-                        //package?.RepaymentPlan?.RepaymentDuration ?? 0,
+                RepaymentDuration = RepaymentPeriod,
+                //package?.RepaymentPlan?.RepaymentDuration ?? 0,
 
-                    RepaymentModel =
-                        package?.RepaymentPlan?.RepaymentFrequency.ToString(),
+                RepaymentModel =
+                    package?.RepaymentPlan?.RepaymentFrequency.ToString(),
 
-                    RiskCategory =
-                        package?.RepaymentPlan?.RiskCategory.ToString()
-                };
+                RiskCategory =
+                    package?.RepaymentPlan?.RiskCategory.ToString()
+            };
 
-//                return response;
-  //          }
+            //                return response;
+            //          }
             var commitmentPaid = await _context.InputPackageSubscriptionPayments
                 .Where(x =>
                     x.SubscriptionId == subscription.Id &&
@@ -2441,7 +2484,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var commitmentOutstanding =
                 commitmentRequired - commitmentPaid;
 
-            
+
             var repaymentValue =
   package.RepaymentRequired && package.RepaymentPlan != null
       ? package.RepaymentPlan.RepaymentValue
@@ -2500,7 +2543,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 RepaymentDuration = RepaymentPeriod,
                 RepaymentModel = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RepaymentFrequency),
 
-                RiskCategory =EnumExtensions.GetDisplayName(package?.RepaymentPlan?.RiskCategory)
+                RiskCategory = EnumExtensions.GetDisplayName(package?.RepaymentPlan?.RiskCategory)
 
             };
 
@@ -2531,6 +2574,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return response;
         }
+
+
         public async Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId)
         {
             var document = await _context.SubscriptionDocuments
@@ -2539,13 +2584,13 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     x.DocumentType == DocumentType.CommissionLetter);
 
             if (document == null)
-                throw new Exception("Commission letter not found for this subscription");
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Commission letter not found for this subscription");
 
             if (string.IsNullOrWhiteSpace(document.FilePath))
-                throw new Exception("Invalid document file path");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid document file path");
 
             if (!File.Exists(document.FilePath))
-                throw new Exception("File no longer exists on server storage");
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "File no longer exists on server storage");
 
             var fileBytes = await File.ReadAllBytesAsync(document.FilePath);
 
@@ -2574,7 +2619,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
 
-          
+
             var paymentsLookup = await _context.InputPackageSubscriptionPayments
                 .Where(p =>
                     subscriptionIds.Contains(p.SubscriptionId) &&
@@ -2591,34 +2636,34 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var paymentMap = paymentsLookup
                 .ToDictionary(x => x.SubscriptionId, x => x.TotalPaid);
 
-                var items = subscriptions.Select(sub =>
+            var items = subscriptions.Select(sub =>
+        {
+            var totalCost = sub.TotalFinancingValue;
+
+            paymentMap.TryGetValue(sub.Id, out var amountPaid);
+
+            var remainingBalance = totalCost - amountPaid;
+
+            var nextDueDate = sub.RepaymentSchedules
+                .Where(x => !x.IsPaid)
+                .OrderBy(x => x.DueDate)
+                .Select(x => x.DueDate)
+                .FirstOrDefault();
+
+            var progress = totalCost == 0
+                ? 0
+                : (amountPaid / totalCost) * 100m;
+
+            return new InputObligationDto
             {
-                var totalCost = sub.TotalFinancingValue;
-
-                paymentMap.TryGetValue(sub.Id, out var amountPaid);
-
-                var remainingBalance = totalCost - amountPaid;
-
-                var nextDueDate = sub.RepaymentSchedules
-                    .Where(x => !x.IsPaid)
-                    .OrderBy(x => x.DueDate)
-                    .Select(x => x.DueDate)
-                    .FirstOrDefault();
-
-                var progress = totalCost == 0
-                    ? 0
-                    : (amountPaid / totalCost) * 100m;
-
-                return new InputObligationDto
-                {
-                    Name = sub.InputPackage?.Name,
-                    TotalCost = totalCost,
-                    AmountPaid = amountPaid,
-                    RemainingBalance = remainingBalance,
-                    Date = nextDueDate,
-                    RepaymentProgress = Math.Round(progress, 2)
-                };
-            }).ToList();
+                Name = sub.InputPackage?.Name,
+                TotalCost = totalCost,
+                AmountPaid = amountPaid,
+                RemainingBalance = remainingBalance,
+                Date = nextDueDate,
+                RepaymentProgress = Math.Round(progress, 2)
+            };
+        }).ToList();
 
             return new PagedResult<InputObligationDto>
             {
@@ -2628,7 +2673,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 PageSize = pageSize
             };
         }
-        
+
         public async Task<LoanDetailDto> GetLoanDetailsAsync(long subscriptionId)
         {
             var subscription = await _context.InputPackageSubscriptions
@@ -2642,7 +2687,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
             if (subscription == null)
-                throw new Exception("Subscription not found");
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Subscription not found");
 
             var package = subscription.InputPackage;
             var repayment = package.RepaymentPlan;
@@ -2824,7 +2869,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0;
 
             var totalOutstanding = totalLoanIssued - totalRepaidAmount;
-           
+
 
             var totalActiveLoans = subscriptions.Count(x => activeStatuses.Contains(x.Status));
 
@@ -2845,8 +2890,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             return new InputLoanSummaryDto
             {
                 TotalLoansIssued = totalLoanIssued,
-                TotalRepaid=totalRepaid,
-                TotalActiveLoans=totalActiveLoans,
+                TotalRepaid = totalRepaid,
+                TotalActiveLoans = totalActiveLoans,
                 TotalActiveLoansAmount = totalActiveLoansAmount,
                 TotalRepaidAmount = totalRepaidAmount,
                 TotalOutstanding = totalOutstanding,
@@ -2997,7 +3042,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.SubscriberUser)
                 .Include(x => x.AddedByUser)
                 .AsQueryable();
-baseQuery = ApplyFilters(baseQuery, filter);
+            baseQuery = ApplyFilters(baseQuery, filter);
             var payments = _context.InputPackageSubscriptionPayments
                 .AsNoTracking()
                 .Where(p => p.Status == TransactionStatus.Successful)
@@ -3122,7 +3167,7 @@ baseQuery = ApplyFilters(baseQuery, filter);
             ws.Cell(1, 4).Value = "Commitment";
             ws.Cell(1, 5).Value = "Created By";
             ws.Cell(1, 6).Value = "Total Financing";
-          //  ws.Cell(1, 7).Value = "Subscribed On";
+            //  ws.Cell(1, 7).Value = "Subscribed On";
             ws.Cell(1, 7).Value = "Status";
 
             var row = 2;
@@ -3203,7 +3248,7 @@ baseQuery = ApplyFilters(baseQuery, filter);
                             table.Cell().Text(item.CommitmentValue.ToString("N2"));
                             table.Cell().Text(item.TotalFinancingValue.ToString("N2"));
 
-                            table.Cell().Text(item.SubscribedOn.HasValue ?  item.SubscribedOn.Value.ToString("yyyy-MM-dd") : null);
+                            table.Cell().Text(item.SubscribedOn.HasValue ? item.SubscribedOn.Value.ToString("yyyy-MM-dd") : null);
                         }
                     });
                 });
@@ -3219,7 +3264,7 @@ baseQuery = ApplyFilters(baseQuery, filter);
 → Defaulted
          **/
         #endregion
-     
+
         private async Task EnsurePackageIsEditable(InputPackage package)
         {
             if (package == null)
