@@ -3,8 +3,11 @@ using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Businesses.Wallets;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -18,11 +21,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     public class InputFinancingController : BaseController
     {
         private readonly IInputFinancingManager _inputFinancingManager;
+        private readonly INomaOSWalletService _nomaOSWalletService;
         public InputFinancingController(IHttpContextAccessor httpContextAccessor,
+            INomaOSWalletService nomaOSWalletService,
              IInputFinancingManager inputFinancingManager) : base(httpContextAccessor)
         {
 
             _inputFinancingManager = inputFinancingManager;
+            _nomaOSWalletService= nomaOSWalletService;
         }
 
         #region InputFinancing
@@ -117,8 +123,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
        
         [HttpPost("create-package")]
         public async Task<IActionResult> CreateManualInputPackageAsync(
-    [FromBody] CreateInputPackageRequest model,
-    [FromQuery] ListQueryParams args)
+            [FromBody] CreateInputPackageRequest model,
+            [FromQuery] ListQueryParams args)
         {
             args.organizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
@@ -491,6 +497,39 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
 
+        [HttpPost("package/link-wallet")]
+        public async Task<IActionResult> UpdateOrganizationInputPackage(
+         [FromQuery] WalletQueryParams filter,
+         [FromBody] UserWalletModel request)
+        {
+            filter.organizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.organizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.businessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            await _nomaOSWalletService
+                .UpdateOrganizationInputPackage(filter, request.WalletProviderId, request);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
 
 
         #endregion InputFinancing
@@ -573,6 +612,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -631,17 +675,27 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
 
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-    "Access Denied",
-    ResponseCodes.Failed,
-    HttpContext.TraceIdentifier
-));
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
             }
-            var result = await _inputFinancingManager
-                .GetInputFinancingDashboardAsync(filter);
+
 
             var fileBytes = await _inputFinancingManager.ExportSubscriptionsAsync(filter, format);
 
@@ -741,6 +795,48 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //request input release
         //disburse input
         //repay financing
+       
+      
+        
+        [HttpPost("subscription/commitment/initiate-payment")]
+        public async Task<IActionResult> SendCommitmentReminderAsync(
+           [FromQuery] InputSubscriptionRequestArgs filter,
+           [FromBody] RecordCommitmentPaymentRequest request)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            await _inputFinancingManager
+                .CommitmentPaymentAsync(request, filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
+       
+        
+        //update create wallet with background service such that if a wallet is created for an organization, update input subscription with the walletid of the provider selected
+
+
         [HttpPost("subscription/commitment-reminder")]
         public async Task<IActionResult> SendCommitmentReminderAsync(
            [FromQuery] SubscriptionQueryFilter filter)

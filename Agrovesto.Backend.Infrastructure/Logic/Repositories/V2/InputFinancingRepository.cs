@@ -76,6 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> AddAdditionalCostToPackageAsync(long packageId, AddAdditionalCostRequest request);
         Task<bool> RemoveAdditionalCostFromPackageAsync(long packageId, long additionalCostId);
         Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs args);
+        Task<bool> UpdateInputPackageWallets(long organizationId, long walletId, long providerId);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -172,6 +173,26 @@ Subscription (real customer participation)
 RepaymentSchedule (per subscriber tracking OR linked schedule)
          */
 
+        public async Task<bool> UpdateInputPackageWallets(long organizationId, long walletId, long providerId)
+        {
+            var package = await _context.InputPackages
+                .Where(x => x.OrganizationId == organizationId 
+                //&&
+               // x.WalletProviderId == providerId 
+                && !x.IsSelectedWalletProvisioned).ToListAsync();
+
+            if (!package.Any()) return false;
+
+            foreach(var p in package)
+            {
+                p.UserWalletId = walletId;
+                p.IsSelectedWalletProvisioned = true;
+                p.WalletProviderId = providerId;
+            }
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
         public async Task<bool> CreateInputFinancingPackageConfig(
         CreateInputPackageRequest request,
         InputPackageConfigArgs args)
@@ -917,6 +938,13 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         request.SubscriberType != InputSubScriptionType.Individual)
                     {
                         throw new Exception("This package does not allow group subscriptions");
+                    }
+
+                    if (package.SubScriptionType == InputSubScriptionType.Individual)
+                    {
+                        var isFarmer = await _context.Farmers.FirstOrDefaultAsync(x => x.UserId == request.SubscriberUserId);
+                        if (isFarmer == null)
+                            throw new Exception("This package does not allow group subscriptions, Subscriber not a farmer");
                     }
 
                     var alreadySubscribed = await _context.InputPackageSubscriptions
@@ -1976,8 +2004,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return query;
         }
-        private IQueryable<InputPackageSubscription> BuildSubscriptionQuery(
-        SubscriptionQueryFilter filter)
+        private async Task<IQueryable<InputPackageSubscription>> BuildSubscriptionQuery(
+    SubscriptionQueryFilter filter)
         {
             var query = _context.InputPackageSubscriptions
                 .Where(x => x.BusinessCode == filter.BusinessCode)
@@ -1986,61 +2014,127 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x => x.AddedByUser)
                 .AsQueryable();
 
+
             if (!string.IsNullOrEmpty(filter.SubscriberUserId))
                 query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
+
 
             if (filter.PackageId.HasValue)
                 query = query.Where(x => x.InputPackageId == filter.PackageId);
 
+
             if (filter.OrganizationId.HasValue)
                 query = query.Where(x => x.OrganizationId == filter.OrganizationId);
+
 
             if (filter.Status.HasValue)
                 query = query.Where(x => x.Status == filter.Status);
 
+
             if (filter.IsActiveOnly == true)
                 query = query.Where(x => x.IsActive);
 
+
+            // Agent scope filtering
+            if (filter.CurrentLoggedInUserRole == UserType.Agent.ToString())
+            {
+                var agentId = await _context.Agents
+                    .Where(x => x.UserId == filter.UserId)
+                    .Select(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                if (filter.OrganizationId.HasValue)
+                {
+                    var organizationAgent = await _context.OrganizationAgents
+                        .Where(x => x.OrganizationId == filter.OrganizationId && x.AgentId == agentId)
+                        .Select(x => x.AgentId)
+                        .FirstOrDefaultAsync();
+
+                    if (organizationAgent == null)
+                    {
+                        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Agent not found in Organization");
+                    }
+
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerAgents.Any(fa =>
+                             fa.AgentId == organizationAgent &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                        ||
+                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
+                         _context.MemberShipAgents.Any(ma =>
+                             ma.AgentId == organizationAgent &&
+                             _context.MemberShips.Any(m =>
+                                 m.Id == ma.MemberShipId &&
+                                 m.UserId == x.SubscriberUserId)))
+                    );
+                }
+                else
+                {
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerAgents.Any(fa =>
+                             fa.AgentId == agentId &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                        ||
+                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
+                         _context.MemberShipAgents.Any(ma =>
+                             ma.AgentId == agentId &&
+                             _context.MemberShips.Any(m =>
+                                 m.Id == ma.MemberShipId &&
+                                 m.UserId == x.SubscriberUserId)))
+                    );
+                }
+            }
 
             if (filter.ViewType.HasValue)
             {
                 switch (filter.ViewType.Value)
                 {
                     case SubscriptionView.PendingApproval:
-                        query = query.Where(x => x.Status == SubscriptionStatus.PendingApproval);
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.PendingApproval);
                         break;
+
 
                     case SubscriptionView.PendingCommitment:
                     case SubscriptionView.Approved:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingCommitment || x.Status == SubscriptionStatus.Approved);
+                            x.Status == SubscriptionStatus.PendingCommitment ||
+                            x.Status == SubscriptionStatus.Approved);
                         break;
+
+
                     case SubscriptionView.PendingDisbursement:
                         query = query.Where(x =>
-                           x.Status == SubscriptionStatus.PendingDisbursement
-                           //||
-                           // x.Status == SubscriptionStatus.Approved
-                           );
+                            x.Status == SubscriptionStatus.PendingDisbursement);
                         break;
 
-                    //case SubscriptionView.Approved:
-                    //    query = query.Where(x =>
-                    //       x.Status == SubscriptionStatus.Approved);
-                    //    break;
+
                     case SubscriptionView.Active:
-                        query = query.Where(x => x.Status == SubscriptionStatus.Active);
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.Active);
                         break;
+
 
                     case SubscriptionView.Completed:
-                        query = query.Where(x => x.Status == SubscriptionStatus.RepaymentCompleted);
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.RepaymentCompleted);
                         break;
+
 
                     case SubscriptionView.Defaulted:
-                        query = query.Where(x => x.Status == SubscriptionStatus.Defaulted);
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.Defaulted);
                         break;
-
                 }
             }
+
+
 
             if (filter.HasPaidCommitment.HasValue)
             {
@@ -2048,26 +2142,121 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 {
                     query = query.Where(x =>
                         _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
+                        .Where(p =>
+                            p.SubscriptionId == x.Id &&
+                            p.PaymentType == PaymentType.Commitment &&
+                            p.Status == TransactionStatus.Successful)
+                        .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
                 }
                 else
                 {
                     query = query.Where(x =>
                         _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) < x.CommitmentValue);
+                        .Where(p =>
+                            p.SubscriptionId == x.Id &&
+                            p.PaymentType == PaymentType.Commitment &&
+                            p.Status == TransactionStatus.Successful)
+                        .Sum(p => (decimal?)p.AmountPaid) < x.CommitmentValue);
                 }
             }
 
+
             return query;
         }
+        //private IQueryable<InputPackageSubscription> BuildSubscriptionQuery(
+        //SubscriptionQueryFilter filter)
+        //{
+        //    var query = _context.InputPackageSubscriptions
+        //        .Where(x => x.BusinessCode == filter.BusinessCode)
+        //        .Include(x => x.InputPackage)
+        //        .Include(x => x.SubscriberUser)
+        //        .Include(x => x.AddedByUser)
+        //        .AsQueryable();
+
+        //    if (!string.IsNullOrEmpty(filter.SubscriberUserId))
+        //        query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
+
+        //    if (filter.PackageId.HasValue)
+        //        query = query.Where(x => x.InputPackageId == filter.PackageId);
+
+        //    if (filter.OrganizationId.HasValue)
+        //        query = query.Where(x => x.OrganizationId == filter.OrganizationId);
+
+        //    if (filter.Status.HasValue)
+        //        query = query.Where(x => x.Status == filter.Status);
+
+        //    if (filter.IsActiveOnly == true)
+        //        query = query.Where(x => x.IsActive);
+
+
+        //    if (filter.ViewType.HasValue)
+        //    {
+        //        switch (filter.ViewType.Value)
+        //        {
+        //            case SubscriptionView.PendingApproval:
+        //                query = query.Where(x => x.Status == SubscriptionStatus.PendingApproval);
+        //                break;
+
+        //            case SubscriptionView.PendingCommitment:
+        //            case SubscriptionView.Approved:
+        //                query = query.Where(x =>
+        //                    x.Status == SubscriptionStatus.PendingCommitment || x.Status == SubscriptionStatus.Approved);
+        //                break;
+        //            case SubscriptionView.PendingDisbursement:
+        //                query = query.Where(x =>
+        //                   x.Status == SubscriptionStatus.PendingDisbursement
+        //                   //||
+        //                   // x.Status == SubscriptionStatus.Approved
+        //                   );
+        //                break;
+
+        //            //case SubscriptionView.Approved:
+        //            //    query = query.Where(x =>
+        //            //       x.Status == SubscriptionStatus.Approved);
+        //            //    break;
+        //            case SubscriptionView.Active:
+        //                query = query.Where(x => x.Status == SubscriptionStatus.Active);
+        //                break;
+
+        //            case SubscriptionView.Completed:
+        //                query = query.Where(x => x.Status == SubscriptionStatus.RepaymentCompleted);
+        //                break;
+
+        //            case SubscriptionView.Defaulted:
+        //                query = query.Where(x => x.Status == SubscriptionStatus.Defaulted);
+        //                break;
+
+        //        }
+        //    }
+
+        //    if (filter.HasPaidCommitment.HasValue)
+        //    {
+        //        if (filter.HasPaidCommitment.Value)
+        //        {
+        //            query = query.Where(x =>
+        //                _context.InputPackageSubscriptionPayments
+        //                    .Where(p =>
+        //                        p.SubscriptionId == x.Id &&
+        //                        p.PaymentType == PaymentType.Commitment &&
+        //                        p.Status == TransactionStatus.Successful)
+        //                    .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
+        //        }
+        //        else
+        //        {
+        //            query = query.Where(x =>
+        //                _context.InputPackageSubscriptionPayments
+        //                    .Where(p =>
+        //                        p.SubscriptionId == x.Id &&
+        //                        p.PaymentType == PaymentType.Commitment &&
+        //                        p.Status == TransactionStatus.Successful)
+        //                    .Sum(p => (decimal?)p.AmountPaid) < x.CommitmentValue);
+        //        }
+        //    }
+
+        //    return query;
+        //}
+
+
         public async Task<InputFinancingDashboardDto> GetInputFinancingDashboardAsync(
         SubscriptionQueryFilter filter)
         {
@@ -2132,65 +2321,114 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             };
         }
         public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
-        SubscriptionQueryFilter filter,
-        int pageNumber,
-        int pageSize)
+    SubscriptionQueryFilter filter,
+    int pageNumber,
+    int pageSize)
         {
-            var query = BuildSubscriptionQuery(filter);
-
             pageNumber = pageNumber < 1 ? 1 : pageNumber;
-            pageSize = pageSize < 1 ? 10 : pageSize;
+            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+
+            var query = await BuildSubscriptionQuery(filter);
 
             var count = await query.CountAsync();
 
-            var items = await query
+            if (count == 0)
+            {
+                return new PagedResult<SubscriptionDetailDto>
+                {
+                    Items = [],
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+
+            var pagedIds = await query
                 .OrderByDescending(x => x.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(x => new SubscriptionDetailDto
+                .Select(x => new { x.Id, x.CommitmentRequired, x.CommitmentValue })
+                .ToListAsync();
+
+            var subscriptionIds = pagedIds.Select(x => x.Id).ToList();
+
+            var commitmentTotals = await _context.InputPackageSubscriptionPayments
+                .Where(p =>
+                    subscriptionIds.Contains(p.SubscriptionId) &&
+                    p.PaymentType == PaymentType.Commitment &&
+                    p.Status == TransactionStatus.Successful)
+                .GroupBy(p => p.SubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
+
+            var rawItems = await _context.InputPackageSubscriptions
+                .Where(x => subscriptionIds.Contains(x.Id))
+                .Include(x => x.InputPackage)
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.AddedByUser)
+                .Include(x => x.Organization)
+                .OrderByDescending(x => x.Id)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.InputPackageId,
+                    x.SubscriberUserId,
+                    x.SubscriberType,
+                    x.CommitmentRequired,
+                    x.CommitmentValue,
+                    x.TotalFinancingValue,
+                    x.SubscribedOn,
+                    x.Status,
+                    SubscriberName = x.SubscriberUser == null
+                        ? x.SubscriberUserId
+                        : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
+                            ? x.SubscriberUser.Name
+                            : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
+                                ? x.SubscriberUser.PhoneNumber
+                                : x.SubscriberUser.Email,
+                    CreatedBy = x.AddedByUser == null
+                        ? x.AddedByUserId
+                        : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
+                            ? x.AddedByUser.Name
+                            : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
+                                ? x.AddedByUser.PhoneNumber
+                                : x.AddedByUser.Email,
+                    Location = x.Organization != null ? x.Organization.CompanyName : null,
+                    PackageName = x.InputPackage.Name,
+                })
+                .ToListAsync();
+
+            var items = rawItems.Select(x =>
+            {
+                var commitmentPaid = commitmentTotals.GetValueOrDefault(x.Id, 0m);
+                var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
+                    ? "Not Required"
+                    : commitmentPaid >= x.CommitmentValue
+                        ? "Paid"
+                        : "Pending";
+
+                return new SubscriptionDetailDto
                 {
                     PackageId = x.InputPackageId,
                     SubscriptionId = x.Id,
                     SubscriberUserId = x.SubscriberUserId,
-                    SubscriberName =
-    x.SubscriberUser == null
-        ? x.SubscriberUserId
-        : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
-            ? x.SubscriberUser.Name
-            : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
-                ? x.SubscriberUser.PhoneNumber
-                : x.SubscriberUser.Email,
-
-                    CreatedBy =
-    x.AddedByUser == null
-        ? x.AddedByUserId
-        : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
-            ? x.AddedByUser.Name
-            : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
-                ? x.AddedByUser.PhoneNumber
-                : x.AddedByUser.Email,
+                    SubscriberName = x.SubscriberName,
+                    CreatedBy = x.CreatedBy,
                     SubscriptionType = x.SubscriberType,
-                    Location = x.Organization != null ? x.Organization.CompanyName : null,
-
-                    PackageName = x.InputPackage.Name,
-
+                    Location = x.Location,
+                    PackageName = x.PackageName,
                     CommitmentValue = x.CommitmentValue,
                     TotalFinancingValue = x.TotalFinancingValue,
                     SubscribedOn = x.SubscribedOn,
                     SubscriptionStatus = x.Status,
                     SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
-                    CommitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
-                                       ? "Not Required"
-                                        : ((_context.InputPackageSubscriptionPayments
-                .Where(p =>
-                    p.SubscriptionId == x.Id &&
-                    p.PaymentType == PaymentType.Commitment &&
-                    p.Status == TransactionStatus.Successful)
-                .Sum(p => (decimal?)p.AmountPaid) ?? 0m) >= x.CommitmentValue)
-            ? "Paid"
-            : "Pending"
-                })
-                .ToListAsync();
+                    CommitmentStatus = commitmentStatus
+                };
+            }).ToList();
 
             return new PagedResult<SubscriptionDetailDto>
             {
@@ -2200,7 +2438,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 PageSize = pageSize
             };
         }
-
 
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {
@@ -2307,26 +2544,39 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             };
         }
 
-        //currently on this
-        public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(
-       SubscriptionQueryFilter filter
-            )
+        public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter)
         {
+            if (filter.SubscriptionId <= 0)
+                throw new Exception("Invalid SubscriptionId provided");
+
             var subscription = await _context.InputPackageSubscriptions
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.AddedByUser)
                 .Include(x => x.InputPackage)
                     .ThenInclude(p => p.CommitmentPlan)
                 .Include(x => x.InputPackage)
                     .ThenInclude(p => p.RepaymentPlan)
-                .Include(x => x.SubscriberUser)
-                .Include(x => x.AddedByUser)
                 .FirstOrDefaultAsync(x => x.Id == filter.SubscriptionId);
 
             if (subscription == null)
                 throw new Exception("Subscription not found");
 
-            var package = subscription.InputPackage;
+            var package = subscription.InputPackage
+                ?? throw new Exception("Package not found for subscription");
+
             var orgId = subscription.OrganizationId;
 
+         
+            var packageItems = await _context.InputPackageItems
+                .Where(x => x.InputPackageId == package.Id)
+                .Include(x => x.OrganizationProduct)
+                .ToListAsync();
+
+            var additionalCosts = await _context.AdditionalInputPackageCosts
+                .Where(x => x.InputPackageId == package.Id)
+                .ToListAsync();
+
+          
             string? location = null;
             string? verificationStatus = null;
 
@@ -2346,9 +2596,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     verificationStatus = farmerOrg == null
                         ? "Not Enrolled"
-                        : farmerOrg.IsActive
-                            ? "Verified"
-                            : "Inactive";
+                        : farmerOrg.IsActive ? "Verified" : "Inactive";
                 }
             }
             else if (subscription.SubscriberType == InputSubScriptionType.MemberShip)
@@ -2367,212 +2615,233 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     verificationStatus = memberOrg == null
                         ? "Not Enrolled"
-                        : memberOrg.IsActive
-                            ? "Verified"
-                            : "Inactive";
+                        : memberOrg.IsActive ? "Verified" : "Inactive";
                 }
             }
-            var RepaymentPeriod = package.RepaymentPlan != null
-                        ? GetRepaymentPeriod(package.RepaymentPlan.RepaymentFrequency, package.RepaymentPlan.RepaymentDuration)
-                        : null;
-            var repayment = package.RepaymentPlan;
 
-
-            var agentRoleId = await _context.Roles
-    .Where(r => r.Name == "Agent")
-    .Select(r => r.Id)
-    .FirstOrDefaultAsync();
-
+           
+            string? agentName = null;
             string? warehouseAssigned = null;
-            bool isAgent = false;
 
-            if (!string.IsNullOrEmpty(agentRoleId) &&
-                !string.IsNullOrEmpty(subscription.AddedByUserId))
+            if (subscription.SubscriberType == InputSubScriptionType.Individual)
             {
-                isAgent = await _context.UserRoles
-                    .AnyAsync(ur =>
-                        ur.UserId == subscription.AddedByUserId &&
-                        ur.RoleId == agentRoleId);
-
-                if (isAgent)
-                {
-                    var agent = await _context.Agents.FirstOrDefaultAsync(x => x.UserId == subscription.AddedByUserId);
-                    if (agent != null)
+                var agentInfo = await (
+                    from fa in _context.FarmerAgents
+                    join f in _context.Farmers on fa.FarmerId equals f.Id
+                    join a in _context.Agents on fa.AgentId equals a.Id
+                    join u in _context.Users on a.UserId equals u.Id
+                    join oa in _context.OrganizationAgents
+     on new { AgentId = a.Id, OrganizationId = orgId ?? 0L }
+     equals new { AgentId = oa.AgentId, OrganizationId = oa.OrganizationId }
+     into oaJoin
+                    from oa in oaJoin.DefaultIfEmpty()
+                    where f.UserId == subscription.SubscriberUserId
+                    select new
                     {
-                        warehouseAssigned = await (
-     from oa in _context.OrganizationAgents
-     join a in _context.Agents on oa.AgentId equals a.Id
-     where a.UserId == subscription.AddedByUserId
-           && oa.OrganizationId == orgId
-     select oa.Location.LocationName
- ).FirstOrDefaultAsync();
+                        AgentName = u.Name ?? u.PhoneNumber ?? u.Email,
+                        WarehouseAssigned = oa != null
+                            ? oa.Location != null
+                                ? oa.Location.LocationName
+                                : null
+                            : null
                     }
-                }
+                ).FirstOrDefaultAsync();
+
+                agentName = agentInfo?.AgentName;
+                warehouseAssigned = agentInfo?.WarehouseAssigned;
+            }
+            else if (subscription.SubscriberType == InputSubScriptionType.MemberShip)
+            {
+                var agentInfo = await (
+                    from ma in _context.MemberShipAgents
+                    join m in _context.MemberShips on ma.MemberShipId equals m.Id
+                    join a in _context.Agents on ma.AgentId equals a.Id
+                    join u in _context.Users on a.UserId equals u.Id
+                    join oa in _context.OrganizationAgents
+  on new { AgentId = a.Id, OrganizationId = orgId ?? 0L }
+  equals new { AgentId = oa.AgentId, OrganizationId = oa.OrganizationId }
+  into oaJoin
+                    from oa in oaJoin.DefaultIfEmpty()
+                    where m.UserId == subscription.SubscriberUserId
+                    select new
+                    {
+                        AgentName = u.Name ?? u.PhoneNumber ?? u.Email,
+                        WarehouseAssigned = oa != null
+                            ? oa.Location != null
+                                ? oa.Location.LocationName
+                                : null
+                            : null
+                    }
+                ).FirstOrDefaultAsync();
+
+                agentName = agentInfo?.AgentName;
+                warehouseAssigned = agentInfo?.WarehouseAssigned;
             }
 
 
-            var subscriberInfo = new SubscriberInfoDto
-            {
-                Name = subscription.SubscriberUser?.Name
-                       ?? subscription.SubscriberUser?.Email
-                       ?? subscription.SubscriberUserId,
-
-                Type = EnumExtensions.GetDisplayName(subscription.SubscriberType),
-
-                Agent = subscription.AddedByUser?.Name
-                        ?? subscription.AddedByUserId,
-
-                Location = location,
-
-                VerificationStatus = verificationStatus,
-
-                EnrollmentDate = subscription.SubscribedOn,
-                Package = package.Name,
-                WarehouseAssigned = warehouseAssigned
-            };
-
-            var response = new SubscriptionReviewResponseDto
-            {
-                Subscriber = subscriberInfo
-            };
-
-            //    if (
-            //filter.ViewType == SubscriptionView.PendingCommitment ||
-            // filter.ViewType == SubscriptionView.Approved ||
-            //          filter.ViewType == SubscriptionView.Active)
-            //        {
-            response.Package = new PackageInfoDto
-            {
-                PackageName = package?.Name,
-
-                TotalValue = package?.TotalFinancingValue ?? 0m,
-
-                CommitmentRequired = package?.CommitmentRequired ?? false,
-
-                CommitmentValue =
-                    package?.CommitmentPlan?.CommitmentValue ?? 0m,
-
-                RepaymentDuration = RepaymentPeriod,
-                //package?.RepaymentPlan?.RepaymentDuration ?? 0,
-
-                RepaymentModel =
-                    package?.RepaymentPlan?.RepaymentFrequency.ToString(),
-
-                RiskCategory =
-                    package?.RepaymentPlan?.RiskCategory.ToString()
-            };
-
-            //                return response;
-            //          }
-            var commitmentPaid = await _context.InputPackageSubscriptionPayments
+            var paymentTotals = await _context.InputPackageSubscriptionPayments
                 .Where(x =>
                     x.SubscriptionId == subscription.Id &&
-                    x.PaymentType == PaymentType.Commitment &&
-                    x.Status == TransactionStatus.Successful)
-                .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
+                    x.Status == TransactionStatus.Successful &&
+                    (x.PaymentType == PaymentType.Commitment ||
+                     x.PaymentType == PaymentType.Repayment))
+                .GroupBy(x => x.PaymentType)
+                .Select(g => new
+                {
+                    PaymentType = g.Key,
+                    Total = g.Sum(x => (decimal?)x.AmountPaid) ?? 0m
+                })
+                .ToListAsync();
 
-            var repaymentPaid = await _context.InputPackageSubscriptionPayments
+            var commitmentPaid = paymentTotals
+                .FirstOrDefault(x => x.PaymentType == PaymentType.Commitment)?.Total ?? 0m;
+            var repaymentPaid = paymentTotals
+                .FirstOrDefault(x => x.PaymentType == PaymentType.Repayment)?.Total ?? 0m;
+
+            
+            var rawRepaymentHistory = await _context.InputPackageSubscriptionPayments
+                .Include(x=>x.RecordedByUser)
                 .Where(x =>
                     x.SubscriptionId == subscription.Id &&
                     x.PaymentType == PaymentType.Repayment &&
                     x.Status == TransactionStatus.Successful)
-                .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
+                .OrderByDescending(x => x.PaidOn)
+                .Select(x => new
+                {
+                    x.PaidOn,
+                    x.AmountPaid,
+                    x.PaymentChannel,
+                    RecordedBy = x.RecordedByUser != null
+                        ? !string.IsNullOrWhiteSpace(x.RecordedByUser.Name)
+                            ? x.RecordedByUser.Name
+                            : x.RecordedByUser.Email
+                        : null
+                })
+                .ToListAsync();
 
-            var commitmentRequired =
-                package?.CommitmentPlan?.CommitmentValue ?? 0m;
 
-            var commitmentOutstanding =
-                commitmentRequired - commitmentPaid;
+            var repaymentPeriod = package.RepaymentPlan != null
+      ? GetRepaymentPeriod(
+          package.RepaymentPlan.RepaymentFrequency,
+          package.RepaymentPlan.RepaymentDuration)
+      : null;
+            // Wrap in try/catch if GetRepaymentPeriod is not guaranteed safe
 
+            var commitmentRequired = package.CommitmentPlan?.CommitmentValue ?? 0m;
+            var commitmentOutstanding = commitmentRequired - commitmentPaid;
 
-            var repaymentValue =
-  package.RepaymentRequired && package.RepaymentPlan != null
-      ? package.RepaymentPlan.RepaymentValue
-      : 0m;
+            var repaymentValue = package.RepaymentRequired && package.RepaymentPlan != null
+                ? package.RepaymentPlan.RepaymentValue
+                : 0m;
 
-            var repaymentOutstanding = repaymentValue - repaymentPaid;
+            var repaymentOutstanding = Math.Max(repaymentValue - repaymentPaid, 0m);
 
-            if (repaymentOutstanding < 0)
-            {
-                repaymentOutstanding = 0;
-            }
-
-            var commitmentDueDate =
-                package?.CommitmentPlan?.CommitmentPaymentEndDate;
-
-            int? commitmentDaysLeft = null;
+            var commitmentDueDate = package.CommitmentPlan?.CommitmentPaymentEndDate;
+            string? commitmentDaysLeft = null;
 
             if (commitmentDueDate.HasValue)
             {
-                commitmentDaysLeft =
-                    (commitmentDueDate.Value.Date -
-                     DateTimeOffset.UtcNow.Date).Days;
+                var isCommitmentPaid = commitmentPaid >= commitmentRequired && commitmentRequired > 0;
+                if (isCommitmentPaid)
+                {
+                    commitmentDaysLeft = "Paid";
+                }
+                else
+                {
+                    var days = (commitmentDueDate.Value.Date - DateTimeOffset.UtcNow.Date).Days;
+                    commitmentDaysLeft = days <= 0 ? "Overdue" : $"{days} day(s) left";
+                }
             }
 
-            var repaymentEndDate =
-                package?.RepaymentPlan?.RepaymentEndDate;
-
-            int? repaymentDaysLeft = null;
+            var repaymentEndDate = package.RepaymentPlan?.RepaymentEndDate;
+            string? repaymentDaysLeft = null;
 
             if (repaymentEndDate.HasValue)
             {
-                repaymentDaysLeft =
-                    (repaymentEndDate.Value.Date -
-                     DateTimeOffset.UtcNow.Date).Days;
+                var isRepaymentPaid = repaymentPaid >= repaymentValue && repaymentValue > 0;
+                if (isRepaymentPaid)
+                {
+                    repaymentDaysLeft = "Paid";
+                }
+                else
+                {
+                    var days = (repaymentEndDate.Value.Date - DateTimeOffset.UtcNow.Date).Days;
+                    repaymentDaysLeft = days <= 0 ? "Overdue" : $"{days} day(s) left";
+                }
             }
 
-            response.FinancingSnapshot = new FinancingSnapshotDto
+
+            return new SubscriptionReviewResponseDto
             {
-                TotalFinancedValue = subscription.TotalFinancingValue,
+                Subscriber = new SubscriberInfoDto
+                {
+                    Name = subscription.SubscriberUser?.Name
+       ?? subscription.SubscriberUser?.PhoneNumber
+       ?? subscription.SubscriberUser?.Email
+       ?? subscription.SubscriberUserId,
+                    Type = EnumExtensions.GetDisplayName(subscription.SubscriberType),
+                    Agent = agentName,
+                    Location = location,
+                    VerificationStatus = verificationStatus,
+                    EnrollmentDate = subscription.SubscribedOn,
+                    Package = package.Name,
+                    WarehouseAssigned = warehouseAssigned
+                },
 
-                CommitmentPaid = commitmentPaid,
+                Package = new PackageInfoDto
+                {
+                    PackageName = package.Name,
+                    TotalValue = package.TotalFinancingValue,
+                    CommitmentRequired = package.CommitmentRequired,
+                    CommitmentValue = package.CommitmentPlan?.CommitmentValue ?? 0m,
+                    RepaymentDuration = repaymentPeriod,
+                    RepaymentModel = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RepaymentMode),
+                    RiskCategory = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RiskCategory)
+                },
 
-                CommitmentAmountRequired = commitmentRequired,
+                FinancingSnapshot = new FinancingSnapshotDto
+                {
+                    TotalFinancedValue = subscription.TotalFinancingValue,
+                    CommitmentPaid = commitmentPaid,
+                    CommitmentAmountRequired = commitmentRequired,
+                    CommitmentOutstandingBalance = commitmentOutstanding,
+                    CommitmentRequired = package.CommitmentRequired,
+                    CommitmentDaysLeft = commitmentDaysLeft,
+                    TotalRepaidAmount = repaymentPaid,
+                    TotalRepaymentRequired = repaymentValue,
+                    RepaymentRequired = package.RepaymentRequired,
+                    TotalRepaymentBalance = repaymentOutstanding,
+                    RepaymentDaysLeft = repaymentDaysLeft,
+                    RepaymentDuration = repaymentPeriod,
+                    RepaymentModel = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RepaymentMode),
+                    RiskCategory = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RiskCategory)
+                },
 
-                CommitmentOutstandingBalance = commitmentOutstanding,
-                CommitmentRequired = package.CommitmentRequired,
-                CommitmentDaysLeft = commitmentDaysLeft,
+                InputBreakdown = packageItems
+                    .Select(x => new InputBreakdownDto
+                    {
+                        InputName = x.OrganizationProduct?.ProductName,
+                        UnitPrice = x.UnitCost,
+                        Quantity = x.Quantity,
+                        TotalCost = x.UnitCost * x.Quantity
+                    }).ToList(),
 
-                TotalRepaidAmount = repaymentPaid,
+                AdditionalCost = additionalCosts
+                    .Select(x => new AdditionalCostDto
+                    {
+                        Name = x.Name,
+                        Amount = x.Amount
+                    }).ToList(),
 
-                TotalRepaymentRequired = repaymentValue,
-                RepaymentRequired = package.RepaymentRequired,
-                TotalRepaymentBalance = repaymentOutstanding,
-
-                RepaymentDaysLeft = repaymentDaysLeft,
-                RepaymentDuration = RepaymentPeriod,
-                RepaymentModel = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RepaymentFrequency),
-
-                RiskCategory = EnumExtensions.GetDisplayName(package?.RepaymentPlan?.RiskCategory)
-
-            };
-
-            response.RepaymentHistory =
-                await _context.InputPackageSubscriptionPayments
-                    .Include(x => x.RecordedByUser)
-                    .Where(x =>
-                        x.SubscriptionId == subscription.Id &&
-                        x.PaymentType == PaymentType.Repayment &&
-                        x.Status == TransactionStatus.Successful)
-                    .OrderByDescending(x => x.PaidOn)
+                RepaymentHistory = rawRepaymentHistory
                     .Select(x => new RepaymentHistoryDto
                     {
                         PaymentDate = x.PaidOn,
-
                         AmountPaid = x.AmountPaid,
-
                         PaymentMethod = x.PaymentChannel.ToString(),
-
-                        RecordedBy =
-                            x.RecordedByUser != null
-                                ? (!string.IsNullOrWhiteSpace(x.RecordedByUser.Name)
-                                    ? x.RecordedByUser.Name
-                                    : x.RecordedByUser.Email)
-                                : null
-                    })
-                    .ToListAsync();
-
-            return response;
+                        RecordedBy = x.RecordedBy
+                    }).ToList()
+            };
         }
 
 
@@ -3030,22 +3299,32 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         }
 
         #region Input Subscription reporting
-
         public async Task<byte[]> ExportSubscriptionsAsync(
     SubscriptionQueryFilter filter,
     ExportFormat format)
         {
-            var baseQuery = _context.InputPackageSubscriptions
+         
+            var baseQuery = await BuildSubscriptionQuery(filter);
+            baseQuery = baseQuery.AsNoTracking();
+
+            
+            var subscriptionIds = await baseQuery
+                .Select(x => x.Id)
+                .ToListAsync();
+
+            if (!subscriptionIds.Any())
+                return format switch
+                {
+                    ExportFormat.Excel => ExportToExcel([]),
+                    ExportFormat.Pdf => ExportToPdf([]),
+                    _ => throw new NotSupportedException("Format not supported")
+                };
+
+            var paymentTotals = await _context.InputPackageSubscriptionPayments
                 .AsNoTracking()
-                .Where(x => x.BusinessCode == filter.BusinessCode)
-                .Include(x => x.InputPackage)
-                .Include(x => x.SubscriberUser)
-                .Include(x => x.AddedByUser)
-                .AsQueryable();
-            baseQuery = ApplyFilters(baseQuery, filter);
-            var payments = _context.InputPackageSubscriptionPayments
-                .AsNoTracking()
-                .Where(p => p.Status == TransactionStatus.Successful)
+                .Where(p =>
+                    subscriptionIds.Contains(p.SubscriptionId) &&
+                    p.Status == TransactionStatus.Successful)
                 .GroupBy(p => p.SubscriptionId)
                 .Select(g => new
                 {
@@ -3053,52 +3332,72 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentPaid = g
                         .Where(x => x.PaymentType == PaymentType.Commitment)
                         .Sum(x => (decimal?)x.AmountPaid) ?? 0m
-                });
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.CommitmentPaid);
 
-            var data = await (
-                from sub in baseQuery
-                join pay in payments
-                    on sub.Id equals pay.SubscriptionId into payGroup
-                from p in payGroup.DefaultIfEmpty()
-                select new SubscriptionDetailDto
+           
+            var rawData = await baseQuery
+                .Select(x => new
                 {
-                    PackageId = sub.InputPackageId,
-                    SubscriptionId = sub.Id,
-                    SubscriberUserId = sub.SubscriberUserId,
-
-                    SubscriberName =
-                        sub.SubscriberUser == null
-                            ? sub.SubscriberUserId
-                            : !string.IsNullOrWhiteSpace(sub.SubscriberUser.Name)
-                                ? sub.SubscriberUser.Name
-                                : !string.IsNullOrWhiteSpace(sub.SubscriberUser.PhoneNumber)
-                                    ? sub.SubscriberUser.PhoneNumber
-                                    : sub.SubscriberUser.Email,
-
-                    CreatedBy =
-                        sub.AddedByUser == null
-                            ? sub.AddedByUserId
-                            : !string.IsNullOrWhiteSpace(sub.AddedByUser.Name)
-                                ? sub.AddedByUser.Name
-                                : !string.IsNullOrWhiteSpace(sub.AddedByUser.PhoneNumber)
-                                    ? sub.AddedByUser.PhoneNumber
-                                    : sub.AddedByUser.Email,
-
-                    SubscriptionType = sub.SubscriberType,
-                    Location = sub.Organization != null ? sub.Organization.CompanyName : null,
-                    PackageName = sub.InputPackage.Name,
-                    CommitmentValue = sub.CommitmentValue,
-                    TotalFinancingValue = sub.TotalFinancingValue,
-                    SubscribedOn = sub.SubscribedOn,
-                    SubscriptionStatus = sub.Status,
-
-                    CommitmentStatus =
-                        (p.CommitmentPaid >= sub.CommitmentValue)
-                            ? "Paid"
-                            : "Pending"
+                    x.Id,
+                    x.InputPackageId,
+                    x.SubscriberUserId,
+                    x.AddedByUserId,
+                    x.SubscriberType,
+                    x.CommitmentValue,
+                    x.CommitmentRequired,
+                    x.TotalFinancingValue,
+                    x.SubscribedOn,
+                    x.Status,
+                    SubscriberName = x.SubscriberUser == null
+                        ? x.SubscriberUserId
+                        : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
+                            ? x.SubscriberUser.Name
+                            : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
+                                ? x.SubscriberUser.PhoneNumber
+                                : x.SubscriberUser.Email,
+                    CreatedBy = x.AddedByUser == null
+                        ? x.AddedByUserId
+                        : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
+                            ? x.AddedByUser.Name
+                            : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
+                                ? x.AddedByUser.PhoneNumber
+                                : x.AddedByUser.Email,
+                    Location = x.Organization != null ? x.Organization.CompanyName : null,
+                    PackageName = x.InputPackage.Name,
                 })
                 .ToListAsync();
 
+          
+            var data = rawData.Select(x =>
+            {
+                var commitmentPaid = paymentTotals.GetValueOrDefault(x.Id, 0m);
+                var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
+                    ? "Not Required"
+                    : commitmentPaid >= x.CommitmentValue
+                        ? "Paid"
+                        : "Pending";
+
+                return new SubscriptionDetailDto
+                {
+                    PackageId = x.InputPackageId,
+                    SubscriptionId = x.Id,
+                    SubscriberUserId = x.SubscriberUserId,
+                    SubscriberName = x.SubscriberName,
+                    CreatedBy = x.CreatedBy,
+                    SubscriptionType = x.SubscriberType,
+                    Location = x.Location,
+                    PackageName = x.PackageName,
+                    CommitmentValue = x.CommitmentValue,
+                    TotalFinancingValue = x.TotalFinancingValue,
+                    SubscribedOn = x.SubscribedOn,
+                    SubscriptionStatus = x.Status,
+                    SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
+                    CommitmentStatus = commitmentStatus
+                };
+            }).ToList();
+
+            
             return format switch
             {
                 ExportFormat.Excel => ExportToExcel(data),
@@ -3106,6 +3405,82 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 _ => throw new NotSupportedException("Format not supported")
             };
         }
+        //    public async Task<byte[]> ExportSubscriptionsAsync(
+        //SubscriptionQueryFilter filter,
+        //ExportFormat format)
+        //    {
+        //        var baseQuery = _context.InputPackageSubscriptions
+        //            .AsNoTracking()
+        //            .Where(x => x.BusinessCode == filter.BusinessCode)
+        //            .Include(x => x.InputPackage)
+        //            .Include(x => x.SubscriberUser)
+        //            .Include(x => x.AddedByUser)
+        //            .AsQueryable();
+        //        baseQuery = ApplyFilters(baseQuery, filter);
+        //        var payments = _context.InputPackageSubscriptionPayments
+        //            .AsNoTracking()
+        //            .Where(p => p.Status == TransactionStatus.Successful)
+        //            .GroupBy(p => p.SubscriptionId)
+        //            .Select(g => new
+        //            {
+        //                SubscriptionId = g.Key,
+        //                CommitmentPaid = g
+        //                    .Where(x => x.PaymentType == PaymentType.Commitment)
+        //                    .Sum(x => (decimal?)x.AmountPaid) ?? 0m
+        //            });
+
+        //        var data = await (
+        //            from sub in baseQuery
+        //            join pay in payments
+        //                on sub.Id equals pay.SubscriptionId into payGroup
+        //            from p in payGroup.DefaultIfEmpty()
+        //            select new SubscriptionDetailDto
+        //            {
+        //                PackageId = sub.InputPackageId,
+        //                SubscriptionId = sub.Id,
+        //                SubscriberUserId = sub.SubscriberUserId,
+
+        //                SubscriberName =
+        //                    sub.SubscriberUser == null
+        //                        ? sub.SubscriberUserId
+        //                        : !string.IsNullOrWhiteSpace(sub.SubscriberUser.Name)
+        //                            ? sub.SubscriberUser.Name
+        //                            : !string.IsNullOrWhiteSpace(sub.SubscriberUser.PhoneNumber)
+        //                                ? sub.SubscriberUser.PhoneNumber
+        //                                : sub.SubscriberUser.Email,
+
+        //                CreatedBy =
+        //                    sub.AddedByUser == null
+        //                        ? sub.AddedByUserId
+        //                        : !string.IsNullOrWhiteSpace(sub.AddedByUser.Name)
+        //                            ? sub.AddedByUser.Name
+        //                            : !string.IsNullOrWhiteSpace(sub.AddedByUser.PhoneNumber)
+        //                                ? sub.AddedByUser.PhoneNumber
+        //                                : sub.AddedByUser.Email,
+
+        //                SubscriptionType = sub.SubscriberType,
+        //                Location = sub.Organization != null ? sub.Organization.CompanyName : null,
+        //                PackageName = sub.InputPackage.Name,
+        //                CommitmentValue = sub.CommitmentValue,
+        //                TotalFinancingValue = sub.TotalFinancingValue,
+        //                SubscribedOn = sub.SubscribedOn,
+        //                SubscriptionStatus = sub.Status,
+
+        //                CommitmentStatus =
+        //                    (p.CommitmentPaid >= sub.CommitmentValue)
+        //                        ? "Paid"
+        //                        : "Pending"
+        //            })
+        //            .ToListAsync();
+
+        //        return format switch
+        //        {
+        //            ExportFormat.Excel => ExportToExcel(data),
+        //            ExportFormat.Pdf => ExportToPdf(data),
+        //            _ => throw new NotSupportedException("Format not supported")
+        //        };
+        //    }
+
         private IQueryable<InputPackageSubscription> ApplyFilters(
     IQueryable<InputPackageSubscription> query,
     SubscriptionQueryFilter filter)
@@ -3293,7 +3668,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 RepaymentFrequency.Monthly => "month",
                 RepaymentFrequency.Quarterly => "quarter",
                 RepaymentFrequency.Annually => "year",
-                _ => "period"
+                _ => "Not Set"
             };
 
             // handle special case for BiWeekly to avoid "6 2 weeks"

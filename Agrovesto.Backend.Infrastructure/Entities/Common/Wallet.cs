@@ -34,13 +34,20 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
 
-        public long WalletId { get; set; }
+        public string DebitWalletId { get; set; }
+        public long DebitWalletProviderId { get; set; }
+        public string CreditWalletId { get; set; }
+        public long CreditWalletProviderId { get; set; }
         public string UserId { get; set; }
         public decimal Amount { get; set; }
+        public decimal CrAmount { get; set; }
+        public decimal DrAmount { get; set; }
         public string TransactionType { get; set; } // "Credit" or "Debit"
         public string Description { get; set; }
         public string Reference { get; set; }
         public decimal BalanceAfter { get; set; }
         public DateTime CreatedAt { get; set; }
     }
+
+
 }

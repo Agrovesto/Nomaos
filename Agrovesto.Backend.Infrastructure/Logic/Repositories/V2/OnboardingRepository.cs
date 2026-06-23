@@ -57,6 +57,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
         Task UpdateUserDetails(OnboardingRequestModel model, OnBoardingArgs args);
+        Task<UsersProfileResponse> GetUseridentity(string userId);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -235,11 +236,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 foreach (var role in roles)
                 {
-                    claims.Add(new Claim(ClaimTypes.Role, role));
+                    claims.Add(new Claim("Roles", role));
                 }
-
-                claims.Add(new Claim("Roles", string.Join(",", roles)));
             }
+            //if (roles?.Any() == true)
+            //{
+            //    foreach (var role in roles)
+            //    {
+            //        claims.Add(new Claim(ClaimTypes.Role, role));
+            //    }
+
+            //    claims.Add(new Claim("Roles", string.Join(",", roles)));
+            //}
 
             if (!string.IsNullOrWhiteSpace(user.UserType))
                 claims.Add(new Claim("UserType", user.UserType));
@@ -670,6 +678,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             user.EmailConfirmed = true;
 
             await _userManager.UpdateAsync(user);
+        }
+        public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+            // Fetch roles via UserRoles → Roles join
+            var roles = await (
+                from ur in _context.UserRoles
+                join r in _context.Roles on ur.RoleId equals r.Id
+                where ur.UserId == userId
+                select new UserRoleDto
+                {
+                    RoleId = r.Id,
+                    RoleName = r.Name
+                }
+            ).AsNoTracking().ToListAsync();
+
+            return new UsersProfileResponse
+            {
+                UserId = user.Id,
+                UserType = user.UserType,
+                Email = user.Email,
+                Phone = user.PhoneNumber,
+                Roles = roles
+            };
         }
 
         public async Task<UsersProfileResponse> GetUserProfile(string userId)

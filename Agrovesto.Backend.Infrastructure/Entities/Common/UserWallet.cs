@@ -132,6 +132,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 
         public long UserWalletId { get; set; }
         public UserWallet UserWallet { get; set; }
+        public long CreditWalletId { get; set; }
+        public UserWallet CreditWallet { get; set; }
 
         public WalletTransactionType WalletTransactionType { get; set; }
 
@@ -197,7 +199,26 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         Debit = 2
     }
 }
+public class WalletReconciliationLog
+{
+    public long Id { get; set; }
+    public string DebitReference { get; set; }
+    public string CreditReference { get; set; }
+    public string Reason { get; set; }
+    public ReconciliationStatus Status { get; set; }
+    public DateTimeOffset FlaggedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public string? ResolvedBy { get; set; }
+    public string? ResolutionNote { get; set; }
+}
 
+public enum ReconciliationStatus
+{
+    Pending,
+    InReview,
+    Resolved,
+    Reversed
+}
 public class ProviderWalletTransaction
 {
     [Key]
