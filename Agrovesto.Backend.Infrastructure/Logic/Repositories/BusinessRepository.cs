@@ -277,6 +277,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return org.Map();
         }
+        public async Task<OrganizationModel> GetOrganizationByUserId(string userId)
+        {
+            var org = await _context.Set<Organization>()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+            if (org == null)
+            {
+                return null;
+            }
+            return org.Map();
+        }
         public async Task<OrganizationModel> GetOrganizationAsync(string organizationEmail)
         {
             var org = await _context.Set<Organization>()

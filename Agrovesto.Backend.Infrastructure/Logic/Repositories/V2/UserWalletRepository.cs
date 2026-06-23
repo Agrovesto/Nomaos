@@ -1,11 +1,15 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
+using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using BCrypt.Net;
 using Core.Models.Payment;
@@ -23,7 +27,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     {
         // Define methods that the UserWalletRepository should implement
         Task<bool> CloseUserWallet(long walletId, string closedByUserId, string reason = "User requested wallet closure");
-        Task CompleteWalletTopUp(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
+        Task CompleteWalletFunding(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
@@ -31,8 +35,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
         Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference);
-        Task<string> InitiateWalletTopUp(long userWalletId, decimal amount, string? description = "Wallet Top-up");
-        Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal");
+        Task<string> CreateWalletFundinAsync(long userWalletId, decimal amount, string? description = "Wallet Top-up"
+            , string? reference = null);
+        Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null);
         Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
         Task ValidateTransactionPin(long walletId, string inputPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
@@ -40,14 +45,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
         Task UpdateWalletBalance(UserWallet wallet);
         Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args);
+        Task FlagForReconciliation(string debitReference, string creditReference, string reason);
+        Task<WalletReconciliationLog?> GetReconciliationLog(string debitReference);
+        Task<List<WalletReconciliationLog>> GetPendingReconciliations();
+        Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
         private readonly DataContext _context;
-        public UserWalletRepository(DataContext context)
+        private readonly IAWSService _notificationService;
+        public UserWalletRepository(DataContext context, IAWSService aWSService)
         {
             _context = context;
-
+            _notificationService = aWSService;
         }
         public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
         {
@@ -386,7 +396,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                     await dbTransaction.CommitAsync();
 
-                    request.Id = userWallet.Id;
+                    request.WalletId = userWallet.Id;
                     return request;
                 }
                 catch
@@ -563,10 +573,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
 
-        public async Task<string> InitiateWalletTopUp(
+        public async Task<string> CreateWalletFundinAsync(
     long userWalletId,
     decimal amount,
-    string? description = "Wallet Top-up")
+    string? description = "Wallet Top-up"
+            , string? reference =null)
         {
             if (amount <= 0)
                 throw new ArgumentException("Amount must be greater than zero");
@@ -577,7 +588,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (wallet == null)
                 throw new Exception("Wallet not found");
 
-            var transactionReference = Guid.NewGuid().ToString();
+            var transactionReference =!string.IsNullOrEmpty(reference) ? reference :  Guid.NewGuid().ToString();
 
             var transaction = new UserWalletTransactions
             {
@@ -602,7 +613,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return transactionReference;
         }
 
-        public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal")
+        public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null)
         {
             if (amount <= 0)
                 throw new ArgumentException("Amount must be greater than zero");
@@ -616,7 +627,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (wallet.WalletBalance < amount)
                 throw new Exception("Insufficient balance");
 
-            var transactionReference = Guid.NewGuid().ToString();
+            var transactionReference = !string.IsNullOrEmpty(reference) ? reference : Guid.NewGuid().ToString();
 
             var transaction = new UserWalletTransactions
             {
@@ -718,7 +729,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return transaction;
         }
 
-        public async Task CompleteWalletTopUp(
+        public async Task CompleteWalletFunding(
     string transactionReference,
     bool isSuccessful,
     string? providerReference,
@@ -944,6 +955,100 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Count = totalCount,
                 Data = pagedData
             };
+        }
+
+
+        public async Task FlagForReconciliation(
+    string debitReference,
+    string creditReference,
+    string reason)
+        {
+            // Guard against duplicate flags for the same debit
+            var existing = await _context.WalletReconciliationLogs
+                .FirstOrDefaultAsync(x => x.DebitReference == debitReference);
+
+            if (existing != null)
+            {
+                // Update reason if it was already flagged, rather than creating a duplicate
+                existing.Reason = $"{existing.Reason} | Re-flagged: {reason}";
+                existing.FlaggedAt = DateTimeOffset.UtcNow;
+                _context.WalletReconciliationLogs.Update(existing);
+                await _context.SaveChangesAsync();
+                return;
+            }
+
+            var log = new WalletReconciliationLog
+            {
+                DebitReference = debitReference,
+                CreditReference = creditReference,
+                Reason = reason,
+                Status = ReconciliationStatus.Pending,
+                FlaggedAt = DateTimeOffset.UtcNow
+            };
+
+            await _context.WalletReconciliationLogs.AddAsync(log);
+            await _context.SaveChangesAsync();
+
+            // Notify the team — fire and forget, never let this break the main flow
+            try
+            {
+                await _notificationService.SendReconciliationAlertAsync(new ReconciliationAlertRequest
+                {
+                    DebitReference = debitReference,
+                    CreditReference = creditReference,
+                    Reason = reason,
+                    FlaggedAt = log.FlaggedAt
+                });
+            }
+            catch
+            {
+                // Notification failure must never swallow or re-throw —
+                // the reconciliation log is already saved at this point
+            }
+        }
+
+        public async Task<WalletReconciliationLog?> GetReconciliationLog(string debitReference)
+        {
+            return await _context.WalletReconciliationLogs
+                .FirstOrDefaultAsync(x => x.DebitReference == debitReference);
+        }
+
+        public async Task<List<WalletReconciliationLog>> GetPendingReconciliations()
+        {
+            return await _context.WalletReconciliationLogs
+                .Where(x => x.Status == ReconciliationStatus.Pending
+                         || x.Status == ReconciliationStatus.InReview)
+                .OrderBy(x => x.FlaggedAt)
+                .ToListAsync();
+        }
+
+        public async Task ResolveReconciliation(
+            long reconciliationId,
+            string resolvedBy,
+            string resolutionNote,
+            ReconciliationStatus finalStatus)
+        {
+            var log = await _context.WalletReconciliationLogs
+                .FirstOrDefaultAsync(x => x.Id == reconciliationId);
+
+            if (log == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    $"Reconciliation log {reconciliationId} not found");
+
+            if (log.Status == ReconciliationStatus.Resolved ||
+                log.Status == ReconciliationStatus.Reversed)
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    $"Reconciliation {reconciliationId} is already {log.Status}");
+
+            log.Status = finalStatus;
+            log.ResolvedAt = DateTimeOffset.UtcNow;
+            log.ResolvedBy = resolvedBy;
+            log.ResolutionNote = resolutionNote;
+
+            _context.WalletReconciliationLogs.Update(log);
+            await _context.SaveChangesAsync();
         }
     }
 }

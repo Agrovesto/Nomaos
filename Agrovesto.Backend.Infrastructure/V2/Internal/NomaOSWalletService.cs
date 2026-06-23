@@ -34,6 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task HandleTopUpWebhook(ProviderWebhookRequest request);
         Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
+        Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
     }
 
@@ -45,11 +46,13 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IUserWalletRepository _userWalletRepository;
         private readonly DataContext _context;
+        private readonly IInputFinancingRepository _inputFinancingRepository;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory,
-            DataContext context)
+            DataContext context,
+            IInputFinancingRepository inputFinancingRepository)
         {
             _factory = factory;
             _providerRepo = providerRepo;
@@ -57,6 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _onboardingRepository = onboardingRepository;
             _context = context;
             _userWalletRepository = userWalletRepository;
+            _inputFinancingRepository = inputFinancingRepository;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env)
         {
@@ -148,7 +152,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     businessCode = args.businessCode;
                 }
 
-                var userProfile = await _onboardingRepository.GetUserProfile(args.UserId);
+                var userProfile = await _onboardingRepository.GetUseridentity(args.UserId);
                 if (userProfile == null)
                     return (false, "User not found");
 
@@ -201,14 +205,20 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     TransactionPin = request.TransactionPin
                 };
 
-                await _userWalletRepository.CreateUserWallet(walletModel, new UserWalletParams
+               var wallet= await _userWalletRepository.CreateUserWallet(walletModel, new UserWalletParams
                 {
                     businessCode = businessCode,
                     Env = args.env,
                     UserId = args.UserId
                 });
 
+                if (userProfile.Roles.Any(r => r.RoleName == "Organization"))
+                {
+                    await UpdateOrganizationInputPackage(args, providerId, wallet);
+                }
+
                 return (true, "Wallet created successfully");
+            
             }
             catch (Exception ex)
             {
@@ -216,6 +226,18 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
+        public async Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByUserId(args.UserId);
+            if (hasOrg != null)
+            {
+                await _inputFinancingRepository.UpdateInputPackageWallets(
+                    hasOrg.OrganizaionId,
+                    wallet.WalletId,
+                    providerId
+                );
+            }
+        }
 
         private static string ExtractDomain(string email)
         {
@@ -300,7 +322,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
                 var providerService = _factory.GetService(providerType);
 
-                var transactionReference = await _userWalletRepository.InitiateWalletTopUp(
+                var transactionReference = await _userWalletRepository.CreateWalletFundinAsync(
                     wallet.Id,
                     request.Amount,
                     request.Description ?? "Wallet top-up");
@@ -323,7 +345,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
                 if (providerResponse == null || !providerResponse.IsSuccess)
                 {
-                    await _userWalletRepository.CompleteWalletTopUp(
+                    await _userWalletRepository.CompleteWalletFunding(
                         transactionReference,
                         false,
                         providerResponse?.Data.ProviderReference,
@@ -494,7 +516,9 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 var providerService = _factory.GetService(providerType);
 
                 // create pending withdrawal transaction
-                var transactionReference = await _userWalletRepository.InitiateWalletWithdrawal(request.UserWalletId, request.Amount, request.Description ?? "Withdrawal");
+                var transactionReference = await _userWalletRepository
+                    .InitiateWalletWithdrawal
+                    (request.UserWalletId, request.Amount, request.Description ?? "Withdrawal");
 
                 var disbursementRequest = new TransferRequest
                 {

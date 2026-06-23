@@ -83,6 +83,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
         Task<MemberShipUpdateResultDto> UpdateMembershipProfile(string userId, MemberShipModel update);
         Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
+        Task<UsersProfileResponse> GetUseridentity(string userId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -1589,6 +1590,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<UsersProfileResponse> GetUserProfileAsync(string userId)
         {
             var profile = await _onboardingRepository.GetUserProfile(userId);
+            if (profile == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
+
+            return profile;
+        }
+        public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        {
+            var profile = await _onboardingRepository.GetUseridentity(userId);
             if (profile == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
 

@@ -77,6 +77,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public enum RepaymentFrequency
     {
+        [Display(Name = "Not Set")]
+        NA = 0,
+
         [Display(Name = "Weekly")]
         Weekly = 1,
 

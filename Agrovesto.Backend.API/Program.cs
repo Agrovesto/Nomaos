@@ -15,6 +15,7 @@ using Amazon.S3;
 using AWS.Logger;
 using AWS.Logger.AspNetCore;
 using AWS.Logger.SeriLog;
+using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -28,8 +29,10 @@ using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
 using QuestPDF.Infrastructure;
 using Serilog;
+using SixLabors.ImageSharp;
 using System;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 using VaultSharp;
@@ -147,7 +150,8 @@ builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
 builder.Services.AddScoped<BulkOnboardingProcessor>();
-
+builder.Services.Configure<ReconciliationEmailSettings>(
+    builder.Configuration.GetSection("ReconciliationEmailSettings"));
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
@@ -177,7 +181,12 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50 MB
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+   // JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters()
@@ -190,9 +199,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
-        )
+        ),
+        RoleClaimType = "Roles"
     };
 });
+//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(opt => {
+//opt.TokenValidationParameters = new TokenValidationParameters
+//{
+//    ValidateIssuer = true,
+//    ValidateAudience = true,
+//    ValidateLifetime = true,
+//    ValidateIssuerSigningKey = true,
+//    ValidAudience = builder.Configuration["Jwt:Audience"],
+//    ValidIssuer = builder.Configuration["Jwt:Issuer"],
+//    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+//    RoleClaimType = ClaimTypes.Role,   
+//    // maps to http://schemas.microsoft.com/ws/2008/06/identity/claims/role
+//    NameClaimType = ClaimTypes.Name   
+//    // maps to http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name
+//    };
+//});
+
 builder.Services.Configure<FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
@@ -366,6 +393,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 
 
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
@@ -374,9 +402,8 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseHangfireDashboard("/hangfire");
 app.UseAuthentication();
-app.UseMiddleware<GlobalExceptionMiddleware>();
-app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
-app.UseMiddleware<TenantResolutionMiddleware>();
+//app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
+//app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
 
 // The health check endpoints are now handled by the HealthController

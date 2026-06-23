@@ -426,13 +426,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class RecordCommitmentPaymentRequest
     {
         public long SubscriptionId { get; set; }
-        public string SubscriberUserId { get; set; }
+        public string ?SubscriberUserId { get; set; }
 
         public decimal Amount { get; set; }
 
         public PaymentChannel PaymentChannel { get; set; }
 
-        public string Reference { get; set; }
+        public string? Reference { get; set; }
 
         public string? ExternalReference { get; set; }
 
@@ -491,6 +491,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string? SubscriberUserId { get; set; }
         public string? BusinessCode { get; set; }
         public string? OrganizationCode { get; set; }
+        public string? CurrentLoggedInUserRole { get; set; }
         public long? OrganizationId { get; set; }
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
@@ -576,6 +577,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string Location { get; set; }
         public string VerificationStatus { get; set; }
         public DateTimeOffset EnrollmentDate { get; set; }
+        public string Package { get; set; }
+        public string WarehouseAssigned { get; set; }
     }
 
     public class PackageInfoDto
@@ -612,6 +615,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class SubscriptionReviewResponseDto
     {
+        public List<InputBreakdownDto> InputBreakdown { get; set; }
+        public List<AdditionalCostDto> AdditionalCost { get; set; }
         public SubscriberInfoDto Subscriber { get; set; }
 
         public PackageInfoDto Package { get; set; }
@@ -632,7 +637,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal CommitmentOutstandingBalance { get; set; }
         public bool RepaymentRequired { get; set; }
         public bool CommitmentRequired { get; set; }
-        public int? CommitmentDaysLeft { get; set; }
+        public string? CommitmentDaysLeft { get; set; }
 
         public decimal TotalRepaidAmount { get; set; }
 
@@ -640,7 +645,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public decimal TotalRepaymentBalance { get; set; }
 
-        public int? RepaymentDaysLeft { get; set; }
+        public string? RepaymentDaysLeft { get; set; }
         public string RepaymentDuration { get; set; }
         public string RepaymentModel { get; set; }
         public string RiskCategory { get; set; }

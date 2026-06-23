@@ -35,7 +35,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count> 0? "Successful": "Failed",
+                    Message = result.Count> 0? "Successful": "No Record",
                     Succeeded = true,
                     Count = result.Count,
 
