@@ -690,6 +690,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public PaymentChannel PaymentChannel { get; set; }
         public string? Reference { get; set; }
         public string? ExternalReference { get; set; }
+        public string? RecordedByUserId { get; set; }
         public long WalletProviderId { get; set; }
     }
     public class PaymentConfirmationRequest

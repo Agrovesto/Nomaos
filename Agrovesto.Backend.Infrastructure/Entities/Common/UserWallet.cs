@@ -130,9 +130,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
 
-        public long UserWalletId { get; set; }
+        public long? UserWalletId { get; set; }
         public UserWallet UserWallet { get; set; }
-        public long CreditWalletId { get; set; }
+        public long? CreditWalletId { get; set; }
         public UserWallet CreditWallet { get; set; }
 
         public WalletTransactionType WalletTransactionType { get; set; }

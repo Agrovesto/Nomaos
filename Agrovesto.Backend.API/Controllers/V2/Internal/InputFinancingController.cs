@@ -813,6 +813,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
+            if (string.IsNullOrWhiteSpace(filter.Env))
+            {
+                return BadRequest(ApiResponse<object>.Fail(
+                    $"Invalid request {nameof(filter.Env)}",
+                    HttpContext.TraceIdentifier
+                ));
+            }
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -825,7 +832,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
             return Ok(ApiResponse<string>.Success(
-                 "Request Processing",
+                 "Request Processed",
                  "Successful",
                  ResponseCodes.Success,
                  HttpContext.TraceIdentifier

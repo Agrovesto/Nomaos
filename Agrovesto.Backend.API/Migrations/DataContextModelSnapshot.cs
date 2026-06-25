@@ -2499,7 +2499,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Reference")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Status")
@@ -5966,6 +5965,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("CommissionFee")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<long?>("CreditWalletId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasMaxLength(3)
@@ -5997,7 +5999,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<long>("UserWalletId")
+                    b.Property<long?>("UserWalletId")
                         .HasColumnType("bigint");
 
                     b.Property<string>("WalletTransactionStatus")
@@ -6009,6 +6011,8 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreditWalletId");
 
                     b.HasIndex("TransactionReference")
                         .IsUnique();
@@ -6354,6 +6358,46 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("ProviderWalletTransactionId");
 
                     b.ToTable("ProviderWalletTransactionLogs");
+                });
+
+            modelBuilder.Entity("WalletReconciliationLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("CreditReference")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("DebitReference")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("FlaggedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("WalletReconciliationLogs");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.AdditionalInputPackageCost", b =>
@@ -7394,11 +7438,16 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletTransactions", b =>
                 {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", "CreditWallet")
+                        .WithMany()
+                        .HasForeignKey("CreditWalletId");
+
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", "UserWallet")
                         .WithMany("Transactions")
                         .HasForeignKey("UserWalletId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("CreditWallet");
 
                     b.Navigation("UserWallet");
                 });

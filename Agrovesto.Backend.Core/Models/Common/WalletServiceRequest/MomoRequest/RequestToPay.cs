@@ -184,8 +184,10 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
     {
         public string BaseUrl { get; set; }
         public string SubscriptionKey { get; set; }
+        public string DisbursementKey { get; set; }
         public string ProviderKey { get; set; }
         public string UserName { get; set; }
+        public string DisbursementUserName { get; set; }
         public string SubscriptionApiKey { get; set; }
         public string DisbursementApiKey { get; set; }
         public string TargetEnvironment { get; set; }
