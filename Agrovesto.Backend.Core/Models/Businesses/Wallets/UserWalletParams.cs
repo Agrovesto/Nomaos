@@ -17,6 +17,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? Currency { get; set; }
         public string Provider { get; set; }
         public string? RawPayload { get; set; }
+        public string BusinessCode { get; set; }
         public string? Signature { get; set; }
         public DateTimeOffset? EventTime { get; set; }
     }

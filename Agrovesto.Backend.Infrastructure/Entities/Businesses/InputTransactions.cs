@@ -339,7 +339,7 @@ RepaymentTransaction
 
         public TransactionStatus Status { get; set; }
 
-        public string Reference { get; set; }
+        public string? Reference { get; set; }
 
         public DateTimeOffset? PaidOn { get; set; }
         public string RecordedByUserId { get; set; }

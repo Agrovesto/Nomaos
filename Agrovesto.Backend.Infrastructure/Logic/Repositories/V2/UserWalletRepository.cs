@@ -660,9 +660,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+          //  await strategy.ExecuteAsync(async () =>
+            //{
+              //  await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
@@ -687,8 +687,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                        await _context.SaveChangesAsync();
-                        await dbTransaction.CommitAsync();
+                       // await _context.SaveChangesAsync();
+                      //  await dbTransaction.CommitAsync();
                         return;
                     }
 
@@ -710,19 +710,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     _context.UserWalletTransactions.Update(transaction);
 
                     await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
+                    //await dbTransaction.CommitAsync();
                 }
                 catch
                 {
-                    await dbTransaction.RollbackAsync();
+                  //  await dbTransaction.RollbackAsync();
                     throw;
                 }
-            });
+            //});
         }
 
         public async Task<UserWalletTransactions> GetWalletTransactionByRef(string transactionReference)
         {
             var transaction = await _context.UserWalletTransactions
+                .Include(x=>x.UserWallet)
                 .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
             if (transaction == null)
                 return null;
@@ -737,9 +738,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var strategy = _context.Database.CreateExecutionStrategy();
 
-            await strategy.ExecuteAsync(async () =>
-            {
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            //await strategy.ExecuteAsync(async () =>
+            //{
+            //    await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
                 try
                 {
@@ -764,8 +765,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                        await _context.SaveChangesAsync();
-                        await dbTransaction.CommitAsync();
+                        //await _context.SaveChangesAsync();
+                       // await dbTransaction.CommitAsync();
                         return;
                     }
 
@@ -776,23 +777,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                                     - transaction.CommissionFee;
 
                     wallet.WalletBalance += netAmount;
-
+                    
                     transaction.BalanceBefore = balanceBefore;
                     transaction.BalanceAfter = wallet.WalletBalance;
                     transaction.WalletTransactionStatus = WalletTransactionStatus.Completed;
-
+                    transaction.CreditWalletId = transaction.UserWalletId;
                     _context.UserWallets.Update(wallet);
                     _context.UserWalletTransactions.Update(transaction);
 
                     await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
+                  //  await dbTransaction.CommitAsync();
                 }
                 catch
                 {
-                    await dbTransaction.RollbackAsync();
+                   // await dbTransaction.RollbackAsync();
                     throw;
                 }
-            });
+            //});
         }
 
 
@@ -820,7 +821,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             _context.UserWalletTransactions.Update(transaction);
-            await _context.SaveChangesAsync();
+           // await _context.SaveChangesAsync();
         }
         public async Task UpdateTransactionStatus(
     string transactionReference,
@@ -845,7 +846,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             transaction.TransactionDate = DateTimeOffset.UtcNow;
 
             _context.UserWalletTransactions.Update(transaction);
-            await _context.SaveChangesAsync();
+           // await _context.SaveChangesAsync();
         }
 
         public async Task UpdateWalletBalance(UserWallet wallet)
@@ -865,7 +866,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context.Entry(existingWallet).OriginalValues["RowVersion"] = existingWallet.RowVersion;
 
             _context.UserWallets.Update(existingWallet);
-            await _context.SaveChangesAsync();
+           // await _context.SaveChangesAsync();
         }
 
         public async Task UpdateTransaction(UserWalletTransactions transaction)
@@ -892,9 +893,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             existingTransaction.TransactionDescription = transaction.TransactionDescription;
 
             existingTransaction.TransactionDate = DateTimeOffset.UtcNow;
-
+            existingTransaction.WalletTransactionStatus =
+    transaction.WalletTransactionStatus;
             _context.UserWalletTransactions.Update(existingTransaction);
-            await _context.SaveChangesAsync();
+           // await _context.SaveChangesAsync();
         }
 
         public async Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args)

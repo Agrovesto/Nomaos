@@ -1161,11 +1161,12 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 Reference = request.Reference,
                 ExternalReference = request.ExternalReference,
                 WalletProviderId = request.WalletProviderId,
-                CreatedOn = DateTimeOffset.UtcNow
+                CreatedOn = DateTimeOffset.UtcNow,
+                RecordedByUserId= request.RecordedByUserId
             };
 
             _context.InputPackageSubscriptionPayments.Add(payment);
-            await _context.SaveChangesAsync();
+           await _context.SaveChangesAsync();
 
             return payment.Id;
         }
