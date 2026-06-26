@@ -2720,6 +2720,26 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 })
                 .ToListAsync();
 
+            var rawcommitmentPaymentHistory = await _context.InputPackageSubscriptionPayments
+                .Include(x=>x.RecordedByUser)
+                .Where(x =>
+                    x.SubscriptionId == subscription.Id &&
+                    x.PaymentType == PaymentType.Commitment &&
+                    x.Status == TransactionStatus.Successful)
+                .OrderByDescending(x => x.PaidOn)
+                .Select(x => new
+                {
+                    x.PaidOn,
+                    x.AmountPaid,
+                    x.PaymentChannel,
+                    RecordedBy = x.RecordedByUser != null
+                        ? !string.IsNullOrWhiteSpace(x.RecordedByUser.Name)
+                            ? x.RecordedByUser.Name
+                            : x.RecordedByUser.Email
+                        : null
+                })
+                .ToListAsync();
+
 
             var repaymentPeriod = package.RepaymentPlan != null
       ? GetRepaymentPeriod(
@@ -2836,6 +2856,14 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                 RepaymentHistory = rawRepaymentHistory
                     .Select(x => new RepaymentHistoryDto
+                    {
+                        PaymentDate = x.PaidOn,
+                        AmountPaid = x.AmountPaid,
+                        PaymentMethod = x.PaymentChannel.ToString(),
+                        RecordedBy = x.RecordedBy
+                    }).ToList(),
+                CommitmentPaymentHistory = rawcommitmentPaymentHistory
+                    .Select(x => new CommitmentHistoryDto
                     {
                         PaymentDate = x.PaidOn,
                         AmountPaid = x.AmountPaid,
