@@ -155,8 +155,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var subscriptionIds = await _context.InputPackageSubscriptions
                 .AsNoTracking()
                 .Where(x =>
-                    x.SubscriberUserId == subscriberUserId &&
-                    x.Status == SubscriptionStatus.Active)
+                    x.SubscriberUserId == subscriberUserId 
+                   // &&
+                   // x.Status == SubscriptionStatus.Active
+                    )
                 .Select(x => x.Id)
                 .ToListAsync();
 

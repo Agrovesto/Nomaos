@@ -624,6 +624,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public FinancingSnapshotDto FinancingSnapshot { get; set; }
 
         public List<RepaymentHistoryDto> RepaymentHistory { get; set; }
+        public List<CommitmentHistoryDto> CommitmentPaymentHistory { get; set; }
     }
 
     public class FinancingSnapshotDto
@@ -652,6 +653,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
 
     public class RepaymentHistoryDto
+    {
+        public DateTimeOffset? PaymentDate { get; set; }
+
+        public decimal AmountPaid { get; set; }
+
+        public string PaymentMethod { get; set; }
+
+        public string RecordedBy { get; set; }
+    }
+    public class CommitmentHistoryDto
     {
         public DateTimeOffset? PaymentDate { get; set; }
 
