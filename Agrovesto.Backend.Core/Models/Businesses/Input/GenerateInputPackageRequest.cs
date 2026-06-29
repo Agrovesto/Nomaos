@@ -1,7 +1,9 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -405,6 +407,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string? OrganizationCode { get; set; }
         public long? OrganizationId { get; set; }
 
+        public string? CurrentLoggedInUserRole { get; set; }
         public string BusinessCode { get; set; }
         public long SubscriptionId { get; set; }
         public string? SubscriberUserId { get; set; }
@@ -451,14 +454,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string Email { get; set; }
         public string PhoneNumber { get; set; }
     }
-    public class DisburseSubscriptionRequest
-    {
-        public long SubscriptionId { get; set; }
-
-        public decimal? DisbursedAmount { get; set; }
-
-        public string? Reference { get; set; }
-    }
+    
 
     public class RecordRepaymentRequest
     {
@@ -756,4 +752,73 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public long AdditionalCostId { get; set; }
     }
+
+
+    #region disbursement
+    public class DisburseSubscriptionRequest
+    {
+        public decimal? DisbursedAmount { get; set; }
+
+        public long WarehouseId { get; set; }   
+        public string? Reference { get; set; }
+        public string? NIN { get; set; }
+
+        /// <summary>Base64-encoded live photo captured on the frontend at disbursement time.</summary>
+        public IFormFile UserImage { get; set; }
+
+        /// <summary>Device GPS coordinates sent by the frontend.</summary>
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    public class DisburseSubscriptionResult
+    {
+        public bool Success { get; set; }
+        public decimal DisbursedAmount { get; set; }
+        public bool IsPartial { get; set; }
+        public string LocationName { get; set; }
+        public List<DisbursementLineItemModel> LineItems { get; set; } = new();
+    }
+    public class DisbursementLineItemModel
+    {
+           public long Id { get; set; }
+        public long DisbursementId { get; set; }
+
+            public long SubscriptionId { get; set; }
+        public long OrganizationProductId { get; set; }
+        public decimal SubscribedQuantity { get; set; }
+        public decimal DisbursedQuantity { get; set; }
+        public decimal PendingQuantity { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal TotalDisbursedValue { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        public long LocationId { get; set; }
+        public string AgentUserId { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    /// <summary>Per-product tracking row for physical disbursements.</summary>
+
+    /// <summary>Maps an agent user to the location they are permitted to disburse from.</summary>
+    public class AgentLocationAssignment
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid UserId { get; set; }
+        public Guid LocationId { get; set; }
+        public bool IsActive { get; set; }
+     //   public Location Location { get; set; }
+    }
+
+    /// <summary>Outbox event payload — extended with geo and partial fields.</summary>
+    
+
+    /// <summary>Strongly-typed disbursement exception — caught at controller level
+    /// to return 400/422 instead of 500.</summary>
+    public class DisbursementException : Exception
+    {
+        public DisbursementException(string message) : base(message) { }
+    }
+
+    #endregion disbursement
 }

@@ -101,7 +101,11 @@ namespace Agrovesto.Backend.Core.V2.Events
         public long SubscriptionId { get; set; }
 
         public long PackageId { get; set; }
-
+        public bool IsPartial { get; set; }
+        public long LocationId { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public string AgentUserId { get; set; }
         public decimal Amount { get; set; }
 
         public DateTime OccurredOn { get; set; } = DateTime.UtcNow;

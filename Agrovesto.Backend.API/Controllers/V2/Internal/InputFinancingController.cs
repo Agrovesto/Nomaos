@@ -570,6 +570,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
 
+          
+
         [HttpPost("approve-subscriber")]
         public async Task<IActionResult> ApproveSubscriptionAsync(
             [FromBody] ApproveSubscriptionRequest model,
@@ -643,6 +645,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 ));
         }
        
+
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
             [FromQuery] SubscriptionQueryFilter filter)
@@ -839,8 +842,115 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ));
         }
 
-       
-        
+
+        [HttpPut("request-release-input")]
+        public async Task<IActionResult> RequestInputDisbursementApprovalAsync(
+            [FromQuery] InputSubscriptionRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .RequestInputDisbursementApprovalAsync(args);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Subscriber Added Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+        [HttpPost("release-input")]
+        public async Task<IActionResult> ApproveInputDisbursementRequestAsync(
+            [FromQuery] ApproveDisbursementRequestDto model,
+            [FromQuery] InputSubscriptionRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .ApproveInputDisbursementRequestAsync(model, args.UserId);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Subscriber Added Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+
+        [HttpGet("disburse-input")]
+
+        [Authorize(Roles = "Organization,Agent")]
+        public async Task<IActionResult> DisburseSubscriptionAsync(
+            [FromForm] DisburseSubscriptionRequest request,
+            [FromQuery] InputSubscriptionRequestArgs filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .DisburseSubscriptionAsync(request, filter);
+
+
+            return Ok(ApiResponse<DisburseSubscriptionResult>.Success(
+    result,
+    "Successful",
+    ResponseCodes.Success,
+    HttpContext.TraceIdentifier
+));
+        }
+
+
         //update create wallet with background service such that if a wallet is created for an organization, update input subscription with the walletid of the provider selected
 
 

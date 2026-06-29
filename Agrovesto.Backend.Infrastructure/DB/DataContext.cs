@@ -508,6 +508,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<UserBusiness> UserBusinesses { get; set; }
         public DbSet<MigrationTracker> MigrationTrackers { get; set; }
         public DbSet<OrganizationBusiness> OrganizationBusinesses { get; set; }
+        public DbSet<DisbursementLineItem> DisbursementLineItems { get; set; }
+        public DbSet<MonetaryDisbursementTransaction> MonetaryDisbursementTransactions { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

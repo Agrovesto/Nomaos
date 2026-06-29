@@ -105,6 +105,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task DeleteInventory(DeleteLocationDto model, ListQueryParams query);
         Task SyncLocationStockLevels(ListQueryParams query);
         Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
+        Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -1117,6 +1118,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
 
             return await _organizationRepository.GetLocationByIdAsync(query.Id);
+
+        }
+        public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
+            if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+
+            return await _organizationRepository.GetLocationsByAgentAsync(query);
 
         }
        

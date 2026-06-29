@@ -497,8 +497,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         LastName = row.LastName,
                         Email = row.Email,
                         PhoneNumber = row.PhoneNumber,
-                        Password = "Admin123",
-                        Pin = "0000",
+                        Password =row.PhoneNumber, //"Admin123",
+                        Pin = "1234",
 
                     };
 

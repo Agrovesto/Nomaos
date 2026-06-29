@@ -201,7 +201,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 BusinessCode=args.businessCode,
                 IsActive=true,
                 UserName=row.LeaderPhoneNumber,
-                Pin="0000",
+                Pin="1234",
                 PhoneNumber = row.LeaderPhoneNumber,
                 // Email / password not set for bulk-imported members;
                 // they complete registration separately via invite flow

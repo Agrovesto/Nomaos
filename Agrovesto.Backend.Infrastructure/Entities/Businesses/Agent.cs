@@ -26,10 +26,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long? OrganizationProductId { get; set; }
         public OrganizationProduct OrganizationProduct { get; set; }
 
-        // Source and destination locations
+        // Source locations
         public long? FromLocationId { get; set; }
         public OrganizationLocation? FromLocation { get; set; }
-
+        //destination location
         public long? ToLocationId { get; set; }
         public OrganizationLocation? ToLocation { get; set; }
         public string? Notes { get; set; }
@@ -74,6 +74,11 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long OrganizationId { get; set; }
         public Organization Organization { get; set; }
         public long? SubscriptionId { get; set; }
+
+        public double Latitude { get; set; } 
+        public double Longitude { get; set; }
+        public decimal Amount { get; set; }
+        
     }
     public class Agent
     {
@@ -113,7 +118,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public DateTimeOffset AssignedOn { get; set; } = DateTimeOffset.Now;
         public string? AssignedByUserId { get; set; }
-        public long LocationId { get; set; } //warehouse/aggregration centre, distribution centre etc
+        public long? LocationId { get; set; } //warehouse/aggregration centre, distribution centre etc
        public OrganizationLocation Location { get; set; }
         public bool IsActive { get; set; } = true;
         public bool IsPrimary { get; set; }
@@ -159,7 +164,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public long LocationId { get; set; }
         public OrganizationLocation Location { get; set; }
         public DateTimeOffset RecordedOn { get; set; } = DateTimeOffset.Now;
-          public long OrganizationProductId { get; set; }
+         public long? OrganizationProductId { get; set; }
         public OrganizationProduct OrganizationProduct { get; set; }
         public string? BatchNumber { get; set; } //can be auto generated or provided by user
         public string? InventoryOwner { get; set; } = "Organization"; // Central, Government, Private, Cooperative, organization, farmer
@@ -175,6 +180,13 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? DeletedByUserId { get; set; }
         public DateTimeOffset? DeletedOn { get; set; }
         public string? DeleteReason { get; set; }
+        public decimal TotalAmount { get; set; } //only used if inventorytype is money
+        public LocationInventoryType LocationInventoryType { get; set; } = LocationInventoryType.Product;
+    }
+    public enum LocationInventoryType
+    {
+        Product = 1,
+        Monetary = 2,
     }
     public class OrganizationLocation
     {

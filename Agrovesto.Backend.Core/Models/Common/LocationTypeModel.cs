@@ -425,6 +425,21 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? UserId { get; set; }
     }
 
+    public class AgentLocationListResponseDto
+    {
+        public bool IsActive { get; set; }
+        public long Id { get; set; }
+        public string LocationName { get; set; }
+        public string? Address { get; set; }
+        public long LocationTypeId { get; set; }
+        public string LocationTypeName { get; set; }
+
+        public decimal Capacity { get; set; }
+        public string CapacityType { get; set; }
+        public decimal StockLevel { get; set; }
+
+        public string LocationStatus { get; set; }
+    }
     public class LocationListResponseDto
     {
         public bool IsActive { get; set; }
@@ -542,6 +557,7 @@ namespace Agrovesto.Backend.Core.Models.Common
 
     public class CreateInventoryDto
     {
+        public decimal Amount { get; set; }
         public long LocationId { get; set; }
 
         public long ProductId { get; set; }
