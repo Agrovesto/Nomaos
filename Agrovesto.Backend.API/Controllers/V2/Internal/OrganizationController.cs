@@ -732,6 +732,50 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         }
+        [HttpGet("locations-by-agent")]
+        [Authorize(Roles = "Organization,Agent")]
+        public async Task<IActionResult> GetLocationsByAgentAsync([FromQuery] ListQueryParams args)
+        {
+            try
+            {
+
+                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                args.UserId = CurrentUserId;
+                if (string.IsNullOrEmpty(args.organizationCode))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
+                }
+                var type = await _organizationManager.GetLocationsByAgentAsync(args);
+                return Ok(new Response<PagedListResponse<List<AgentLocationListResponseDto>>>()
+                {
+                    Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
+
+
+                    Succeeded = true,
+                    Message = "Successful",
+                    Data = type,
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
 
         [HttpGet("sublocations")]
         public async Task<IActionResult> GetSubLocationsAsync([FromQuery] ListQueryParams args)

@@ -65,10 +65,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId);
         Task<CommitmentReminderDto?> GetCommitmentReminderAsync(long subscriptionId);
         Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter);
-        Task<long> RequestInputDisbursementApprovalAsync(long subscriptionId, decimal? requestedAmount, string? reference, InputSubscriptionRequestArgs args);
+        Task<long> RequestInputDisbursementApprovalAsync(long subscriptionId, string? reference, string userId);
         Task<decimal> GetTotalCommitmentPaidAsync(long subscriptionId);
         // Task<bool> RecordSuccessfulPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args);
-        Task<bool> RecordSuccessfulPaymentAsync(long paymentId, PaymentConfirmationRequest request);
+        Task<bool> RecordSuccessfulPaymentAsync(long paymentId, PaymentConfirmationRequest request, string performedBy);
         Task FlagPendingBankTransferAsync(long paymentId);
         Task FlagPendingCashApprovalAsync(long paymentId);
         Task<long> CreatePendingPaymentAsync(CreateCommitmentPaymentRequest request);
@@ -77,6 +77,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> RemoveAdditionalCostFromPackageAsync(long packageId, long additionalCostId);
         Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs args);
         Task<bool> UpdateInputPackageWallets(long organizationId, long walletId, long providerId);
+        Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, string approvedByUserId);
+        Task<decimal> GetAvailableBalanceAsync(long locationId);
+        Task DeductAsync(long locationId, decimal amount, string referenceNumber, string agentUserId);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -1204,7 +1207,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         }
         public async Task<bool> RecordSuccessfulPaymentAsync(
       long paymentId,
-      PaymentConfirmationRequest request)
+      PaymentConfirmationRequest request, string performedBy)
         {
             var payment = await _context.InputPackageSubscriptionPayments
                 .Include(x => x.Subscription)
@@ -1255,6 +1258,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 subscription.Status =
                     SubscriptionStatus.PendingDisbursement;
 
+                await RequestInputDisbursementApprovalAsync(subscription.Id,
+                    request.ExternalReference, performedBy);
+
+
                 _context.OutboxMessages.Add(new OutboxMessage
                 {
                     Id = Guid.NewGuid(),
@@ -1271,9 +1278,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 });
             }
 
-            /*
-             * General payment recorded event
-             */
             _context.OutboxMessages.Add(new OutboxMessage
             {
                 Id = Guid.NewGuid(),
@@ -1549,9 +1553,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
         public async Task<long> RequestInputDisbursementApprovalAsync(
             long subscriptionId,
-            decimal? requestedAmount,
             string? reference,
-            InputSubscriptionRequestArgs args)
+            string userId)
         {
             var subscription = await _context.InputPackageSubscriptions
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
@@ -1561,11 +1564,12 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             if (subscription.Status != SubscriptionStatus.PendingDisbursement)
                 throw new Exception("Not ready for disbursement");
+
             var request = new InputSubscriptionDisbursement
             {
                 SubscriptionId = subscriptionId,
                 RequestedAmount = subscription.TotalFinancingValue,
-                RequestedByUserId = args.UserId,
+                RequestedByUserId = userId,
                 RequestCreatedOn = DateTimeOffset.Now,
                 Reference = reference,
                 Status = DisbursementStatus.PendingApproval,
@@ -1624,12 +1628,87 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return true;
         }
+
+
+        public async Task<decimal> GetAvailableBalanceAsync(long locationId)
+        {
+            return await _context.LocationInventories
+                .Where(x =>
+                    x.LocationId == locationId &&
+                    x.LocationInventoryType == LocationInventoryType.Monetary &&
+                    x.IsActive == true &&
+                    x.DeletedOn == null)
+                .SumAsync(x => x.TotalAmount);
+        }
+
+        // ── DeductAsync ───────────────────────────────────────────────────────────
+        public async Task DeductAsync(
+            long locationId,
+            decimal amount,
+            string referenceNumber,
+            string agentUserId)
+        {
+            if (amount <= 0)
+                throw new DisbursementException("Deduction amount must be greater than zero.");
+
+                    var monetaryRows = await _context.LocationInventories
+                .Where(x =>
+                    x.LocationId == locationId &&
+                    x.LocationInventoryType == LocationInventoryType.Monetary &&
+                    x.IsActive == true &&
+                    x.DeletedOn == null &&
+                    x.TotalAmount > 0)
+                .OrderBy(x => x.RecordedOn)
+                .ToListAsync();
+
+            decimal totalAvailable = monetaryRows.Sum(x => x.TotalAmount);
+
+            if (totalAvailable < amount)
+                throw new DisbursementException(
+                    $"Insufficient funds at this location. " +
+                    $"Available: {totalAvailable:N2}, Requested: {amount:N2}.");
+
+            // Drain rows one by one until the full amount is covered.
+            decimal remaining = amount;
+
+            foreach (var row in monetaryRows)
+            {
+                if (remaining <= 0) break;
+
+                decimal deductFromThisRow = Math.Min(row.TotalAmount, remaining);
+               
+                row.TotalAmount -= deductFromThisRow;
+                remaining -= deductFromThisRow;
+
+                // Record an InventoryTransaction for every row touched
+                // so there is a full audit trail at the row level.
+                _context.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    FromLocationId = locationId,
+                    ToLocationId = locationId,
+                    OrganizationProductId = null,          // monetary — no product
+                    Amount = deductFromThisRow,
+                    QuantityAfter = row.TotalAmount,
+                    TransactionType = InventoryTransactionType.Disbursement,
+                    ReferenceNumber = referenceNumber,
+                    TransactionDate = DateTimeOffset.UtcNow,
+                    PerformedByUserId = agentUserId,
+                });
+            }
+
+            // SaveChanges is intentionally NOT called here.
+            // The calling service (DisburseSubscriptionAsync) owns the transaction
+            // and will call SaveChangesAsync + CommitAsync itself.
+        }
         //for this disbursement, the input might be physical commodity based on 
         //the input package configuration, so to disburse that kind of input, we 
         //need to deduct the disbursed input package items from the organization product in
         // the warehouse so as to track when there is no more inventory to fulfil disbursement
         //however, if it is just monetary, then you can log the disbursement amount.
         //rework this disburse subscription to cater for that
+
+
+
 
         public async Task<bool> DisburseSubscriptionAsync(
      DisburseSubscriptionRequest request,
@@ -1651,7 +1730,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         .Include(x => x.InputPackage)
                             .ThenInclude(x => x.AdditionalCosts)
                         .FirstOrDefaultAsync(x =>
-                            x.Id == request.SubscriptionId &&
+                            x.Id == args.SubscriptionId &&
                             x.SubscriberUserId == args.SubscriberUserId);
 
                     if (subscription == null)
@@ -1659,7 +1738,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     var approvedRequest = await _context.InputSubscriptionDisbursements
                         .FirstOrDefaultAsync(x =>
-                            x.SubscriptionId == request.SubscriptionId &&
+                            x.SubscriptionId == args.SubscriptionId &&
                             x.Status == DisbursementStatus.Approved);
 
                     if (approvedRequest == null)
@@ -1707,17 +1786,17 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             if (inventory == null)
                                 throw new Exception($"Product not found: {item.OrganizationProductId}");
 
-                            if (inventory.Quantity < item.Quantity)
+                            if (inventory.TotalAmount < item.Quantity)
                                 throw new Exception($"Insufficient inventory for {inventory.OrganizationProduct.ProductName}");
 
-                            inventory.Quantity -= item.Quantity;
+                            inventory.TotalAmount -= item.Quantity;
 
                             _context.InventoryTransactions.Add(new InventoryTransaction
                             {
                                 OrganizationProductId = inventory.OrganizationProductId,
                                 Quantity = item.Quantity,
-                                QuantityBefore = inventory.Quantity + item.Quantity,
-                                QuantityAfter = inventory.Quantity,
+                                QuantityBefore = inventory.TotalAmount + item.Quantity,
+                                QuantityAfter = inventory.TotalAmount,
                                 TransactionType = InventoryTransactionType.Disbursement,
                                 ReferenceNumber = request.Reference,
                                 SubscriptionId = subscription.Id,

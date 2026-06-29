@@ -128,7 +128,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 IsActive = true,
                 FarmerOnboardingStatus = FarmerOnboardingStatus.Pending,
                 HasDefaultPassword = true,
-                Pin = "0000"
+                Pin = "1234"
             };
 
             var identityResult = await _userManager.CreateAsync(user, defaultPassword);

@@ -460,6 +460,11 @@ public class SubscriptionDocument
         public User DisbursedByUser { get; set; }
         public decimal? DisbursedAmount { get; set; }
         public decimal? RemainingBalance { get; set; }
+        public bool IsPartial { get; set; }
+        public long? LocationId { get; set; }
+        public OrganizationLocation Location { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
         public DisbursementStatus Status { get; set; } = DisbursementStatus.PendingApproval;
     }
 
@@ -474,6 +479,59 @@ public class SubscriptionDocument
         public bool IsConfirmed { get; set; }
         public string Notes { get; set; }
         public DateTimeOffset ReviewedOn { get; set; }
+    }
+    public class DisbursementLineItem
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public long DisbursementId { get; set; }
+
+        public InputSubscriptionDisbursement Disbursement { get; set; }
+
+
+        public long SubscriptionId { get; set; }
+        public InputPackageSubscription Subscription { get; set; }
+        public long OrganizationProductId { get; set; }
+        public OrganizationProduct OrganizationProduct { get; set; }
+        public decimal SubscribedQuantity { get; set; }
+        public decimal DisbursedQuantity { get; set; }
+        public decimal PendingQuantity { get; set; }
+        public decimal UnitCost { get; set; }
+        public decimal TotalDisbursedValue { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        public long LocationId { get; set; }
+        public OrganizationLocation OrganizationLocation { get; set; }
+        public string AgentUserId { get; set; }
+        public User User { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+
+    /// <summary>Ledger row for every monetary disbursement — full or partial.</summary>
+    public class MonetaryDisbursementTransaction
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+
+        public long SubscriptionId { get; set; }
+        public InputPackageSubscription Subscription { get; set; }
+
+        public long DisbursementId { get; set; }
+        public InputSubscriptionDisbursement Disbursement { get; set; }
+        public long LocationId { get; set; }
+        public OrganizationLocation OrganizationLocation { get; set; }
+        public decimal SubscribedAmount { get; set; }
+        public decimal DisbursedAmount { get; set; }
+        public decimal PendingAmount { get; set; }
+        public string ReferenceNumber { get; set; }
+        public string AgentUserId { get; set; }
+        public User User { get; set; }
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+        public DateTimeOffset DisbursedOn { get; set; }
     }
 
 }

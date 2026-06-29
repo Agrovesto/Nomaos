@@ -208,8 +208,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.BGService
                             {
                                 Email = row.Email,
                                 PhoneNumber = row.PhoneNumber,
-                                Password = "Admin123@",
-                                Pin = "0000",
+                                Password = row.PhoneNumber,
+                                Pin = "1234",
                                 FirstName = row.FirstName,
                                 MiddleName = row.MiddleName,
                                 LastName = row.LastName,

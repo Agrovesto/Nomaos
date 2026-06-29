@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -84,6 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<InventoryTransactionDto>> GetInventoryTransactionsAsync(long inventoryId);
         Task DeleteInventory(DeleteLocationDto dto);
         Task SyncLocationStockLevels();
+        Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query);
     }
     public class OrganizationRepository : IOrganizationRepository
     {
@@ -2005,6 +2007,73 @@ SELECT
                 PageSize = pageSize
             };
         }
+       public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
+        {
+            //get loations belonging to an agent using the query.userId
+            var agent = await _context.Agents
+                       .FirstOrDefaultAsync(x => x.UserId == query.UserId);
+
+            if (agent == null)
+                throw new DisbursementException("No agent profile found for the current user.");
+
+            var baseQuery =  _context.OrganizationAgents
+                        .Include(x => x.Location)
+                        .Where(x =>
+                            x.AgentId == agent.Id &&
+                            x.OrganizationId == query.OrganizationId &&
+                            x.IsActive).AsQueryable();
+
+
+            if (!string.IsNullOrWhiteSpace(query.Location))
+            {
+                baseQuery = baseQuery.Where(x => x.Location.LocationName.Contains(query.Location));
+            }
+            if (!string.IsNullOrEmpty(query.LocationStatus))
+            {
+                baseQuery = baseQuery.Where(x => x.Location.LocationStatus.ToLower().Contains(query.LocationStatus.ToLower()));
+            }
+            if (query.LocationTypeId.HasValue)
+            {
+                baseQuery = baseQuery.Where(x => x.Location.LocationTypeId == query.LocationTypeId);
+            }
+            var totalCount = await baseQuery.CountAsync();
+
+            if(totalCount == 0)
+            {
+                throw new NotFoundException("No location assigned to Agent");
+            }
+
+            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
+            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+
+            var data = await baseQuery
+                .OrderByDescending(x => x.Location.CreatedOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new AgentLocationListResponseDto
+                {
+                    IsActive = x.Location.LocationStatus == "Active",                    
+                    // IsActive= x.IsActive,
+                    Id = x.Id,
+                    LocationName = x.Location.LocationName,
+                    Address = x.Location.Address,
+                    Capacity = x.Location.Capacity,
+                    CapacityType = x.Location.CapacityType,
+                    StockLevel = x.Location.StockLevel,
+                    LocationStatus=x.Location.LocationStatus,
+                    LocationTypeId = x.Location.LocationTypeId,
+                    LocationTypeName = x.Location.LocationType.Type                    
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<AgentLocationListResponseDto>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
         public async Task<LocationResponseDto> GetLocationByIdAsync(long id)
         {
             var location = await _context.OrganizationLocations
@@ -2719,7 +2788,8 @@ SELECT
                     BusinessCode = dto.BusinessCode,
                     RecordedOn = DateTimeOffset.UtcNow,
                     RecordByUserId = dto.RecordedByUserId,
-                    IsActive = true
+                    IsActive = true,
+                    LocationInventoryType= LocationInventoryType.Product
                 };
 
                 _context.LocationInventories.Add(inventory);
@@ -2758,7 +2828,8 @@ SELECT
                 BusinessCode = dto.BusinessCode,
 
                 TransactionDate = DateTimeOffset.UtcNow,
-                OrganizationId = location.OrganizationId
+                OrganizationId = location.OrganizationId,
+                
             };
 
             _context.InventoryTransactions.Add(transaction);
@@ -2766,6 +2837,74 @@ SELECT
             // UPDATE LOCATION STOCK
             await UpdateLocationStockLevel(location.Id);
 
+            await _context.SaveChangesAsync();
+
+            return inventory;
+        }
+       public async Task<LocationInventory> SendMoneyToLocationAsInventory(CreateInventoryDto dto)
+        {
+            var location = await _context.OrganizationLocations
+                .FirstOrDefaultAsync(x => x.Id == dto.LocationId 
+                
+                && x.IsActive);
+
+            if (location == null)
+                throw new Exception("Location not found.");
+            var batchNumber = $"{DateTimeOffset.UtcNow}-Money-{dto.Amount}";
+            // Check if inventory already exists
+            var inventory = await _context.LocationInventories
+                .FirstOrDefaultAsync(x =>
+                    x.LocationId == dto.LocationId &&
+                    x.TotalAmount == 0 &&
+                    x.BatchNumber == batchNumber &&
+                    x.IsActive);
+            if (inventory == null)
+            {
+                inventory = new LocationInventory
+                {
+                    LocationId = dto.LocationId,
+                    BatchNumber = batchNumber,
+                    BusinessCode = dto.BusinessCode,
+                    RecordedOn = DateTimeOffset.UtcNow,
+                    RecordByUserId = dto.RecordedByUserId,
+                    IsActive = true,
+                    TotalAmount= dto.Amount,
+                    LocationInventoryType = LocationInventoryType.Monetary
+                };
+
+                _context.LocationInventories.Add(inventory);
+
+            }
+            else
+            {
+
+                inventory.TotalAmount += dto.Amount;
+            }
+            // CREATE TRANSACTION HERE
+            var transaction = new InventoryTransaction
+            {
+                LocationInventory = inventory,
+
+                ToLocationId = dto.LocationId,
+
+                TransactionType = InventoryTransactionType.StockIn,
+
+                QuantityType = "Monetary",
+                Amount= dto.Amount,
+                BatchNumber = batchNumber,
+
+                Reason = "Money added to location",
+
+                PerformedByUserId = dto.RecordedByUserId,
+
+                BusinessCode = dto.BusinessCode,
+
+                TransactionDate = DateTimeOffset.UtcNow,
+                OrganizationId = location.OrganizationId,
+                
+            };
+
+            _context.InventoryTransactions.Add(transaction);
             await _context.SaveChangesAsync();
 
             return inventory;

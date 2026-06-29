@@ -705,6 +705,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return new UsersProfileResponse
             {
+                NIN=user.NIN,
+                BVN=user.BVN,
                 UserId = user.Id,
                 UserType = user.UserType,
                 Email = user.Email,
@@ -1409,8 +1411,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var salt = EncryptionUtil.GetSalt();
 
-            string defaultPin = "0000";
-            string defaultPassword = "Admin123";
+            string defaultPin = "1234";
+            string defaultPassword = model.PhoneNumber;//"Admin123";
 
             var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
                 ? defaultPassword

@@ -36,7 +36,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }
-
+        public string NIN { get; set; }
+        public string BVN { get; set; }
         public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }

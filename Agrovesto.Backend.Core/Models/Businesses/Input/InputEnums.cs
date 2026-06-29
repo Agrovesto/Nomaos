@@ -172,7 +172,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         Defaulted = 9,
 
         [Display(Name = "Rejected")]
-        Rejected = 10
+        Rejected = 10,
+
+        [Display(Name = "Partially Disbursed")]
+        PartiallyDisbursed = 11
     }
 
     public enum DisbursementType
