@@ -2614,6 +2614,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentRequired = package?.CommitmentRequired ?? false,
 
                     CommitmentValue = commitmentPlan?.CommitmentValue ?? 0,
+                    RepaymentValue = repaymentPlan.RepaymentValue,
 
                     RepaymentDuration = RepaymentPeriod,//repaymentPlan?.RepaymentDuration ?? 0,
 
@@ -2658,6 +2659,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
           
             string? location = null;
+            string? lga = null;
+            string? state = null;
             string? verificationStatus = null;
 
             if (subscription.SubscriberType == InputSubScriptionType.Individual)
@@ -2668,7 +2671,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 if (farmer != null)
                 {
                     location = farmer.Location;
-
+                    state = farmer.State;
+                    lga = farmer.Lga;
                     var farmerOrg = await _context.FarmerOrganizations
                         .FirstOrDefaultAsync(x =>
                             x.FarmerId == farmer.Id &&
@@ -2688,6 +2692,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 {
                     location = member.Location;
 
+                    state = member.State;
+                    lga = member.Lga;
                     var memberOrg = await _context.OrganizationMemberships
                         .FirstOrDefaultAsync(x =>
                             x.MembershipId == member.Id &&
@@ -2873,28 +2879,38 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new SubscriptionReviewResponseDto
             {
+                SubscriptionId= subscription.Id,
                 Subscriber = new SubscriberInfoDto
                 {
                     Name = subscription.SubscriberUser?.Name
        ?? subscription.SubscriberUser?.PhoneNumber
        ?? subscription.SubscriberUser?.Email
        ?? subscription.SubscriberUserId,
+                    PhoneNumber=subscription.SubscriberUser?.PhoneNumber,
                     Type = EnumExtensions.GetDisplayName(subscription.SubscriberType),
                     Agent = agentName,
                     Location = location,
                     VerificationStatus = verificationStatus,
                     EnrollmentDate = subscription.SubscribedOn,
                     Package = package.Name,
-                    WarehouseAssigned = warehouseAssigned
+                    WarehouseAssigned = warehouseAssigned,
+                    Lga=lga,
+                    State=state
                 },
 
                 Package = new PackageInfoDto
                 {
+                    PackageTarget=package.InputTarget,
                     PackageName = package.Name,
                     TotalValue = package.TotalFinancingValue,
                     CommitmentRequired = package.CommitmentRequired,
                     CommitmentValue = package.CommitmentPlan?.CommitmentValue ?? 0m,
+                    RepaymentValue = package.RepaymentPlan?.RepaymentValue ?? 0m,
                     RepaymentDuration = repaymentPeriod,
+                    Season=package.InputSeason,
+                    RepaymentStartDate=package.RepaymentPlan?.RepaymentStartDate,
+                    RepaymentEndDate= package.RepaymentPlan?.RepaymentEndDate,
+                    CommitmentPlan=EnumExtensions.GetDisplayName(package.CommitmentPlan.CommitmentType),
                     RepaymentModel = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RepaymentMode),
                     RiskCategory = EnumExtensions.GetDisplayName(package.RepaymentPlan?.RiskCategory)
                 },

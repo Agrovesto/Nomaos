@@ -782,25 +782,129 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  HttpContext.TraceIdentifier
                  ));
         }
-       
+
+        [HttpGet("subscription/documents")]
+        [Authorize(Roles = "Organization,Agent")]
+        public async Task<IActionResult> GetSubscriptionDocuments(
+            [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetDocuments(filter.SubscriptionId);
+
+            return Ok(ApiResponse<List<Core.Models.Businesses.Input.SubscriptionDocument>>.Success(
+result,
+"Successful",
+ResponseCodes.Success,
+HttpContext.TraceIdentifier
+));
+    
+        }
+
+
         [HttpGet("subscription/commission-letter")]
         public async Task<IActionResult> DownloadCommissionLetter([FromQuery]long subscriptionId)
         {
+            
             var result =
                 await _inputFinancingManager.DownloadCommissionLetterAsync(subscriptionId);
 
             return File(result.FileBytes, "application/pdf", result.FileName);
         }
-        //upload commission letter
-        //escalate default
-        //release input
-        //pay commitment fee
-        //request input release
-        //disburse input
-        //repay financing
        
-      
-        
+        [HttpGet("subscription/commitment/payment-receipt")]
+        public async Task<IActionResult> DownloadPaymentReceipt([FromQuery]long subscriptionId)
+        {
+           
+            string role="";
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                   !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                role = UserType.Agent.ToString();
+            }
+
+            var result =
+                await _inputFinancingManager.GetPaymentReceiptAsync(subscriptionId, role);
+
+            return File(result.FileContent, "application/pdf", result.FileName);
+        }
+       
+        [HttpGet("subscription/commitment-form")]
+        public async Task<IActionResult> DownloadCommitmentLetter([FromQuery] SubscriptionQueryFilter query)
+        {
+            if (string.IsNullOrWhiteSpace(query.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            var result =
+                await _inputFinancingManager.DownloadCommitmentLetter(query);
+
+            return File(result.FileContent, "application/pdf", result.FileName);
+        }
+        //upload commission letter
+        [HttpPost("subscription/upload-commitment-form")]
+        [Consumes("multipart/form-data")]
+        public async Task<IActionResult> UploadSignedCommitmentForm(
+            IFormFile file,
+            [FromQuery] InputSubscriptionRequestArgs args)
+        {
+            args.OrganizationCode ??= OrganizationCode;
+            args.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                ));
+            }
+             var result = await _inputFinancingManager
+                .UploadCommissionLetterAsync(args.SubscriptionId, args.UserId, file);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+                "Uploaded Successfully",
+                HttpContext.TraceIdentifier
+            ));
+        }
+
+
+        //escalate default
+        //repay financing
+
+
+        //pay commitment fee
         [HttpPost("subscription/commitment/initiate-payment")]
         public async Task<IActionResult> SendCommitmentReminderAsync(
            [FromQuery] InputSubscriptionRequestArgs filter,
@@ -842,7 +946,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ));
         }
 
-
+        //request input release
         [HttpPut("request-release-input")]
         public async Task<IActionResult> RequestInputDisbursementApprovalAsync(
             [FromQuery] InputSubscriptionRequestArgs args)
@@ -874,7 +978,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
 
-
+        //release input
         [HttpPost("release-input")]
         public async Task<IActionResult> ApproveInputDisbursementRequestAsync(
             [FromQuery] ApproveDisbursementRequestDto model,
@@ -909,8 +1013,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
 
-        [HttpGet("disburse-input")]
-
+        //disburse input
+        [HttpPost("disburse-input")]
         [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> DisburseSubscriptionAsync(
             [FromForm] DisburseSubscriptionRequest request,

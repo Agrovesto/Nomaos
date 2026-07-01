@@ -2054,7 +2054,7 @@ SELECT
                 {
                     IsActive = x.Location.LocationStatus == "Active",                    
                     // IsActive= x.IsActive,
-                    Id = x.Id,
+                    Id = x.Location.Id,
                     LocationName = x.Location.LocationName,
                     Address = x.Location.Address,
                     Capacity = x.Location.Capacity,

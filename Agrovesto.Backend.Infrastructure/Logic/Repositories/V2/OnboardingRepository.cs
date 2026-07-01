@@ -714,7 +714,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Roles = roles
             };
         }
-
         public async Task<UsersProfileResponse> GetUserProfile(string userId)
         {
             var user = await _context.Users
@@ -724,15 +723,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
+            // Any extra roles this user has been granted beyond their default UserType
+            var additionalRoles = await (
+                from ur in _context.UserRoles
+                join r in _context.Roles on ur.RoleId equals r.Id
+                where ur.UserId == userId
+                select r.Name // adjust to actual column name, e.g. r.RoleName
+            ).ToListAsync();
+
             var response = new UsersProfileResponse
             {
                 UserId = user.Id,
                 UserType = user.UserType,
                 Email = user.Email,
-                Phone = user.PhoneNumber
+                Phone = user.PhoneNumber,
+                NIN = user.NIN,
+                BVN = user.BVN,
+                Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
 
-            switch (user.UserType)
+            // Default role + any additional roles, deduped so we don't fetch the same profile twice
+            var allRoleTypes = new List<string> { user.UserType };
+            allRoleTypes.AddRange(additionalRoles);
+            allRoleTypes = allRoleTypes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+            foreach (var roleType in allRoleTypes)
+            {
+                await PopulateRoleProfile(response, roleType, userId);
+            }
+
+            return response;
+        }
+        private async Task PopulateRoleProfile(UsersProfileResponse response, string roleType, string userId)
+        {
+            switch (roleType)
             {
                 case "Farmer":
                     response.Farmer = await GetFarmerProfile(userId);
@@ -746,13 +770,76 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     response.Membership = await GetCooperativeProfile(userId);
                     break;
 
+                case "Organization":
+                    response.Organization = await GetOrganizationProfile(userId); // fixed: was overwriting Membership
+                    break;
+
                 default:
-                    throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid user type");
+                    // Unknown/legacy role type in UserRoles — skip rather than throw,
+                    // so one bad role entry doesn't block the whole profile.
+                    break;
             }
-
-            return response;
         }
+        //public async Task<UsersProfileResponse> GetUserProfile(string userId)
+        //{
+        //    var user = await _context.Users
+        //        .AsNoTracking()
+        //        .FirstOrDefaultAsync(x => x.Id == userId);
 
+        //    if (user == null)
+        //        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
+
+        //    var response = new UsersProfileResponse
+        //    {
+        //        UserId = user.Id,
+        //        UserType = user.UserType,
+        //        Email = user.Email,
+        //        Phone = user.PhoneNumber
+        //    };
+
+        //    switch (user.UserType)
+        //    {
+        //        case "Farmer":
+        //            response.Farmer = await GetFarmerProfile(userId);
+        //            break;
+
+        //        case "Agent":
+        //            response.Agent = await GetAgentProfile(userId);
+        //            break;
+
+        //        case "MemberShip":
+        //            response.Membership = await GetCooperativeProfile(userId);
+        //            break;
+
+        //        default:
+        //            throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid user type");
+        //    }
+
+        //    return response;
+        //}
+        private async Task<OrganizationModel> GetOrganizationProfile(string userId)
+        {
+            var organization = await _context.Organizations
+                .Include(x=>x.State)
+                .Include(x => x.LGA)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.UserId == userId);
+            if (organization == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Organization profile not found");
+            var profile = new OrganizationModel
+            {
+                OrganizaionId = organization.OrganizationId,
+                OrganizationName = organization.CompanyName,
+                OrganizationCode = organization.OrganizationCode,
+                OrganizationEmail = organization.OrganizationEmail,
+                PhoneNumber = organization.PhoneNumber,
+                State = organization.State.State,
+                Lga = organization.LGA.Name,
+                Location = organization.CompanyAddress,
+             
+            };
+            return profile;
+        }
         private async Task<FarmerProfileDto> GetFarmerProfile(string userId)
         {
 
