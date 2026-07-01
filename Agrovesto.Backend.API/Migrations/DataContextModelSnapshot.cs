@@ -4728,6 +4728,10 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("SubscriptionId")
                         .HasColumnType("bigint");
 
@@ -6974,7 +6978,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscription", "Subscription")
-                        .WithMany()
+                        .WithMany("Payments")
                         .HasForeignKey("SubscriptionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -7866,6 +7870,8 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscription", b =>
                 {
+                    b.Navigation("Payments");
+
                     b.Navigation("RepaymentSchedules");
                 });
 

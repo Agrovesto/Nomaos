@@ -319,6 +319,9 @@ RepaymentTransaction
         public string BusinessCode { get; set; }
         public ICollection<RepaymentSchedule> RepaymentSchedules { get; set; }
         = new List<RepaymentSchedule>();
+
+        public ICollection<InputPackageSubscriptionPayment> Payments { get; set; }
+        =new List<InputPackageSubscriptionPayment>();
     }
     public class InputPackageSubscriptionPayment
     {
@@ -436,6 +439,7 @@ public class SubscriptionDocument
         public string UploadedBy { get; set; }
         public string FilePath { get; set; }
         public string FileName { get; set; }
+        public string Key { get; set; }
     }
 
     public class InputSubscriptionDisbursement

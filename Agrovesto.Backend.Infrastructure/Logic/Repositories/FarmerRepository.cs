@@ -2054,9 +2054,13 @@ SELECT
         {
             var entity = data.Map();
             var imageExist = await _context.FarmerImages.Where(x => x.FarmerUserId == data.FarmerUserId
-            && x.BelongToBusinessCode == data.BelongToBusinessCode).FirstOrDefaultAsync();
-
-
+          //  && x.BelongToBusinessCode == data.BelongToBusinessCode
+            ).FirstOrDefaultAsync();
+            //if (data.OrganizationCode != null)
+            //{
+            //    imageExist = await _context.FarmerImages.Where(x => x.FarmerUserId == data.FarmerUserId
+            //    && x.BelongToBusinessCode == data.BelongToBusinessCode && x.OrganizationCode == data.OrganizationCode).FirstOrDefaultAsync();
+            //}
             if (imageExist != null)
             {
                 imageExist.IMageKey = data.ImageKey;
@@ -2076,17 +2080,20 @@ SELECT
             await _context.SaveChangesAsync();
 
             return (true, entity.Map());
+        
         }
         public async Task<FarmerImagesModel> GetUserImage(string userId, string businessCode, string? organizationCode)
         {
 
             var query = _context.FarmerImages
-        .Where(f => f.FarmerUserId == userId && f.BelongToBusinessCode == businessCode);
+        .Where(f => f.FarmerUserId == userId 
+        //&& f.BelongToBusinessCode == businessCode
+        );
 
-            if (!string.IsNullOrEmpty(organizationCode))
-            {
-                query = query.Where(f => f.OrganizationCode.Contains(organizationCode));
-            }
+            //if (!string.IsNullOrEmpty(organizationCode))
+            //{
+            //    query = query.Where(f => f.OrganizationCode.Contains(organizationCode));
+            //}
             var farmer = await query.FirstOrDefaultAsync();
 
 
@@ -2100,12 +2107,12 @@ SELECT
         {
 
             var query = _context.FarmerImages
-        .Where(f => f.BelongToBusinessCode == businessCode);
+        .Where(f => f.FarmerUserId == userId);
 
-            if (!string.IsNullOrEmpty(organizationCode))
-            {
-                query = query.Where(f => f.OrganizationCode.Contains(organizationCode));
-            }
+            //if (!string.IsNullOrEmpty(organizationCode))
+            //{
+            //    query = query.Where(f => f.OrganizationCode.Contains(organizationCode));
+            //}
             var farmer = await query.FirstOrDefaultAsync();
 
 

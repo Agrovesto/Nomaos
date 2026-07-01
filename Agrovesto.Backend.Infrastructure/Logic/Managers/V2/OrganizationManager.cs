@@ -1124,6 +1124,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
 
             return await _organizationRepository.GetLocationsByAgentAsync(query);
 
@@ -1545,10 +1550,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     RoleId = model.RoleId,
                     UserId = model.UserId
                 };
+                if (model.LocationId > 0)
+                {
+                    await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
+                }
+                if(model.RoleId > 0)
+                {
 
-                await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
+                    await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
+                }
 
-                await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
 
 
                 return true;
@@ -1561,7 +1572,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 throw new BaseException(
                     ExceptionType.INTERNAL_SERVER_ERROR,
-                    "Unable to complete onboarding at the moment.");
+                    ex.Message ?? "Unable to complete onboarding at the moment.");
             }
         }
 

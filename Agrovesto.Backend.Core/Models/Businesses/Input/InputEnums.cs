@@ -268,6 +268,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     {
         [Display(Name = "Commission Letter")]
         CommissionLetter =1,
+        [Display(Name = "Other")]
+        Other =2
 
     }
 

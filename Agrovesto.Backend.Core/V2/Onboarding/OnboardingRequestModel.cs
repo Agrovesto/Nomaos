@@ -47,6 +47,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         // Cooperative
       public MemberShipModel Membership { get; set; }
+        // Organization
+      public OrganizationModel Organization { get; set; }
     }
   
     public class SimpleAgentDto

@@ -1,0 +1,177 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Subscriber Commitment Form</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            color: #222;
+            margin: 0;
+            padding: 24px;
+            background: #fff;
+        }
+
+        .container {
+            max-width: 780px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+        }
+
+        .header {
+            text-align: center;
+            padding: 16px;
+            border-bottom: 2px solid #0b6e5b;
+        }
+
+            .header h1 {
+                color: #0b6e5b;
+                margin: 0;
+                font-size: 20px;
+                letter-spacing: 1px;
+            }
+
+            .header p {
+                margin: 4px 0 0;
+                font-size: 12px;
+                color: #555;
+            }
+
+        .section-title {
+            background: #0b6e5b;
+            color: #fff;
+            padding: 8px 14px;
+            font-weight: bold;
+            font-size: 13px;
+            margin-top: 18px;
+        }
+
+        table.fields {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4px;
+        }
+
+            table.fields td {
+                border: 1px solid #ccc;
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+                table.fields td.label {
+                    background: #f7f7f7;
+                    font-weight: bold;
+                    width: 32%;
+                }
+
+        .declaration {
+            font-size: 12.5px;
+            line-height: 1.6;
+            padding: 14px;
+        }
+
+            .declaration b {
+                color: #0b6e5b;
+            }
+
+            .declaration ul {
+                margin: 8px 0 0 18px;
+                padding: 0;
+            }
+
+        .sig-grid {
+            display: flex;
+            gap: 24px;
+            padding: 18px;
+        }
+
+        .sig-col {
+            flex: 1;
+        }
+
+        .sig-line {
+            border-top: 1px solid #999;
+            margin-top: 36px;
+            padding-top: 4px;
+            font-size: 11px;
+            color: #555;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 10.5px;
+            color: #777;
+            padding: 14px;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>INPUT FINANCING PROGRAMME</h1>
+            <p>Agricultural Input Financing</p>
+            <h2 style="color:#0b6e5b;font-size:16px;margin:10px 0 0;">SUBSCRIBER COMMITMENT FORM</h2>
+            <p>Agricultural Input Financing &middot; Commitment Agreement</p>
+        </div>
+
+        <div class="section-title">A. SUBSCRIBER INFORMATION</div>
+        <table class="fields">
+            <tr><td class="label">Full Name</td><td>{{FullName}}</td></tr>
+            <tr><td class="label">Subscription ID</td><td>{{SubscriptionId}}</td></tr>
+            <tr><td class="label">Type</td><td>{{SubscriberType}}</td></tr>
+            <tr><td class="label">Phone Number</td><td>{{PhoneNumber}}</td></tr>
+            <tr><td class="label">State / LGA</td><td>{{State}} / {{LGA}}</td></tr>
+        </table>
+
+        <div class="section-title">B. PACKAGE DETAILS</div>
+        <table class="fields">
+            <tr><td class="label">Package Name</td><td>{{PackageName}}</td></tr>
+            <tr><td class="label">Crop / Commodity</td><td>{{Crop}}</td></tr>
+            <tr><td class="label">Growth Cycle / Season</td><td>{{GrowthCycle}}</td></tr>
+            <tr><td class="label">Package Input Value</td><td>{{PackageValue}}</td></tr>
+            <tr><td class="label">Commitment Amount</td><td>{{CommitmentAmount}}</td></tr>
+            <tr><td class="label">Repayment Duration</td><td>{{RepaymentDuration}} Months</td></tr>
+            <tr><td class="label">Commitment Plan</td><td>{{CommitmentPlan}}</td></tr>
+        </table>
+
+        <div class="section-title">C. COMMITMENT DECLARATION</div>
+        <div class="declaration">
+            I, <b>{{FullName}}</b>, of Subscription ID <b>{{SubscriptionId}}</b>, hereby commit to pay a
+            commitment fee of <b>{{CommitmentAmount}}</b> (<b>{{CommitmentAmountWords}}</b> Naira Only) for the
+            <b>{{PackageName}}</b> package covering the <b>{{GrowthCycle}}</b> input financing programme, for the
+            period of <b>{{StartDate}}</b> to <b>{{EndDate}}</b>.
+            <p>By signing this form, I acknowledge and agree to the following terms:</p>
+            <ul>
+                <li>I understand that this commitment amount is a prerequisite for the release of my input package.</li>
+                <li>I agree to repay the outstanding input financing balance in accordance with the agreed repayment schedule.</li>
+                <li>I accept that failure to honour my repayment obligations may result in suspension from future financing cycles.</li>
+                <li>I confirm that all information provided in this form is accurate and complete to the best of my knowledge.</li>
+                <li>I consent to the organization contacting me via the registered phone number for repayment reminders and updates.</li>
+                <li>I hereby authorize the organization to debit any amount due and outstanding under this commitment agreement from any of my bank accounts or registered payment instruments, without further notice, should I fail to meet my repayment obligations on the agreed due dates.</li>
+            </ul>
+        </div>
+
+        <div class="section-title">D. SIGNATURES</div>
+        <div class="sig-grid">
+            <div class="sig-col">
+                <div style="font-weight:bold;font-size:12px;color:#0b6e5b;">SUBSCRIBER</div>
+                <div class="sig-line">Signature &amp; Date</div>
+                <div class="sig-line">Full Name (Print)</div>
+                <div class="sig-line">Date</div>
+            </div>
+            <div class="sig-col">
+                <div style="font-weight:bold;font-size:12px;color:#0b6e5b;">HEAD OF COMMUNITY/RELIGIOUS LEADER</div>
+                <div class="sig-line">Authorized Signature &amp; Stamp</div>
+                <div class="sig-line">Name &amp; Designation</div>
+                <div class="sig-line">Date</div>
+            </div>
+        </div>
+
+        <div class="footer">
+            This form is an official document of the Input Financing Programme.<br>
+            Retain one (1) copy each: Subscriber | Agent | Organization
+        </div>
+    </div>
+</body>
+</html>

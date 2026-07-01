@@ -568,9 +568,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class SubscriberInfoDto
     {
         public string Name { get; set; }
+        public string PhoneNumber { get; set; }
         public string Type { get; set; }
         public string Agent { get; set; }
         public string Location { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
         public string VerificationStatus { get; set; }
         public DateTimeOffset EnrollmentDate { get; set; }
         public string Package { get; set; }
@@ -586,6 +589,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string RepaymentDuration { get; set; }
         public string RepaymentModel { get; set; }
         public string RiskCategory { get; set; }
+        public string PackageTarget { get; set; }
+        public string Season { get; set; }
+        public decimal RepaymentValue { get; set; }
+        public string CommitmentPlan { get; set; }
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
     }
 
     public class SubscriptionDocument
@@ -597,7 +606,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public string FileName { get; set; }
         public string FilePath { get; set; }   // or BlobUrl
-
+        public string Key { get; set; }
         public DateTimeOffset UploadedOn { get; set; }
     }
 
@@ -608,9 +617,21 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string? Reference { get; set; }
         public decimal? Amount { get; set; }
     }
-
+    public class PaymentReceiptResponse
+    {
+        public string FileName { get; set; } = "";
+        public string ContentType { get; set; } = "application/pdf";
+        public byte[] FileContent { get; set; } = [];
+    }
+    public class CommitmentFormDto
+    {
+        public string FileName { get; set;}
+        public string ContentType { get; set;}
+        public byte[] FileContent { get; set; }
+    }
     public class SubscriptionReviewResponseDto
     {
+        public long SubscriptionId { get; set; }
         public List<InputBreakdownDto> InputBreakdown { get; set; }
         public List<AdditionalCostDto> AdditionalCost { get; set; }
         public SubscriberInfoDto Subscriber { get; set; }

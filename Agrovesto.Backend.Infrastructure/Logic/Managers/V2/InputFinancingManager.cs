@@ -22,19 +22,31 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Rekognition.Model;
+using Amazon.S3;
+using Amazon.S3.Model;
+using Amazon.SimpleNotificationService.Model;
+using Core.Models.Payment;
+using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Office2013.Drawing.ChartStyle;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
+using Hangfire;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using PhoneNumbers;
+using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.IO.Packaging;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 using static Org.BouncyCastle.Math.EC.ECCurve;
+using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 {
@@ -75,6 +87,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, string approvedByUserId);
         Task<DisburseSubscriptionResult> DisburseSubscriptionAsync(DisburseSubscriptionRequest request, InputSubscriptionRequestArgs args);
         Task<long> RequestInputDisbursementApprovalAsync(InputSubscriptionRequestArgs args);
+        Task<CommitmentFormDto> DownloadCommitmentLetter(SubscriptionQueryFilter filter);
+        Task<(byte[] FileBytes, string FileName)> UploadCommissionLetterAsync(long subscriptionId, string userId, IFormFile file);
+        Task<PaymentReceiptResponse> GetPaymentReceiptAsync(long subscriptionId, string currentloggedInrole);
+        Task<List<Core.Models.Businesses.Input.SubscriptionDocument>> GetDocuments(long subscriptionId);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -97,6 +113,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IFarmerRepository _farmerRepository;
 
         private readonly IRepaymentEngine _repaymentEngine;
+        private static readonly string[] AllowedExtensions = { ".pdf", ".jpg", ".jpeg", ".png" };
+        private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
         public InputFinancingManager(IWalletServiceFactory factory, IWalletProviderRepository providerRepo, IUserWalletRepository userWalletRepository,
             IInputFinancingRepository inputFinancingRepository, IBusinessRepository businessRepository,
@@ -422,9 +440,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
         public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
-  SubscriptionQueryFilter filter,
-  int pageNumber,
-  int pageSize)
+        SubscriptionQueryFilter filter,
+        int pageNumber,
+        int pageSize)
         {
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
             if (hasOrg != null)
@@ -470,10 +488,302 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _inputFinancingRepository.GetSubscriptionDetail(filter);
         }
+        public async Task<CommitmentFormDto> DownloadCommitmentLetter(SubscriptionQueryFilter filter)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+            if (hasOrg != null)
+            {
+                filter.OrganizationId = hasOrg.OrganizaionId;
+            }
+            if (!filter.ViewType.HasValue)
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
+            }
+            if (!Enum.IsDefined(typeof(SubscriptionView), filter.ViewType))
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid Subscription view type");
+            }
+
+            var subscriptiondetail = await _inputFinancingRepository.GetSubscriptionDetail(filter);
+
+            var data = new CommitmentFormData
+            {
+                FullName = subscriptiondetail.Subscriber.Name,
+                SubscriptionId = subscriptiondetail.SubscriptionId,
+                SubscriberType = subscriptiondetail.Subscriber.Type,
+                PhoneNumber = subscriptiondetail.Subscriber.PhoneNumber,
+                State = subscriptiondetail.Subscriber.State,
+                LGA = subscriptiondetail.Subscriber.Lga,
+                PackageName = subscriptiondetail.Package.PackageName,
+                Crop = subscriptiondetail.Package.PackageTarget,
+                GrowthCycleSeason = subscriptiondetail.Package.Season,
+                PackageInputValue = subscriptiondetail.Package.TotalValue,
+                CommitmentAmount = subscriptiondetail.Package.CommitmentValue,
+                RepaymentDuration = subscriptiondetail.Package.RepaymentDuration,
+                CommitmentPlan = subscriptiondetail.Package.CommitmentPlan,
+                StartDate = subscriptiondetail.Package.RepaymentStartDate,
+                EndDate = subscriptiondetail.Package.RepaymentEndDate,
+                CommitmentAmountInWords = NumberToWords.Convert(subscriptiondetail.Package.CommitmentValue)
+            };
+
+            var pdfBytes = CommitmentFormGenerator.Generate(data);
+
+            return new CommitmentFormDto
+            {
+                FileName = $"CommitmentForm_{data.SubscriptionId}.pdf",
+                ContentType = "application/pdf",
+                FileContent = pdfBytes
+            };
+        }
+        public async Task<(byte[] FileBytes, string FileName)> UploadCommissionLetterAsync(long subscriptionId, string userId, IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "No file was uploaded");
+
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(extension))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Only PDF, JPG, or PNG files are allowed");
+
+            if (file.Length > MaxFileSizeBytes)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "File size must not exceed 10MB");
+
+            var subscriptionExists = await _context.InputPackageSubscriptions.AnyAsync(x => x.Id == subscriptionId);
+            if (!subscriptionExists)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Subscription not found");
+
+            var s3Key = $"commitment-letters/{subscriptionId}/{Guid.NewGuid():N}{extension}";
+
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+            ms.Position = 0;
+
+            await _imageRecognitionService.UploadFileAsync(s3Key, ms, file.ContentType);
+
+            var existingDocument = await _context.SubscriptionDocuments
+                .FirstOrDefaultAsync(x =>
+                    x.SubscriptionId == subscriptionId &&
+                    x.DocumentType == Core.Models.Businesses.Input.DocumentType.CommissionLetter);
+
+            if (existingDocument != null)
+            {
+                if (!string.IsNullOrWhiteSpace(existingDocument.Key))
+                {
+                    await _imageRecognitionService.DeleteFileAsync(existingDocument.Key);
+                }
+
+                existingDocument.Key = s3Key;
+                existingDocument.FileName = file.FileName;
+                existingDocument.UploadedOn = DateTimeOffset.UtcNow;
+                _context.SubscriptionDocuments.Update(existingDocument);
+            }
+            else
+            {
+                _context.SubscriptionDocuments.Add(new SubscriptionDocument
+                {
+                    SubscriptionId = subscriptionId,
+                    DocumentType = Core.Models.Businesses.Input.DocumentType.CommissionLetter,
+                    Key = s3Key,
+                    FileName = file.FileName,
+                    UploadedOn = DateTimeOffset.UtcNow,
+                    UploadedBy =userId,
+                    FilePath=s3Key
+
+                });
+            }
+
+            await _context.SaveChangesAsync();
+
+            return (ms.ToArray(), file.FileName);
+        }
+
+        public async Task<List<Core.Models.Businesses.Input.SubscriptionDocument>> GetDocuments(long subscriptionId)
+        {
+           var document = await _context.SubscriptionDocuments
+                .Where(x =>
+                    x.SubscriptionId == subscriptionId).ToListAsync();
+
+            if (document.Count == 0)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Commission letter not found for this subscription");
+
+            List<Core.Models.Businesses.Input.SubscriptionDocument> response = document.Select(x=> new Core.Models.Businesses.Input.SubscriptionDocument
+            { 
+                FileName= x.FileName,
+                FilePath=x.FilePath,
+                Id=x.Id,
+                Key=x.Key,
+                SubscriptionId=x.SubscriptionId,
+                Type=x.DocumentType,
+                UploadedOn=x.UploadedOn
+            }).ToList();
+
+
+
+            return response;
+        }
         public async Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId)
         {
-            return await _inputFinancingRepository.DownloadCommissionLetterAsync(subscriptionId);
+            var document = await _context.SubscriptionDocuments
+                .FirstOrDefaultAsync(x =>
+                    x.SubscriptionId == subscriptionId &&
+                    x.DocumentType == Core.Models.Businesses.Input.DocumentType.CommissionLetter);
+
+            if (document == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Commission letter not found for this subscription");
+
+            if (string.IsNullOrWhiteSpace(document.Key))
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid document storage key");
+
+            var fileBytes = await _imageRecognitionService.DownloadFileAsync(document.Key);
+
+            var fileName = string.IsNullOrWhiteSpace(document.FileName)
+                ? $"commission_letter_{subscriptionId}.pdf"
+                : document.FileName;
+
+            return (fileBytes, fileName);
         }
+
+        public async Task<PaymentReceiptResponse> GetPaymentReceiptAsync(long subscriptionId, string currentloggedInrole)
+        {
+            var agentroute = _configuration["Receipt:AgentRoute"];
+            var orgRoute = _configuration["Receipt:OrgRoute"];
+
+            var baseUrl = _configuration["Receipt:BaseUrl"];
+            if(currentloggedInrole == UserType.Agent.ToString())
+            {
+                baseUrl += $"/{agentroute}";
+            }
+            else
+            {
+                baseUrl += $"/{orgRoute}";
+            }
+            // Fetch the subscription with all successful commitment payments
+            var subscription = await _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.Organization)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.RepaymentPlan)
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.Payments.Where(p =>
+                    p.PaymentType == PaymentType.Commitment &&
+                    p.Status == TransactionStatus.Successful))
+                    .ThenInclude(x => x.RecordedByUser)
+                .FirstOrDefaultAsync(x => x.Id == subscriptionId);
+
+            if (subscription == null)
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Subscription not found");
+
+            var package = subscription.InputPackage;
+
+            var commitmentPayments = subscription.Payments
+                .Where(p =>
+                    p.PaymentType == PaymentType.Commitment &&
+                    p.Status == TransactionStatus.Successful)
+                .OrderBy(p => p.PaidOn)
+                .ToList();
+
+            if (!commitmentPayments.Any())
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No successful commitment payments found for this subscription");
+
+            var totalAmountPaid = commitmentPayments.Sum(p => p.AmountPaid);
+
+            var latestPayment = commitmentPayments.Last();
+
+            var agent = latestPayment.RecordedByUser;
+
+            //var totalInstallments = commitmentPayments.Count;
+            var totalInstallments = CalculateTotalInstallments(
+        package.RepaymentPlan.RepaymentStartDate!.Value,
+        package.RepaymentPlan.RepaymentEndDate!.Value,
+        subscription.RepaymentFrequency);
+
+            var installmentAmount = package.RepaymentPlan.RepaymentValue / totalInstallments;
+            var receiptNumber = $"RCP-{package.InputSeason}-{package.InputTarget}-{latestPayment.PaidOn:yyyyMMdd}-{subscriptionId:D4}";
+
+            var data= new PaymentReceiptData
+            {
+                ReceiptNumber = receiptNumber,
+                PaymentDate = latestPayment.PaidOn ?? DateTimeOffset.UtcNow,
+
+                // Subscriber
+                FullName = subscription.SubscriberUser.Name,
+                SubscriberId = subscription.SubscriberUser.Id,
+                SubscriberType = EnumExtensions.GetDisplayName(subscription.SubscriberType),
+
+                // Package
+                PackageName = package.Name,
+                GrowthCycle = package.InputSeason,
+                RepaymentPlan = EnumExtensions.GetDisplayName(subscription.RepaymentFrequency),
+                //InstallmentLabel = $"{totalInstallments} Payment{(totalInstallments > 1 ? "s" : "")}",
+
+                InstallmentLabel = $"{totalInstallments} installment{(totalInstallments > 1 ? "s" : "")} of ₦{installmentAmount:N2}",
+                PeriodStart = package.RepaymentPlan?.RepaymentStartDate?.ToString("MMM yyyy"),
+                PeriodEnd = package.RepaymentPlan?.RepaymentEndDate?.ToString("MMM yyyy"),
+
+                // Payment — reflects the most recent transaction
+                PaymentChannel = latestPayment.PaymentChannel.ToString(),
+                PaymentReference = latestPayment.ExternalReference,
+                CollectedByName = agent?.Name ?? "-",
+                CollectedByCode = agent?.Id ?? "-",
+
+                // Amounts — summed across all commitment payments
+                AmountPaid = totalAmountPaid,
+                RepaymentValue = package.RepaymentPlan.RepaymentValue,
+                TotalPackageValue = package.TotalFinancingValue,
+                AmountInWords = NumberToWords.Convert(totalAmountPaid),
+
+                // QR
+                SubscriptionId = subscription.Id,
+                QrUrl = ReceiptQrUrlBuilder.Build(
+                    subscriptionId: subscription.Id,
+                    paymentId: 0,           // no longer payment-specific
+                    baseUrl: $"{baseUrl}/subscriber/{subscription.Id}?viewType=3"!,
+                    hmacSecret: _configuration["Receipt:HmacSecret"]!)
+            };
+
+            var pdfBytes = PaymentReceiptGenerator.Generate(data);
+
+            return new PaymentReceiptResponse
+            {
+                FileName = $"{data.ReceiptNumber}.pdf",
+                ContentType = "application/pdf",
+                FileContent = pdfBytes
+            };
+        }
+
+        public static int CalculateTotalInstallments(
+DateTimeOffset startDate,
+DateTimeOffset endDate,
+RepaymentFrequency frequency)
+        {
+            if (endDate < startDate)
+                throw new ArgumentException("End date cannot be before start date.");
+
+            return frequency switch
+            {
+                RepaymentFrequency.Weekly =>
+                    (int)Math.Floor((endDate - startDate).TotalDays / 7) + 1,
+
+                RepaymentFrequency.BiWeekly =>
+                    (int)Math.Floor((endDate - startDate).TotalDays / 14) + 1,
+
+                RepaymentFrequency.Monthly =>
+                    ((endDate.Year - startDate.Year) * 12)
+                    + endDate.Month - startDate.Month + 1,
+
+                RepaymentFrequency.Quarterly =>
+                    (((endDate.Year - startDate.Year) * 12)
+                    + endDate.Month - startDate.Month) / 3 + 1,
+
+                RepaymentFrequency.Annually =>
+                    endDate.Year - startDate.Year + 1,
+
+                _ => 1
+            };
+        }
+        //public async Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId)
+        //{
+        //    return await _inputFinancingRepository.DownloadCommissionLetterAsync(subscriptionId);
+        //}
 
         public async Task<bool> CommitmentPaymentAsync(
       RecordCommitmentPaymentRequest request,
@@ -1031,6 +1341,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 try
                 {
+                    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
+                    if (hasOrg != null)
+                    {
+                        args.OrganizationId = hasOrg.OrganizaionId;
+                    }
                     // ── 1. Validate args ──────────────────────────────────────────────
                     if (string.IsNullOrEmpty(args.SubscriberUserId))
                         throw new DisbursementException("Subscriber user is required.");
@@ -1094,6 +1409,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         request.UserImage,
                         new ImageVerificationArgs
                         {
+                            OrganizationCode=args.OrganizationCode,
                             BusinessCode = args.BusinessCode,
                             FarmerUserId = subscription.SubscriberUser.Id
                         });
