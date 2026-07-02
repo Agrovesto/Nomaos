@@ -13,6 +13,7 @@ using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -1133,18 +1134,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return role;
         }
-
         public async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
         {
-            if (!string.IsNullOrWhiteSpace(model.Email))
-                return await _userManager.FindByNameAsync(model.Email);
+            User? user = null;
 
-            if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
-                return await _context.Users
+            if (!string.IsNullOrWhiteSpace(model.Email))
+                user = await _userManager.FindByNameAsync(model.Email);
+
+            if (user == null && !string.IsNullOrWhiteSpace(model.PhoneNumber))
+                user = await _context.Users
                     .FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
 
-            return null;
+            return user;
         }
+        //public async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
+        //{
+        //    if (!string.IsNullOrWhiteSpace(model.Email))
+        //        return await _userManager.FindByNameAsync(model.Email);
+
+        //    if (!string.IsNullOrWhiteSpace(model.PhoneNumber))
+        //        return await _context.Users
+        //            .FirstOrDefaultAsync(u => u.PhoneNumber == model.PhoneNumber);
+
+        //    return null;
+        //}
         public async Task UpdateUserDetails(
          OnboardingRequestModel model,
          OnBoardingArgs args)
@@ -1351,147 +1364,176 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
-        //        private async Task<CreateUserResult>
-        //HandleExistingUser(
-        //    User user,
-        //    OnboardingRequestModel model,
-        //    OnBoardingArgs args,
-        //    IdentityRole role)
-        //        {
-        //          if(string.IsNullOrEmpty(model.PhoneNumber))
-        //            {
-        //                user.PhoneNumber = model.PhoneNumber;
-        //            }
-        //          if(string.IsNullOrEmpty(model.Email))
-        //            {
-        //                user.Email = model.Email;
-        //            }
-        //            bool hasRole = await _context.UserRoles
-        //                .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id);
 
-        //            if (!hasRole)
-        //            {
-        //                var roleResult = await _userManager.AddToRoleAsync(user, role.Name);
-
-        //                if (!roleResult.Succeeded)
-        //                {
-        //                    var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
-        //                    return new CreateUserResult { 
-        //                        model=model,
-        //                        status=false,
-        //                        message=errors,
-        //                        IsExisting=true
-        //                    };
-        //                }
-        //            }
-
-        //            if (string.IsNullOrWhiteSpace(args.businessCode))
-        //            {
-        //                 return new CreateUserResult
-        //                {
-        //                    model = model,
-        //                    status = false,
-        //                    message = "Business context is required.",
-        //                    IsExisting = true
-        //                };
-        //            }
-
-        //            var business = await _context.Businesses
-        //                .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
-
-        //            if (business == null)
-        //            {
-        //                return new CreateUserResult
-        //                {
-        //                    model = model,
-        //                    status = false,
-        //                    message = "Invalid business.",
-        //                    IsExisting = true
-        //                };
-        //            }
-
-        //            var membership = await _context.UserBusinesses
-        //                .FirstOrDefaultAsync(x =>
-        //                    x.UserId == user.Id &&
-        //                    x.BusinessId == business.BusinessId);
-
-        //            if (membership != null)
-        //            {
-        //                return new CreateUserResult
-        //                {
-        //                    model = MapUserResponse(user, model),
-        //                    status = true,
-        //                    message = "User already exists in this business. Please login with your credentials.",
-        //                    IsExisting = true
-        //                };
-
-        //            }
-
-        //            var newMembership = new UserBusiness
-        //            {
-        //                UserId = user.Id,
-        //                BusinessId = business.BusinessId,
-        //                Role = args.userType,
-        //                IsActive = true,
-        //                IsDefault = false,
-        //                JoinedOn = DateTimeOffset.UtcNow
-        //            };
-
-        //            _context.UserBusinesses.Add(newMembership);
-        //            await _context.SaveChangesAsync();
-
-        //            var hasDefault = await _context.UserBusinesses
-        //                .AnyAsync(x => x.UserId == user.Id && x.IsDefault);
-
-        //            if (!hasDefault)
-        //            {
-        //                newMembership.IsDefault = true;
-        //                await _context.SaveChangesAsync();
-        //            }
-
-        //            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-        //            return new CreateUserResult
-        //            {
-        //                model = MapUserResponse(user, model),
-        //                status = true,
-        //                message = "User already exists. Access has been granted to this business. Please login.",
-        //                IsExisting = true
-        //            };
-
-        //        }
-
-
-        /** private async Task<(OnboardingRequestModel, bool status, string message)> HandleExistingUser(
-        User user,
-        OnboardingRequestModel model,
-        OnBoardingArgs args,
-        IdentityRole role)
+        private async Task<CreateUserResult> CreateNewUser(
+    OnboardingRequestModel model,
+    OnBoardingArgs args,
+    IdentityRole role)
         {
-            
-            bool hasRole = await _context.UserRoles
-                .AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id);
+            var salt = EncryptionUtil.GetSalt();
 
-            if (!hasRole)
+            string defaultPin = "1234";
+            string defaultPassword = model.PhoneNumber;
+
+            var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
+                ? defaultPassword
+                : model.Password;
+
+            var pinToUse = string.IsNullOrWhiteSpace(model.Pin) &&
+                           !string.IsNullOrWhiteSpace(model.PhoneNumber)
+                ? defaultPin
+                : model.Pin;
+
+            bool isDefaultPassword = string.IsNullOrWhiteSpace(model.Password);
+            bool isDefaultPin = string.IsNullOrWhiteSpace(model.Pin) &&
+                                !string.IsNullOrWhiteSpace(model.PhoneNumber);
+
+            var user = BuildUserEntity(model, args, salt);
+
+            if (!string.IsNullOrEmpty(pinToUse))
             {
-                var result = await _userManager.AddToRoleAsync(user, role.Name);
+                user.PinEncrypt = pinToUse.EncryptTransactionPin(salt);
+            }
 
-                if (!result.Succeeded)
+            user.HasDefaultPassword = isDefaultPassword;
+            user.HasDefaultPin = isDefaultPin;
+
+            IdentityResult createUser;
+
+            try
+            {
+                createUser = await _userManager.CreateAsync(user, passwordToUse);
+            }
+            catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
+            {
+                // Someone else won the race and inserted this phone/email first.
+                // Re-run the existing-user lookup and hand off to that path.
+                var raceWinner = await FindExistingUserAsync(model);
+
+                if (raceWinner != null)
                 {
-                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
-                    return (model, false, errors);
+                    return await HandleExistingUser(raceWinner, model, args, role);
+                }
+
+                // Fallback if we still can't find them for some reason
+                return new CreateUserResult
+                {
+                    model = model,
+                    status = false,
+                    message = $"An account with this {conflictField} already exists. Please sign in to continue.",
+                    IsExisting = true
+                };
+            }
+
+            if (!createUser.Succeeded)
+            {
+                var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
+                return new CreateUserResult
+                {
+                    model = model,
+                    status = false,
+                    message = errors,
+                    IsExisting = false
+                };
+            }
+
+            await _userManager.AddToRoleAsync(user, role.Name);
+            Business? business = null;
+
+            if (!string.IsNullOrWhiteSpace(args.businessCode))
+            {
+                business = await _context.Businesses
+                    .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
+            }
+
+            if (business == null)
+            {
+                return new CreateUserResult
+                {
+                    model = model,
+                    status = false,
+                    message = "Business not found.",
+                    IsExisting = false
+                };
+            }
+
+            var exists = await _context.UserBusinesses
+                .AnyAsync(x => x.UserId == user.Id && x.BusinessId == business.BusinessId);
+
+            if (!exists)
+            {
+                _context.UserBusinesses.Add(new UserBusiness
+                {
+                    UserId = user.Id,
+                    BusinessId = business.BusinessId,
+                    IsDefault = true,
+                    IsActive = true,
+                    Role = args.userType,
+                    JoinedOn = DateTimeOffset.UtcNow
+                });
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
+                {
+                    return new CreateUserResult
+                    {
+                        model = model,
+                        status = false,
+                        message = $"This account already has membership for this business ({conflictField}).",
+                        IsExisting = true
+                    };
                 }
             }
 
             await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
 
-            return (
-                MapUserResponse(user, model),
-                true,
-                "User already exists"
-            );
+            user.Pin = pinToUse;
+            user.Password = passwordToUse;
+
+            model.Pin = pinToUse;
+            model.Password = passwordToUse;
+
+            return new CreateUserResult
+            {
+                model = MapUserResponse(user, model),
+                status = true,
+                message = "You're almost done. Please continue to complete your profile.",
+                IsExisting = false
+            };
         }
-        **/
-        private async Task<CreateUserResult> CreateNewUser(
+        private static bool IsDuplicateKeyViolation(DbUpdateException ex, out string conflictField)
+        {
+            conflictField = "details";
+
+            // SqlException is usually the innermost exception under DbUpdateException
+            var sqlEx = ex.InnerException as SqlException ?? ex.GetBaseException() as SqlException;
+
+            if (sqlEx == null)
+                return false;
+
+            // 2627 = violation of PRIMARY KEY or UNIQUE constraint
+            // 2601 = cannot insert duplicate key row (unique index)
+            bool isDuplicateKey = sqlEx.Errors
+                .Cast<SqlError>()
+                .Any(e => e.Number == 2627 || e.Number == 2601);
+
+            if (!isDuplicateKey)
+                return false;
+
+            var message = sqlEx.Message;
+
+            if (message.Contains("IX_AspNetUsers_PhoneNumber", StringComparison.OrdinalIgnoreCase))
+                conflictField = "phone number";
+            else if (message.Contains("IX_AspNetUsers_Email", StringComparison.OrdinalIgnoreCase) ||
+                     message.Contains("UserNameIndex", StringComparison.OrdinalIgnoreCase))
+                conflictField = "email";
+
+            return true;
+        }
+        /**private async Task<CreateUserResult> CreateNewUser(
        OnboardingRequestModel model,
        OnBoardingArgs args,
        IdentityRole role)
@@ -1595,61 +1637,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
           
         }
-
-        /** private async Task<(OnboardingRequestModel, bool, string)> CreateNewUser(
-        OnboardingRequestModel model,
-        OnBoardingArgs args,
-        IdentityRole role)
-        {
-            var salt = EncryptionUtil.GetSalt();
-
-            string defaultPin = "0000";
-            string defaultPassword = "Admin123";
-
-            var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
-        ? defaultPassword
-        : model.Password;
-
-            var pinToUse = string.IsNullOrWhiteSpace(model.Pin) && !string.IsNullOrWhiteSpace(model.PhoneNumber)
-                ? defaultPin
-                : model.Pin;
-
-            bool isDefaultPassword = string.IsNullOrWhiteSpace(model.Password);
-            bool isDefaultPin = string.IsNullOrWhiteSpace(model.Pin) && !string.IsNullOrWhiteSpace(model.PhoneNumber);
-
-
-            var user = BuildUserEntity(model, args, salt);
-
-            if (!string.IsNullOrEmpty(pinToUse))
-            {
-                user.PinEncrypt = pinToUse.EncryptTransactionPin(salt);
-            }
-
-            user.HasDefaultPassword = isDefaultPassword;
-            user.HasDefaultPin = isDefaultPin;
-
-            var createUser = await _userManager.CreateAsync(user, passwordToUse);
-
-            if (!createUser.Succeeded)
-            {
-                var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
-                return (model, false, errors);
-            }
-
-            await _userManager.AddToRoleAsync(user, role.Name);
-
-            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-            user.Pin = pinToUse;
-            user.Password = passwordToUse;
-            model.Pin = pinToUse;
-            model.Password = passwordToUse;
-            return (
-                MapUserResponse(user, model),
-                true,
-                "Registration Successful."
-            );
-        }
-      **/
+        **/
         private User BuildUserEntity(OnboardingRequestModel model, OnBoardingArgs args, byte[] salt)
         {
             return new User
