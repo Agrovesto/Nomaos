@@ -1734,12 +1734,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 UserId = userId
             };
 
-            if (model.LocationId.HasValue)
+            if (model.LocationId.HasValue &&  model.LocationId.Value > 0)
             {
                 agentAssignment.LocationId = model.LocationId.Value;
                 await _agentRepository.UpdateOrganizationAgentLocation(agentAssignment);
             }
-            if (model.RoleId.HasValue)
+            if (model.RoleId.HasValue && model.RoleId.Value > 0)
             {
                 agentAssignment.RoleId = model.RoleId.Value;
                 await _agentRepository.UpdateOrganizationAgentRole(agentAssignment);
