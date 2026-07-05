@@ -76,6 +76,7 @@
     <PackageReference Include="Serilog.Sinks.Elasticsearch" Version="8.4.1" />
 
     <!-- Geospatial -->
+    <PackageReference Include="Humanizer.Core.fil" Version="3.0.1" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="NetTopologySuite.IO.GeoJSON" Version="4.0.0" />
     
