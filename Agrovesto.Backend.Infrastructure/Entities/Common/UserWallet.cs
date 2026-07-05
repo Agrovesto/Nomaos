@@ -1,4 +1,6 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -128,8 +130,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
 
-        public long UserWalletId { get; set; }
+        public long? UserWalletId { get; set; }
         public UserWallet UserWallet { get; set; }
+        public long? CreditWalletId { get; set; }
+        public UserWallet CreditWallet { get; set; }
 
         public WalletTransactionType WalletTransactionType { get; set; }
 
@@ -168,10 +172,25 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     }
     public enum WalletTransactionStatus
     {
-        Pending = 1,
-        Successful = 2,
-        Failed = 3,
-        Reversed = 4
+        Initiated = 0,
+
+        DebitPending = 1,
+        DebitSuccessful=2,
+        DebitFailed=3,
+
+        CreditPending=4,
+        CreditSuccessful=5,
+        CreditFailed=6,
+
+
+        Completed = 7,
+
+        ReconciliationRequired =8,
+        ReversalPending=9,
+        Reversed =10,
+
+        Failed =11,
+
     }
 
     public enum WalletTransactionType
@@ -179,4 +198,77 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         Credit = 1,
         Debit = 2
     }
+}
+public class WalletReconciliationLog
+{
+    public long Id { get; set; }
+    public string DebitReference { get; set; }
+    public string CreditReference { get; set; }
+    public string Reason { get; set; }
+    public ReconciliationStatus Status { get; set; }
+    public DateTimeOffset FlaggedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+    public string? ResolvedBy { get; set; }
+    public string? ResolutionNote { get; set; }
+}
+
+public enum ReconciliationStatus
+{
+    Pending,
+    InReview,
+    Resolved,
+    Reversed
+}
+public class ProviderWalletTransaction
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+    public long Id { get; set; }
+
+    public string Reference { get; set; }
+
+    public WalletProviderType Provider { get; set; }
+
+    public decimal Amount { get; set; }
+
+    public WalletTransactionStatus Status { get; set; }
+
+    public string SubscriberWalletNumber { get; set; }
+
+    public string BusinessWalletNumber { get; set; }
+
+    public string RecipientWalletNumber { get; set; }
+
+    public string DebitReference { get; set; }
+
+    public string CreditReference { get; set; }
+
+    public string ProviderTransactionId { get; set; }
+
+    public string FailureReason { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
+}
+public class ProviderWalletTransactionLog
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+    public long Id { get; set; }
+
+    public long ProviderWalletTransactionId { get; set; }
+    public ProviderWalletTransaction ProviderWalletTransaction { get; set; }
+
+    public string Step { get; set; }
+
+    public string RequestPayload { get; set; }
+
+    public string ResponsePayload { get; set; }
+
+    public bool IsSuccess { get; set; }
+
+    public DateTime CreatedAt { get; set; }
 }

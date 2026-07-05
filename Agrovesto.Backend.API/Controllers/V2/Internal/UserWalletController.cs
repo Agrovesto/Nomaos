@@ -9,6 +9,7 @@ using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
@@ -35,7 +36,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count> 0? "Successful": "Failed",
+                    Message = result.Count> 0? "Successful": "No Record",
                     Succeeded = true,
                     Count = result.Count,
 
@@ -81,6 +82,42 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+        [HttpGet("complete-payment")]
+        public async Task<IActionResult> CompletePayment([FromQuery] string  reference,
+            [FromQuery] string walletProviderCode, [FromQuery]string env, [FromQuery] string businessCode)
+        {
+            try
+            {
+               
+               
+
+                 var request= await _walletManager.GetRequestToPayStatus(walletProviderCode,reference,env, businessCode);
+                return Ok(ApiResponse<bool>.Success(
+                    request,
+                ResponseCodes.Success,
+                HttpContext.TraceIdentifier
+                ));
             }
             catch (BaseException ex)
             {

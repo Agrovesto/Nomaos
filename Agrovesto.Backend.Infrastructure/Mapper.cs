@@ -1410,7 +1410,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Ward = entities.Ward,
                 IsLeaderAFarmer = entities.IsLeaderAFarmer,
                 MemberShipTypeId = entities.MemberShipTypeId,
-                Tier = EnumExtensions.GetDisplayName(entities.Tier)
+                Tier = EnumExtensions.GetDisplayName(entities.TierLevel)
             };
         }
         public static MemberShipModel Map(this MemberShip entities)
@@ -1440,7 +1440,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OnboardedById = entities.OnboardedById,
                 IsLeaderAFarmer = entities.IsLeaderAFarmer,
                 MemberShipTypeId = entities.MemberShipTypeId,
-                Tier = EnumExtensions.GetDisplayName(entities.Tier)
+                Tier = EnumExtensions.GetDisplayName(entities.TierLevel)
             };
         }
 
@@ -1471,7 +1471,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //OrganizationCode = model.OrganizationCode,
                 OnboardedById = model.OnboardedById,
                 MemberShipTypeId = model.MemberShipTypeId,
-                Tier = model.Tier.ToEnum<Tier>(),
+                TierLevel = model.Tier.ToEnum<Tier>(),
 
             };
         }
@@ -1768,6 +1768,28 @@ namespace Agrovesto.Backend.Infrastructure
         }
 
 
+        public static LocationCreateResponse CreateViewMap(this OrganizationLocation entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new LocationCreateResponse
+            {
+                Id = entity.Id,
+                Address=entity.Address,
+                StateId=entity.StateId,
+                LgaId=entity.LgaId,
+                LocationName=entity.LocationName,
+                LocationTypeId=entity.LocationTypeId,
+                Capacity = entity.Capacity,
+                CapacityType=entity.CapacityType,
+                StockLevel=entity.StockLevel,
+
+                CreatedOn = entity.CreatedOn,
+            };
+        }
         public static OrganizationLocationModel ViewMap(this OrganizationLocation entity)
         {
             if (entity == null)

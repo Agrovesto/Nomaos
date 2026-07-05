@@ -23,7 +23,11 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Phone { get; set; }
         public string Name { get; set; }
     }
-
+    public class UserRoleDto
+    {
+        public string RoleId { get; set; }
+        public string RoleName { get; set; }
+    }
         public class UsersProfileResponse
     {
         public string UserId { get; set; }
@@ -32,8 +36,9 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }
-
-
+        public string NIN { get; set; }
+        public string BVN { get; set; }
+        public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
 
@@ -42,6 +47,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         // Cooperative
       public MemberShipModel Membership { get; set; }
+        // Organization
+      public OrganizationModel Organization { get; set; }
     }
   
     public class SimpleAgentDto
@@ -162,7 +169,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string AgentUserId { get; set; }
         public long AgentId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
-
+        public bool IsExisting { get; set; } = false;
         public string Message { get; set; }
     }
     public class CreateMembershipResponseModel
@@ -171,6 +178,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long MembershipId { get; set; }
         public bool RequiresProfileCompletion { get; set; }
         public string Message { get; set; }
+        public bool IsExisting { get; set; } = false;
     }
     public class OnboardingResponseModel
     {
@@ -178,9 +186,11 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? Message { get; set; }
+        public bool IsExisting { get; set; }
     }
     public class OnboardingRequestModel
     {
+        public string? Env { get; set; }
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
         public string? ActivityName { get; set; }
@@ -357,5 +367,22 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long? Id { get; set; }
         public DateTimeOffset? StartDate { get; set; }
         public DateTimeOffset? EndDate { get; set; }
+    }
+
+    public class BulkOnboardingQueueResponse
+    {
+        public Guid JobId { get; set; }
+
+        public string Status { get; set; }
+
+        public string Message { get; set; }
+    }
+
+    public class CreateUserResult
+    {
+        public OnboardingRequestModel model { get; set; }
+        public bool status { get; set; }
+        public string message { get; set; }
+        public bool IsExisting { get; set; }
     }
 }

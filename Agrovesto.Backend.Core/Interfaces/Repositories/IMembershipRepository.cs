@@ -33,5 +33,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(long membershipId, ListQueryParams query);
         Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
         Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, List<long> membershipIds);
+        Task<MembershipResponse> AssignLeaderAsync(AssignLeaderDto dto, string updatedById);
+        Task<MembershipResponse> CreateMembershipAsync(CreateMembershipDto dto, OnBoardingArgs args);
     }
 }

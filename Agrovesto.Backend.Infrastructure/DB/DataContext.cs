@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using DocumentFormat.OpenXml.Bibliography;
@@ -16,6 +17,7 @@ using System.Reflection.Emit;
 using System.Reflection.Metadata;
 using System.Text;
 using System.Threading.Tasks;
+using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
 namespace Agrovesto.Backend.Infrastructure.DB
 {
@@ -23,24 +25,32 @@ namespace Agrovesto.Backend.Infrastructure.DB
     {
         public DataContext CreateDbContext(string[] args)
         {
+            var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.Development.json")
+               // .AddJsonFile("appsettings.json", optional: false)
+                .AddJsonFile($"appsettings.{environment}.json", optional: true)
+                .AddEnvironmentVariables()
                 .Build();
 
             var optionsBuilder = new DbContextOptionsBuilder<DataContext>();
             optionsBuilder.UseSqlServer(
-              config.GetConnectionString("DefaultConnection"),
-        sqlOptions =>
-        {
-            sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 5,
-                maxRetryDelay: TimeSpan.FromSeconds(10),
-                errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(300);
-            sqlOptions.UseNetTopologySuite();
-        });
+            config.GetConnectionString("DefaultConnection"),
+            sqlOptions =>
+            {
+                sqlOptions.MigrationsAssembly("Agrovesto.Backend.API");
+
+                sqlOptions.UseNetTopologySuite();
+
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 5,
+                    maxRetryDelay: TimeSpan.FromSeconds(10),
+                    errorNumbersToAdd: null);
+
+                sqlOptions.CommandTimeout(300);
+            });
+
 
             return new DataContext(optionsBuilder.Options);
         }
@@ -58,6 +68,26 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+
+
+            modelBuilder.Entity<User>()
+       .HasIndex(u => u.PhoneNumber)       
+       .IsUnique();
+
+            modelBuilder.Entity<UserOrganization>()
+                .HasKey(uo => new { uo.UserId, uo.OrganizationCode });
+
+            modelBuilder.Entity<FarmerOrganization>()
+                .HasIndex(fo => new { fo.FarmerId, fo.OrganizationCode });
+
+            modelBuilder.Entity<FarmerCooperative>()
+                .HasIndex(fc => new { fc.FarmerId, fc.CooperativeId });
+
+            modelBuilder.Entity<FarmerAgent>()
+                .HasIndex(fa => new { fa.FarmerId, fa.AgentId });
+
+
+
             modelBuilder.Entity<OrganizationLocation>()
        .HasOne(l => l.ParentLocation)
        .WithMany(l => l.SubLocations)
@@ -327,25 +357,27 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .WithMany()
     .HasForeignKey(x => x.OrganizationProductId)
     .OnDelete(DeleteBehavior.NoAction);
-            //modelBuilder.Entity<Farm>()
-            //    .HasIndex(f => f.FarmPolygon)
-            //    .HasDatabaseName("IX_Farm_Polygon")
-            //    .IsSpatial();
 
-            //for market transaction
-            //  modelBuilder.ApplyConfiguration(new MarketTransactionConfiguration());
+            modelBuilder.Entity<Organization>()
+    .ToTable("Organizations");
+
+            modelBuilder.Entity<RepaymentSchedule>()
+        .HasOne(x => x.InputPackageSubscription)
+        .WithMany(x => x.RepaymentSchedules)
+        .HasForeignKey(x => x.InputPackageSubscriptionId);
+
+            modelBuilder.Entity<InputPackage>()
+    .HasOne(p => p.CommitmentPlan)
+    .WithOne(c => c.InputPackage)
+    .HasForeignKey<CommitmentPlan>(c => c.InputPackageId);
+
+            modelBuilder.Entity<InputPackage>()
+    .HasOne(p => p.RepaymentPlan)
+    .WithOne(c => c.InputPackage)
+    .HasForeignKey<RepaymentPlan>(c => c.InputPackageId);
         }
 
-        //public DbSet<MarketTransaction> MarketTransactions { get; set; }
-        //public DbSet<Commodity> Commodities { get; set; }
-        //public DbSet<CommodityVariety> CommodityVarieties { get; set; }
-        //public DbSet<CommodityCategory> CommodityCategories { get; set; }
-        //public DbSet<TransactionCost> TransactionCosts { get; set; }
-        //public DbSet<Market> Markets { get; set; }
-        //public DbSet<MarketCommodity> MarketCommodities { get; set; }
-        //public DbSet<MarketDay> MarketDays { get; set; }
-
-
+     
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<MemberShipAgent> MemberShipAgents { get; set; }
@@ -361,7 +393,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         public DbSet<Business> Businesses { get; set; }
         public DbSet<UserOrganization> UserOrganizations { get; set; }
-        public DbSet<Organization> BusinessOrganizations { get; set; }
+        public DbSet<Organization> Organizations { get; set; }
         public DbSet<BusinessWorker> BusinessWorkers { get; set; }  
         public DbSet<SubAccount> SubAccounts { get; set; }
         public DbSet<FeeSplitConfiguration> FeeSplitConfigurations { get; set; }
@@ -437,10 +469,23 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<UserWallet> UserWallets { get; set; }
         public DbSet<WalletSecurity> WalletSecurities { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
+        public DbSet<WalletReconciliationLog> WalletReconciliationLogs { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
-        public DbSet<InputTransaction> InputTransactions { get; set; }
-        public DbSet<InputAllocation> InputAllocations { get; set; }
+        public DbSet<ProviderWalletTransaction> ProviderWalletTransactions { get; set; }
+        public DbSet<ProviderWalletTransactionLog> ProviderWalletTransactionLogs { get; set; }
         public DbSet<InputPackage> InputPackages { get; set; }
+        public DbSet<CommitmentPlan> CommitmentPlans { get; set; }
+        public DbSet<RepaymentPlan> RepaymentPlans { get; set; }
+        public DbSet<InputPackageSubscription> InputPackageSubscriptions { get; set; }
+        public DbSet<SubscriptionDocument> SubscriptionDocuments { get; set; }
+        public DbSet<RepaymentSchedule> RepaymentSchedules { get; set; }
+        public DbSet<RepaymentPenalty> RepaymentPenalties { get; set; }
+        public DbSet<PenaltyPolicy> PenaltyPolicies { get; set; }
+        public DbSet<SubscriptionPaymentAllocation> SubscriptionPaymentAllocations { get; set; }
+        public DbSet<InputPackageSubscriptionPayment> InputPackageSubscriptionPayments { get; set; }
+        public DbSet<PaymentReconciliation> PaymentReconciliation { get; set; }
+        public DbSet<InputSubscriptionDisbursement> InputSubscriptionDisbursements { get; set; }
+        public DbSet<OutboxMessage> OutboxMessages { get; set; }
         public DbSet<Module> Modules { get; set; }
         public DbSet<StorageCategory> StorageCategories { get; set; }
         public DbSet<TemperatureControlType> TemperatureControlTypes { get; set; }
@@ -455,6 +500,16 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<EopCostItem> EopCostItems { get; set; }
         public DbSet<InputFinancingCategory> InputFinancingCategories { get; set; }
         public DbSet<InputPackageItem> InputPackageItems { get; set; }
+        public DbSet<BusinessLicenseModule> BusinessLicenseModules { get; set; }
+        public DbSet<SystemModule> SystemModules { get; set; }
+        public DbSet<BusinessLicense> BusinessLicenses { get; set; }
+        public DbSet<BusinessBillingInvoice> BusinessBillingInvoices { get; set; }
+        public DbSet<BusinessPayment> BusinessPayments { get; set; }
+        public DbSet<UserBusiness> UserBusinesses { get; set; }
+        public DbSet<MigrationTracker> MigrationTrackers { get; set; }
+        public DbSet<OrganizationBusiness> OrganizationBusinesses { get; set; }
+        public DbSet<DisbursementLineItem> DisbursementLineItems { get; set; }
+        public DbSet<MonetaryDisbursementTransaction> MonetaryDisbursementTransactions { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public decimal OrganizationContribution { get; set; } = 0;
         public decimal PartnerContribution { get; set; } = 0;
         public DateTimeOffset SubscriptionInitiatedOn { get; set; }
-        public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Pending;// "PendingApproval", "Approved", "Rejected"
+        public SubscriptionStatus Status { get; set; } = SubscriptionStatus.PendingApproval;// "PendingApproval", "Approved", "Rejected"
         public DateTimeOffset SubscriptionApprovedOn { get; set; }
         public string SubscriptionApprovedByUserId { get; set; }
 

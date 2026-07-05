@@ -53,12 +53,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var isCurrentUserFarmer = CurrentUserRoles
                     .Contains("Farmer", StringComparer.OrdinalIgnoreCase);
 
-                if (isCurrentUserFarmer)
-                {
-                    args.UserId = CurrentUserId;
-                }
-                else
-                {
+                    args.UserId = args.UserId ?? CurrentUserId;
+
+
+              
                     if (string.IsNullOrWhiteSpace(args.UserId))
                     {
                         return BadRequest(new Response<string>()
@@ -76,7 +74,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                             Succeeded = false
                         });
                     }
-                }
+                
 
                 if (!string.IsNullOrWhiteSpace(OrganizationCode) &&
                     string.IsNullOrWhiteSpace(args.organizationCode))
@@ -139,8 +137,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
+                args.UserId = args.UserId ?? CurrentUserId;
                 if (string.IsNullOrEmpty(args.UserId))
                 {
                     return BadRequest(new Response<Dictionary<string, string>>()
@@ -463,9 +460,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                args.UserId = args.UserId ?? CurrentUserId;
 
-              
 
                 var updateDetail = await _onBoardingManager.VerifyBvn(args, model, args.UserId);
 
@@ -523,8 +519,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
+                args.UserId = args.UserId ?? CurrentUserId;
                 var updateDetail = await _onBoardingManager.VerifyNIN(args, model, args.UserId);
 
 
@@ -579,8 +574,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
+                args.UserId = args.UserId ?? CurrentUserId;
                 var request = await _onBoardingManager.RequestEmailOrPhoneVerification(args, model, args.UserId);
 
 

@@ -67,6 +67,16 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             }
             return $"P{r}aout";
         }
+        public static string GenerateDisbursementReference()
+        {
+            Random gen = new Random();
+            string r = gen.Next(0, 1000000).ToString("D7");
+            if (r.Distinct().Count() == 1)
+            {
+                r = GenerateDisbursementReference();
+            }
+            return $"Dis{r}";
+        }
 
         public static string GenerateTopUpReferenceNumber()
         {

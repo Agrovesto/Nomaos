@@ -23,6 +23,7 @@ using CsvHelper;
 using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Hangfire;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -40,7 +41,9 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using static iTextSharp.text.pdf.codec.TiffWriter;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
+using BulkUploadJob = Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob;
 using Path = System.IO.Path;
 using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
@@ -77,8 +80,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
         Task EnsureFarmerIdIsValidAsync(long farmerId);
-        Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
+        Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(Stream excelStream, OnBoardingArgs args);
         Task<MemberShipUpdateResultDto> UpdateMembershipProfile(string userId, MemberShipModel update);
+        Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
+        Task<UsersProfileResponse> GetUseridentity(string userId);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -132,86 +137,170 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _configuration = configuration;
             _awsService = awsService;
         }
-        public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
-       Stream excelStream,
-       OnBoardingArgs args)
+        public async Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(
+         Stream excelStream,
+         OnBoardingArgs args)
         {
             if (excelStream == null)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
-            // Copy stream to memory so we can both inspect and save to disk for background processing
-            using var ms = new MemoryStream();
-            await excelStream.CopyToAsync(ms);
-            ms.Position = 0;
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "Excel file is required.");
 
-            var rows = _excelConverterService.BulkParseExcel(ms);
-
-            if (!rows.Any())
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
-
-            var result = new BulkOnboardingResult
+            if (_taskQueue == null || _scopeFactory == null)
             {
-                Total = rows.Count,
-                Errors = new List<BulkOnboardingError>(),
-                Successful = 0
-            };
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Background processing is not configured.");
+            }
 
-            // Persist file to temp location for background worker
             var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+
             Directory.CreateDirectory(tempDir);
-            var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
-            ms.Position = 0;
-            await using (var fs = File.Create(tmpFile))
+
+            var filePath = Path.Combine(
+                tempDir,
+                $"bulk_{Guid.NewGuid()}.xlsx");
+
+            await using (var fs = File.Create(filePath))
             {
-                ms.Position = 0;
-                await ms.CopyToAsync(fs);
+                await excelStream.CopyToAsync(fs);
                 await fs.FlushAsync();
             }
 
-            // Validate background queue and scope factory to avoid NullReferenceException
-            if (_taskQueue == null || _scopeFactory == null)
+            var job = new BulkUploadJob
             {
-                // Fail fast with a clear message instead of allowing a NullReferenceException
-                throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
-            }
+                Id = Guid.NewGuid(),
+                FilePath = filePath,
+                OrganizationCode = args.organizationCode,
+                CreatedByUserId = args.UserId ?? args.OnboardedByUserId ?? "system",
+                OnboardedByUserId = args.OnboardedByUserId ?? args.UserId ?? "system",
+                Status = "Queued",
+                ErrorMessage = string.Empty,
+                CreatedAt = DateTime.UtcNow,
+                TotalRows = 0,
+                Successful = 0,
+                Failed = 0
+            };
 
-            // Queue background work item that calls processor
-            _taskQueue.QueueTask(async cancellationToken =>
+            _context.BulkUploadJobs.Add(job);
+
+            await _context.SaveChangesAsync();
+            BackgroundJob.Enqueue<BulkOnboardingProcessor>(
+    x => x.ProcessAsync(
+        filePath,
+        args,
+        job.Id,
+        CancellationToken.None));
+            //_taskQueue.QueueTask(async cancellationToken =>
+            //{
+            //    try
+            //    {
+            //        using var scope = _scopeFactory.CreateScope();
+
+            //        var processor = scope.ServiceProvider
+            //            .GetRequiredService<BulkOnboardingProcessor>();
+
+            //        await processor.ProcessAsync(
+            //            filePath,
+            //            args,
+            //            job.Id,
+            //            cancellationToken);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        using var scope = _scopeFactory.CreateScope();
+
+            //        var logger = scope.ServiceProvider
+            //            .GetRequiredService<ILogger<OrganizationManager>>();
+
+            //        logger.LogError(
+            //            ex,
+            //            "Queued bulk onboarding failed for JobId {jobId}",
+            //            job.Id);
+            //    }
+            //});
+
+            return new BulkOnboardingQueueResponse
             {
-                try
-                {
-                    if (_scopeFactory == null)
-                    {
-                        // Should not happen due to the earlier check, but guard anyway
-                        return;
-                    }
-
-                    using var scope = _scopeFactory.CreateScope();
-                    var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
-                    var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                    logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
-
-
-                    await processor.ProcessAsync(tmpFile, args, cancellationToken);
-                }
-                catch (Exception ex)
-                {
-                    try
-                    {
-                        if (_scopeFactory != null)
-                        {
-                            using var scope = _scopeFactory.CreateScope();
-                            var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                            logger.LogError(ex, "Background bulk onboarding failed to start processor");
-                        }
-                    }
-                    catch { }
-                }
-            });
-            result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
-
-            return result;
+                JobId = job.Id,
+                Status = "Queued",
+                Message = "Bulk onboarding queued successfully."
+            };
         }
+        /**  public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
+         Stream excelStream,
+         OnBoardingArgs args)
+          {
+              if (excelStream == null)
+                  throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
+              using var ms = new MemoryStream();
+              await excelStream.CopyToAsync(ms);
+              ms.Position = 0;
 
+              var rows = _excelConverterService.BulkParseExcel(ms);
+
+              if (!rows.Any())
+                  throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
+
+              var result = new BulkOnboardingResult
+              {
+                  Total = rows.Count,
+                  Errors = new List<BulkOnboardingError>(),
+                  Successful = 0
+              };
+
+              var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
+              Directory.CreateDirectory(tempDir);
+              var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
+              ms.Position = 0;
+              await using (var fs = File.Create(tmpFile))
+              {
+                  ms.Position = 0;
+                  await ms.CopyToAsync(fs);
+                  await fs.FlushAsync();
+              }
+
+              if (_taskQueue == null || _scopeFactory == null)
+              {
+                  throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
+              }
+
+              _taskQueue.QueueTask(async cancellationToken =>
+              {
+                  try
+                  {
+                      if (_scopeFactory == null)
+                      {
+                          return;
+                      }
+
+                      using var scope = _scopeFactory.CreateScope();
+                      var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
+                      var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                      logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
+
+
+                      await processor.ProcessAsync(tmpFile, args, cancellationToken);
+                  }
+                  catch (Exception ex)
+                  {
+                      try
+                      {
+                          if (_scopeFactory != null)
+                          {
+                              using var scope = _scopeFactory.CreateScope();
+                              var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
+                              logger.LogError(ex, "Background bulk onboarding failed to start processor");
+                          }
+                      }
+                      catch { }
+                  }
+              });
+              result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
+
+              return result;
+          }
+          **/
 
         public async Task<OrganizationResponseModel> CreateOrganization(
      OrganizationOnboardingModel model,
@@ -408,8 +497,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         LastName = row.LastName,
                         Email = row.Email,
                         PhoneNumber = row.PhoneNumber,
-                        Password = "Admin123",
-                        Pin = "0000",
+                        Password =row.PhoneNumber, //"Admin123",
+                        Pin = "1234",
 
                     };
 
@@ -608,7 +697,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             )
         {
             ValidateLoginModel(model);
-            var login= await _onboardingRepository.Login(model, businessCode);
+           // var login= await _onboardingRepository.Login(model, businessCode);
+            var login= await _onboardingRepository.Login(model);
 
             return login;
         }
@@ -688,6 +778,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "User Id missing.");
                 }
+                if (!string.IsNullOrEmpty(model.PhoneNumber) || !string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
+                 {
+                    ValidateIdentifier(model.NIN, "NIN");
+                    ValidateIdentifier(model.Bvn, "BVN");
+                    ValidateIdentifier(model.PhoneNumber, "Phonenumber");
+                }
                 model.organizationCode = args.organizationCode;
                 var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (hasOrg != null)
@@ -701,12 +797,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 model.PhoneNumber = !string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber : updateUser.PhoneNumber;
 
                 args.userType = !string.IsNullOrEmpty(args.userType) ? args.userType : updateUser.UserType;
-                await CreateUserCategory(model, args);
+               
                 if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
                 {
-                    ValidateIdentifier(model.NIN, "NIN");
-                    ValidateIdentifier(model.Bvn, "BVN");
-
                     if (!string.IsNullOrWhiteSpace(model.NIN))
                         updateUser.NIN = model.NIN;
 
@@ -715,7 +808,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     await _onboardingRepository.OnNINBVNUpdate(updateUser);
                 }
-
+                await CreateUserCategory(model, args);
                 return (true, "User Profile Created");
             }
 
@@ -769,21 +862,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     await CreateFarmerProfileAsync(model, args);
                     break;
-                //case UserType.Organization:
-                //    await OnboardOrganization(new OrganizationOnboardingModel
-                //    {
-                     
-                //        FirstName = model.FirstName,
-                //        LastName = model.LastName,
-                //        PhoneNumber = model.PhoneNumber,
-                //        ContactEmail= model.Email
-                //    }, new OrganizationOnboardingArgs
-                //    {
-                //        businessCode=args.businessCode,
-                //        userId=model.Id,
-                        
-                //    });
-                //    break;
+             
                 case UserType.Processors:
                     break;
                 case UserType.Suppliers:
@@ -792,22 +871,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         }
 
-        public async Task OnboardOrganization(OrganizationOnboardingModel org, OrganizationOnboardingArgs args)
-        {
-            var organization = await _businessRepository.CreateOrUpdateOrganization(org, args);
-            var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
-                args.userId,
-                new ProfileRequestModel
-                {
-                    FirstName = org.FirstName?.Trim(),
-                    LastName = org.LastName?.Trim(),
-                    PhoneNumber = org.PhoneNumber?.Trim(),
-                    Email = org.ContactEmail?.Trim(),
-                    organizationCode = organization.OrganizationCode
-                });
-            args.userType ??= updatedUser.UserType; 
-
-        }
+       
 
         private async Task CreateAgentProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
@@ -1013,7 +1077,154 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
             }
         }
-        public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
+        public async Task<OnboardingResponseModel> CreateBusinessUser(
+    OnboardingRequestModel model,
+    OnBoardingArgs args)
+        {
+            try
+            {
+                ValidateRequest(model, args);
+
+                var env = ResolveEnvironment(args);
+
+                var business = await GetBusinessOrThrow(args.businessCode);
+
+                var createUserResult = await RegisterUser(model, args);
+
+                if (!createUserResult.status)
+                {
+                    throw new BaseException(
+                        Core.Enums.ExceptionType.BAD_REQUEST,
+                        createUserResult.message);
+                }
+
+                await ExecutePostCreationStepsAsync(
+                    model,
+                    args,
+                    createUserResult,
+                    business,
+                    env);
+
+                return BuildResponse(model, createUserResult);
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "User Registration failed unexpectedly");
+
+                throw new BaseException(
+                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
+                    "An unexpected error occurred. Please try again.");
+            }
+        }
+        private void ValidateRequest(OnboardingRequestModel model, OnBoardingArgs args)
+        {
+            ValidateUserType(args);
+            ValidateQuickOnboarding(model);
+
+            if (string.IsNullOrEmpty(args.businessCode))
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Business code is required.");
+            }
+        }
+        private string ResolveEnvironment(OnBoardingArgs args)
+        {
+            return !string.IsNullOrEmpty(args.Env)
+                ? args.Env
+                : _configuration["Official:Env"] ?? string.Empty;
+        }
+        private async Task<BusinessModel> GetBusinessOrThrow(string businessCode)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(businessCode);
+
+            if (business == null)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "Business does not exist.");
+            }
+
+            return business;
+        }
+        private Task<CreateUserResult> RegisterUser(
+    OnboardingRequestModel model,
+    OnBoardingArgs args)
+        {
+            return _onboardingRepository.RegisterUser(model, args);
+        }
+        private async Task ExecutePostCreationStepsAsync(
+    OnboardingRequestModel model,
+    OnBoardingArgs args,
+    CreateUserResult createUser,
+    BusinessModel business,
+    string env)
+        {
+            try
+            {
+                await EnsureWalletExists(createUser.model, business);
+
+                await CreateUserProfile(new ProfileRequestModel
+                {
+                    Email = model.Email,
+                    FirstName = model.FirstName,
+                    LastName = model.LastName,
+                    MiddleName = model.MiddleName,
+                    Id = createUser.model.Id,
+                    PhoneNumber = model.PhoneNumber,
+                    OnboardedByUserId = args.OnboardedByUserId
+                }, args);
+
+                await _onboardingRepository.TrackUserRoleAssignment(
+                    createUser.model.Id,
+                    args.userType);
+
+                createUser.model.Env = env;
+
+                if (createUser.IsExisting)
+                    return;
+
+                await HandleUserNotificationsAsync(createUser.model, env);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(
+                    ex,
+                    "Non-critical onboarding step failed for user {UserId}",
+                    createUser.model.Id);
+            }
+        }
+     private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env)
+        {
+            if (user.HasDefaultPassword)
+            {
+                await SendDefaultCredentialChange(user);
+            }
+
+            await GenerateAndSendOtp(user);
+        }
+        private OnboardingResponseModel BuildResponse(
+    OnboardingRequestModel model,
+    CreateUserResult createUser)
+        {
+            model.Id = createUser.model.Id;
+
+            return new OnboardingResponseModel
+            {
+                Id = model.Id,
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                IsExisting = createUser.IsExisting,
+                Message = createUser.IsExisting
+                    ? createUser.message
+                    : "User created successfully."
+            };
+        }
+        /**public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
         {
             string message = "";
             string env = !string.IsNullOrEmpty(args.Env)
@@ -1059,13 +1270,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     await _onboardingRepository.TrackUserRoleAssignment(
                         createUser.model.Id,
                         args.userType);
-
-                    if(env == Env.Live.ToString())
+                    createUser.model.Env = env;
+                    if (!createUser.IsExisting) {
+                    if (env == Env.Live.ToString())
                     {
                         if (createUser.model.HasDefaultPassword)
                         {
                             await SendDefaultCredentialChange(createUser.model);
                         }
+                     
                         await GenerateAndSendOtp(createUser.model);
                     }
                     else
@@ -1075,23 +1288,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                             await SendDefaultCredentialChange(createUser.model);
                         }
                         await GenerateAndSendOtp(createUser.model);
-                       // message = await DummyGenerateAndSendOtp(createUser.model);
+                    }
                     }
                 }
                 catch (Exception ex)
                 {
-                    // Log as info/warning, do NOT throw
                     _log.LogWarning(ex, $"Non-critical onboarding step failed for user {createUser.model.Id}. User may need to update profile manually.");
                 }
 
                 model.Id = createUser.model.Id;
-                
                 return new OnboardingResponseModel
                 {
                     Id = model.Id,
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber,
-                    Message = !string.IsNullOrEmpty(createUser.message) ? $"{createUser.message} {message}" : $"User created successfully. Some post-registration steps may need manual completion {message}."
+                    IsExisting = createUser.IsExisting,
+                    Message = createUser.IsExisting
+           ? createUser.message
+           : $"User created successfully. {message}"
                 };
             }
             catch (BaseException)
@@ -1105,7 +1319,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
                     "An unexpected error occurred. Please try again.");
             }
-        }
+        }**/
         private static void ValidateUserType(OnBoardingArgs args)
         {
             if (!Enum.TryParse<UserType>(args.userType, true, out _))
@@ -1226,6 +1440,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     $"Your verification code is {otp.Code}. It expires in 5 minutes.",
                     $"Your verification code is {otp.Code}. It expires in 5 minutes."
                     );
+                
                 //await _sMSService.SendEmailAsync(
                 //    destination,
                 //    "Confirm your account",
@@ -1237,6 +1452,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         otp.Destination,
                         $"Your verification code is {otp.Code}. Expires in 5 minutes.");
             }
+            await _awsService.SendEmailAsync(
+                  senderEmail,
+                  "agrovesto@gmail.com",
+                  $"New Registration Alert on NomaOS {model.Env} environment",
+                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details.",
+                  $"New registration from {model.Email} {model.PhoneNumber}. Login to Admin Console for details."
+                  );
         }
 
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
@@ -1373,6 +1595,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return profile;
         }
+        public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        {
+            var profile = await _onboardingRepository.GetUseridentity(userId);
+            if (profile == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
+
+            return profile;
+        }
 
 
         public async Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId)
@@ -1384,6 +1614,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Core.Enums.ExceptionType.NOTFOUND,
                     "User not found.");
             }
+            user.model.Env = args.Env;
             if (args.Env == Env.Live.ToString())
             {
                 await GenerateAndSendOtp(user.model.ToEntity());
@@ -1864,12 +2095,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await RunNonCriticalSteps(
                     model, args, business, user.model, dateTime);
 
+                //return new CreateMembershipResponseModel
+                //{
+                //    UserId = user.model.Id,
+                //    MembershipId = membership.data.Id,
+                //    RequiresProfileCompletion = true,
+                //    Message= user.message,
+                //};
                 return new CreateMembershipResponseModel
                 {
                     UserId = user.model.Id,
                     MembershipId = membership.data.Id,
                     RequiresProfileCompletion = true,
-                    Message= user.message,
+                    IsExisting = user.IsExisting,
+                    Message = user.IsExisting
+        ? user.message
+        : $"User created successfully."
                 };
             }
             catch (BaseException)
@@ -1906,11 +2147,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _businessRepository.GetBusinessByCodeAsync(businessCode)
                 ?? throw new BaseException(ExceptionType.NOTFOUND, "Business does not exist");
         }
-        private async Task<(OnboardingRequestModel model, bool status, string message)> RegisterMembershipLeaderOrFail(
+        private async Task<CreateUserResult> RegisterMembershipLeaderOrFail(
             MemberShipRequestModel model,
             OnBoardingArgs args)
         {
-            (OnboardingRequestModel model, bool status, string message) result = await _onboardingRepository.RegisterUser(
+      var result = await _onboardingRepository.RegisterUser(
                 new OnboardingRequestModel
                 {
                     Email = model.Email,
@@ -2040,7 +2281,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 var business = await GetBusinessOrFail(args.businessCode);
 
-                (OnboardingRequestModel model, bool status, string message) registerUser = await _onboardingRepository.RegisterUser(
+               var registerUser = await _onboardingRepository.RegisterUser(
                new OnboardingRequestModel
                {
                    Email = model.Email,
@@ -2088,13 +2329,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
              //   await GenerateAndSendOtp(registerUser.model);
               
 
+                //return new CreateAgentResponseModel
+                //{
+                //    UserId = args.UserId,
+                //    AgentId = agent.data.Id,
+                //    AgentUserId= registerUser.model.Id,
+                //    RequiresProfileCompletion = true,
+                //    Message= registerUser.message
+                //};
                 return new CreateAgentResponseModel
                 {
                     UserId = args.UserId,
                     AgentId = agent.data.Id,
-                    AgentUserId= registerUser.model.Id,
+                    AgentUserId = registerUser.model.Id,
                     RequiresProfileCompletion = true,
-                    Message= registerUser.message
+                    IsExisting = registerUser.IsExisting,
+                    Message = registerUser.IsExisting
+        ? registerUser.message
+        : $"User created successfully."
                 };
             }
             catch (BaseException)
@@ -2109,7 +2361,89 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Unable to complete onboarding at the moment.");
             }
         }
-    
+        public async Task<bool> EditAgentUser(
+            ProfileRequestModel model,
+            OnBoardingArgs args)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(args.UserId))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+                ValidateRequest(model, args);
+
+                var business = await GetBusinessOrFail(args.businessCode);
+
+                var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+                if (organization != null)
+                    model.OrganizationId = organization.OrganizaionId;
+
+                var onboardingRequest = BuildOnboardingRequest(model);
+
+                await _onboardingRepository.UpdateUserDetails(onboardingRequest, args);
+
+                var updateprofile= await _agentRepository.CreateUpdateAgent(new AgentModel
+                {
+                    BelongToBusinessCode = args.businessCode,
+                    State = model.State,
+                    Lga = model.Lga,
+                    Email = model.Email,
+                    Location = model.Location,
+                    Name = BuildFullName(model),
+                    OnBoardedOn = DateTimeOffset.Now,
+                    PhoneNumber = model.PhoneNumber,
+                    UserId = args.UserId,
+                    Ward = model.Ward,
+                    OnboardedById = args.OnboardedByUserId,
+                    OrganizationId = model.OrganizationId
+                });
+
+                return true;
+            }
+            catch (BaseException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to complete onboarding at the moment.");
+            }
+        }
+        private string BuildFullName(ProfileRequestModel model)
+        {
+            if (!string.IsNullOrWhiteSpace(model.FullName))
+                return model.FullName;
+
+            return string.Join(" ",
+                new[] { model.FirstName, model.MiddleName, model.LastName }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+        }
+        private OnboardingRequestModel BuildOnboardingRequest(ProfileRequestModel model)
+        {
+            return new OnboardingRequestModel
+            {
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                FirstName = model.FirstName,
+                MiddleName = model.MiddleName,
+                LastName = model.LastName
+            };
+        }
+        private void ValidateRequest(ProfileRequestModel model, OnBoardingArgs args)
+        {
+            ValidateQuickOnboarding(new OnboardingRequestModel
+            {
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber
+            });
+
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
+
+        }
+       
+
     }
 
 }

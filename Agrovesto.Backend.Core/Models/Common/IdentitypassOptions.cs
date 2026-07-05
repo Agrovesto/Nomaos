@@ -18,6 +18,12 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string preembleySecretKey { get; set; }
         public string preembleyAppId { get; set; }
     }
+    public class ReconciliationEmailSettings
+    {
+        public string FromEmail { get; set; }
+        public string FromName { get; set; }
+        public List<string> AlertRecipients { get; set; } // ops/finance team emails
+    }
     //public class AesOptions
     //{
     //    public string Key { get; set; }

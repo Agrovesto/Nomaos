@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Core.Models.Payment;
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Drive.v3.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -27,8 +28,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         MomoPreApprovalRequest request,
         WalletProviderParameterModel[] parameters,
         string env);
-        Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequesToWithdrawStatus(string reference, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(string Reference, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletResponseService<MomoPaymentStatusResponse>> GetTransferStatus(string reference, WalletProviderParameterModel[] parameters, string env);
         Task<WalletResponseService<bool>> RequestDirectDebitApproval(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env);
+        Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
     }
 
     public class MTNMomo : IGenericWalletService, IMTNMomo
@@ -43,8 +47,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             _configuration = configuration;
             _log = log;
         }
-      
 
+        public bool RequiresPreDebit => true;
         public async Task<ProviderParams> RetrieveParams(WalletProviderParameterModel[] parameters, string Env)
         {
             var response = new ProviderParams();
@@ -57,6 +61,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.UserName = _params["UserName"].Value;
             response.TargetEnvironment = _params["TargetEnvironment"].Value;
             response.DisbursementApiKey = _params["DisbursementApiKey"].Value;
+            response.DisbursementKey = _params["DisbursementKey"].Value;
+            response.DisbursementUserName = _params["DisbursementUserName"].Value;
 
 
             return response;
@@ -79,7 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         }
         private async Task<MomoAuthResponse> GetProviderToken(
-  ProviderParams @params, string authToken, string key, string url)
+        ProviderParams @params, string authToken, string key, string url)
         {
             var handler = new HttpClientHandler();
 
@@ -100,32 +106,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
             );
         }
-        //private async Task<MomoAuthResponse> GetProviderToken(ProviderParams @params, string authToken)
-        //{
-        //    var headers = new Dictionary<string, string>
-        //        {
-        //            { "Authorization",  $"Basic {authToken}"},
-        //            { "Ocp-Apim-Subscription-Key", @params.SubscriptionKey },
-        //            { "X-Target-Environment", @params.TargetEnvironment }
-        //        };
-        //    try
-        //    {
-        //        var request = await _httpService.Post($"{@params.BaseUrl}/collection/token/", null, headers);
-        //        var readResponse = await request.Content.ReadAsStringAsync();
-        //        //request.EnsureSuccessStatusCode();
-
-        //        var response = JsonConvert.DeserializeObject<MomoAuthResponse>(readResponse);
-        //          return response;
-
-
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
-        //        return null;
-        //    }
-
-        //}
+ 
 
         private static Dictionary<string, string> GenerateHeader(ProviderParams @params, string BearerToken)
         {
@@ -138,7 +119,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
 
        
-        public async Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env)
+        public async Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(string Reference, WalletProviderParameterModel[] parameters, string env)
         {
             var @params = await RetrieveParams(parameters, env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
@@ -147,9 +128,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
 
                 var headers = GenerateHeader(@params, token.AccessToken);
-                headers.Add("X-Reference-Id", request.Reference);
+                headers.Add("X-Reference-Id", Reference);
 
-                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/requesttopay/{request.Reference}", headers);
+                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/requesttopay/{Reference}", headers);
                 var response = await sendrequest.Content.ReadAsStringAsync();
 
 
@@ -176,8 +157,88 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
 
         }
+       
+        public async Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequesToWithdrawStatus(string reference, WalletProviderParameterModel[] parameters, string env)
+        {
+            var @params = await RetrieveParams(parameters, env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            try
+            {
 
-        public async Task<WalletResponseService<PaymentResponse>> InitiateTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", reference);
+
+                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/collection/v1_0/requesttowithdraw/{reference}", headers);
+                var response = await sendrequest.Content.ReadAsStringAsync();
+
+
+                var momoResponse = JsonSerializer.Deserialize<MomoPaymentStatusResponse>(response,
+         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (momoResponse == null)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Failed("Invalid response from provider");
+
+
+                if (sendrequest.IsSuccessStatusCode)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Success(momoResponse);
+
+                return WalletResponseService<MomoPaymentStatusResponse>.Failed("RequestToPay failed");
+
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+
+
+        }
+        public async Task<WalletResponseService<MomoPaymentStatusResponse>> GetTransferStatus(string reference, WalletProviderParameterModel[] parameters, string env)
+        {
+            var @params = await RetrieveParams(parameters, env);
+            var basicAuth = BasicAuthHeader(@params.DisbursementUserName, @params.DisbursementApiKey);
+            try
+            {
+
+                var token = await GetProviderToken(@params, basicAuth, @params.DisbursementKey, "disbursement");
+
+
+                var headers = GenerateDisbursementHeaders(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", reference);
+
+                var sendrequest = await _httpService.Get($"{@params.BaseUrl}/disbursement/v1_0/transfer/{reference}", headers);
+                var response = await sendrequest.Content.ReadAsStringAsync();
+
+
+                var momoResponse = JsonSerializer.Deserialize<MomoPaymentStatusResponse>(response,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (momoResponse == null)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Failed("Invalid response from provider");
+
+
+                if (sendrequest.IsSuccessStatusCode)
+                    return WalletResponseService<MomoPaymentStatusResponse>.Success(momoResponse);
+
+                return WalletResponseService<MomoPaymentStatusResponse>.Failed("RequestToPay failed");
+
+
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
+                throw;
+            }
+
+
+        }
+
+        public async Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
@@ -185,13 +246,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             try
             {
                 var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+                request.Currency = Env == "Demo" ? "EUR" : (!string.IsNullOrWhiteSpace(request.Currency) ? request.Currency : "NGN");
                 var headers = GenerateHeader(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.TransactionReference);
-                headers.Add("X-Callback-Url", callbackUrl);
+                if (!string.IsNullOrWhiteSpace(callbackUrl))
+                    headers.Add("X-Callback-Url", callbackUrl);
 
                 var body = new
                 {
-                    amount = request.Amount,
+
+                    amount = request.Amount.ToString("0"),  // "600" not 600.00
+                    //amount = request.Amount,
                     currency = request.Currency,
                     externalId = request.TransactionReference,
                     payer = new
@@ -204,11 +269,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 };
                 var content = new StringContent(JsonConvert.SerializeObject(body), Encoding.UTF8, "application/json");
-
                 var sendRequest = await _httpService.Post(
-    $"{@params.BaseUrl}/collection/v1_0/requesttopay",
+    $"{@params.BaseUrl}/collection/v1_0/requesttowithdraw",
     content,
     headers);
+                var response = await sendRequest.Content.ReadAsStringAsync();
 
                 if (sendRequest.IsSuccessStatusCode)
                 {
@@ -237,6 +302,81 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
 
         }
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
+        {
+            var @params = await RetrieveParams(parameters, Env);
+            var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
+            var callbackUrl = _configuration["CallbackUrl"];
+            try
+            {
+                request.Currency = Env == "Demo" ? "EUR" : (!string.IsNullOrWhiteSpace(request.Currency) ? request.Currency : "NGN");
+
+                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "collection");
+                var headers = GenerateHeader(@params, token.AccessToken);
+                headers.Add("X-Reference-Id", request.TransactionReference);
+                if (!string.IsNullOrWhiteSpace(callbackUrl))
+                    headers.Add("X-Callback-Url", callbackUrl);
+
+
+
+                var body = new
+                {
+                    amount = request.Amount.ToString("0"),  // "600" not 600.00
+                    currency = request.Currency,
+                    externalId = request.TransactionReference,
+                    payer = new
+                    {
+                        partyIdType = "MSISDN",
+                        partyId = request.WalletNumber
+                    },
+                    payerMessage = request.Message,
+                    payeeNote = request.Message
+                };
+                _log.LogInformation(
+     "MTN MoMo RequestToPay Request. Url={Url} Headers={Headers} Body={Body}",
+     $"{@params.BaseUrl}/collection/v1_0/requesttopay",
+     JsonConvert.SerializeObject(headers),
+     JsonConvert.SerializeObject(body, Formatting.Indented));
+                var serializedBody = JsonConvert.SerializeObject(body, Formatting.Indented);
+                _log.LogInformation("MTN MoMo RequestToPay Payload: {Payload}", serializedBody);
+
+                var content = new StringContent(serializedBody, Encoding.UTF8, "application/json");
+
+
+                var sendRequest = await _httpService.Post(
+    $"{@params.BaseUrl}/collection/v1_0/requesttopay",
+    content,
+    headers);
+                var response = await sendRequest.Content.ReadAsStringAsync();
+
+
+                if (sendRequest.IsSuccessStatusCode)
+                {
+                    var paymentResponse = new PaymentResponse
+                    {
+                        Status = sendRequest.StatusCode.ToString(),
+                        Reference = request.TransactionReference,
+                        ProviderReference= request.TransactionReference,
+                        
+                    };
+                    
+                    return WalletResponseService<PaymentResponse>.Success(paymentResponse, message: $"Dial *671*1*1*1*{request.WalletNumber}*{request.Amount}#");
+                }
+
+                else
+                {
+                    var errorMessage = $"Request failed with status code {sendRequest.StatusCode} ({sendRequest.ReasonPhrase})";
+                    return WalletResponseService<PaymentResponse>.Failed(errorMessage, (int)sendRequest.StatusCode);
+                }
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, $"Error Creating Wallet at Momo Service: {errorMsg}");
+                throw;
+            }
+
+        }
 
         public async Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
@@ -246,23 +386,29 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
            
         }
 
-        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletWithdrawalAsync(DisbursementRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
-            var basicAuth = BasicAuthHeader(@params.UserName, @params.DisbursementApiKey);
+            var basicAuth = BasicAuthHeader(@params.DisbursementUserName, @params.DisbursementApiKey);
             var callbackUrl = _configuration["CallbackUrl"];
             try
             {
-                var token = await GetProviderToken(@params, basicAuth, @params.SubscriptionKey, "disbursement");
+                var token = await GetProviderToken(@params, basicAuth, @params.DisbursementKey, "disbursement");
+                request.Currency = Env == "Demo" ? "EUR" : (!string.IsNullOrWhiteSpace(request.Currency) ? request.Currency : "NGN");
+      
 
-                var headers = GenerateHeader(@params, token.AccessToken);
+                var headers = GenerateDisbursementHeaders(@params, token.AccessToken);
                 headers.Add("X-Reference-Id", request.Reference);
-                headers.Add("X-Callback-Url", callbackUrl);
+
+                if (!string.IsNullOrWhiteSpace(callbackUrl))
+                    headers.Add("X-Callback-Url", callbackUrl);
+
 
                 var body = new
                 {
-                    amount = request.Amount,
+                    amount = request.Amount,  // "600" not 600.00
                     currency = request.Currency,
+
                     externalId = request.Reference,
                     payee = new
                     {
@@ -303,6 +449,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 _log.LogError(ex, $"Error Creating Wallet at FCMBWallet Service: {errorMsg}");
                 throw;
             }
+        }
+
+      
+        private static Dictionary<string, string> GenerateDisbursementHeaders(ProviderParams @params, string BearerToken)
+        {
+            return new Dictionary<string, string>
+                {
+                    { "Authorization",  $"Bearer  {BearerToken}"},
+                    { "Ocp-Apim-Subscription-Key", @params.DisbursementKey },
+                    { "X-Target-Environment", @params.TargetEnvironment }
+                };
         }
 
         public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)

@@ -68,7 +68,40 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [NotMapped]
         public List<ValueChainSelectionDto> SelectedItems { get; set; }
     }
-   
+
+
+    /// <summary>
+    /// Persisted form of Farmer.SelectedItems (which is [NotMapped]).
+    ///
+    /// One row = one value-chain item selected by a farmer.
+    /// A farmer can have many selections (e.g. Crop > Cereals > Maize,
+    /// Livestock > Poultry > Broiler, etc.)
+    /// </summary>
+    public class FarmerValueChain
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+        public long Id { get; set; }
+
+        public long FarmerId { get; set; }
+        public Farmer Farmer { get; set; } = default!;
+
+        // ── Category (top-level grouping e.g. "Crop", "Livestock") ──────
+        public long CategoryId { get; set; }
+        public string CategoryName { get; set; } = default!;
+
+        // ── Type (mid-level e.g. "Cereals", "Poultry") ──────────────────
+        public long TypeId { get; set; }
+        public string TypeName { get; set; } = default!;
+
+        // ── Item (leaf e.g. "Maize", "Broiler") ─────────────────────────
+        public long ItemId { get; set; }
+        public string ItemName { get; set; } = default!;
+
+        public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
+        public string? CreatedByUserId { get; set; }
+    }
+
     public class FarmerCooperative
     {
         [Key]

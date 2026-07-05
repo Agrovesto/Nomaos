@@ -213,7 +213,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices
                     shouldVerifyNin = false,
                     BusinessCode = args.businessCode,
                     Password = args.DefaultPassword,
-                    Pin = "0000",
+                    Pin = "1234",
                     OrganizationCode = args.organizationCode,
                     CreatedOn = !string.IsNullOrEmpty(dateString) ? DateTimeOffset.Parse(dateString) : DateTimeOffset.UtcNow,
                     Bvn = bvn,

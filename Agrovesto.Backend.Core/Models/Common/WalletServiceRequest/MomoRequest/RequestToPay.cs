@@ -7,6 +7,18 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
 {
+    public class ReconciliationAlertRequest
+    {
+        public string senderEmail { get; set; }
+        public string RecipientEmail { get; set; }
+        public string Subject { get; set; }
+        public string bodyHtm { get; set; }
+        public string bodyText { get; set; }
+        public string DebitReference { get; set; }
+        public string CreditReference { get; set; }
+        public string Reason { get; set; }
+        public DateTimeOffset FlaggedAt { get; set; }
+    }
     public class CollectionRequest
     {
         public string Amount { get; set; }
@@ -15,7 +27,7 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string AccountNumber { get; set; } // MSISDN
         public string Message { get; set; }
     }
-    public class DisbursementRequest
+    public class TransferRequest
     {
         public string Amount { get; set; }
         public string Currency { get; set; }
@@ -172,8 +184,10 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
     {
         public string BaseUrl { get; set; }
         public string SubscriptionKey { get; set; }
+        public string DisbursementKey { get; set; }
         public string ProviderKey { get; set; }
         public string UserName { get; set; }
+        public string DisbursementUserName { get; set; }
         public string SubscriptionApiKey { get; set; }
         public string DisbursementApiKey { get; set; }
         public string TargetEnvironment { get; set; }
