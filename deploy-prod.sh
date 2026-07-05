@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy-staging.sh  <commit-sha>
+# deploy-prod.sh  <commit-sha>
 # ─────────────────────────────────────────────────────────────────────────────
 # Runs on the EC2. Never compiles anything. The artifact was already rsync'd
 # by GitHub Actions into /var/www/Nomaos/incoming/<sha>/
