@@ -289,8 +289,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-                ResolveUserContext(args);
-                if (CurrentUserId !=null &&  CurrentUserRole != args.userType)
+                if (string.IsNullOrWhiteSpace(args.UserId))
+                {
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "UserId must be provided to create a profile for the farmer."
+                    );
+                }
+                // ResolveUserContext(args);
+                if (CurrentUserId !=null )
+                    //&&  !CurrentUserRoles.Contains(args.userType))
                 {
                     await EnrichArgsByRoleAsync(args);
                 }
@@ -1016,8 +1024,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
-            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-            var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
+         //   args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
 
             if (agent == null)
                 throw new BaseException(
@@ -1053,25 +1061,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.organizationCode = OrganizationCode;
             }
         }
-        private void ResolveUserContext(OnBoardingArgs args)
-        {
-            var currentRole = CurrentUserRole;
+        //private void ResolveUserContext(OnBoardingArgs args)
+        //{
+        //    var currentRole = CurrentUserRole;
 
-            if (currentRole == "Farmer")
-            {
-                args.UserId ??= CurrentUserId;
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(args.UserId))
-                {
-                    throw new BaseException(
-                        ExceptionType.BAD_REQUEST,
-                        "UserId must be provided to create a profile for the farmer."
-                    );
-                }
-            }
-        }
+        //    if (currentRole == "Farmer")
+        //    {
+        //        args.UserId ??= CurrentUserId;
+        //    }
+        //    else
+        //    {
+        //        if (string.IsNullOrWhiteSpace(args.UserId))
+        //        {
+        //            throw new BaseException(
+        //                ExceptionType.BAD_REQUEST,
+        //                "UserId must be provided to create a profile for the farmer."
+        //            );
+        //        }
+        //    }
+        //}
 
     }
 }

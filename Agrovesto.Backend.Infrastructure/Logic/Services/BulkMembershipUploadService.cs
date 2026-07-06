@@ -35,11 +35,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task<BulkUploadResult> ProcessBulkMembershipUploadAsync(
-     List<BulkMembershipRowDto> rows, OnBoardingArgs args)
+       List<BulkMembershipRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkUploadResult { TotalRows = rows.Count };
 
-            // Prefetch lookup tables
             var membershipTypeMap = await _db.MemberShipTypes
                 .Where(t => t.BusinessCode == args.businessCode)
                 .ToDictionaryAsync(t => t.Name.ToLower(), t => t);
@@ -49,60 +48,99 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 .ToDictionaryAsync(b => b.BusinessCode, b => b);
 
             var orgMap = new Dictionary<string, Organization>();
-            var orgCodes = rows
-                .Where(r => !string.IsNullOrWhiteSpace(args.organizationCode))
-                .Select(r => args.organizationCode)
-                .Distinct()
-                .ToList();
-
-            if (orgCodes.Any())
+            if (!string.IsNullOrWhiteSpace(args.organizationCode))
             {
                 orgMap = await _db.Organizations
-                    .Where(o => orgCodes.Contains(o.OrganizationCode))
+                    .Where(o => o.OrganizationCode == args.organizationCode)
                     .ToDictionaryAsync(o => o.OrganizationCode, o => o);
             }
 
-            // ── Pre-validate duplicates (2 DB calls, no transactions) ────
+            // ── Pre-fetch existing users by phone (to REUSE, not reject) ──
             var incomingPhones = rows.Select(r => r.LeaderPhoneNumber).ToList();
-            var existingPhones = (await _db.Users
-                .Where(u => incomingPhones.Contains(u.PhoneNumber)
-                         && u.BusinessCode == args.businessCode)
-                .Select(u => u.PhoneNumber)
+            var existingUsersByPhone = (await _db.Users
+                .Where(u => incomingPhones.Contains(u.PhoneNumber))
                 .ToListAsync())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .ToDictionary(u => u.PhoneNumber, u => u, StringComparer.OrdinalIgnoreCase);
 
-            var incomingNames = rows.Select(r => r.MembershipName).ToList();
-            var existingNames = (await _db.MemberShips
-                .Where(m => incomingNames.Contains(m.Name)
-                         && m.BelongToBusinessCode == args.businessCode)
-                .Select(m => m.Name)
+            // ── Real duplicate check: user already a Membership leader for THIS business (+ org) ──
+            var existingUserIds = existingUsersByPhone.Values.Select(u => u.Id).ToList();
+
+            var existingMembershipUserIds = (await _db.MemberShips
+                .Where(m => existingUserIds.Contains(m.UserId) && m.BelongToBusinessCode == args.businessCode)
+                .Select(m => m.UserId)
                 .ToListAsync())
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                .ToHashSet();
+
+            HashSet<string> existingMembershipUserIdsInOrg = new();
+            if (!string.IsNullOrWhiteSpace(args.organizationCode)
+                && orgMap.TryGetValue(args.organizationCode, out var currentOrg))
+            {
+                existingMembershipUserIdsInOrg = (await _db.OrganizationMemberships
+                    .Where(om => om.OrganizationId == currentOrg.OrganizationId
+                              && existingMembershipUserIds.Contains(om.MemberShip.UserId))
+                    .Select(om => om.MemberShip.UserId)
+                    .ToListAsync())
+                    .ToHashSet();
+            }
+            var incomingNames = rows.Select(r => r.MembershipName).ToList();
+
+            // Fetch existing MemberShips in this business by name, so we can REUSE them
+            var existingMembershipsByName = (await _db.MemberShips
+                .Where(m => incomingNames.Contains(m.Name) && m.BelongToBusinessCode == args.businessCode)
+                .ToListAsync())
+                .ToDictionary(m => m.Name, m => m, StringComparer.OrdinalIgnoreCase);
+
+            // Of those, which are ALREADY linked to the current organization? — that's the real duplicate.
+            HashSet<long> alreadyLinkedMembershipIds = new();
+            if (!string.IsNullOrWhiteSpace(args.organizationCode)
+                && orgMap.TryGetValue(args.organizationCode, out var currentOrgForNameCheck))
+            {
+                var candidateMembershipIds = existingMembershipsByName.Values.Select(m => m.Id).ToList();
+
+                alreadyLinkedMembershipIds = (await _db.OrganizationMemberships
+                    .Where(om => candidateMembershipIds.Contains(om.MemberShip.Id)
+                              && om.OrganizationId == currentOrgForNameCheck.OrganizationId)
+                    .Select(om => om.MemberShip.Id)
+                    .ToListAsync())
+                    .ToHashSet();
+            }
 
             foreach (var row in rows)
             {
-                if (existingPhones.Contains(row.LeaderPhoneNumber))
-                    result.Errors.Add(new MembershipRowError
-                    {
-                        RowNumber = row.RowNumber,
-                        PhoneNumber = row.LeaderPhoneNumber,
-                        Messages = new List<string>
-                    { $"Row {row.RowNumber}: phone number '{row.LeaderPhoneNumber}' already exists." }
-                    });
+                // Phone/leader check (unchanged from before)
+                if (existingUsersByPhone.TryGetValue(row.LeaderPhoneNumber, out var existingUser))
+                {
+                    bool alreadyMemberOfBusiness = existingMembershipUserIds.Contains(existingUser.Id);
+                    bool alreadyMemberOfOrg = string.IsNullOrWhiteSpace(args.organizationCode)
+                        || existingMembershipUserIdsInOrg.Contains(existingUser.Id);
 
-                if (existingNames.Contains(row.MembershipName))
+                    if (alreadyMemberOfBusiness && alreadyMemberOfOrg)
+                    {
+                        result.Errors.Add(new MembershipRowError
+                        {
+                            RowNumber = row.RowNumber,
+                            PhoneNumber = row.LeaderPhoneNumber,
+                            Messages = new List<string>
+                { $"Row {row.RowNumber}: this leader is already onboarded as a membership for this organization." }
+                        });
+                    }
+                }
+
+                // Membership name check — only a duplicate if ALREADY LINKED TO THIS ORG
+                if (existingMembershipsByName.TryGetValue(row.MembershipName, out var existingMembership)
+                    && alreadyLinkedMembershipIds.Contains(existingMembership.Id))
+                {
                     result.Errors.Add(new MembershipRowError
                     {
                         RowNumber = row.RowNumber,
                         MembershipName = row.MembershipName,
                         Messages = new List<string>
-                    { $"Row {row.RowNumber}: membership name '{row.MembershipName}' already exists." }
+            { $"Row {row.RowNumber}: membership '{row.MembershipName}' is already onboarded in this organization." }
                     });
+                }
             }
 
-            result.FailureCount = result.Errors.Count; // ← sync failure count from pre-validation
-
-            // ── Only chunk and process rows that passed ───────────────────
+            result.FailureCount = result.Errors.Select(e => e.RowNumber).Distinct().Count();
             var validRows = rows.Where(r =>
                 !result.Errors.Any(e => e.RowNumber == r.RowNumber)).ToList();
 
@@ -126,7 +164,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                         foreach (var row in currentChunk)
                         {
                             await ProcessSingleRowAsync(
-                                row, membershipTypeMap, businessMap, orgMap, args);
+      row, membershipTypeMap, businessMap, orgMap,
+      existingUsersByPhone, existingMembershipsByName, args);
                         }
 
                         await _db.SaveChangesAsync();
@@ -171,125 +210,144 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             return result;
         }
         private async Task ProcessSingleRowAsync(
-            BulkMembershipRowDto row,
-            Dictionary<string, MemberShipType> typeMap,
-            Dictionary<string, Business> businessMap,
-            Dictionary<string, Organization> orgMap, OnBoardingArgs args)
+           BulkMembershipRowDto row,
+           Dictionary<string, MemberShipType> typeMap,
+           Dictionary<string, Business> businessMap,
+           Dictionary<string, Organization> orgMap,
+           Dictionary<string, User> existingUsersByPhone,
+           Dictionary<string, MemberShip> existingMembershipsByName,
+           OnBoardingArgs args)
         {
-
-            // ── Split leader name into parts ──────────────────────────
-            var nameParts = (row.LeaderName ?? "").Split(' ',
-                StringSplitOptions.RemoveEmptyEntries);
+            var nameParts = (row.LeaderName ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var firstName = nameParts.ElementAtOrDefault(0);
-            var middleName = nameParts.Length > 2
-                ? nameParts.ElementAtOrDefault(1) : null;
-            var lastName = nameParts.Length > 1
-                ? nameParts.Last() : null;
+            var middleName = nameParts.Length > 2 ? nameParts.ElementAtOrDefault(1) : null;
+            var lastName = nameParts.Length > 1 ? nameParts.Last() : null;
 
             var membershipType = typeMap[row.MembershipType.ToLower()];
             var business = businessMap[args.businessCode];
 
-            // ── 1. Create the User account ────────────────────────────
-            var userId = Guid.NewGuid().ToString();
-            var user = new User
+            // ── 1. Reuse existing User by phone, or create one ───────
+            User user;
+            bool isNewUser = !existingUsersByPhone.TryGetValue(row.LeaderPhoneNumber, out user!);
+
+            if (isNewUser)
             {
-                Id = userId,
-                Name = $"{firstName} {middleName} {lastName}",
-                CreatedOn= DateTimeOffset.Now,
-                CreatedBy= args.UserId,
-                UserType="MemberShip",
-                BusinessCode=args.businessCode,
-                IsActive=true,
-                UserName=row.LeaderPhoneNumber,
-                Pin="1234",
-                PhoneNumber = row.LeaderPhoneNumber,
-                // Email / password not set for bulk-imported members;
-                // they complete registration separately via invite flow
-            };
-            await _db.Users.AddAsync(user);
+                user = new User
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Name = $"{firstName} {middleName} {lastName}",
+                    CreatedOn = DateTimeOffset.Now,
+                    CreatedBy = args.UserId,
+                    UserType = "MemberShip",
+                    BusinessCode = args.businessCode,
+                    IsActive = true,
+                    UserName = row.LeaderPhoneNumber,
+                    Pin = "1234",
+                    PhoneNumber = row.LeaderPhoneNumber,
+                };
+                await _db.Users.AddAsync(user);
+                existingUsersByPhone[row.LeaderPhoneNumber] = user;
+            }
 
-            // ── 2. Create the Membership record ──────────────────────
-            var membership = new MemberShip
+            // ── 2. Reuse existing MemberShip by name+business, or create one ──
+            MemberShip membership;
+            bool isNewMembership = !existingMembershipsByName.TryGetValue(row.MembershipName, out membership!);
+
+            if (isNewMembership)
             {
-                Name = row.MembershipName,
-                State = row.State,
-                Lga = row.LGA,
-                Location = row.Location,
-                MembershipLeaderFirstName = firstName,
-                MembershipLeaderMiddleName = middleName,
-                MembershipLeaderLastName = lastName,
-                PhoneNumber = row.LeaderPhoneNumber,
-                UserId = userId,
-                BelongToBusinessCode = args.businessCode,
-                MemberShipTypeId = membershipType.Id,
-                OnboardedById = args.UserId,
-                TierLevel = Tier.None,
-                IsActive = true,
-                OnBoardedOn = DateTimeOffset.UtcNow,
-            };
-            await _db.MemberShips.AddAsync(membership);
+                membership = new MemberShip
+                {
+                    Name = row.MembershipName,
+                    State = row.State,
+                    Lga = row.LGA,
+                    Location = row.Location,
+                    MembershipLeaderFirstName = firstName,
+                    MembershipLeaderMiddleName = middleName,
+                    MembershipLeaderLastName = lastName,
+                    PhoneNumber = row.LeaderPhoneNumber,
+                    UserId = user.Id,
+                    BelongToBusinessCode = args.businessCode,
+                    MemberShipTypeId = membershipType.Id,
+                    OnboardedById = args.UserId,
+                    TierLevel = Tier.None,
+                    IsActive = true,
+                    OnBoardedOn = DateTimeOffset.UtcNow,
+                };
+                await _db.MemberShips.AddAsync(membership);
 
-            // EF needs the Membership PK before writing junction records;
-            // SaveChanges is called at the END of the chunk, so we use
-            // a temporary state approach: add all entities and let EF
-            // resolve FK relationships via navigation properties.
-            // Alternatively, call SaveChanges here and rely on the outer
-            // transaction for rollback safety — choose based on your
-            // EF setup.
+                // Track so later rows in the SAME batch with this name reuse it too
+                existingMembershipsByName[row.MembershipName] = membership;
+            }
 
-            // ── 3. UserBusiness (REQUIRED — at least one business) ───
-            var userBusiness = new UserBusiness
+            // ── 3. UserBusiness — only add if not already linked ─────
+            bool alreadyInBusiness = !isNewUser && await _db.UserBusinesses
+                .AnyAsync(ub => ub.UserId == user.Id && ub.BusinessId == business.BusinessId);
+
+            if (!alreadyInBusiness)
             {
-                UserId = userId,
-                BusinessId = business.BusinessId,
-                IsDefault = true,
-                IsActive = true,
-                JoinedOn = DateTimeOffset.UtcNow,
-                InvitedBy = args.UserId,
-            };
-            await _db.UserBusinesses.AddAsync(userBusiness);
+                await _db.UserBusinesses.AddAsync(new UserBusiness
+                {
+                    UserId = user.Id,
+                    BusinessId = business.BusinessId,
+                    IsDefault = true,
+                    IsActive = true,
+                    JoinedOn = DateTimeOffset.UtcNow,
+                    InvitedBy = args.UserId,
+                });
+            }
 
-            // ── 4. Organization links (CONDITIONAL) ──────────────────
+            // ── 4. Organization links — only add if not already linked ──
             if (!string.IsNullOrWhiteSpace(args.organizationCode)
                 && orgMap.TryGetValue(args.organizationCode, out var org))
             {
-                var userOrg = new UserOrganization
-                {
-                    UserId = userId,
-                    OrganizationCode = org.OrganizationCode,
-                    IsActive = true,
-                    //JoinedOn = DateTimeOffset.UtcNow,
-                };
-                await _db.UserOrganizations.AddAsync(userOrg);
+                bool alreadyInOrgAsUser = !isNewUser && await _db.UserOrganizations
+                    .AnyAsync(uo => uo.UserId == user.Id && uo.OrganizationCode == org.OrganizationCode);
 
-                // OrganizationMembership is written after membership is
-                // tracked by EF — use the navigation property so EF
-                // resolves the FK automatically
-                var orgMembership = new OrganizationMembership
+                if (!alreadyInOrgAsUser)
                 {
-                    OrganizationId = org.OrganizationId,
-                    MemberShip = membership, // EF resolves Id
-                    AssignedByUserId = args.UserId,
-                    IsActive = true,
-                    AssignedOn = DateTimeOffset.UtcNow,
-                };
-                await _db.OrganizationMemberships.AddAsync(orgMembership);
+                    await _db.UserOrganizations.AddAsync(new UserOrganization
+                    {
+                        UserId = user.Id,
+                        OrganizationCode = org.OrganizationCode,
+                        IsActive = true,
+                    });
+                }
+
+                bool membershipAlreadyInOrg = !isNewMembership && await _db.OrganizationMemberships
+                    .AnyAsync(om => om.MemberShip.Id == membership.Id && om.OrganizationId == org.OrganizationId);
+
+                if (!membershipAlreadyInOrg)
+                {
+                    await _db.OrganizationMemberships.AddAsync(new OrganizationMembership
+                    {
+                        OrganizationId = org.OrganizationId,
+                        MemberShip = membership,
+                        AssignedByUserId = args.UserId,
+                        IsActive = true,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                    });
+                }
             }
 
-            // ── 5. Agent link (CONDITIONAL) ──────────────────────────
+            // ── 5. Agent link ──────────────────────────────────────
             if (args.Id > 0)
             {
-                var membershipAgent = new MemberShipAgent
-                {
-                    AgentId = args.Id,
-                    MemberShip = membership, // EF resolves Id
-                    OnboardedByUserId = args.UserId,
-                    IsActive = true,
-                    AssignedOn = DateTimeOffset.UtcNow,
-                };
-                await _db.MemberShipAgents.AddAsync(membershipAgent);
+                bool alreadyLinkedToAgent = !isNewMembership && await _db.MemberShipAgents
+                    .AnyAsync(ma => ma.MemberShip.Id == membership.Id && ma.AgentId == args.Id);
 
-                membership.HasbeenAssignedAgent = true;
+                if (!alreadyLinkedToAgent)
+                {
+                    await _db.MemberShipAgents.AddAsync(new MemberShipAgent
+                    {
+                        AgentId = args.Id,
+                        MemberShip = membership,
+                        OnboardedByUserId = args.UserId,
+                        IsActive = true,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                    });
+
+                    membership.HasbeenAssignedAgent = true;
+                }
             }
         }
     }

@@ -66,17 +66,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
         public async Task<OrganizationResponseModel> CreateOrUpdateOrganization(
-    OrganizationOnboardingModel orgModel,
-    OrganizationOnboardingArgs args)
+       OrganizationOnboardingModel orgModel,
+       OrganizationOnboardingArgs args)
         {
             // STEP 1: Resolve Business
             var business = await _context.Businesses
-                .FirstOrDefaultAsync(x =>
-                    x.BusinessCode == args.businessCode);
+                .FirstOrDefaultAsync(x => x.BusinessCode == args.businessCode);
 
             if (business == null)
                 throw new Exception("Invalid business");
 
+            // STEP 2: Check for existing organization
             var orgExist = await _context.Organizations
                 .Include(x => x.OrganizationBusinesses)
                 .FirstOrDefaultAsync(x =>
@@ -85,85 +85,90 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             if (orgExist != null)
             {
-                if (!string.IsNullOrWhiteSpace(orgModel.ContactEmail))
-                    orgExist.ContactEmail = orgModel.ContactEmail;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.CompanyEmail))
-                    orgExist.OrganizationEmail = orgModel.CompanyEmail;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.CompanyName))
-                    orgExist.CompanyName = orgModel.CompanyName;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.FirstName))
-                    orgExist.FirstName = orgModel.FirstName;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.LastName))
-                    orgExist.LastName = orgModel.LastName;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.PhoneNumber))
-                    orgExist.PhoneNumber = orgModel.PhoneNumber;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.OrganizationPhone))
-                    orgExist.OrganizationPhone = orgModel.OrganizationPhone;
-
-                if (orgModel.StateId > 0)
-                    orgExist.StateId = orgModel.StateId;
-
-                if (orgModel.LgaId > 0)
-                    orgExist.LgaId = orgModel.LgaId;
-
-                if (!string.IsNullOrWhiteSpace(orgModel.CompanyAddress))
-                    orgExist.CompanyAddress = orgModel.CompanyAddress;
-
-                if (orgModel.CompanyType.HasValue)
-                    orgExist.CompanyType = orgModel.CompanyType.ToString();
-
-                if (!string.IsNullOrWhiteSpace(orgModel.CACNumber))
-                    orgExist.CACNumber = orgModel.CACNumber;
-
-                if (orgModel.RoleInOrganization.HasValue)
-                    orgExist.RoleInOrganization = orgModel.RoleInOrganization.ToString();
-
-                bool alreadyLinked = orgExist.OrganizationBusinesses
-                    .Any(x => x.BusinessId == business.BusinessId);
-
-                if (!alreadyLinked)
-                {
-                    orgExist.OrganizationBusinesses.Add(new OrganizationBusiness
-                    {
-                        BusinessId = business.BusinessId,
-                        IsActive = true
-                    });
-                }
+                UpdateOrganizationFields(orgExist, orgModel);
+                LinkBusinessIfMissing(orgExist, business.BusinessId);
 
                 await _context.SaveChangesAsync();
-
                 return orgExist.ViewOnboardMap();
             }
 
-
-            orgModel.OrganizationCode =
-                await GenerateOrganizationCodeAsync(orgModel.CompanyName);
+            // STEP 3: Create new organization
+            orgModel.OrganizationCode = await GenerateOrganizationCodeAsync(orgModel.CompanyName);
 
             var org = orgModel.OnboardMap();
-
             org.UserId = args.userId;
             org.OrganizationCode = orgModel.OrganizationCode;
-
-            
+            org.BusinessCode = args.businessCode;
             org.OrganizationBusinesses.Add(new OrganizationBusiness
             {
                 BusinessId = business.BusinessId,
-                IsActive = true
+                IsActive = true,
+                CreatedOn = DateTimeOffset.Now
             });
 
             _context.Organizations.Add(org);
-
-            // await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
             return org.ViewOnboardMap();
         }
-        //   public async Task<OrganizationResponseModel> CreateOrUpdateOrganization(
+
+        private static void UpdateOrganizationFields(Organization orgExist, OrganizationOnboardingModel orgModel)
+        {
+            if (!string.IsNullOrWhiteSpace(orgModel.ContactEmail))
+                orgExist.ContactEmail = orgModel.ContactEmail;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.CompanyEmail))
+                orgExist.OrganizationEmail = orgModel.CompanyEmail;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.CompanyName))
+                orgExist.CompanyName = orgModel.CompanyName;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.FirstName))
+                orgExist.FirstName = orgModel.FirstName;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.LastName))
+                orgExist.LastName = orgModel.LastName;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.PhoneNumber))
+                orgExist.PhoneNumber = orgModel.PhoneNumber;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.OrganizationPhone))
+                orgExist.OrganizationPhone = orgModel.OrganizationPhone;
+
+            if (orgModel.StateId > 0)
+                orgExist.StateId = orgModel.StateId;
+
+            if (orgModel.LgaId > 0)
+                orgExist.LgaId = orgModel.LgaId;
+
+            if (!string.IsNullOrWhiteSpace(orgModel.CompanyAddress))
+                orgExist.CompanyAddress = orgModel.CompanyAddress;
+
+            if (orgModel.CompanyType.HasValue)
+                orgExist.CompanyType = orgModel.CompanyType.ToString();
+
+            if (!string.IsNullOrWhiteSpace(orgModel.CACNumber))
+                orgExist.CACNumber = orgModel.CACNumber;
+
+            if (orgModel.RoleInOrganization.HasValue)
+                orgExist.RoleInOrganization = orgModel.RoleInOrganization.ToString();
+        }
+
+        private static void LinkBusinessIfMissing(Organization orgExist, long businessId)
+        {
+            bool alreadyLinked = orgExist.OrganizationBusinesses
+                .Any(x => x.BusinessId == businessId);
+
+            if (!alreadyLinked)
+            {
+                orgExist.OrganizationBusinesses.Add(new OrganizationBusiness
+                {
+                    BusinessId = businessId,
+                    IsActive = true,
+                    CreatedOn = DateTimeOffset.Now
+                });
+            }
+        } //   public async Task<OrganizationResponseModel> CreateOrUpdateOrganization(
         //OrganizationOnboardingModel orgModel,
         //OrganizationOnboardingArgs args)
         //   {

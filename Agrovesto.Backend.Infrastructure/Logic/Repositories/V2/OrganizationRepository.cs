@@ -3845,32 +3845,180 @@ SELECT
       
          **/
 
+        //    public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query)
+        //    {
+        //        if (string.IsNullOrWhiteSpace(query.organizationCode))
+        //            throw new ValidationException("Organization code is required");
+
+        //        var farmerData = await (
+        //            from fo in _context.FarmerOrganizations
+        //            join f in _context.Farmers on fo.FarmerId equals f.Id
+        //            join u in _context.Users on f.UserId equals u.Id into userJoin
+        //            from u in userJoin.DefaultIfEmpty()
+        //            where fo.OrganizationCode == query.organizationCode
+        //                  && f.Id == query.Id
+        //            select new { Farmer = f, User = u }
+        //        ).FirstOrDefaultAsync();
+
+        //        if (farmerData == null)
+        //            throw new NotFoundException("Farmer not found in this organization");
+
+        //        var farmer = farmerData.Farmer;
+        //        var user = farmerData.User;
+
+        //        var farmerImage = await _context.FarmerImages
+        //            .Where(x => x.FarmerUserId == farmer.UserId)
+        //            .Select(x => x.IMageKey)
+        //            .FirstOrDefaultAsync();
+
+        //        var valueChainItems = await _context.FarmerValueChainItems
+        //            .Where(x => x.FarmerId == farmer.Id)
+        //            .Select(x => new FarmerValueChainItemDto
+        //            {
+        //                ValueChainType = x.ValueChainType,
+        //                ItemName = x.ItemName
+        //            })
+        //            .ToListAsync();
+
+        //        var farms = await _context.Farms
+        //            .Where(f => f.FarmerId == farmer.Id)
+        //            .ToListAsync();
+        //        var agents = await (
+        //from fa in _context.FarmerAgents
+        //join a in _context.Agents on fa.AgentId equals a.Id
+        //where fa.FarmerId == farmer.Id
+        //      && fa.OrganizationCode == query.organizationCode
+        //select new OrganizationFarmerAgentDto
+        //{
+        //    AgentId = a.Id,
+        //    AgentName = a.Name,
+        //    AgentUserId = a.UserId,
+        //    AssignedOn = fa.AssignedOn,
+        //    Active = a.IsActive
+        //})
+        //.ToListAsync();
+
+        //        var memberships = await (
+        //            from fc in _context.FarmerCooperatives
+        //            join c in _context.MemberShips on fc.CooperativeId equals c.Id
+        //            where fc.FarmerId == farmer.Id
+        //                  && fc.OrganizationCode == query.organizationCode
+        //            select new OrganizationFarmerCooperativeDto
+        //            {
+        //                MembershipId = c.Id,
+        //                MembershipName = c.Name,
+        //                JoinedOn = fc.JoinedOn,
+        //                IsActive = c.IsActive
+        //            })
+        //            .ToListAsync();
+        //        //var agents = await (
+        //        //    from fa in _context.FarmerAgents
+        //        //    join a in _context.Agents on fa.AgentId equals a.Id
+        //        //    where fa.FarmerId == farmer.Id
+        //        //    select new OrganizationFarmerAgentDto
+        //        //    {
+        //        //        AgentId = a.Id,
+        //        //        AgentName = a.Name,
+        //        //        AgentUserId = a.UserId,
+        //        //        AssignedOn = fa.AssignedOn,
+        //        //        Active = a.IsActive
+        //        //    })
+        //        //    .ToListAsync();
+
+        //        //var memberships = await (
+        //        //    from fc in _context.FarmerCooperatives
+        //        //    join c in _context.MemberShips on fc.CooperativeId equals c.Id
+        //        //    where fc.FarmerId == farmer.Id
+        //        //    select new OrganizationFarmerCooperativeDto
+        //        //    {
+        //        //        MembershipId = c.Id,
+        //        //        MembershipName = c.Name,
+        //        //        JoinedOn = fc.JoinedOn,
+        //        //        IsActive = c.IsActive
+        //        //    })
+        //        //    .ToListAsync();
+
+        //        return new OrganizationFarmerDetailResponse
+        //        {
+        //            FarmerId = farmer.Id,
+        //            UserId = farmer.UserId,
+        //            Name = farmer.Name,
+        //            PhoneNumber = farmer.PhoneNumber,
+        //            Email = farmer.Email,
+        //            Gender = farmer.Gender,
+        //            Dob = farmer.DateOfBirth,
+        //            BVN = user?.BVN,
+        //            NIN = user?.NIN,
+        //            FarmerImage = farmerImage,
+
+        //            State = farmer.State,
+        //            Lga = farmer.Lga,
+        //            Ward = farmer.Ward,
+        //            Location = farmer.Location,
+
+        //            FarmerCategory = farmer.FarmerCategory,
+        //            Level = EnumExtensions.GetDisplayName(farmer.Level),
+        //            CreatedOn = farmer.OnBoardedOn,
+
+        //            YearsInAgric = farmer.YearsInAgric,
+        //            FarmSize = farms.Sum(x => x.FarmSize),
+
+        //            ValueChainItems = valueChainItems,
+        //            Agents = agents,
+        //            Memberships = memberships
+        //        };
+        //    }
+
         public async Task<OrganizationFarmerDetailResponse> GetFarmerDetailsAsync(ListQueryParams query)
         {
-            if (string.IsNullOrWhiteSpace(query.organizationCode))
-                throw new ValidationException("Organization code is required");
+            bool hasOrgScope = !string.IsNullOrWhiteSpace(query.organizationCode);
 
-            var farmerData = await (
-                from fo in _context.FarmerOrganizations
-                join f in _context.Farmers on fo.FarmerId equals f.Id
-                join u in _context.Users on f.UserId equals u.Id into userJoin
-                from u in userJoin.DefaultIfEmpty()
-                where fo.OrganizationCode == query.organizationCode
-                      && f.Id == query.Id
-                select new { Farmer = f, User = u }
-            ).FirstOrDefaultAsync();
+            Farmer? farmer;
+            User? user;
 
-            if (farmerData == null)
-                throw new NotFoundException("Farmer not found in this organization");
+            if (hasOrgScope)
+            {
+                // Org-scoped lookup: farmer must actually belong to this organization
+                var farmerData = await (
+                    from fo in _context.FarmerOrganizations
+                    join f in _context.Farmers on fo.FarmerId equals f.Id
+                    join u in _context.Users on f.UserId equals u.Id into userJoin
+                    from u in userJoin.DefaultIfEmpty()
+                    where fo.OrganizationCode == query.organizationCode
+                          && f.Id == query.Id
+                    select new { Farmer = f, User = u }
+                ).FirstOrDefaultAsync();
 
-            var farmer = farmerData.Farmer;
-            var user = farmerData.User;
+                if (farmerData == null)
+                    throw new NotFoundException("Farmer not found in this organization");
+
+                farmer = farmerData.Farmer;
+                user = farmerData.User;
+            }
+            else
+            {
+                // Global lookup: no organization restriction, farmer found by Id alone
+                var farmerData = await (
+                    from f in _context.Farmers
+                    join u in _context.Users on f.UserId equals u.Id into userJoin
+                    from u in userJoin.DefaultIfEmpty()
+                    where f.Id == query.Id
+                    select new { Farmer = f, User = u }
+                ).FirstOrDefaultAsync();
+
+                if (farmerData == null)
+                    throw new NotFoundException("Farmer not found");
+
+                farmer = farmerData.Farmer;
+                user = farmerData.User;
+            }
 
             var farmerImage = await _context.FarmerImages
                 .Where(x => x.FarmerUserId == farmer.UserId)
                 .Select(x => x.IMageKey)
                 .FirstOrDefaultAsync();
 
+            // Farmer-level facts — always global, no org filter
             var valueChainItems = await _context.FarmerValueChainItems
                 .Where(x => x.FarmerId == farmer.Id)
                 .Select(x => new FarmerValueChainItemDto
@@ -3884,30 +4032,42 @@ SELECT
                 .Where(f => f.FarmerId == farmer.Id)
                 .ToListAsync();
 
-            var agents = await (
+            var agentsQuery =
                 from fa in _context.FarmerAgents
                 join a in _context.Agents on fa.AgentId equals a.Id
                 where fa.FarmerId == farmer.Id
-                select new OrganizationFarmerAgentDto
+                select new { fa, a };
+
+            if (hasOrgScope)
+                agentsQuery = agentsQuery.Where(x => x.fa.OrganizationCode == query.organizationCode);
+
+            var agents = await agentsQuery
+                .Select(x => new OrganizationFarmerAgentDto
                 {
-                    AgentId = a.Id,
-                    AgentName = a.Name,
-                    AgentUserId = a.UserId,
-                    AssignedOn = fa.AssignedOn,
-                    Active = a.IsActive
+                    AgentId = x.a.Id,
+                    AgentName = x.a.Name,
+                    AgentUserId = x.a.UserId,
+                    AssignedOn = x.fa.AssignedOn,
+                    Active = x.a.IsActive
                 })
                 .ToListAsync();
 
-            var memberships = await (
+            var membershipsQuery =
                 from fc in _context.FarmerCooperatives
                 join c in _context.MemberShips on fc.CooperativeId equals c.Id
                 where fc.FarmerId == farmer.Id
-                select new OrganizationFarmerCooperativeDto
+                select new { fc, c };
+
+            if (hasOrgScope)
+                membershipsQuery = membershipsQuery.Where(x => x.fc.OrganizationCode == query.organizationCode);
+
+            var memberships = await membershipsQuery
+                .Select(x => new OrganizationFarmerCooperativeDto
                 {
-                    MembershipId = c.Id,
-                    MembershipName = c.Name,
-                    JoinedOn = fc.JoinedOn,
-                    IsActive = c.IsActive
+                    MembershipId = x.c.Id,
+                    MembershipName = x.c.Name,
+                    JoinedOn = x.fc.JoinedOn,
+                    IsActive = x.c.IsActive
                 })
                 .ToListAsync();
 

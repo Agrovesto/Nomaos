@@ -245,6 +245,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
         public string BusinessCode { get; set; }
+        public bool RequiresCredentialChange { get; set; }
+        public string SecurityNotice { get; set; }
         //  public UserObject User { get; set; }
     }
     public class OrganizationDto
