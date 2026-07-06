@@ -19,14 +19,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     public class MembershipController : BaseController
     {
 
+        private static readonly string[] AllowedExtensions = { ".csv", ".xlsx", ".xls" };
         private readonly IMembershipManager _membershipManager;
         private readonly IBusinessManager _businessManager;
         private readonly IOnBoardingManager _onBoardingManager;
-
+        private readonly ILogger<MembershipController> _logger;
         private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         public MembershipController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
+            ILogger<MembershipController> logger,
 
                 IBulkFarmerUploadService bulkFarmerUploadService,
             IMembershipManager membershipManager, IBusinessManager businessManager) : base(httpContextAccessor)
@@ -34,7 +36,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _onBoardingManager=onBoardingManager;
             _membershipManager = membershipManager;
             _businessManager = businessManager;
-
+            _logger = logger;
             _bulkFarmerUploadService = bulkFarmerUploadService;
         }
 
@@ -42,51 +44,129 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkUpload(
-            IFormFile file,
-            [FromQuery] OnBoardingArgs args)
+    IFormFile file,
+    [FromQuery] OnBoardingArgs args)
         {
-            // ── Basic input checks ────────────────────────────────────────
+            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
-            if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-                return BadRequest("Only CSV files are accepted.");
+            if (file.Length > MaxFileSizeBytes)
+                return Error("FILE_TOO_LARGE",
+                    $"That file is too large. Please upload a file smaller than {MaxFileSizeBytes / (1024 * 1024)} MB.");
 
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(extension))
+                return Error("FILE_TYPE_INVALID",
+                    "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
+
+            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
-                return BadRequest("businessCode is required.");
+                return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
             args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(args.UserId))
-                return Unauthorized("Access Denied");
+                return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
+                    StatusCodes.Status401Unauthorized);
+
             args.organizationCode = OrganizationCode;
-            await EnrichCooperativeAsync(args);
-
-
+              await EnrichCooperativeAsync(args);
+            // --- Parse file ---
             List<BulkFarmerRowDto> rows;
             try
             {
                 await using var stream = file.OpenReadStream();
-                rows = BulkFarmerCsvParser.Parse(stream);
+                rows = BulkFarmerCsvParser.Parse(stream, file.FileName);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Unsupported file type uploaded: {FileName}", file.FileName);
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
             }
             catch (Exception ex)
             {
-                return BadRequest($"Could not parse CSV: {ex.Message}");
+                _logger.LogError(ex, "Failed to parse bulk upload file: {FileName}", file.FileName);
+                return Error("FILE_PARSE_ERROR",
+                    "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
             }
 
             if (rows.Count == 0)
-                return BadRequest("The uploaded file contains no data rows.");
+                return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
 
-            var uploadedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            // --- Process ---
+            try
+            {
+                var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
 
+                int statusCode = result.Failed > 0
+                    ? StatusCodes.Status207MultiStatus
+                    : StatusCodes.Status200OK;
 
-            var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
-
-            int statusCode = result.Failed > 0 ? StatusCodes.Status207MultiStatus
-                                               : StatusCodes.Status200OK;
-
-            return StatusCode(statusCode, result);
+                return StatusCode(statusCode, result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Bulk farmer upload processing failed for business {BusinessCode}", args.businessCode);
+                return Error("UPLOAD_PROCESSING_FAILED",
+                    "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
+                    StatusCodes.Status500InternalServerError);
+            }
         }
+        private IActionResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
+        {
+            return StatusCode(statusCode, new ApiErrorResponse
+            {
+                Code = code,
+                Message = message
+            });
+        }
+        //public async Task<IActionResult> BulkUpload(
+        //    IFormFile file,
+        //    [FromQuery] OnBoardingArgs args)
+        //{
+        //    // ── Basic input checks ────────────────────────────────────────
+        //    if (file is null || file.Length == 0)
+        //        return BadRequest("No file uploaded.");
+
+        //    if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        //        return BadRequest("Only CSV files are accepted.");
+
+        //    if (string.IsNullOrWhiteSpace(args.businessCode))
+        //        return BadRequest("businessCode is required.");
+
+        //    args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+        //    if (string.IsNullOrWhiteSpace(args.UserId))
+        //        return Unauthorized("Access Denied");
+        //    args.organizationCode = OrganizationCode;
+        //    await EnrichCooperativeAsync(args);
+
+
+        //    List<BulkFarmerRowDto> rows;
+        //    try
+        //    {
+        //        await using var stream = file.OpenReadStream();
+        //        rows = BulkFarmerCsvParser.Parse(stream);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return BadRequest($"Could not parse CSV: {ex.Message}");
+        //    }
+
+        //    if (rows.Count == 0)
+        //        return BadRequest("The uploaded file contains no data rows.");
+
+        //    var uploadedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+
+
+        //    var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
+
+        //    int statusCode = result.Failed > 0 ? StatusCodes.Status207MultiStatus
+        //                                       : StatusCodes.Status200OK;
+
+        //    return StatusCode(statusCode, result);
+        //}
 
 
         [HttpPut("update-farmer-profile")]

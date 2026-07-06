@@ -149,7 +149,12 @@ namespace Agrovesto.Backend.Core.CoreUtils
         public string Message { get; set; }
         public T Data { get; set; }
     }
-
+    public class ApiErrorResponse
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public Dictionary<string, string>? Details { get; set; }
+    }
     public class PagedListResponse<T>
     {
         public string Code { get; set; }

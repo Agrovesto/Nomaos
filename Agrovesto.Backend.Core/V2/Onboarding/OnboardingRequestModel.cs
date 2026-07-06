@@ -324,8 +324,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? OnboardedByUserId { get; set; }
         public string businessCode { get; set; }
         public string? organizationCode { get; set; }
-        public List<long?>? CooperativeIds { get; set; }
-        public List<long?>? AgentIds { get; set; }
+        public List<long?>? CooperativeIds { get; set; } = new();
+        public List<long?>? AgentIds { get; set; } = new();
 
         //public string? env { get; set; }
     }
