@@ -195,10 +195,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     UserBusiness activeBusiness,
     List<OrganizationDto>? organizations,
     bool hasPendingOnboarding,
-    List<string>? modules = null)
+    List<string>? modules = null,
+    bool requiresCredentialChange = false)
         {
             var claims = new List<Claim>
     {
+        new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString()),
+        new Claim("RequiresCredentialChange", requiresCredentialChange.ToString()),
+
         new Claim(JwtRegisteredClaimNames.Sub, user.Id),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim(ClaimTypes.NameIdentifier, user.Id),
@@ -284,78 +288,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return claims;
         }
-        /**  private List<Claim> BuildClaims(
-        User user,
-        IList<string>? roles,
-        List<OrganizationDto>? organizations,
-        bool hasPendingOnboarding)
-          {
-              var claims = new List<Claim>
-      {
-
-          new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-          new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-          new Claim(ClaimTypes.NameIdentifier, user.Id),
-       
-          new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString())
-      };
-              var principalName =
-      user.Name ??
-      user.Email ??
-      user.PhoneNumber ??
-      user.Id;
-
-              claims.Add(new Claim(ClaimTypes.Name, principalName));
-
-              if (!string.IsNullOrWhiteSpace(user.Email))
-                  claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
-
-              if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
-                  claims.Add(new Claim("PhoneNumber", user.PhoneNumber));
-
-
-
-              claims.Add(new Claim(
-      "DisplayName",
-      user.Name ??
-      user.Email ??
-      user.PhoneNumber ??
-      "User"
-));
-              if (roles?.Any() == true)
-              {
-                  foreach (var role in roles)
-                  {
-                      claims.Add(new Claim(ClaimTypes.Role, role));
-                  }
-                  claims.Add(new Claim("Roles", string.Join(",", roles)));
-              }
-                if (!string.IsNullOrWhiteSpace(user.UserType))
-                  claims.Add(new Claim("UserType", user.UserType));
-
-              if (user.LastLoginDate.HasValue)
-                  claims.Add(new Claim("LastLogin", user.LastLoginDate.Value.ToString("O")));
-         
-              claims.Add(new Claim("MemberSince", user.CreatedOn.ToString("O")));
-
-              if (organizations?.Any() == true)
-              {
-                  claims.Add(new Claim(
-                      "Organizations",
-                      JsonConvert.SerializeObject(
-                          organizations.Select(o => new
-                          {
-                              o.OrganizationCode,
-                              o.OrganizationName
-                          })
-                      )
-                  ));
-              }
-
-              return claims;
-          }
-          **/
-
+      
         private async Task<List<OrganizationDto>> GetUserOrganizationsAsync(string userId)
         {
             var orgCodes = await _context.UserOrganizations
@@ -442,29 +375,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Roles = roles.ToList()
             };
         }
+        private (bool IsWeak, string Message) CheckWeakCredentials(User user, LoginModel model)
+        {
+            switch (model.LoginMethod)
+            {
+                case LoginType.Pin:
+                    if (model.Pin == "1234")
+                        return (true, "Your PIN is set to a default value. Please change it for security.");
+                    break;
+
+                case LoginType.Password:
+                    if (!string.IsNullOrWhiteSpace(model.Password) &&
+                        !string.IsNullOrWhiteSpace(user.PhoneNumber) &&
+                        model.Password == user.PhoneNumber)
+                        return (true, "Your password matches your phone number. Please change it for security.");
+                    break;
+            }
+
+            return (false, null);
+        }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
       LoginModel model)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
                 return (false, "Invalid credentials", null);
-            //var user = await _userManager.Users
-            //    .FirstOrDefaultAsync(x =>
-            //        x.Email == model.Email ||
-            //        x.UserName == model.Email ||
-            //        x.UserName == model.Phonenumber ||
-            //        x.PhoneNumber == model.Phonenumber);
-
-            //if (user == null)
-            //    return (false, "Invalid credentials", null);
-
+            
             var credentialResult = await ValidateCredentialsAsync(user, model);
             if (!credentialResult.Success)
                 return (false, credentialResult.Message, null);
-            //var passwordValid = await _userManager.CheckPasswordAsync(user, model.Password);
 
-            //if (!passwordValid)
-            //    return (false, "Invalid credentials", null);
+            var weakCredentialResult = CheckWeakCredentials(user, model);
 
             var userBusinesses = await _context.UserBusinesses
                 .Include(x => x.Business)
@@ -507,7 +448,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 activeBusiness,   
                 organizations,
                 hasPendingOnboarding,
-                modules
+                modules,
+                weakCredentialResult.IsWeak
             );
 
             var token = GenerateJwtToken(claims);
@@ -528,9 +470,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                   BusinessId=  b.BusinessId,
                    BusinessCode= b.Business.BusinessCode,
                    BusinessName= b.Business.BusinessName
-                }).ToList()
+                }).ToList(),
+                RequiresCredentialChange = weakCredentialResult.IsWeak,
+                SecurityNotice = weakCredentialResult.Message
             });
-        }  /**   public async Task<(bool Status, string Message, TokenModel Response)> Login(
+        } 
+        
+        /**   public async Task<(bool Status, string Message, TokenModel Response)> Login(
        LoginModel model,
        string businessCode)
            {

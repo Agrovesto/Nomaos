@@ -100,93 +100,120 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             return result;
         }
-        private async Task OnboardSingleFarmerAsync(
-            BulkFarmerRowDto row, OnBoardingArgs args)
+        private async Task OnboardSingleFarmerAsync(BulkFarmerRowDto row, OnBoardingArgs args)
         {
-            bool phoneExists = await _db.Users
-                .AnyAsync(u => u.PhoneNumber == row.PhoneNumber.Trim());
+            var phone = row.PhoneNumber.Trim();
 
-            if (phoneExists)
-                throw new DuplicatePhoneException(
-                    $"Phone number '{row.PhoneNumber}' already exists.", row.RowIndex);
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.PhoneNumber == phone);
 
-            var (defaultPassword, salt) = GenerateDefaultCredentials();
-
-            var user = new User
+            if (user == null)
             {
-                UserName = row.PhoneNumber.Trim(),
-                PhoneNumber = row.PhoneNumber.Trim(),
-                Email = row.Email?.Trim(),
-                Name = row.Name.Trim(),
-                NIN = row.NIN,
-                BVN = row.BVN,
-                Salt = salt,
-                UserType = "Farmer",
-                BusinessCode = args.businessCode,
-                CreatedBy = args.UserId,
-                CreatedOn = DateTimeOffset.UtcNow,
-                IsActive = true,
-                FarmerOnboardingStatus = FarmerOnboardingStatus.Pending,
-                HasDefaultPassword = true,
-                Pin = "1234"
-            };
+                var (defaultPassword, salt) = GenerateDefaultCredentials();
 
-            var identityResult = await _userManager.CreateAsync(user, defaultPassword);
-            if (!identityResult.Succeeded)
-            {
-                var msg = string.Join("; ", identityResult.Errors.Select(e => e.Description));
-                throw new InvalidOperationException($"User creation failed: {msg}");
+                user = new User
+                {
+                    UserName = phone,
+                    PhoneNumber = phone,
+                    Email = row.Email?.Trim(),
+                    Name = row.Name.Trim(),
+                    NIN = row.NIN,
+                    BVN = row.BVN,
+                    Salt = salt,
+                    UserType = "Farmer",
+                    BusinessCode = args.businessCode,
+                    CreatedBy = args.UserId,
+                    CreatedOn = DateTimeOffset.UtcNow,
+                    IsActive = true,
+                    FarmerOnboardingStatus = FarmerOnboardingStatus.Pending,
+                    HasDefaultPassword = true,
+                    Pin = "1234"
+                };
+
+                var identityResult = await _userManager.CreateAsync(user, defaultPassword);
+                if (!identityResult.Succeeded)
+                {
+                    var msg = string.Join("; ", identityResult.Errors.Select(e => e.Description));
+                    throw new InvalidOperationException($"User creation failed: {msg}");
+                }
             }
 
-            var farmer = new Farmer
-            {
-                UserId = user.Id,
-                BelongToBusinessCode = args.businessCode,
-                Name = row.Name.Trim(),
-                PhoneNumber = row.PhoneNumber.Trim(),
-                Email = row.Email?.Trim(),
-                Gender = row.Gender,
-                DateOfBirth = row.DateOfBirth,
-                Location = row.Location,
-                State = row.State,
-                Lga = row.Lga,
-                Ward = row.Ward,
-                FarmerCategory = row.FarmerCategory,
-                YearsInAgric = row.YearsInAgric,
-                HighestLevelOfEducation = row.HighestLevelOfEducation,
-                OnboardedByUserId = args.UserId,
-                OnBoardedOn = DateTimeOffset.UtcNow,
-                Level = FarmerLevel.Level1
-            };
-            _db.Farmers.Add(farmer);
+            // The real "duplicate" to guard against: same user already onboarded
+            // as a Farmer for THIS business — not merely "phone exists somewhere".
+            var farmer = await FindExistingFarmerInScopeAsync(user.Id, args.businessCode, args.organizationCode);
 
-            await _db.SaveChangesAsync();
-           
+            if (farmer == null)
+            {
+                // Might still be an existing Farmer for this business, just not yet linked to this org.
+                // Reuse that Farmer row if present, instead of creating a second Farmer for the same
+                // user+business combination.
+                farmer = await _db.Farmers
+                    .FirstOrDefaultAsync(f => f.UserId == user.Id && f.BelongToBusinessCode == args.businessCode);
+
+                if (farmer == null)
+                {
+                    farmer = new Farmer
+                    {
+                        UserId = user.Id,
+                        BelongToBusinessCode = args.businessCode,
+                        Name = row.Name.Trim(),
+                        PhoneNumber = phone,
+                        Email = row.Email?.Trim(),
+                        Gender = row.Gender,
+                        DateOfBirth = row.DateOfBirth,
+                        Location = row.Location,
+                        State = row.State,
+                        Lga = row.Lga,
+                        Ward = row.Ward,
+                        FarmerCategory = row.FarmerCategory,
+                        YearsInAgric = row.YearsInAgric,
+                        HighestLevelOfEducation = row.HighestLevelOfEducation,
+                        OnboardedByUserId = args.UserId,
+                        OnBoardedOn = DateTimeOffset.UtcNow,
+                        Level = FarmerLevel.Level1
+                    };
+
+                    _db.Farmers.Add(farmer);
+                    await _db.SaveChangesAsync();
+                }
+            }
+            else
+            {
+                // Already onboarded as a Farmer in this exact business + organization — treat as duplicate.
+                throw new DuplicatePhoneException(phone, row.RowIndex);
+            }
             if (row.SelectedItems.Any())
-            {
                 await AddFarmerValueChainItemsAsync(farmer.Id, row.SelectedItems, args.UserId);
-            }
+
             if (!string.IsNullOrWhiteSpace(args.organizationCode))
-            {
-                await LinkToOrganizationAsync(
-                    user, farmer, args.organizationCode, args.UserId);
-            }
+                await LinkToOrganizationAsync(user, farmer, args.organizationCode, args.UserId);
 
-          
             if (args.CooperativeIds.Count > 0)
-            {
-
-                await LinkToCooperativeAsync(
-                    farmer, args.CooperativeIds,
-                    args.organizationCode, args.UserId);
-            }
+                await LinkToCooperativeAsync(farmer, args.CooperativeIds, args.organizationCode, args.UserId);
 
             if (args.AgentIds.Count > 0)
+                await LinkToAgentAsync(farmer, args.AgentIds, args.organizationCode, args.UserId);
+        }
+        private async Task<Farmer?> FindExistingFarmerInScopeAsync(
+    string userId, string businessCode, string? organizationCode)
+        {
+            // Base: same user, same business, same role (Farmer)
+            var farmerQuery = _db.Farmers
+                .Where(f => f.UserId == userId && f.BelongToBusinessCode == businessCode);
+
+            if (string.IsNullOrWhiteSpace(organizationCode))
             {
-                await LinkToAgentAsync(
-                    farmer, args.AgentIds,
-                    args.organizationCode, args.UserId);
+                // No org context on this upload — duplicate means "already a farmer for this business" only.
+                return await farmerQuery.FirstOrDefaultAsync();
             }
+
+            // Org context provided — duplicate means "already a farmer for this business AND
+            // already linked to this specific organization".
+            return await farmerQuery
+                .Where(f => _db.FarmerOrganizations.Any(fo =>
+                    fo.FarmerId == f.Id &&
+                    fo.OrganizationCode == organizationCode &&
+                    fo.IsActive))
+                .FirstOrDefaultAsync();
         }
         private async Task AddFarmerValueChainItemsAsync(
             long farmerId,

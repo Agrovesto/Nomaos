@@ -31,7 +31,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [ApiController]
     public class OrganizationController : BaseController
     {
-
+        private static readonly string[] AllowedExtensions = { ".csv", ".xlsx", ".xls" };
         private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
         private readonly IOnBoardingManager _onboardingManager;
@@ -43,11 +43,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IBulkMembershipExcelParser _parser;
         private readonly IBulkMembershipValidator _validator;
         private readonly IBulkMembershipUploadService _memberShipUploadService;
+        private readonly ILogger<OrganizationController> _logger;
 
         private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
 
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
+            ILogger<OrganizationController> logger,
             IBusinessManager businessManager,
              INomaOSWalletService walletService,
              IOrganizationManager organizationManager,
@@ -70,6 +72,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _inputFinancingManager = inputFinancingManager;
             _bulkFarmerUploadService = bulkFarmerUploadService;
             _parser = parser;
+            _logger = logger;
             _validator = validator;
             _memberShipUploadService = memberShipUploadService;
             _membershipManager = membershipManager;
@@ -2843,49 +2846,131 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("upload-bulk-membership")]
         [RequestSizeLimit(MaxFileSizeBytes)] // 10 MB cap
         public async Task<IActionResult> BulkMembershipUpload(
-       IFormFile file,
-       [FromQuery] OnBoardingArgs args)
+    IFormFile file,
+    [FromQuery] OnBoardingArgs args)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("No file provided.");
+            // --- File presence & validation ---
+            if (file is null || file.Length == 0)
+                return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
+
+            if (file.Length > MaxFileSizeBytes)
+                return Error("FILE_TOO_LARGE",
+                    $"That file is too large. Please upload a file smaller than {MaxFileSizeBytes / (1024 * 1024)} MB.");
+
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(extension))
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file. Please upload an Excel (.xlsx) file.");
+
+            // --- Request/auth validation ---
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload memberships.");
 
             var onboardedById = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            if (string.IsNullOrWhiteSpace(onboardedById))
+                return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
+                    StatusCodes.Status401Unauthorized);
+
             args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-            
-            using var stream = file.OpenReadStream();
+
+            // --- Parse file ---
             List<BulkMembershipRowDto> rows;
             try
             {
-                rows = _parser.Parse(
-                    stream, args.businessCode, onboardedById,
-                    args.organizationCode, args.Id);
+                await using var stream = file.OpenReadStream();
+                rows = _parser.Parse(stream, file.FileName, args.businessCode, onboardedById, args.organizationCode, args.Id);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Unsupported membership file type uploaded: {FileName}", file.FileName);
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
             }
             catch (Exception ex)
             {
-                return BadRequest($"Could not parse file: {ex.Message}");
+                _logger.LogError(ex, "Failed to parse membership upload file: {FileName}", file.FileName);
+                return Error("FILE_PARSE_ERROR",
+                    "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
             }
+            if (rows.Count == 0)
+                return Error("FILE_EMPTY", "This file doesn't contain any membership records to upload.");
 
-            if (!rows.Any())
-                return BadRequest("The file contains no data rows.");
-
-            // Pre-validate ALL rows — zero DB writes until this passes
+            // --- Pre-validate ALL rows — zero DB writes until this passes ---
             var validationErrors = await _validator.ValidateAllAsync(rows, args);
             if (validationErrors.Any())
             {
-                return UnprocessableEntity(new
+                return UnprocessableEntity(new ApiErrorResponse
                 {
-                    Message = "Validation failed. No records were saved.",
-                    Errors = validationErrors
+                    Code = "VALIDATION_FAILED",
+                    Message = "We found problems with some rows. No records were saved — please fix and re-upload.",
+                    Details = validationErrors
+    .GroupBy(e => e.RowNumber)
+    .ToDictionary(
+        g => g.Key.ToString(),
+        g => string.Join("; ", g.SelectMany(e => e.Messages)))
                 });
             }
 
-            // Process (chunked transactions)
-            var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
+            // --- Process (chunked transactions) ---
+            try
+            {
+                var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
 
-            return result.FailureCount == 0
-                ? Ok(result)
-                : StatusCode(207, result); 
+                return result.FailureCount == 0
+                    ? Ok(result)
+                    : StatusCode(StatusCodes.Status207MultiStatus, result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Membership upload processing failed for business {BusinessCode}", args.businessCode);
+                return Error("UPLOAD_PROCESSING_FAILED",
+                    "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
+                    StatusCodes.Status500InternalServerError);
+            }
         }
+
+        // public async Task<IActionResult> BulkMembershipUpload(
+        //IFormFile file,
+        //[FromQuery] OnBoardingArgs args)
+        // {
+        //     if (file == null || file.Length == 0)
+        //         return BadRequest("No file provided.");
+
+        //     var onboardedById = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+        //     args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+
+        //     using var stream = file.OpenReadStream();
+        //     List<BulkMembershipRowDto> rows;
+        //     try
+        //     {
+        //         rows = _parser.Parse(
+        //             stream, args.businessCode, onboardedById,
+        //             args.organizationCode, args.Id);
+        //     }
+        //     catch (Exception ex)
+        //     {
+        //         return BadRequest($"Could not parse file: {ex.Message}");
+        //     }
+
+        //     if (!rows.Any())
+        //         return BadRequest("The file contains no data rows.");
+
+        //     // Pre-validate ALL rows — zero DB writes until this passes
+        //     var validationErrors = await _validator.ValidateAllAsync(rows, args);
+        //     if (validationErrors.Any())
+        //     {
+        //         return UnprocessableEntity(new
+        //         {
+        //             Message = "Validation failed. No records were saved.",
+        //             Errors = validationErrors
+        //         });
+        //     }
+
+        //     // Process (chunked transactions)
+        //     var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
+
+        //     return result.FailureCount == 0
+        //         ? Ok(result)
+        //         : StatusCode(207, result); 
+        // }
 
         [HttpGet("membership-mgt-overview")]
         public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
@@ -3191,50 +3276,84 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkUpload(
-            IFormFile file,
-            [FromQuery] OnBoardingArgs args)
+    IFormFile file,
+    [FromQuery] OnBoardingArgs args)
         {
+            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
-                return BadRequest("No file uploaded.");
+                return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
-            if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-                return BadRequest("Only CSV files are accepted.");
+            if (file.Length > MaxFileSizeBytes)
+                return Error("FILE_TOO_LARGE",
+                    $"That file is too large. Please upload a file smaller than {MaxFileSizeBytes / (1024 * 1024)} MB.");
 
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(extension))
+                return Error("FILE_TYPE_INVALID",
+                    "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
+
+            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
-                return BadRequest("businessCode is required.");
+                return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
             args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(args.UserId))
-                return Unauthorized("Access Denied");
-            args.organizationCode = OrganizationCode;
-          
+                return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
+                    StatusCodes.Status401Unauthorized);
 
+            args.organizationCode = OrganizationCode;
+
+            // --- Parse file ---
             List<BulkFarmerRowDto> rows;
             try
             {
                 await using var stream = file.OpenReadStream();
-                rows = BulkFarmerCsvParser.Parse(stream);
+                rows = BulkFarmerCsvParser.Parse(stream, file.FileName);
+            }
+            catch (NotSupportedException ex)
+            {
+                _logger.LogWarning(ex, "Unsupported file type uploaded: {FileName}", file.FileName);
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
             }
             catch (Exception ex)
             {
-                return BadRequest($"Could not parse CSV: {ex.Message}");
+                _logger.LogError(ex, "Failed to parse bulk upload file: {FileName}", file.FileName);
+                return Error("FILE_PARSE_ERROR",
+                    "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
             }
 
             if (rows.Count == 0)
-                return BadRequest("The uploaded file contains no data rows.");
+                return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
 
-            var uploadedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            // --- Process ---
+            try
+            {
+                var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
 
-            var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
+                int statusCode = result.Failed > 0
+                    ? StatusCodes.Status207MultiStatus
+                    : StatusCodes.Status200OK;
 
-            int statusCode = result.Failed > 0 ? StatusCodes.Status207MultiStatus
-                                               : StatusCodes.Status200OK;
-
-            return StatusCode(statusCode, result);
+                return StatusCode(statusCode, result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Bulk farmer upload processing failed for business {BusinessCode}", args.businessCode);
+                return Error("UPLOAD_PROCESSING_FAILED",
+                    "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
+                    StatusCodes.Status500InternalServerError);
+            }
         }
 
-
+        private IActionResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
+        {
+            return StatusCode(statusCode, new ApiErrorResponse
+            {
+                Code = code,
+                Message = message
+            });
+        }
         //[HttpPost("bulk-onboard")]
         //public async Task<IActionResult> BulkOnboard(IFormFile file,[FromQuery] OnBoardingArgs args)
         //{
@@ -3299,9 +3418,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //    }
 
         //}
-         
-       
-        
+
+
+
         [HttpGet("farmer/sales-overview")]
         public async Task<IActionResult> GetOrganizationFarmerSalesSummary([FromQuery] ListQueryParams query)
         {

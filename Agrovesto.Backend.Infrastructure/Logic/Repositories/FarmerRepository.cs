@@ -244,7 +244,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (args.CooperativeIds == null || !args.CooperativeIds.Any())
                 return null;
 
-            // Check if the farmer exists
             var farmer = await _context.Farmers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == farmerId);
@@ -252,20 +251,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             if (farmer == null)
                 return null;
 
-            // Get existing assignments for this farmer
-            var existingAssignments = await _context.FarmerCooperatives
-                .Where(fa => fa.FarmerId == farmerId && args.CooperativeIds.Contains(fa.CooperativeId))
+            var incomingCooperativeIds = args.CooperativeIds
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList();
+
+            // Scope the "already assigned" check to THIS organization only
+            var existingCooperativeIdsInThisOrg = await _context.FarmerCooperatives
+                .Where(fa => fa.FarmerId == farmerId
+                          && incomingCooperativeIds.Contains(fa.CooperativeId)
+                          && fa.OrganizationCode == args.organizationCode)
                 .Select(fa => fa.CooperativeId)
                 .ToListAsync();
 
-            // Filter out agents that are already assigned
-            var newCooperativeIds = args.CooperativeIds
-       .Where(x => x.HasValue)
-       .Select(x => x.Value)
-       .Except(existingAssignments)
-       .ToList();
+            var newCooperativeIds = incomingCooperativeIds
+                .Except(existingCooperativeIdsInThisOrg)
+                .ToList();
 
-            // Create new assignments
             if (newCooperativeIds.Any())
             {
                 var newAssignments = newCooperativeIds.Select(cooperativeId => new FarmerCooperative
@@ -274,21 +276,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     CooperativeId = cooperativeId,
                     OnboardedByUserId = args.OnboardedByUserId,
                     JoinedOn = DateTimeOffset.UtcNow,
-                    IsActive=true,
-                    OrganizationCode=args.organizationCode
+                    IsActive = true,
+                    OrganizationCode = args.organizationCode
                 }).ToList();
 
                 await _context.FarmerCooperatives.AddRangeAsync(newAssignments);
                 await _context.SaveChangesAsync();
             }
 
-            // Reload the farmer with updated data
             var updatedFarmer = await _context.Farmers
                 .FirstOrDefaultAsync(f => f.Id == farmerId);
 
             return updatedFarmer.Map();
         }
-
         public async Task<FarmerModel> AssignFarmerToCooperative(
     long farmerId,
     long cooperativeId,
@@ -2155,7 +2155,6 @@ SELECT
             if (args.AgentIds == null || !args.AgentIds.Any())
                 return null;
 
-            // Check if the farmer exists
             var farmer = await _context.Farmers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.Id == farmerId);
@@ -2163,41 +2162,42 @@ SELECT
             if (farmer == null)
                 return null;
 
-            // Get existing assignments for this farmer
-            var existingAssignments = await _context.FarmerAgents
-                .Where(fa => fa.FarmerId == farmerId && args.AgentIds.Contains(fa.AgentId))
+            var incomingAgentIds = args.AgentIds
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList();
+
+            // Scope the "already assigned" check to THIS organization only
+            var existingAgentIdsInThisOrg = await _context.FarmerAgents
+                .Where(fa => fa.FarmerId == farmerId
+                          && incomingAgentIds.Contains(fa.AgentId)
+                          && fa.OrganizationCode == args.organizationCode)
                 .Select(fa => fa.AgentId)
                 .ToListAsync();
 
-            // Filter out agents that are already assigned
+            var newAgentIds = incomingAgentIds.Except(existingAgentIdsInThisOrg).ToList();
 
-            var newAgentIds = args.AgentIds
-    .Where(x => x.HasValue)
-    .Select(x => x.Value)
-    .Except(existingAssignments)
-    .ToList();
-
-            // Create new assignments
             if (newAgentIds.Any())
             {
                 var newAssignments = newAgentIds.Select(agentId => new FarmerAgent
                 {
                     FarmerId = farmerId,
                     AgentId = agentId,
-                    AssignedOn = DateTimeOffset.UtcNow
+                    OrganizationCode = args.organizationCode,
+                    AssignedByUserId = args.UserId,
+                    AssignedOn = DateTimeOffset.UtcNow,
+                    IsActive = true
                 }).ToList();
 
                 await _context.FarmerAgents.AddRangeAsync(newAssignments);
                 await _context.SaveChangesAsync();
             }
 
-            // Reload the farmer with updated data
             var updatedFarmer = await _context.Farmers
                 .FirstOrDefaultAsync(f => f.Id == farmerId);
 
             return updatedFarmer.Map();
         }
-
         public async Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId)
         {
             if (args.AgentIds == null || !args.AgentIds.Any())
