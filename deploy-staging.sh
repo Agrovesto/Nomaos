@@ -22,11 +22,19 @@ NGINX_CONF="/etc/nginx/conf.d/nomaos_upstream.conf"
 ACTIVE_FILE="$BASE/active-slot"
 MAX_RELEASES=5
 
-# ── Validate incoming artifact ────────────────────────────────────────────────
-if [[ ! -d "$INCOMING" ]]; then
-  echo "❌ Incoming artifact not found: $INCOMING"
-  exit 1
-fi
+dotnet publish \
+  -c Release \
+  -r linux-x64 \
+  -f net8.0 \
+  --self-contained true \
+  -o /var/www/Nomaos/publish \
+  --verbosity minimal \
+  2>&1 | tee /tmp/publish.log
+
+PUBLISH_EXIT=${PIPESTATUS[0]}
+
+if [ $PUBLISH_EXIT -ne 0 ]; then
+  echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
 
 DEPLOYED_SHA=$(cat "$INCOMING/.commit-sha" 2>/dev/null || echo "")
 if [[ "$DEPLOYED_SHA" != "$COMMIT_SHA" ]]; then
@@ -127,8 +135,4 @@ for OLD in "${OLD_RELEASES[@]}"; do
   sudo rm -rf "$BASE/releases/$OLD"
 done
 
-echo ""
-echo "🎉 Deployment complete"
-echo "   Slot   : $TARGET"
-echo "   Port   : $TARGET_PORT"
-echo "   Commit : $COMMIT_SHA"
+echo "✅ Deployment successful!"

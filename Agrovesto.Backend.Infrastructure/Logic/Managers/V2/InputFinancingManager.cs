@@ -1354,7 +1354,7 @@ RepaymentFrequency frequency)
                         throw new DisbursementException("A valid Subscription Id is required.");
 
                   
-                    if (request.Latitude == 0 && request.Longitude == 0)
+                    if (Math.Abs(request.Latitude) < 1e-6 && Math.Abs(request.Longitude) < 1e-6)
                         throw new DisbursementException(
                             "Geolocation is required for disbursement. " +
                             "Ensure location permissions are granted on your device.");
