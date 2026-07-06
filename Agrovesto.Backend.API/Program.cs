@@ -86,7 +86,7 @@ if (!builder.Environment.IsDevelopment())
                 reloadOnChange: true,
                 reloadCheckIntervalSeconds: 60
             ),
-            "nomaos/staging/appsettings",
+            "nomaos/prod/appsettings",
             "kv"
         );
     }
