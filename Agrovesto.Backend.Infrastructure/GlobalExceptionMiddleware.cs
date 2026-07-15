@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 namespace Agrovesto.Backend.Infrastructure
 {
     using Agrovesto.Backend.Core.Exceptions;
+    using Agrovesto.Backend.Core.Models.Businesses.Input;
     using Microsoft.AspNetCore.Http;
     using Microsoft.Data.SqlClient;
     using Microsoft.EntityFrameworkCore;
@@ -27,7 +28,7 @@ namespace Agrovesto.Backend.Infrastructure
             _next = next;
             _logger = logger;
         }
-
+         
         public async Task InvokeAsync(HttpContext context)
         {
             try
@@ -69,15 +70,21 @@ namespace Agrovesto.Backend.Infrastructure
         {
             if (ex is BaseException bex && !string.IsNullOrWhiteSpace(bex.ExceptionMessage))
                 return bex.ExceptionMessage;
-
-            if (!string.IsNullOrWhiteSpace(ex.Message) &&
+            if (ex is DisbursementException dex && !string.IsNullOrWhiteSpace(dex.Message))
+                return dex.Message;
+           if(!string.IsNullOrEmpty(ex.Message) &&
                 !ex.Message.Contains("See the inner exception") &&
                 !ex.Message.Contains("An error occurred"))
                 return ex.Message;
 
-            if (ex.InnerException != null &&
-                !string.IsNullOrWhiteSpace(ex.InnerException.Message))
-                return ex.InnerException.Message;
+            //if (!string.IsNullOrWhiteSpace(ex.Message) &&
+            //    !ex.Message.Contains("See the inner exception") &&
+            //    !ex.Message.Contains("An error occurred"))
+            //    return ex.Message;
+
+            //if (ex.InnerException != null &&
+            //    !string.IsNullOrWhiteSpace(ex.InnerException.Message))
+            //    return ex.InnerException.Message;
 
             return "An unexpected error occurred. Please contact support if the issue persists.";
         }

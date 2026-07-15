@@ -254,6 +254,7 @@ string? startDate, string? endDate, string? exportFormat)
 
         public async Task<FileDownloadModel> FilterFarmerTransactionForDownload(
 string? businessCode,
+string? OrganizationCode,
 string? FarmerUserId,
 string? state,
 string? marketDay,
@@ -280,7 +281,7 @@ string? endDate, string? exportFormat)
                 string farmerId = string.Empty;
                 if (!string.IsNullOrEmpty(FarmerUserId))
                 {
-                    var farmer = await _farmerRepository.GetFarmerByUserId(FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                    var farmer = await _farmerRepository.GetFarmerByUserId(FarmerUserId, OrganizationCode) ?? throw new Exception("Farmer does not exist");
                     farmerId = farmer.UserId;
                 }
               

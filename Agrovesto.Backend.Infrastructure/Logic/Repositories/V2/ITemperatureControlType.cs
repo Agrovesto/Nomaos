@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.DB;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -11,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
     public interface ITemperatureControlType
     {
-        Task<List<TemperatureControlType>> GetAllAsync();
+        Task<List<TemperatureControlType>> GetAllAsync(ListQueryParams args);
         Task<TemperatureControlType> GetByIdAsync(long id);
         Task AddAsync(TemperatureControlType temperatureControlType);
         Task UpdateAsync(TemperatureControlType temperatureControlType);
@@ -24,9 +25,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
         }
-        public async Task<List<TemperatureControlType>> GetAllAsync()
+        public async Task<List<TemperatureControlType>> GetAllAsync(ListQueryParams args)
         {
-            return await _context.TemperatureControlTypes.ToListAsync();
+            return await _context.TemperatureControlTypes.Where(x=>x.BusinessCode == args.businessCode).ToListAsync();
         }
         public async Task<TemperatureControlType> GetByIdAsync(long id)
         {

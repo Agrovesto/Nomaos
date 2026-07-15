@@ -237,7 +237,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                var updateDetail = await _onBoardingManager.RemoveFarmerFromCooperative(args.UserId, args.Id);
+                var updateDetail = await _onBoardingManager.RemoveFarmerFromCooperative(args.UserId, args.Id, args.organizationCode);
 
 
                 return Ok(new Response<bool>()

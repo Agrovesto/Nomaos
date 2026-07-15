@@ -953,7 +953,13 @@ HttpContext.TraceIdentifier
         {
             args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
-
+            if (string.IsNullOrEmpty(args.SubscriberUserId))
+            {
+                return BadRequest(ApiResponse<object>.Fail(
+                    "Subscriber user Id is required",
+                    HttpContext.TraceIdentifier
+                ));
+            }
             if (string.IsNullOrWhiteSpace(args.OrganizationCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -973,7 +979,7 @@ HttpContext.TraceIdentifier
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Subscriber Added Successfully",
+                "Request Sent Successfully",
                 HttpContext.TraceIdentifier
             ));
         }
@@ -986,6 +992,13 @@ HttpContext.TraceIdentifier
         {
             args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
+            if (string.IsNullOrEmpty(args.SubscriberUserId))
+            {
+                return BadRequest(ApiResponse<object>.Fail(
+                    "Subscriber user Id is required",
+                    HttpContext.TraceIdentifier
+                ));
+            }
 
             if (string.IsNullOrWhiteSpace(args.OrganizationCode))
             {
@@ -1002,11 +1015,11 @@ HttpContext.TraceIdentifier
                 ));
             }
             var result = await _inputFinancingManager
-                .ApproveInputDisbursementRequestAsync(model, args.UserId);
+                .ApproveInputDisbursementRequestAsync(model, args);
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Subscriber Added Successfully",
+                "Request Approved Successfully",
                 HttpContext.TraceIdentifier
             ));
         }

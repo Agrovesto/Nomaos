@@ -56,7 +56,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory,
-            DataContext context, MTNMomo mtnMomoService,
+            DataContext context, IMTNMomo mtnMomoService,
             IInputFinancingRepository inputFinancingRepository)
         {
 
@@ -69,11 +69,11 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _userWalletRepository = userWalletRepository;
             _inputFinancingRepository = inputFinancingRepository;
         }
-        public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env)
+        public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
         {
-            var provider = await _providerRepo.GetActiveProvider();
-            var providerId = provider.Where(x => x.Code == WalletProviderCode).FirstOrDefault().ProviderId;
-            WalletProviderParameterModel[] parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
+            var provider = await _providerRepo.GetProvidersForBusiness(businessCode);
+            var providerId = provider.Where(x => x.WalletProvider.Code == WalletProviderCode).FirstOrDefault().ProviderId;
+            WalletProviderParameterModel[] parameters = await _providerRepo.GetParametersByProvider(providerId,businessCode, Env);
             return parameters;
 
         }
@@ -171,7 +171,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ? args.UserId
                     : args.organizationCode;
 
-                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
+                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env, args.businessCode);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
 
                 object existingWallet = await _userWalletRepository.ExistingWalletForProvider(args, contextType, contextReferenceId, providerId);
@@ -180,19 +180,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     return (false, "Wallet already exists for this provider and context");
 
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
-                var providerService = _factory.GetService(providerType);
+                var providerService = _factory.GetService(request.WalletProviderCode);
 
                 var providerUserProfile = new Agrovesto.Backend.Core.V2.Onboarding.UserProfileResponse
                 {
                     UserId = userProfile.UserId,
                     Email = userProfile.Email,
-                    PhoneNumber = !string.IsNullOrEmpty( userProfile.Phone) ? userProfile.Phone : request.PhoneNumber
+                    PhoneNumber = !string.IsNullOrEmpty( userProfile.Phone) ? userProfile.Phone : request.PhoneNumber,
+                    BVN= !string.IsNullOrEmpty(userProfile.BVN) ? userProfile.BVN : request.BVN,
+                    NIN= !string.IsNullOrEmpty(userProfile.NIN) ? userProfile.NIN : request.NIN,
+
+                    FirstName= userProfile.Name
                 };
 
-                var validationResponse = await providerService.ValidateAccountAsync(providerUserProfile, providerParams, args.env);
+                var validationResponse = await providerService.CreateWalletAsync(providerUserProfile, providerParams, args.env);
 
                 if (validationResponse == null || !validationResponse.IsSuccess)
-                    return (false, validationResponse?.Message ?? "Account validation failed");
+                    return (false, validationResponse?.Message ?? "Account creation failed");
 
                 var walletNumber = validationResponse.Data?.WalletNumber;
                 if (string.IsNullOrWhiteSpace(walletNumber))
@@ -209,7 +213,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ContextType = contextType.ToString(),
                     ContextReferenceId = contextReferenceId,
                     SetAsDefaultForContext = request.IsDefault,
-                    TransactionPin = request.TransactionPin
+                    TransactionPin = request.TransactionPin,
+
                 };
 
                var wallet= await _userWalletRepository.CreateUserWallet(walletModel, new UserWalletParams
@@ -316,7 +321,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                         Message = "Wallet is inactive"
                     };
 
-                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
+                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env, args.businessCode);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
 
                 if (wallet.WalletProviderId != providerId)
@@ -327,7 +332,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     };
 
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
-                var providerService = _factory.GetService(providerType);
+                var providerService = _factory.GetService(request.WalletProviderCode);
 
                 var transactionReference = await _userWalletRepository.CreateWalletFundinAsync(
                     wallet.Id,
@@ -401,8 +406,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             bool result  = false;
             var providerType = walletProviderCode.ToEnum<WalletProviderType>();
 
-            var providerParams = await RetrieveParams(walletProviderCode, env);
-            var providerService = _factory.GetService(providerType);
+            var providerParams = await RetrieveParams(walletProviderCode,  env, businessCode);
+            var providerService = _factory.GetService(walletProviderCode);
 
             if (providerType == WalletProviderType.Momo)
             {
@@ -577,11 +582,11 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     return new ProviderResponse { IsSuccess = false, Message = ex.Message };
                 }
 
-                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env);
+                var providerParams = await RetrieveParams(request.WalletProviderCode, args.env, args.businessCode);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
 
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
-                var providerService = _factory.GetService(providerType);
+                var providerService = _factory.GetService(request.WalletProviderCode);
 
                 // create pending withdrawal transaction
                 var transactionReference = await _userWalletRepository

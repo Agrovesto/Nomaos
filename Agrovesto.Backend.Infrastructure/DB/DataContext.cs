@@ -69,10 +69,62 @@ namespace Agrovesto.Backend.Infrastructure.DB
             
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<BusinessWalletProvider>()
+     .HasIndex(x => new { x.BusinessCode, x.ProviderId })
+     .IsUnique();
+
+            modelBuilder.Entity<BusinessWalletProvider>()
+                .HasOne(x => x.WalletProvider)
+                .WithMany(x => x.BusinessWalletProviders)   // add this ICollection to WalletProvider entity
+                .HasForeignKey(x => x.ProviderId)
+                .OnDelete(DeleteBehavior.Restrict);          // don't let deleting a provider cascade-wipe tenants
+
+            modelBuilder.Entity<BusinessWalletProviderParameter>()
+                .HasOne(x => x.BusinessWalletProvider)
+                .WithMany(x => x.Parameters)
+                .HasForeignKey(x => x.BusinessWalletProviderId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+
+            modelBuilder.Entity<BusinessSMSProvider>()
+    .HasIndex(x => new { x.BusinessCode, x.ProviderId })
+    .IsUnique();
+
+            modelBuilder.Entity<BusinessSMSProvider>()
+                .HasOne(x => x.SMSProvider)
+                .WithMany(x => x.BusinessSMSProviders)   // add this ICollection to WalletProvider entity
+                .HasForeignKey(x => x.ProviderId)
+                .OnDelete(DeleteBehavior.Restrict);          // don't let deleting a provider cascade-wipe tenants
+
+            modelBuilder.Entity<BusinessSMSProviderParameter>()
+                .HasOne(x => x.BusinessSMSProvider)
+                .WithMany(x => x.Parameters)
+                .HasForeignKey(x => x.BusinessSMSProviderId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<User>()
-       .HasIndex(u => u.PhoneNumber)       
-       .IsUnique();
+       .HasIndex(u => u.PhoneNumber)
+       .IsUnique()
+       .HasFilter("[PhoneNumber] IS NOT NULL");
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique()
+                .HasFilter("[Email] IS NOT NULL");
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.BVN)
+                .IsUnique()
+                .HasFilter("[BVN] IS NOT NULL");
+
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.NIN)
+                .IsUnique()
+                .HasFilter("[NIN] IS NOT NULL");
+
+       //     modelBuilder.Entity<User>()
+       //.HasIndex(u => u.PhoneNumber)       
+       //.IsUnique();
 
             modelBuilder.Entity<UserOrganization>()
                 .HasKey(uo => new { uo.UserId, uo.OrganizationCode });
@@ -510,6 +562,13 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<OrganizationBusiness> OrganizationBusinesses { get; set; }
         public DbSet<DisbursementLineItem> DisbursementLineItems { get; set; }
         public DbSet<MonetaryDisbursementTransaction> MonetaryDisbursementTransactions { get; set; }
+        public DbSet<BusinessWalletProvider> BusinessWalletProviders { get; set; }
+        public DbSet<BusinessWalletProviderParameter> BusinessWalletProviderParameters { get; set; }
+        public DbSet<BusinessSMSProvider> BusinessSMSProviders { get; set; }
+        public DbSet<BusinessSMSProviderParameter> BusinessSMSProviderParameters { get; set; }
+        public DbSet<SMSProviderParameter> SMSProviderParameters { get; set; }
+        public DbSet<SMSProvider> SMSProvider { get; set; }
+    
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

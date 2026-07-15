@@ -1045,22 +1045,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             // Base query: cooperatives assigned to this agent via join table
             var cooperativesQuery = from f in _context.MemberShips
-                            join fa in _context.MemberShipAgents on f.Id equals fa.MemberShipId
-                            join a in _context.Agents on fa.AgentId equals a.Id
-                            where a.UserId == agentId
-                            select f;
-            //var cooperativesQuery = _context.MemberShips
-            // .AsNoTracking()
-            // .Where(s =>
-            //// s.IsAssignedToAgentId == agentId || 
-            // s.OnboardedById == agentId);
+                                    join fa in _context.MemberShipAgents on f.Id equals fa.MemberShipId
+                                    join a in _context.Agents on fa.AgentId equals a.Id
+                                    where a.UserId == agentId
+                                    select f;
 
-
-            // Filter by organization code
-            //if (!string.IsNullOrWhiteSpace(query.organizationCode))
-            //{
-            //    cooperativesQuery = cooperativesQuery.Where(s => s.OrganizationCode == query.organizationCode);
-            //}
+            // If an organizationCode is supplied, only return this agent's cooperatives
+            // that also belong to that organization
+            if (!string.IsNullOrWhiteSpace(query.organizationCode))
+            {
+                cooperativesQuery = from f in cooperativesQuery
+                                    join om in _context.OrganizationMemberships
+                                        on f.Id equals om.MembershipId
+                                    join o in _context.Organizations
+                                        on om.OrganizationId equals o.OrganizationId
+                                    where o.OrganizationCode == query.organizationCode
+                                    select f;
+            }
 
             var cooperatives = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
@@ -1078,15 +1079,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     PhoneNumber = s.PhoneNumber,
                     UserId = s.UserId,
                     IsLeaderAFarmer = s.IsLeaderAFarmer,
-                    Tier=EnumExtensions.GetDisplayName(s.TierLevel),
-                    MembershipType= s.MemberShipType.Name,
-                    MembershipLeaderFirstName=s.MembershipLeaderLastName,
-                    MembershipLeaderGender=s.MembershipLeaderGender ,
-                    MembershipLeaderLastName=s.MembershipLeaderLastName,
-                    MembershipLeaderMiddleName=s.MembershipLeaderMiddleName,
-                    Ward=s.Ward,
-                    MemberShipTypeId=s.MemberShipTypeId,
-                    // Count farmers via FarmerCooperatives
+                    Tier = EnumExtensions.GetDisplayName(s.TierLevel),
+                    MembershipType = s.MemberShipType.Name,
+                    MembershipLeaderFirstName = s.MembershipLeaderLastName,
+                    MembershipLeaderGender = s.MembershipLeaderGender,
+                    MembershipLeaderLastName = s.MembershipLeaderLastName,
+                    MembershipLeaderMiddleName = s.MembershipLeaderMiddleName,
+                    Ward = s.Ward,
+                    MemberShipTypeId = s.MemberShipTypeId,
                     TotalFarmers = _context.FarmerCooperatives.Count(fc => fc.CooperativeId == s.Id)
                 })
                 .ToListAsync();
@@ -1094,7 +1094,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return cooperatives.Any() ? cooperatives : new List<MemberShipResponseModel>();
         }
 
-      
 
         public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
         {

@@ -910,14 +910,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             await _context.SaveChangesAsync();
         }
 
-        public async Task<FarmerModel> GetFarmerByUserId(string userId)
+        public async Task<FarmerModel> GetFarmerByUserId(string userId, string? organizationCode = null)
         {
             var farmer = await _context.Farmers
               .FirstOrDefaultAsync(x => x.UserId == userId);
 
             if (farmer == null)
                 throw new Exception("No record found");
-
+            if (!string.IsNullOrEmpty(organizationCode))
+            {
+                farmer = await _context.Farmers
+                    .Join(_context.FarmerOrganizations,
+                        f => f.Id,
+                        fo => fo.FarmerId,
+                        (f, fo) => new { Farmer = f, FarmerOrg = fo })
+                    .Where(joined => joined.Farmer.UserId == userId && joined.FarmerOrg.OrganizationCode == organizationCode)
+                    .Select(joined => joined.Farmer)
+                    .FirstOrDefaultAsync();
+            }
             var cooperativeNames = await (
               from fc in _context.FarmerCooperatives
               join c in _context.MemberShips

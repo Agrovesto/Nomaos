@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.DB;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -11,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
     public interface IStorageCategoryRepository
     {
-        Task<List<StorageCategory>> GetAllAsync();
+        Task<List<StorageCategory>> GetAllAsync(ListQueryParams args);
         Task<StorageCategory> GetByIdAsync(long id);
         Task AddAsync(StorageCategory storageCategory);
         Task UpdateAsync(StorageCategory storageCategory);
@@ -24,9 +25,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
         }
-        public async Task<List<StorageCategory>> GetAllAsync()
+        public async Task<List<StorageCategory>> GetAllAsync(ListQueryParams args)
         {
-            return await _context.StorageCategories.ToListAsync();
+            return await _context.StorageCategories.Where(x=>x.BusinessCode == args.businessCode).ToListAsync();
         }
         public async Task<StorageCategory> GetByIdAsync(long id)
         {

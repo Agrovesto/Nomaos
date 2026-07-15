@@ -191,5 +191,9 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string SubscriptionApiKey { get; set; }
         public string DisbursementApiKey { get; set; }
         public string TargetEnvironment { get; set; }
+        public string ClientSecret { get; set; }
+        public string ClientId { get; set; }
+        public string SchemeId { get; set; }
+        public string WalletShemeTierId { get; set; }
     }
 }

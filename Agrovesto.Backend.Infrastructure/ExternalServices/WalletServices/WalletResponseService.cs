@@ -9,7 +9,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
     public class AccountValidationResponse
     {
         public string WalletNumber { get; set; }
+        public string macChecksum { get; set; }
+        public string walletTier { get; set; }
+        public string walletName { get; set; }
         public string AccountName { get; set; } // optional
+        public string walletBalance { get; set; } 
+        public string balance { get; set; } 
+        public string ledgerBalance { get; set; }
+        public string ProviderReference { get; set; } // e.g. macChecksum for MTN, or whatever Etransact calls it
+
     }
 
     public class WalletResponseService<T>

@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public string UserId { get; set; }
         public string UserType { get; set; }
-
+        public string Name { get; set; }
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }
@@ -70,6 +70,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string FirstName { get; set; }   
         public string LastName { get; set; }
         public string Level { get; set; }
+        public string BVN { get; set; }
+        public string NIN { get; set; }
+        public string WalletNumber { get; set; }
+        public string ImageString { get; set; }
     }
     public class BulkOnboardingExcelRow
     {

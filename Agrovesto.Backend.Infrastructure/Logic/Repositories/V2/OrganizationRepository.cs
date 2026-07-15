@@ -2007,22 +2007,62 @@ SELECT
                 PageSize = pageSize
             };
         }
-       public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
+        public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
         {
-            //get loations belonging to an agent using the query.userId
             var agent = await _context.Agents
-                       .FirstOrDefaultAsync(x => x.UserId == query.UserId);
+                .FirstOrDefaultAsync(x => x.UserId == query.UserId);
 
             if (agent == null)
                 throw new DisbursementException("No agent profile found for the current user.");
 
-            var baseQuery =  _context.OrganizationAgents
-                        .Include(x => x.Location)
-                        .Where(x =>
-                            x.AgentId == agent.Id &&
-                            x.OrganizationId == query.OrganizationId &&
-                            x.IsActive).AsQueryable();
+            if (string.IsNullOrWhiteSpace(query.organizationCode))
+                throw new NotFoundException("Organization code is required");
 
+            var codes = query.organizationCode
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct()
+                .ToList();
+
+            var organizations = await _context.Organizations
+                .Where(x => codes.Contains(x.OrganizationCode))
+                .ToListAsync();
+
+            if (!organizations.Any())
+                throw new NotFoundException("Organization not found");
+
+            var agentOrgIds = await _context.OrganizationAgents
+                .Where(x => x.AgentId == agent.Id && x.IsActive && x.LocationId != null)
+                .Select(x => x.OrganizationId)
+                .Distinct()
+                .ToListAsync();
+
+            Organization selectedOrg;
+
+            if (codes.Count == 1)
+            {
+                selectedOrg = organizations.First();
+
+                if (!agentOrgIds.Contains(selectedOrg.OrganizationId))
+                    throw new NotFoundException("No location assigned to Agent for the specified organization");
+            }
+            else
+            {
+                selectedOrg = organizations.FirstOrDefault(o => agentOrgIds.Contains(o.OrganizationId));
+
+                if (selectedOrg == null)
+                    throw new NotFoundException("No location assigned to Agent");
+            }
+
+            query.OrganizationId = selectedOrg.OrganizationId;
+
+            var baseQuery = _context.OrganizationAgents
+                .Include(x => x.Location)
+                .Where(x =>
+                    x.AgentId == agent.Id &&
+                    x.OrganizationId == query.OrganizationId &&
+                    x.LocationId != null &&
+                    x.IsActive)
+                .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(query.Location))
             {
@@ -2036,9 +2076,10 @@ SELECT
             {
                 baseQuery = baseQuery.Where(x => x.Location.LocationTypeId == query.LocationTypeId);
             }
+
             var totalCount = await baseQuery.CountAsync();
 
-            if(totalCount == 0)
+            if (totalCount == 0)
             {
                 throw new NotFoundException("No location assigned to Agent");
             }
@@ -2052,17 +2093,16 @@ SELECT
                 .Take(pageSize)
                 .Select(x => new AgentLocationListResponseDto
                 {
-                    IsActive = x.Location.LocationStatus == "Active",                    
-                    // IsActive= x.IsActive,
+                    IsActive = x.Location.LocationStatus == "Active",
                     Id = x.Location.Id,
                     LocationName = x.Location.LocationName,
                     Address = x.Location.Address,
                     Capacity = x.Location.Capacity,
                     CapacityType = x.Location.CapacityType,
                     StockLevel = x.Location.StockLevel,
-                    LocationStatus=x.Location.LocationStatus,
+                    LocationStatus = x.Location.LocationStatus,
                     LocationTypeId = x.Location.LocationTypeId,
-                    LocationTypeName = x.Location.LocationType.Type                    
+                    LocationTypeName = x.Location.LocationType.Type
                 })
                 .ToListAsync();
 
@@ -2074,6 +2114,7 @@ SELECT
                 PageSize = pageSize
             };
         }
+
         public async Task<LocationResponseDto> GetLocationByIdAsync(long id)
         {
             var location = await _context.OrganizationLocations
@@ -3698,20 +3739,25 @@ SELECT
         public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
     ListQueryParams args)
         {
-            if (string.IsNullOrWhiteSpace(args.organizationCode))
-                throw new ValidationException("Organization code is required");
-
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
 
             var skip = (args.PageNumber - 1) * args.PageSize;
-
-
+            var dupes = await _context.FarmerOrganizations
+    .AsNoTracking()
+    .Where(fo => fo.IsActive && fo.OrganizationCode == args.organizationCode)
+    .GroupBy(fo => fo.FarmerId)
+    .Where(g => g.Count() > 1)
+    .Select(g => new { FarmerId = g.Key, Count = g.Count() })
+    .ToListAsync();
+           
+            
             var query =
                 from fo in _context.FarmerOrganizations.AsNoTracking()
 
-                where fo.OrganizationCode == args.organizationCode
-                      && fo.IsActive
+                where fo.IsActive
+                      && (string.IsNullOrWhiteSpace(args.organizationCode)
+                          || fo.OrganizationCode == args.organizationCode)
 
                 join f in _context.Farmers.AsNoTracking()
                     on fo.FarmerId equals f.Id
@@ -3756,16 +3802,13 @@ SELECT
                     IsActive = fo.IsActive
                 };
 
-
             var totalCount = await query.CountAsync();
-
 
             var data = await query
                 .OrderByDescending(x => x.CreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
                 .ToListAsync();
-
 
             return new PagedListResponse<List<OrganizationFarmerResponse>>
             {
@@ -3775,6 +3818,86 @@ SELECT
                 Data = data
             };
         }
+        //    public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(
+        //ListQueryParams args)
+        //    {
+        //        if (string.IsNullOrWhiteSpace(args.organizationCode))
+        //            throw new ValidationException("Organization code is required");
+
+        //        args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
+        //        args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
+
+        //        var skip = (args.PageNumber - 1) * args.PageSize;
+
+
+        //        var query =
+        //            from fo in _context.FarmerOrganizations.AsNoTracking()
+
+        //            where fo.OrganizationCode == args.organizationCode
+        //                  && fo.IsActive
+
+        //            join f in _context.Farmers.AsNoTracking()
+        //                on fo.FarmerId equals f.Id
+
+        //            join u in _context.Users.AsNoTracking()
+        //                on f.UserId equals u.Id
+
+        //            select new OrganizationFarmerResponse
+        //            {
+        //                UserId = u.Id,
+
+        //                FarmerId = f.Id,
+
+        //                Name = f.Name ?? u.Name,
+
+        //                PhoneNumber = u.PhoneNumber,
+
+        //                Email = u.Email,
+
+        //                Gender = f.Gender,
+
+        //                State = f.State,
+
+        //                Lga = f.Lga,
+
+        //                Ward = f.Ward,
+
+        //                Location = f.Location,
+
+        //                FarmerCategory = f.FarmerCategory,
+
+        //                Level = EnumExtensions.GetDisplayName(
+        //                    (FarmerLevel)f.Level),
+
+        //                CreatedOn = u.CreatedOn,
+
+        //                FarmerOnboardingStatus =
+        //                    u.FarmerOnboardingStatus.ToString(),
+
+        //                IsPendingOnboarding = false,
+
+        //                IsActive = fo.IsActive
+        //            };
+
+
+        //        var totalCount = await query.CountAsync();
+
+
+        //        var data = await query
+        //            .OrderByDescending(x => x.CreatedOn)
+        //            .Skip(skip)
+        //            .Take(args.PageSize)
+        //            .ToListAsync();
+
+
+        //        return new PagedListResponse<List<OrganizationFarmerResponse>>
+        //        {
+        //            PageNumber = args.PageNumber,
+        //            PageSize = args.PageSize,
+        //            Count = totalCount,
+        //            Data = data
+        //        };
+        //    }
         /** public async Task<PagedListResponse<List<OrganizationFarmerResponse>>> GetOrganizationFarmersAsync(ListQueryParams args)
          {
              if (string.IsNullOrWhiteSpace(args.organizationCode))
