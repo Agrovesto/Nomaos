@@ -49,15 +49,15 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public string UserId { get; set; }
 
-        public string OrganizationCode { get; set; }
+        public string? OrganizationCode { get; set; }
 
-        public string CompanyName { get; set; }
+        public string? CompanyName { get; set; }
 
         public string? FullName { get; set; }
 
-        public string FirstName { get; set; }
+        public string? FirstName { get; set; }
 
-        public string LastName { get; set; }
+        public string? LastName { get; set; }
 
         public string? PhoneNumber { get; set; }
 

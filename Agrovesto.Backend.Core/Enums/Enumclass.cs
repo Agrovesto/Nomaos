@@ -7,6 +7,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum RateLimitType
+    {
+        OTP,
+        LOGIN,
+        RESET_PASSWORD,
+    }
     public enum InventoryTransactionType
     {
         [Display(Name = "Opening Balance")]

@@ -59,7 +59,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     message = "Successful";
                     break;
                 case "01":
-                    message = "Record not found";
+                    message = "Invalid NIN details";
                     break;
                 case "02":
                     message = "Service not available";

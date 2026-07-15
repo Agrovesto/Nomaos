@@ -19,6 +19,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 
 namespace Agrovesto.Backend.API.Extensions
@@ -129,17 +130,31 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmerQueryService, FarmerQueryService>();
             services.AddScoped<IUserWalletRepository, UserWalletRepository>();
             services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
+            // Concrete registrations - required for WalletServiceFactory to resolve them
+           
+           
+            services.AddScoped<IGenericWalletService, MTNMomo>(); 
+            services.AddScoped<IGenericWalletService, EtransactWallet>();
 
+            // Interface registrations - only needed if something else in your code
+            // depends on IMTNMomo / IEtransactWallet directly
+            services.AddScoped<IMTNMomo, MTNMomo>();
+            services.AddScoped<IEtransactWallet, EtransactWallet>();
+
+
+            // The factory itself
             services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
+            // services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
+
 
 
             services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
             services.AddScoped<IWalletService, FCMBWalletService>();
             services.AddScoped<IWalletService, SterlingWalletService>();
-            services.AddScoped<MTNMomo>();
-            services.AddScoped<IMTNMomo, MTNMomo>();
+          //  services.AddScoped<MTNMomo>();
+           // services.AddScoped<IMTNMomo, MTNMomo>();
 
-            services.AddScoped<IGenericWalletService, MTNMomo>();
+          //  services.AddScoped<IGenericWalletService, MTNMomo>();
             services.AddScoped<IAWSService, AWSService>();
             services.AddScoped<ISalesRepository, SalesRepository>();
 
@@ -167,6 +182,13 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddHostedService<JobSchedulerService>();
 
             services.AddTransient<OverdueRepaymentJob>();
+
+
+            services.Configure<RateLimitSettingsUtil>(configuration.GetSection("RateLimiting"));
+            services.AddSingleton<IRateLimitService, RateLimitServiceUtil>();
+            services.AddScoped<ISMSProviderRepository, SMSProviderRepository>();
+
+
         }
     }
 }

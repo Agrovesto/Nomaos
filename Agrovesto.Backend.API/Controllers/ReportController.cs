@@ -166,6 +166,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<FarmerModel[]>), 500)]
         public async Task<IActionResult> FilterForDownload(
         [FromQuery] string? businessCode,
+        [FromQuery] string? OrganizationCode,
        [FromQuery] string? FarmerUserId,
        [FromQuery] string? state,
        [FromQuery] string? marketDay,
@@ -180,7 +181,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
 
 
-                var result = await _reportManager.FilterFarmerTransactionForDownload(businessCode, FarmerUserId, state, marketDay, marketName,cropName,startDate, endDate, exportFormat);
+                var result = await _reportManager.FilterFarmerTransactionForDownload(businessCode,OrganizationCode, FarmerUserId, state, marketDay, marketName,cropName,startDate, endDate, exportFormat);
 
                 Response.Headers.Add("Content-Disposition", $"attachment; filename=\"{result.FileName}\"");
                 return File(result.FileBytes, result.MimeType);

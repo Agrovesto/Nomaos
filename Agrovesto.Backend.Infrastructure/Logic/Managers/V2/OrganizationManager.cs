@@ -88,7 +88,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<LocationResponseDto>>> GetSubLocationsAsync(ListQueryParams query);
         Task<PagedListResponse<List<SubLocationListDto>>> GetSubLocationsByParentAsync(long parentLocationId, ListQueryParams query);
         Task<bool> ReassignAgentToLocation(ProfileRequestModel model, OrganizationAgentArgs args);
-        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds);
+        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
         Task<OrganizationLocationModel> UpdateLocationAsync(EditLocationDto model, ListQueryParams query);
         Task<LocationInventory> AddInventoryAsync(CreateInventoryDto model, ListQueryParams query);
         Task<LocationInventory> EditInventoryAsync(EditInventoryDto model, ListQueryParams query);
@@ -1124,11 +1124,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             var business = await _businessRepository.GetBusinessByCodeAsync(query.businessCode);
             if (business == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Business Record not found"); }
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-            if (hasOrg != null)
-            {
-                query.OrganizationId = hasOrg.OrganizaionId;
-            }
+            //var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            //if (hasOrg != null)
+            //{
+            //    query.OrganizationId = hasOrg.OrganizaionId;
+            //}
 
             return await _organizationRepository.GetLocationsByAgentAsync(query);
 
@@ -1633,7 +1633,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 var agent = await CreateAgent(model, args, registerUser.model.Id);
 
-                await SendDefaultCredentialChange(registerUser.model);
+                await SendDefaultCredentialChange(registerUser.model, args.businessCode);
 
                 await AssignAgentToOrganization(model, args, registerUser.model.Id);
 
@@ -1900,7 +1900,7 @@ DateTimeOffset dateTime)
                 await LogActivity(user, args);
                 await EnsureWalletExists(user, business);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await SendDefaultCredentialChange(user);
+                await SendDefaultCredentialChange(user, args.businessCode);
             }
             catch (Exception ex)
             {
@@ -1924,7 +1924,7 @@ DateTimeOffset dateTime)
 
                                     });
         }
-        private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model, string businessCode)
         {
             var senderEmail = _configuration["Official:Email"];
 
@@ -1957,7 +1957,8 @@ DateTimeOffset dateTime)
                 // SMS fallback
                 await _sMSService.SendSmsAsync(
                     destination,
-                    $"Your default pin is {model.Pin}. Kindly login and change this."
+                    $"Your default pin is {model.Pin}. Kindly login and change this.",
+                    businessCode
                 );
             }
         }
@@ -2168,7 +2169,7 @@ DateTimeOffset dateTime)
         {
             if (args.Id != 0) return;
 
-            var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+            var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId, args.organizationCode);
 
             if (farmer == null)
                 throw new BaseException(
@@ -2226,13 +2227,13 @@ DateTimeOffset dateTime)
             }
 
         }
-        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds)
+        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
-                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId, organizationCode);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
 
                 var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeIds);
@@ -2314,7 +2315,7 @@ DateTimeOffset dateTime)
                 var business = await GetBusinessOrFail(args.businessCode);
 
                 var user = await RegisterMembershipLeaderOrFail(model, args);
-                await SendDefaultCredentialChange(user.model);
+                await SendDefaultCredentialChange(user.model, args.businessCode);
 
                 var membership = await CreateMembershipOrFail(
                     model, args, business, user.model.Id, dateTime);
@@ -2353,13 +2354,13 @@ DateTimeOffset dateTime)
 
             return await _farmerRepository.AssignFarmerToCooperatives(args, args.Id);
         }
-        public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId)
+        public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId, string? organizationCode)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
-                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId, organizationCode);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
 
                 var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeId);
@@ -2505,7 +2506,7 @@ DateTimeOffset dateTime)
 
         private async Task EnrichFarmerQuery(ListQueryParams request)
         {
-            var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId);
+            var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, request.organizationCode);
 
             if (farmer == null)
                 throw new BaseException(

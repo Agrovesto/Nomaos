@@ -114,7 +114,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(ListQueryParams query)
         {
-            var profile = await _farmerRepository.GetFarmerByUserId(query.UserId);
+            var profile = await _farmerRepository.GetFarmerByUserId(query.UserId, query.organizationCode);
             if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Farmer Record not found"); }
 
             // Agents linked to this farmer
@@ -164,7 +164,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "No file was uploaded.");
             }
 
-            // 1. Extract rows using your extractor
             var allFarmers = await ParseFarmerFileAsync(model.FileContent, args);
 
             if (allFarmers == null || !allFarmers.Any())
@@ -192,7 +191,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "No file was uploaded.");
             }
 
-            // 1. Extract rows using your extractor
             var allFarmers = await ParseFarmerFileAsync(model.FileContent, args);
 
             if (allFarmers == null || !allFarmers.Any())
@@ -236,7 +234,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     Status = "Processing"
                 });
 
-                // Small delay to prevent overwhelming system
                 await Task.Delay(50);
             }
 
@@ -395,7 +392,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                             if (isNewUser)
                             {
-                                await NotifyUserOfOrganizationAddition(userToUse.PhoneNumber, args.organizationCode);
+                                await NotifyUserOfOrganizationAddition(userToUse.PhoneNumber, args.organizationCode, args.businessCode);
                             }
                         }
                     }
@@ -509,7 +506,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                     OrganizationCode = args.organizationCode
                                 });
                                 _log.LogInformation($"User {model.PhoneNumber} added to organization {args.organizationCode}.");
-                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode, args.businessCode);
                             }
                         }
                         else
@@ -591,22 +588,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public async Task<SubAccountModel> CreateBulkBusinessUser(UserModel model, BusinessModel business, BusinessRegistrationArgs args)
         {
-            // 1. Initial Validation
             if (string.IsNullOrWhiteSpace(model.PhoneNumber) || model.PhoneNumber.Length != 11)
                 throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST, "Phone number must be exactly 11 digits.");
 
-              // Assuming ConvertedDate is a local utility method
             model.DateOfBirth = ConvertedDate(model.DateOfBirth);
             model.Lga = !string.IsNullOrEmpty(model.Lga) ? model.Lga : model.Location;
 
-            // 4. NIN Verification (I/O operation outside the transaction)
             if (model.shouldVerifyNin)
             {
                 var ninVerification = await _identityVerificationManager.VerifyNIN(new NINDataModel { number = model.NIN });
                 if (!ninVerification.status)
                 {
                     _log.LogError($"NIN verification failed: {ninVerification.detail}");
-                    // Keep shouldVerifyNin=false to prevent subsequent retries if verification failed
                     model.shouldVerifyNin = false;
                 }
                 else
@@ -620,7 +613,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
             }
 
-            // 5. Execution Strategy with Transaction (Ensures atomicity for database writes)
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
             {
@@ -652,7 +644,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 OrganizationCode = args.organizationCode
                             });
                             _log.LogInformation($"User {model.PhoneNumber} added to organization {args.organizationCode}.");
-                            await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                            await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode, args.businessCode);
                         }
                         else
                         {
@@ -688,21 +680,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         }
                     }
 
-                    // 6. Ensure Subaccount Exists (Wallet/Account Manager operations)
                     var existingSubAccount = await _walletManager.GetSubAccountByUserId(existingUser.Id);
                     SubAccountModel subAccount;
                     model.Email ??= GenerateEmail(model.FirstName, args.businessEmail);
 
                     subAccount = existingSubAccount ?? await CreateSubAccountAsync(model, args, business, existingUser.Id);
 
-                    // 7. Track Role and Create Category
                     await _authenticationRepository.TrackUserRoleAssignment(existingUser, model.UserType);
 
                     // Create business worker/category
                     await CreateUserCategory(
                         model,
                         args,
-                        new BusinessWorkerModel(), // Assuming these are mock/empty models for the method
+                        new BusinessWorkerModel(),
                         new BusinessWorkerModel(),
                         business,
                         subAccount,
@@ -710,11 +700,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         args.UserType
                     );
 
-                    // 8. Commit Changes
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    // 9. Populate and Return Subaccount Response
                     subAccount.UserId = existingUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
@@ -727,28 +715,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 }
                 catch (Exception ex)
                 {
-                    // 1. Log the full exception and stack trace
                     _log.LogError(ex, "Error occurred during CreateBulkBusinessUser and transaction rollback initiated.");
 
-                    // 2. Rollback the database transaction
                     await transaction.RollbackAsync();
 
-                    // 3. Determine the root cause message
                     string errorMessage;
 
-                    // Check for specific exceptions that wrap the database error (like EF Core)
                     if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
                     {
-                        // Extract the most specific database error message (e.g., SQL server constraint violation)
                         errorMessage = $"DB Constraint Error: {dbEx.InnerException?.Message ?? dbEx.Message}";
                     }
-                    // Check if it's already a handled business exception
                     else if (ex is BaseException bex)
                     {
-                        // Keep the original, clear business message
                         errorMessage = bex.Message;
                     }
-                    // Catch other internal errors, like identity creation failures (if not using BaseException)
                     else if (ex.InnerException != null)
                     {
                         errorMessage = $"System Error: {ex.InnerException.Message}";
@@ -758,8 +738,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                         errorMessage = ex.Message;
                     }
 
-                    // 4. Wrap the root message in a BaseException and rethrow. 
-                    // This ensures the outer Task.WhenAll loop catches a BaseException for clear reporting.
                     throw new BaseException(Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR, errorMessage);
                 }
             });
@@ -790,7 +768,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                  }
              }
 
-             // summary
              int successCount = results.Count(x => x.status == true);
              int failedCount = results.Count(x => x.status == false);
 
@@ -928,10 +905,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-                //var agent = await _agentRepository.GetAgentBySuperVisor(userId);
-
-                //if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+               
                 var cooperative = await _cooperativeRepository.AgentsBySupervisor(userId, query);
                 if (cooperative == null) return new PagedListResponse<List<AgentModel>>
                 {
@@ -1018,7 +992,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 throw new NotFoundException($"No Record Found");
             }
         }
-        private async Task SendOnboardingSMSM(string businessName, string phoneNumber)
+        private async Task SendOnboardingSMSM(string businessName, string phoneNumber, string businessCode)
         {
             var messageBody = $"A new business {businessName} has been added to your merchant list for Farmer Management Platform." +
                          $"You can always reach out to the business using {phoneNumber} ";
@@ -1039,7 +1013,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 to = $"2349061562512",
                 sms = messageBody
-            });
+            }, businessCode);
         }
 
         public async Task<BusinessModel> CreateBusiness(BusinessModel business, BusinessRegistrationArgs args) //userId is same as onboarded by{
@@ -1113,7 +1087,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             logincred = $"login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}&pwd={args.DefaultPassword}"
                         };
                         var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-                        var sendSms = SendOnboardingSMSM(business.BusinessName, business.PhoneNumber);
+                        var sendSms = SendOnboardingSMSM(business.BusinessName, business.PhoneNumber, args.businessCode);
                         return newBusiness;
                     }
                     catch (Exception ex)
@@ -1138,8 +1112,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             if (business == null) { throw new Exception($"Business does not exist"); }
             BusinessWorkerModel newBusinessWorker = new BusinessWorkerModel();
-            //verify user bvn details
-
+            
             var strategy = _context.Database.CreateExecutionStrategy();
 
             await strategy.ExecuteAsync(async () =>
@@ -1225,8 +1198,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             "MM/dd/yyyy", "MMM dd, yyyy", "yyyy/MM/dd"
         };
 
-            string dateOfBirth = date; // Example input, change to test other formats
-
+            string dateOfBirth = date; 
             if (DateTime.TryParseExact(dateOfBirth, dateFormats,
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
             {
@@ -1256,32 +1228,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        //public async Task<MemberShipModel> AssignCooperativeToAgent(string agentId, long cooperativeId)
-        //{
-        //    var assignAgentToCooperative = new MemberShipModel();
-        //    var strategy = _context.Database.CreateExecutionStrategy();
-
-        //    await strategy.ExecuteAsync(async () =>
-        //    {
-        //        await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-        //        try
-        //        {
-        //            assignAgentToCooperative = await _cooperativeRepository.AssignCooperativeToAgent(agentId, cooperativeId);
-
-        //            var assignAgentToFarmer = await _cooperativeRepository.AssignFarmerToAgent(agentId, cooperativeId);
-        //            await _context.SaveChangesAsync();
-        //            await dbTransaction.CommitAsync();
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            await dbTransaction.RollbackAsync();
-        //            throw new Exception($"{ex.Message}", ex);
-        //        }
-        //    });
-        //    return assignAgentToCooperative;
-        //}
-        public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
+         public async Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId)
         {
             return await _cooperativeRepository.ViewAgentAssignedToCooperative(cooperativeId);
         }
@@ -1391,7 +1338,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     if (existingUser != null)
                     {
-                        // Only handle organization linkage if organizationCode is provided
                         if (!string.IsNullOrEmpty(args.organizationCode))
                         {
                             bool alreadyInOrg = await _context.UserOrganizations
@@ -1409,7 +1355,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                     OrganizationCode = args.organizationCode
                                 });
                                 _log.LogInformation($"User {model.PhoneNumber} added to organization {args.organizationCode}.");
-                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode);
+                                await NotifyUserOfOrganizationAddition(existingUser.PhoneNumber, args.organizationCode, args.businessCode);
                             }
                         }
                         else
@@ -1469,7 +1415,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
 
-                    // Populate subaccount response
                     subAccount.UserId = existingUser.Id;
                     subAccount.Address = model.Location;
                     subAccount.City = model.Lga;
@@ -1489,7 +1434,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             });
         }
 
-        private async Task NotifyUserOfOrganizationAddition(string phoneNumber, string orgCode)
+        private async Task NotifyUserOfOrganizationAddition(string phoneNumber, string orgCode, string businessCode)
         {
             try
             {
@@ -1505,7 +1450,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 {
                     to = $"234{phoneNumber[^10..]}",
                     sms = message
-                });
+                }, businessCode);
 
                 if (termiiResult.response != null && termiiResult.status)
                 {
@@ -1748,41 +1693,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         }
 
 
-        //private async Task CreateFarmerProfileAsync(UserModel model, BusinessRegistrationArgs args, BusinessModel business, string userId, SubAccountModel subaccount,
-        //    long cooperativeId)
-        //{
-        //    if (string.IsNullOrEmpty(model.Email))
-        //    {
-        //        model.Email = GenerateEmail(model.FirstName, business.BusinessEmail);
-        //    }
-        //    var farmer = new FarmerModel
-        //    {
-        //        OnboardedByUserId = args.UserId,
-        //        BelongToBusinessCode = business.BusinessCode,
-        //        Email = model.Email,
-        //        Gender = model.Gender,
-        //        State = model.State,
-        //        Lga = model.Lga,
-        //        Location = model.Location,
-        //        Name = !string.IsNullOrEmpty(model.Name) ? model.Name : $"{model.FirstName} {model.MiddleName} {model.LastName}",
-        //        OnBoardedOn = DateTimeOffset.UtcNow,
-        //        PhoneNumber = model.PhoneNumber,
-        //        UserId = model.Id,
-        //        DateOfBirth = model.DateOfBirth,
-        //       // BelongToCooperativeId = cooperativeId,
-        //        Ward = model.Ward,
-        //        OrganizationCode = args.organizationCode,
-        //        FarmerCategory = model.FarmerCategory,
-        //        SelectedItems = model.ValueChainDto,
-        //        YearsInAgric = model.YearsInAgric,
-        //        HighestLevelOfEducation = model.HighestLevelOfEducation,
-        //        // ValueChainItems= model.ValueChainSelections
-        //    };
-
-        //    var farer = await _farmerRepository.CreateFarmer(farmer);
-
-
-        //}
         private async Task CreateFarmerProfileAsync(
     UserModel model,
     BusinessRegistrationArgs args,
@@ -2073,43 +1983,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             }
         }
 
-        //public async Task<PagedListResponse<List<FarmerModel>>> GetFarmersByBusinessCode(string userId,
-        //        ListQueryParams query)
-        //{
-        //    try
-        //    {
-        //        query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-        //        var business = await _businessRepository.GetBusinessByUserIdAsync(userId);
-
-        //        if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
-        //        var farmers = await _farmerRepository.GetFarmersByBusinessCode(business.BusinessCode, query);
-        //        if (farmers == null) return new PagedListResponse<List<FarmerModel>>
-        //        {
-        //            Succeeded = true,
-        //            Data = null,
-        //            Count = 0,
-        //            Message = "No Record Found"
-        //        };
-        //        return new PagedListResponse<List<FarmerModel>>
-        //        {
-        //            Succeeded = true,
-        //            Data = farmers,
-        //            Count = farmers.Count,
-        //            Message = "Retrieved Successfully"
-        //        };
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        _log.LogError($"Error retrieving Agents: {ex.Message}");
-
-        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new NotFoundException($"No Record Found");
-        //    }
-        //}
         public async Task<MemberShipModel> GetCooperativeDetailByUserId(string userId)
         {
 
@@ -2405,15 +2278,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<ImageUploadResponse> SaveFarmerImage(ImageModel model, BusinessRegistrationArgs args)
         {
             var saveFace = new ImageUploadResponse();
-            //var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-            //    ?? throw new Exception("Business does not exist");
-
-
-            //var strategy = _context.Database.CreateExecutionStrategy();
-
-            //await strategy.ExecuteAsync(async () =>
-            //{
-            //    await using var dbTransaction = await _context.Database.BeginTransactionAsync();
             try
             {
                 saveFace = await _faceManager.UploadImage(model.File, model.FarmerUserId, args.businessCode, args.organizationCode);
@@ -2470,7 +2334,7 @@ ListQueryParams query, string imageKey)
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Access Forbidden");
 
-                var farmer = await _farmerRepository.GetFarmerByUserId(query.UserId);
+                var farmer = await _farmerRepository.GetFarmerByUserId(query.UserId, query.organizationCode);
 
                 if (farmer == null)
                 {
@@ -2589,7 +2453,6 @@ ListQueryParams query, string imageKey)
                 }
             });
 
-            // 🔑 non-DB work after commit
             var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
 
             var propagationUrl = AppSettingsHelper.Setting("propagation:url");
@@ -2607,105 +2470,12 @@ ListQueryParams query, string imageKey)
 
             // send notifications
             var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-            var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact);
+            var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact, args.businessCode);
 
             return newOrg;
         }
 
-        //public async Task<OrganizationModel> CreateOrganization(OrganizationModel org, BusinessRegistrationArgs args) //userId is same as onboarded by{
-        //{   
-        //    OrganizationModel newOrg = new OrganizationModel();
-        //    var parentBusiness = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
-        //    if (parentBusiness == null)
-        //    {
-        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"Parent business not found or has been deactivated, kindly contact platform administrator");
-        //    }
-        //    var bModel = await _businessRepository.GetOrganizationAsync(org.OrganizationCode);
-        //    if (bModel != null)
-        //    {
-        //        throw new BaseException(Core.Enums.ExceptionType.ALREADY_EXIST, $"{org.OrganizationName} already exist, Kindly contact administrator");
-        //    }
-        //    var strategy = _context.Database.CreateExecutionStrategy();
-
-        //    await strategy.ExecuteAsync(async () =>
-        //    {
-        //        using (var dbTransaction = _context.Database.BeginTransaction())
-        //        {
-        //            try
-        //            {
-        //                var name = org.OrganizationName.Replace(" ", string.Empty).ToUpper();
-        //                var businessCount = await _businessRepository.OrganizationCount();
-        //                if (name.Length > 3)
-        //                {
-        //                    name = $"{name.Substring(0, 3)}";
-        //                }
-        //                org.BusinessCode = args.businessCode;
-        //                org.OrganizationCode= $"{name}{DateTimeOffset.Now.Month}{businessCount + 1}";
-
-        //                //register organization
-        //                newOrg = await _businessRepository.CreateOrganization(org);
-
-        //                var registrationMode = new UserModel
-        //                {
-        //                    Email = org.OrganizationEmail,
-        //                    FirstName = org.OrganizationName,
-        //                    Password = org.Password,
-        //                    PhoneNumber = org.Contact,
-        //                    UserType = Enum.GetName(typeof(UserType), UserType.Organization),//UserType.Business,
-        //                    CreatedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : "Self-Registration",
-        //                    CreatedOn = DateTimeOffset.Now,
-        //                    BusinessCode = args.businessCode,
-        //                    OrganizationCode= org.OrganizationCode,
-        //                    Name= org.OrganizationName
-
-        //                };
-        //                var registerBusinessUser = await _authenticationRepository.RegisterBusinessUser(registrationMode, args.RoleName /*role name should be business admin role*/);
-        //                if (!registerBusinessUser.status)
-        //                {
-        //                    throw new Exception(registerBusinessUser.message);
-        //                }
-
-
-
-
-        //                await _context.SaveChangesAsync();
-        //                await dbTransaction.CommitAsync();
-
-
-        //                //send email to business about sucessful onboarding
-
-        //                var accountOfficer = await _authenticationRepository.GetUserById(args.UserId);
-
-        //                var propagationUrl = AppSettingsHelper.Setting("propagation:url");
-        //                var mailRequest = new WelcomeMailBody
-        //                {
-        //                    To = org.ContactEmail,
-        //                    ToName = $"{org.OrganizationName}",
-        //                    Subject = $"Welcome OnBoard {org.OrganizationName}",
-        //                    AccountOfficer = accountOfficer.model.FirstName,
-        //                    DefaultPassword = args.DefaultPassword,
-        //                    Email = accountOfficer.model.Email,
-        //                    PhoneNumber = accountOfficer.model.PhoneNumber,
-        //                    //PropagateUrl = $"{propagationUrl}/login?bsCd={business.BusinessCode}&signage={newBusiness.BusinessCodeSignageSalt}",
-        //                    logincred = $"login?bsCd={org.BusinessCode}&org={org.OrganizationCode}&pwd={args.DefaultPassword}"
-        //                };
-        //                var mail = SendGridService.DynamicBusinessOnboarding(mailRequest);
-        //                var sendSms = SendOnboardingSMSM(org.OrganizationName, org.Contact);
-        //                return newOrg;
-        //            }
-        //            catch (Exception ex)
-        //            {
-
-        //                await dbTransaction.RollbackAsync();
-        //                _log.LogInformation("Error thrown at organization registration with ", ex.Message);
-        //                throw;
-        //            }
-        //        }
-        //    });
-
-        //    return newOrg;
-        //}
-
+       
         public async Task<FarmerDetailDto> GetFarmerDetails(
 
     ListQueryParams query)

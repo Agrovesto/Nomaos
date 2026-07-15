@@ -18,6 +18,7 @@ using Microsoft.AspNetCore.Authorization;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -39,6 +40,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IModuleRepository _moduleRepository;
         private readonly IOrganizationManager _organizationManager;
         private readonly IInputFinancingRepository _inputFinancingRepository;
+        private readonly ISMSProviderRepository _sMSProviderRepository;
         public AdminController(IHttpContextAccessor httpContextAccessor,
             IWalletProviderManager walletProvider,
             IReportManager reportManager,
@@ -52,7 +54,8 @@ namespace Agrovesto.Backend.API.Controllers
             ITemperatureControlType temperatureControlType,
             IModuleRepository moduleRepository,
             IOrganizationManager organizationManager,
-            IInputFinancingRepository inputFinancingRepository
+            IInputFinancingRepository inputFinancingRepository,
+            ISMSProviderRepository sMSProviderRepository
             ) : base(httpContextAccessor)
         {
             _reportManager = reportManager;
@@ -68,7 +71,50 @@ namespace Agrovesto.Backend.API.Controllers
             _moduleRepository = moduleRepository;
             _organizationManager = organizationManager;
             _inputFinancingRepository = inputFinancingRepository;
+            _sMSProviderRepository = sMSProviderRepository;
         }
+
+
+        [HttpGet("businesses")]
+        public async Task<IActionResult> GetBusinessesAsync([FromQuery] ListQueryParams query)
+        {
+            try
+            {
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var result = await _businessManager.GetBusinessesAsync(query);
+                return Ok(new PagedListResponse<List<BusinessModel>>()
+                {
+                    Data = result.Data,
+                    Message = result.Message,
+                    Succeeded =true,
+                    Count = result.Count,
+                    PageNumber = query.PageNumber,
+                    PageSize = 10,
+                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+
+
+        }
+
+
         [HttpGet("inputfinancing-categories")]
         public async Task<IActionResult> GetInputFinancingCategory([FromQuery] ListQueryParams args)
         {
@@ -915,7 +961,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
 
-        public async Task<IActionResult> GetAllWallets()
+        public async Task<IActionResult> GetAllWallets([FromQuery] string businessCode)
         {
             var result = await _walletProvider.GetAll();
             return Ok(new Response<WalletProviderModel[]>()
@@ -974,7 +1020,22 @@ namespace Agrovesto.Backend.API.Controllers
             return Ok(new Response<object>()
             {
                 Succeeded = result,
-                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+                Message = result ? "Provider has been activated successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
+        [HttpPut("enable-wallet-provider/{businessCode}")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> EnableWalletProvider(string businessCode, [FromQuery]long id,
+            [FromBody] WalletProviderParameterModel[]? model, [FromQuery] bool isDefault =false)
+        {
+            var result = await _walletProvider.EnableProviderForBusiness(businessCode, id, model, isDefault);
+            return Ok(new Response<BusinessWalletProviderModel>()
+            {
+                Succeeded = true,
+                Message = "Provider enabled successfully"
             });
         }
         [HttpGet("wallet/parameters/{id}/{Env}")]
@@ -1095,6 +1156,58 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                 return Ok(new Response<WalletProviderParameterModel>()
+                {
+                    Succeeded = true,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+        [HttpPost("wallet/business-parameter/edit")]
+        [ProducesResponseType(typeof(Response<BusinessWalletProviderParameterModel>), 200)]
+        [ProducesResponseType(typeof(Response<BusinessWalletProviderParameterModel>), 400)]
+        [ProducesResponseType(typeof(Response<BusinessWalletProviderParameterModel>), 422)]
+        [ProducesResponseType(typeof(Response<BusinessWalletProviderParameterModel>), 500)]
+        public async Task<IActionResult> EditParameterForBusiness([FromBody] BusinessWalletProviderParameterModel model, [FromQuery]string businessCode)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                
+                var result = await _walletProvider.EditBusinessParameterValue(model);
+
+
+                return Ok(new Response<BusinessWalletProviderParameterModel>()
                 {
                     Succeeded = true,
                     Data = result
@@ -1395,5 +1508,251 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         #endregion OrganizationMgt
+
+
+        #region sms
+        [HttpPost("sms/create-provider")]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 500)]
+        public async Task<IActionResult> CreateSMSProvier([FromBody] SMSProviderModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                return Ok(new Response<SMSProviderModel>
+                {
+                    Succeeded = true,
+                    Data = await _sMSProviderRepository.CreateProvider(model)
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+        //[Authorize(Roles = "Admin")]
+
+        [HttpGet("sms/get-providers")]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 500)]
+
+        public async Task<IActionResult> GetAllSMSProviders([FromQuery] string businessCode)
+        {
+            var result = await _sMSProviderRepository.GetAll();
+            return Ok(new Response<SMSProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+        [HttpGet("sms/get-providers-by-business/{businessCode}")]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 500)]
+
+        public async Task<IActionResult> GetProvidersForBusiness(string businessCode)
+        {
+            var result = await _sMSProviderRepository.GetProvidersForBusiness(businessCode);
+            return Ok(new Response<BusinessSMSProviderModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        [HttpGet("sms/provider-by-id/{id}")]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 500)]
+
+        public async Task<IActionResult> GetSMSProviderById(long id)
+        {
+            var result = await _sMSProviderRepository.Get(id);
+            return Ok(new Response<SMSProviderModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Disables provider
+        /// </summary>
+        /// <param name="id"></param>
+        /// <returns></returns>
+      //  [Authorize(Roles = "Admin")]
+        [HttpPut("sms/{businessCode}/disable/business")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> DisableProviderForBusiness(string businessCode, [FromQuery]long id)
+        {
+            bool result = await _sMSProviderRepository.DisableProviderForBusiness(businessCode,id);
+            return Ok(new Response<object>()
+            {
+                Succeeded = result,
+                Message = result ? "Provider has been disabled successfully" : "An error occur while processing your request, Please try again"
+            });
+        }
+
+        [HttpPut("sms/{businessCode}/activate/business")]
+        [ProducesResponseType(typeof(Response<object>), 200)]
+        [ProducesResponseType(typeof(Response<object>), 400)]
+        [ProducesResponseType(typeof(Response<object>), 422)]
+        [ProducesResponseType(typeof(Response<object>), 500)]
+        public async Task<IActionResult> EnableProviderForBusiness(string businessCode, [FromQuery]long id,
+            [FromBody] SMSProviderParameterModel[]? overrideParameters, [FromQuery]bool isDefault=false)
+        {
+            var result = await _sMSProviderRepository.EnableProviderForBusiness(businessCode, id, overrideParameters, isDefault);
+            return Ok(new Response<BusinessSMSProviderModel>()
+            {
+                Succeeded = true,
+                Message = "Provider has been activated successfully" 
+            });
+        }
+     
+        [HttpGet("sms/parameters/{id}/{Env}")]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 500)]
+
+        public async Task<IActionResult> GetParametersByProvider(long id, string Env)
+        {
+            var result = await _sMSProviderRepository.GetParametersByProvider(id, Env);
+            return Ok(new Response<SMSProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+        [HttpGet("sms/parameters/{id}/{Env}/{businessCode}")]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 500)]
+
+        public async Task<IActionResult> GetParametersByProvider(long id, string Env, string businessCode)
+        {
+            var result = await _sMSProviderRepository.GetParametersByProvider(id, businessCode,Env);
+            return Ok(new Response<SMSProviderParameterModel[]>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+        [HttpGet("sms/parameter/{id}/{businessCode}")]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderParameterModel>), 500)]
+
+        public async Task<IActionResult> EditBusinessParameterValue(long id, string businessCode, [FromBody] BusinessSMSProviderParameterModel model)
+        {model.ParameterId= id;
+            
+            
+            var result = await _sMSProviderRepository.EditBusinessParameterValue(model);
+            return Ok(new Response<BusinessSMSProviderParameterModel>()
+            {
+                Succeeded = true,
+                Data = result
+            });
+
+        }
+
+        /// <summary>
+        /// Updates parameter
+        /// </summary>
+        /// <param name="model"></param>
+        /// <returns></returns>
+        //  [Authorize(Roles = "Admin")]
+
+        [HttpPost("sms/update-provider-parameters")]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 200)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 400)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 422)]
+        [ProducesResponseType(typeof(Response<SMSProviderModel>), 500)]
+        public async Task<IActionResult> UpdateProviderParameter([FromBody] SMSProviderModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            try
+            {
+                var result = await _sMSProviderRepository.UpdateProviderParameter(model);
+
+
+                return Ok(new Response<SMSProviderModel>()
+                {
+                    Succeeded = true,
+                    Data = result
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+    
+        #endregion
+
     }
 }
