@@ -229,15 +229,26 @@ jobs:
       # 🚀 DEPLOYMENT STEPS (ONLY AFTER SONARQUBE PASSES)
       # ============================================================
 
-      - name: Publish application
+      - name: Publish
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
             --configuration Release \
+            --runtime linux-x64 \
             --framework net8.0 \
-            --no-restore \
+            --self-contained true \
             --output ${{ env.PUBLISH_DIR }} \
             /p:PublishTrimmed=false \
             /p:PublishSingleFile=false
+
+      - name: Create deployment metadata
+        run: |
+          echo "${{ env.COMMIT_SHA }}" > ${{ env.PUBLISH_DIR }}/.commit-sha
+          echo "${{ env.VERSION }}" > ${{ env.PUBLISH_DIR }}/.version
+          echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > ${{ env.PUBLISH_DIR }}/.deployed-at
+          echo "✅ Deployment metadata created:"
+          echo "   SHA: $(cat ${{ env.PUBLISH_DIR }}/.commit-sha)"
+          echo "   Version: $(cat ${{ env.PUBLISH_DIR }}/.version)"
+          echo "   Deployed: $(cat ${{ env.PUBLISH_DIR }}/.deployed-at)"
 
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -264,6 +275,18 @@ jobs:
             ${{ env.PUBLISH_DIR }}/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
+      - name: Verify artifact on server
+        run: |
+          echo "🔍 Verifying deployment artifact..."
+          REMOTE_SHA=$(ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo 'NOT_FOUND'")
+          
+          if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
+            echo "✅ SHA verified on server: $REMOTE_SHA"
+          else
+            echo "❌ SHA mismatch! Expected: ${{ env.COMMIT_SHA }}, Got: $REMOTE_SHA"
+            exit 1
+          fi
       - name: Swap deployment slot
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
@@ -276,8 +299,19 @@ jobs:
           # Uncomment when ready:
           # curl -f https://dev-noma-api-nomaos.com/health || exit 1
 
+      - name: Deployment Summary
+        if: success()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📦 Version: ${{ env.VERSION }}"
+          echo "🔖 Commit: ${{ env.COMMIT_SHA }}"
+          echo "🕐 Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          echo "🌍 Environment: Staging"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
       - name: Cleanup old releases
         if: success()
         run: |
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "cd /var/www/Nomaos/releases && ls -t | tail -n +6 | xargs -r rm -rf"
+          echo "🧹 Note: Old releases cleanup is handled by deploy-staging.sh"
