@@ -161,19 +161,69 @@ jobs:
         continue-on-error: true
 
       # ✅ END SONARQUBE ANALYSIS
-      - name: End SonarQube Analysis
+      - name: End SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
-          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
+        run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
-      # ✅ CHECK QUALITY GATE
-      - name: Check SonarQube Quality Gate
-        uses: sonarsource/sonarqube-quality-gate-action@master
-        timeout-minutes: 5
+      # 🔧 ALTERNATIVE: Manual Quality Gate Check using SonarQube API
+      - name: Check SonarQube Quality Gate (Manual)
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
+        run: |
+          echo "Waiting for SonarQube analysis to complete..."
+          sleep 10
+          
+          # Get the analysis ID from the report task file
+          if [ -f ".sonarqube/out/.sonar/report-task.txt" ]; then
+            ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' .sonarqube/out/.sonar/report-task.txt)
+            echo "Analysis ID: $ANALYSIS_ID"
+            
+            # Poll for task completion
+            MAX_ATTEMPTS=60
+            ATTEMPT=0
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
+                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" | \
+                jq -r '.task.status')
+              
+              echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS - Status: $STATUS"
+              
+              if [ "$STATUS" = "SUCCESS" ]; then
+                echo "✅ Analysis completed successfully"
+                break
+              elif [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELED" ]; then
+                echo "❌ Analysis failed with status: $STATUS"
+                exit 1
+              fi
+              
+              sleep 5
+              ATTEMPT=$((ATTEMPT+1))
+            done
+            
+            if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "❌ Timeout waiting for analysis to complete"
+              exit 1
+            fi
+            
+            # Check Quality Gate status
+            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" | \
+              jq -r '.projectStatus.status')
+            
+            echo "Quality Gate Status: $QG_STATUS"
+            
+            if [ "$QG_STATUS" != "OK" ]; then
+              echo "❌ Quality Gate failed with status: $QG_STATUS"
+              exit 1
+            fi
+            
+            echo "✅ Quality Gate passed!"
+          else
+            echo "❌ Report task file not found"
+            exit 1
+          fi
 
       # ============================================================
       # 🚀 DEPLOYMENT STEPS (ONLY AFTER SONARQUBE PASSES)
