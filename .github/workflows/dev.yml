@@ -13,126 +13,207 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   # ============================================================
-  # ✅ JOB 1 — PR QUALITY CHECK (SONAR ONLY HERE)
+  # ✅ JOB 1 — PR QUALITY CHECK WITH SONARQUBE
   # ============================================================
-  pr-quality:
+  SASTSonarQube:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    environment: secops
 
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
+      DOTNET_VERSION: 8.0.x
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Required for SonarQube blame information
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # ✅ ADD CACHING HERE
+      # ✅ OPTIMIZED CACHING
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
-          restore-keys: nuget-${{ runner.os }}-
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
-      - name: Cache SonarQube packages
+      - name: Cache SonarQube scanner
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
-          key: sonar-${{ runner.os }}
+          key: sonar-scanner-${{ runner.os }}
+          restore-keys: |
+            sonar-scanner-${{ runner.os }}
 
       - name: Cache dotnet tools
         uses: actions/cache@v4
         with:
           path: ~/.dotnet/tools
-          key: dotnet-tools-${{ runner.os }}
+          key: dotnet-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
+          restore-keys: |
+            dotnet-tools-${{ runner.os }}-
 
-      - run: dotnet tool install --global dotnet-sonarscanner
+      # ✅ INSTALL SONARSCANNER
+      - name: Install SonarScanner
+        run: |
+          dotnet tool install --global dotnet-sonarscanner --version 6.0.0 || true
+          dotnet tool install --global dotnet-coverage --version 17.10.0 || true
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+      # ✅ GET VERSION FROM PROJECT FILE
+      - name: Get project version
+        id: pkg_version
+        run: |
+          VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} || echo "1.0.0")
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Project version: $VERSION"
 
-      - run: dotnet restore
+      - name: Restore dependencies
+        run: dotnet restore
 
-      - name: Sonar Begin (PR)
+      # ✅ START SONARQUBE ANALYSIS
+      - name: Begin SonarQube Analysis
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: |
           dotnet sonarscanner begin \
             /k:"${{ env.SONAR_PROJECT_KEY }}" \
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
-            /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
-            /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            /d:sonar.pullrequest.branch="${{ github.event.pull_request.head.ref }}" \
-            /d:sonar.pullrequest.base="${{ github.event.pull_request.base.ref }}"
+            /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}" \
+            /d:sonar.projectVersion="${{ env.VERSION }}" \
+            /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml \
+            /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**" \
+            /d:sonar.coverage.exclusions="**Tests.cs,**/*Tests/**,**/Program.cs" \
+            /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
 
-      - run: dotnet build --configuration Release --no-restore
+      # ✅ BUILD
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
 
-      - run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release
+      # ✅ RUN TESTS WITH CODE COVERAGE
+      - name: Test and coverage
+        run: |
+          dotnet-coverage collect \
+            "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
+            -f xml -o coverage.xml
 
-      - run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
-      
+      # ✅ END SONARQUBE ANALYSIS
+      - name: End SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
+        run: |
+          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
+
+      # ✅ CHECK QUALITY GATE
+      - name: Check SonarQube Quality Gate
+        uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+        timeout-minutes: 5
+        env:
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
 
   # ============================================================
-  # ✅ JOB 2 — DEPLOY (NO SONAR HERE)
+  # ✅ JOB 2 — DEPLOY TO STAGING
   # ============================================================
   deploy-staging:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    environment: staging
 
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
-      SONAR_PROJECT_KEY: Agrovesto.Backend.API
-
+      DOTNET_VERSION: 8.0.x
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - run: dotnet restore
-      - run: dotnet build --configuration Release --no-restore
+      # ✅ OPTIMIZED CACHING FOR DEPLOY
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      # ✅ RUN TESTS BEFORE DEPLOY
+      - name: Run tests
+        run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal
+
+      # ✅ PUBLISH APPLICATION
       - name: Publish
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
-            -c Release \
-            -f net8.0 \
+            --configuration Release \
+            --framework net8.0 \
             --no-restore \
-            -o ${{ env.PUBLISH_DIR }}
+            --output ${{ env.PUBLISH_DIR }} \
+            /p:PublishTrimmed=false \
+            /p:PublishSingleFile=false
 
+      # ✅ SETUP SSH
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
 
-      - name: Add EC2 host
+      - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
 
-      - name: Rsync
+      # ✅ DEPLOY VIA RSYNC
+      - name: Create release directory
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
-          rsync -az --delete \
+      - name: Rsync files
+        run: |
+          rsync -avz --delete \
+            --exclude='.git' \
+            --exclude='*.pdb' \
             ${{ env.PUBLISH_DIR }}/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
-      - name: Swap Slot
+      # ✅ SWAP TO NEW VERSION
+      - name: Swap deployment slot
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
+
+      # ✅ HEALTH CHECK
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f https://dev-noma-api-nomaos.com/health || exit 1
