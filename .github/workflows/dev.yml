@@ -153,14 +153,29 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       # ✅ TEST WITH COVERAGE
-      - name: Test and coverage
+      - name: Test & Coverage
         run: |
-          dotnet-coverage collect \
-            "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
-            -f xml -o coverage.xml
+          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+            --configuration Release \
+            --no-build \
+            --verbosity normal \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./coverage \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+        continue-on-error: true
+      
+        # Convert coverage to OpenCover format for SonarQube
+      - name: Prepare coverage for SonarQube
+        run: |
+          if [ -d "./coverage" ]; then
+            find ./coverage -name "coverage.cobertura.xml" -exec cp {} ./coverage/coverage.opencover.xml \; || true
+            echo "✅ Coverage report prepared"
+          else
+            echo "⚠️ No coverage data found"
+          fi
         continue-on-error: true
 
-      # ✅ END SONARQUBE ANALYSIS
+      ###### ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
