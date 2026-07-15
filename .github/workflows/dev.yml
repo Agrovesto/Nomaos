@@ -1,6 +1,9 @@
-name: CI/CD Deploy Agrovesto.Backend.API
+name: CI - Sonar + Deploy
 
 on:
+  pull_request:
+    branches:
+      - staging
   push:
     branches:
       - staging
@@ -10,102 +13,143 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+
+  # ============================================================
+  # ✅ JOB 1 — PR QUALITY CHECK
+  # Runs ONLY on pull_request
+  # ============================================================
+  pr-quality:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     env:
-      APP: Agrovesto.Backend.API
-      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-      PUBLISH_DIR: ${{ github.workspace }}/publish
-      COMMIT_SHA: ${{ github.sha }}
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
-      # ── Setup .NET ───────────────────────────────────────────────────
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v5
+        uses: actions/checkout@v4
         with:
-          dotnet-version: "8.0.x"
+          fetch-depth: 0
 
-      # ── Install jq (needed for Quality Gate check) ───────────────────
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      # ── Clean ─────────────────────────────────────────────────────────
-      - name: Clean
-        run: |
-          dotnet clean ${{ env.PROJECT_PATH }} --configuration Release || true
-          rm -rf ${{ env.PROJECT_PATH }}/../obj
-          rm -rf ${{ env.PROJECT_PATH }}/../bin
-
-      # ── Cache NuGet ───────────────────────────────────────────────────
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}-${{ github.run_id }}
-          restore-keys: nuget-${{ runner.os }}-
+          dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore ${{ env.PROJECT_PATH }}
-
-      # ── Install SonarScanner ──────────────────────────────────────────
       - name: Install SonarScanner
         run: dotnet tool install --global dotnet-sonarscanner
 
       - name: Add dotnet tools to PATH
         run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      # ── SonarQube Begin ───────────────────────────────────────────────
-      - name: SonarQube Begin
+      - name: Restore
+        run: dotnet restore
+
+      - name: Sonar Begin (PR)
         run: |
           dotnet sonarscanner begin \
             /k:"${{ env.SONAR_PROJECT_KEY }}" \
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
-            /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+            /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
+            /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
+            /d:sonar.pullrequest.branch=${{ github.head_ref }} \
+            /d:sonar.pullrequest.base=${{ github.base_ref }}
 
-      # ── Build (required between begin/end) ────────────────────────────
       - name: Build
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore
 
-      # ── SonarQube End ─────────────────────────────────────────────────
-      - name: SonarQube End
+      - name: Sonar End
+        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
+
+
+  # ============================================================
+  # ✅ JOB 2 — STAGING DEPLOY
+  # Runs ONLY on push to staging
+  # ============================================================
+  build-test-analyze-deploy:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
+      SONAR_PROJECT_KEY: Agrovesto.Backend.API
+      PUBLISH_DIR: ${{ github.workspace }}/publish
+      COMMIT_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Install SonarScanner
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Add dotnet tools to PATH
+        run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Restore
+        run: dotnet restore
+
+      # ✅ SONAR BEGIN
+      - name: Sonar Begin
         run: |
-          dotnet sonarscanner end \
-            /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+          dotnet sonarscanner begin \
+            /k:"${{ env.SONAR_PROJECT_KEY }}" \
+            /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
+            /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
+            /d:sonar.newCode.referenceBranch=staging
 
-      # ── Wait for Quality Gate ─────────────────────────────────────────
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      # ✅ TEST WITH COVERAGE
+      - name: Test with Coverage
+        run: |
+          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --configuration Release
+
+      - name: Install ReportGenerator
+        run: dotnet tool install --global dotnet-reportgenerator-globaltool
+
+      - name: Generate OpenCover Report
+        run: |
+          reportgenerator \
+            -reports:**/coverage.cobertura.xml \
+            -targetdir:coverage-report \
+            -reporttypes:OpenCover
+
+      - name: Sonar End
+        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
+
+      # ✅ WAIT FOR QUALITY GATE
       - name: Wait for Quality Gate
         run: |
-          echo "Waiting for SonarQube Quality Gate..."
-
           STATUS="PENDING"
-          ATTEMPTS=0
-
-          while [[ "$STATUS" == "PENDING" || "$STATUS" == "IN_PROGRESS" || -z "$STATUS" ]]; do
+          until [[ "$STATUS" != "PENDING" && "$STATUS" != "IN_PROGRESS" ]]; do
             sleep 5
-            STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" \
+            STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN_DOTNET }}:" \
               "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=${{ env.SONAR_PROJECT_KEY }}" \
               | jq -r '.projectStatus.status')
-
-            echo "Current status: $STATUS"
-            ATTEMPTS=$((ATTEMPTS+1))
-
-            if [ $ATTEMPTS -gt 30 ]; then
-              echo "Timeout waiting for Quality Gate"
-              exit 1
-            fi
+            echo "Status: $STATUS"
           done
 
           if [ "$STATUS" != "OK" ]; then
-            echo "Quality Gate failed ❌"
+            echo "Quality Gate Failed"
             exit 1
           fi
-
-          echo "Quality Gate passed ✅"
 
       # ── Publish ───────────────────────────────────────────────────────
       - name: Publish
