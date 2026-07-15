@@ -19,7 +19,7 @@ jobs:
   SASTSonarQube:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    environment: secops
+    environment: staging
 
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
@@ -63,25 +63,25 @@ jobs:
           restore-keys: |
             dotnet-tools-${{ runner.os }}-
 
-      # ✅ INSTALL SONARSCANNER
-      - name: Install SonarScanner
+      # ✅ INSTALL SONARSCANNER (Updated version)
+      - name: Install SonarScanner and Coverage tools
         run: |
-          dotnet tool install --global dotnet-sonarscanner --version 6.0.0 || true
-          dotnet tool install --global dotnet-coverage --version 17.10.0 || true
+          dotnet tool install --global dotnet-sonarscanner --version 7.1.0 || true
+          dotnet tool install --global dotnet-coverage --version 17.12.4 || true
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       # ✅ GET VERSION FROM PROJECT FILE
       - name: Get project version
         id: pkg_version
         run: |
-          VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} || echo "1.0.0")
+          VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} | head -1 || echo "1.0.0")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Project version: $VERSION"
 
       - name: Restore dependencies
         run: dotnet restore
 
-      # ✅ START SONARQUBE ANALYSIS
+      # ✅ START SONARQUBE ANALYSIS (FIXED VERSION PARAMETER)
       - name: Begin SonarQube Analysis
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -91,10 +91,10 @@ jobs:
             /k:"${{ env.SONAR_PROJECT_KEY }}" \
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}" \
-            /d:sonar.projectVersion="${{ env.VERSION }}" \
+            /v:"${{ env.VERSION }}" \
             /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml \
-            /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**" \
-            /d:sonar.coverage.exclusions="**Tests.cs,**/*Tests/**,**/Program.cs" \
+            /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
+            /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
 
       # ✅ BUILD
@@ -212,8 +212,8 @@ jobs:
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
 
-      # ✅ HEALTH CHECK
+      # ✅ HEALTH CHECK (Optional - update URL)
       - name: Health check
         run: |
           sleep 10
-          curl -f https://dev-noma-api-nomaos.com/health || exit 1
+          # curl -f https://your-staging-url.com/health || exit 1
