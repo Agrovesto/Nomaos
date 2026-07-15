@@ -68,8 +68,8 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            /d:sonar.pullrequest.branch=${{ github.head_ref }} \        
-            /d:sonar.pullrequest.base=staging
+            /d:sonar.pullrequest.branch="${{ github.event.pull_request.head.ref }}" \
+            /d:sonar.pullrequest.base="${{ github.event.pull_request.base.ref }}"
 
       - run: dotnet build --configuration Release --no-restore
 
