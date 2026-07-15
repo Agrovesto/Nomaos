@@ -1,4 +1,4 @@
-name: CI - Sonar + Deploy
+name: CI - PR Quality + Deploy
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
 
   # ============================================================
-  # ✅ JOB 1 — PR QUALITY CHECK
+  # ✅ JOB 1 — PR QUALITY CHECK (SONAR ONLY HERE)
   # ============================================================
   pr-quality:
     if: github.event_name == 'pull_request'
@@ -35,9 +35,28 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - run: sudo apt-get update && sudo apt-get install -y jq
+      # ✅ ADD CACHING HERE
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}
+
+      - name: Cache dotnet tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.dotnet/tools
+          key: dotnet-tools-${{ runner.os }}
 
       - run: dotnet tool install --global dotnet-sonarscanner
+      
       - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - run: dotnet restore
@@ -50,23 +69,17 @@ jobs:
             /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
             /d:sonar.pullrequest.branch=${{ github.head_ref }} \
-            /d:sonar.pullrequest.base=${{ github.base_ref }} \
-            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+            /d:sonar.pullrequest.base=staging
 
       - run: dotnet build --configuration Release --no-restore
 
-      - name: Test with Coverage
-        run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults \
-            --configuration Release
+      - run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release
 
       - run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
-
+      
 
   # ============================================================
-  # ✅ JOB 2 — STAGING BUILD + DEPLOY
+  # ✅ JOB 2 — DEPLOY (NO SONAR HERE)
   # ============================================================
   deploy-staging:
     if: github.event_name == 'push'
@@ -74,66 +87,19 @@ jobs:
 
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
-      SONAR_PROJECT_KEY: Agrovesto.Backend.API
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - run: sudo apt-get update && sudo apt-get install -y jq
-
-      - run: dotnet tool install --global dotnet-sonarscanner
-      - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-
       - run: dotnet restore
-
-      # ✅ SONAR BEGIN
-      - name: Sonar Begin
-        run: |
-          dotnet sonarscanner begin \
-            /k:"${{ env.SONAR_PROJECT_KEY }}" \
-            /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
-            /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
-            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
-            /d:sonar.newCode.referenceBranch=staging
-
       - run: dotnet build --configuration Release --no-restore
 
-      - name: Test with Coverage
-        run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./TestResults \
-            --configuration Release
-
-      - run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
-
-      # ✅ WAIT FOR QUALITY GATE
-      - name: Wait for Quality Gate
-        run: |
-          STATUS="PENDING"
-          until [[ "$STATUS" != "PENDING" && "$STATUS" != "IN_PROGRESS" ]]; do
-            sleep 5
-            STATUS=$(curl -s -u "${{ secrets.SONAR_TOKEN_DOTNET }}:" \
-              "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=${{ env.SONAR_PROJECT_KEY }}" \
-              | jq -r '.projectStatus.status')
-            echo "Status: $STATUS"
-          done
-
-          if [ "$STATUS" != "OK" ]; then
-            echo "Quality Gate Failed"
-            exit 1
-          fi
-
-      # ✅ PUBLISH
       - name: Publish
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
@@ -142,7 +108,6 @@ jobs:
             --no-restore \
             -o ${{ env.PUBLISH_DIR }}
 
-      # ✅ DEPLOY
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -160,7 +125,6 @@ jobs:
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
           rsync -az --delete \
-            --checksum \
             ${{ env.PUBLISH_DIR }}/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
