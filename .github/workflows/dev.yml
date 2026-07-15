@@ -169,7 +169,7 @@ jobs:
 
       # ✅ CHECK QUALITY GATE
       - name: Check SonarQube Quality Gate
-        uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # v1.2.0
+        uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
