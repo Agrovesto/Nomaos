@@ -68,7 +68,7 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            /d:sonar.pullrequest.branch=staging \
+            /d:sonar.pullrequest.branch=${{ github.head_ref }} \        
             /d:sonar.pullrequest.base=staging
 
       - run: dotnet build --configuration Release --no-restore
@@ -89,9 +89,13 @@ jobs:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
+      SONAR_PROJECT_KEY: Agrovesto.Backend.API
+
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
