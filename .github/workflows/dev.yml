@@ -157,11 +157,7 @@ jobs:
         run: |
           dotnet test ${{ env.TEST_PROJECT_PATH }} \
             --configuration Release \
-            # --no-build \
-            --verbosity normal \
-            # -p:CollectCoverage=true \
-            # -p:CoverletOutputFormat=opencover \
-            # -p:CoverletOutput=./coverage/coverage.opencover.xml        
+            --verbosity normal         
           echo "✅ Tests completed with coverage"
         # Convert coverage to OpenCover format for SonarQube
       - name: Move coverage for SonarQube
