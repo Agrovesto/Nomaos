@@ -16,34 +16,31 @@ jobs:
 
   # ============================================================
   # ✅ JOB 1 — PR QUALITY CHECK
-  # Runs ONLY on pull_request
   # ============================================================
   pr-quality:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     env:
+      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Install SonarScanner
-        run: dotnet tool install --global dotnet-sonarscanner
+      - run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Add dotnet tools to PATH
-        run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+      - run: dotnet tool install --global dotnet-sonarscanner
+      - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      - name: Restore
-        run: dotnet restore
+      - run: dotnet restore
 
       - name: Sonar Begin (PR)
         run: |
@@ -53,20 +50,25 @@ jobs:
             /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
             /d:sonar.pullrequest.branch=${{ github.head_ref }} \
-            /d:sonar.pullrequest.base=${{ github.base_ref }}
+            /d:sonar.pullrequest.base=${{ github.base_ref }} \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      - run: dotnet build --configuration Release --no-restore
 
-      - name: Sonar End
-        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
+      - name: Test with Coverage
+        run: |
+          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --configuration Release
+
+      - run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
 
   # ============================================================
-  # ✅ JOB 2 — STAGING DEPLOY
-  # Runs ONLY on push to staging
+  # ✅ JOB 2 — STAGING BUILD + DEPLOY
   # ============================================================
-  build-test-analyze-deploy:
+  deploy-staging:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
@@ -78,27 +80,20 @@ jobs:
       COMMIT_SHA: ${{ github.sha }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Install SonarScanner
-        run: dotnet tool install --global dotnet-sonarscanner
+      - run: dotnet tool install --global dotnet-sonarscanner
+      - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      - name: Add dotnet tools to PATH
-        run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
-
-      - name: Restore
-        run: dotnet restore
+      - run: dotnet restore
 
       # ✅ SONAR BEGIN
       - name: Sonar Begin
@@ -110,10 +105,8 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.newCode.referenceBranch=staging
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
+      - run: dotnet build --configuration Release --no-restore
 
-      # ✅ TEST WITH COVERAGE
       - name: Test with Coverage
         run: |
           dotnet test ${{ env.TEST_PROJECT_PATH }} \
@@ -121,18 +114,7 @@ jobs:
             --results-directory ./TestResults \
             --configuration Release
 
-      - name: Install ReportGenerator
-        run: dotnet tool install --global dotnet-reportgenerator-globaltool
-
-      - name: Generate OpenCover Report
-        run: |
-          reportgenerator \
-            -reports:**/coverage.cobertura.xml \
-            -targetdir:coverage-report \
-            -reporttypes:OpenCover
-
-      - name: Sonar End
-        run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
+      - run: dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
       # ✅ WAIT FOR QUALITY GATE
       - name: Wait for Quality Gate
@@ -151,7 +133,7 @@ jobs:
             exit 1
           fi
 
-      # ── Publish ───────────────────────────────────────────────────────
+      # ✅ PUBLISH
       - name: Publish
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
@@ -160,20 +142,19 @@ jobs:
             --no-restore \
             -o ${{ env.PUBLISH_DIR }}
 
-      # ── Setup SSH Agent ───────────────────────────────────────────────
+      # ✅ DEPLOY
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
 
-      - name: Add EC2 host to known_hosts
+      - name: Add EC2 host
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
 
-      # ── Rsync to EC2 ──────────────────────────────────────────────────
-      - name: Rsync artifact to EC2
+      - name: Rsync
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
@@ -183,20 +164,7 @@ jobs:
             ${{ env.PUBLISH_DIR }}/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
-      # ── Swap slot ─────────────────────────────────────────────────────
-      - name: Swap slot
+      - name: Swap Slot
         run: |
-          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
-
-      # ── Deployment Summary ────────────────────────────────────────────
-      - name: Write deployment summary
-        if: always()
-        run: |
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit | \`${{ env.COMMIT_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Time | $(date -u) |" >> $GITHUB_STEP_SUMMARY
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
