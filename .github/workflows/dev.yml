@@ -159,9 +159,9 @@ jobs:
             --configuration Release \
             --no-build \
             --verbosity normal \
-            --collect:"XPlat Code Coverage" \
-            --results-directory ./coverage \
-            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            /p:CollectCoverage=true \
+            /p:CoverletOutputFormat=opencover \
+            /p:CoverletOutput=./coverage/
         continue-on-error: true
       
         # Convert coverage to OpenCover format for SonarQube
@@ -312,7 +312,7 @@ jobs:
           sleep 10
           echo "✅ Deployment completed successfully"
           # Uncomment when ready:
-          # curl -f https://dev-noma-api-nomaos.com/health || exit 1
+          curl -f https://dev-noma-api-nomaos.com/health || exit 1
 
       - name: Deployment Summary
         if: success()
