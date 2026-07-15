@@ -14,10 +14,59 @@ concurrency:
 
 jobs:
   # ============================================================
-  # ✅ JOB 1 — PR QUALITY CHECK WITH SONARQUBE
+  # ✅ JOB 1 — BUILD & TEST ON PR (NO SONAR - Community doesn't support PR decoration)
   # ============================================================
-  SASTSonarQube:
+  pr-quality-check:
     if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    env:
+      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
+      DOTNET_VERSION: 8.0.x
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
+
+      - name: Publish test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Test Results
+          path: '**/test-results.trx'
+          reporter: dotnet-trx
+          fail-on-error: false
+
+  # ============================================================
+  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
+  # ============================================================
+  sonar-and-deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     environment: staging
 
@@ -25,13 +74,15 @@ jobs:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
+      PUBLISH_DIR: ${{ github.workspace }}/publish
+      COMMIT_SHA: ${{ github.sha }}
       DOTNET_VERSION: 8.0.x
 
     steps:
       - name: Checkout
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
-          fetch-depth: 0  # Required for SonarQube blame information
+          fetch-depth: 0
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -63,16 +114,15 @@ jobs:
           restore-keys: |
             dotnet-tools-${{ runner.os }}-
 
-      # ✅ INSTALL SONARSCANNER (Updated version)
+      # ✅ INSTALL SONARSCANNER
       - name: Install SonarScanner and Coverage tools
         run: |
           dotnet tool install --global dotnet-sonarscanner --version 7.1.0 || true
           dotnet tool install --global dotnet-coverage --version 17.12.4 || true
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
-      # ✅ GET VERSION FROM PROJECT FILE
+      # ✅ GET VERSION
       - name: Get project version
-        id: pkg_version
         run: |
           VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} | head -1 || echo "1.0.0")
           echo "VERSION=$VERSION" >> $GITHUB_ENV
@@ -81,7 +131,7 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      # ✅ START SONARQUBE ANALYSIS (FIXED VERSION PARAMETER)
+      # ✅ START SONARQUBE ANALYSIS
       - name: Begin SonarQube Analysis
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -101,13 +151,12 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
-      # ✅ RUN TESTS WITH CODE COVERAGE
+      # ✅ TEST WITH COVERAGE
       - name: Test and coverage
         run: |
           dotnet-coverage collect \
             "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
             -f xml -o coverage.xml
-        continue-on-error: true
 
       # ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube Analysis
@@ -124,53 +173,11 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
 
-  # ============================================================
-  # ✅ JOB 2 — DEPLOY TO STAGING
-  # ============================================================
-  deploy-staging:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    environment: staging
+      # ============================================================
+      # 🚀 DEPLOYMENT STEPS (ONLY AFTER SONARQUBE PASSES)
+      # ============================================================
 
-    env:
-      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-      TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
-      PUBLISH_DIR: ${{ github.workspace }}/publish
-      COMMIT_SHA: ${{ github.sha }}
-      DOTNET_VERSION: 8.0.x
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      # ✅ OPTIMIZED CACHING FOR DEPLOY
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
-      # ✅ RUN TESTS BEFORE DEPLOY
-      - name: Run tests
-        run: dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal
-
-      # ✅ PUBLISH APPLICATION
-      - name: Publish
+      - name: Publish application
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
             --configuration Release \
@@ -180,7 +187,6 @@ jobs:
             /p:PublishTrimmed=false \
             /p:PublishSingleFile=false
 
-      # ✅ SETUP SSH
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -193,7 +199,6 @@ jobs:
           ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
-      # ✅ DEPLOY VIA RSYNC
       - name: Create release directory
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
@@ -207,14 +212,20 @@ jobs:
             ${{ env.PUBLISH_DIR }}/ \
             ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
-      # ✅ SWAP TO NEW VERSION
       - name: Swap deployment slot
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
 
-      # ✅ HEALTH CHECK (Optional - update URL)
       - name: Health check
         run: |
           sleep 10
-          # curl -f https://your-staging-url.com/health || exit 1
+          echo "✅ Deployment completed successfully"
+          # Uncomment when ready:
+          # curl -f https://dev-noma-api-nomaos.com/health || exit 1
+
+      - name: Cleanup old releases
+        if: success()
+        run: |
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "cd /var/www/Nomaos/releases && ls -t | tail -n +6 | xargs -r rm -rf"
