@@ -159,19 +159,19 @@ jobs:
             --configuration Release \
             --no-build \
             --verbosity normal \
-            /p:CollectCoverage=true \
-            /p:CoverletOutputFormat=opencover \
-            /p:CoverletOutput=./coverage/
-        continue-on-error: true
-      
+            -p:CollectCoverage=true \
+            -p:CoverletOutputFormat=opencover \
+            -p:CoverletOutput=./coverage/coverage.opencover.xml        
+          echo "✅ Tests completed with coverage"
         # Convert coverage to OpenCover format for SonarQube
-      - name: Prepare coverage for SonarQube
+      - name: Move coverage for SonarQube
         run: |
-          if [ -d "./coverage" ]; then
-            find ./coverage -name "coverage.cobertura.xml" -exec cp {} ./coverage/coverage.opencover.xml \; || true
-            echo "✅ Coverage report prepared"
+          mkdir -p coverage
+          find ./TestResults -name "coverage.cobertura.xml" -exec cp {} ./coverage/coverage.opencover.xml \;
+          if [ -f "./coverage/coverage.opencover.xml" ]; then
+            echo "✅ Coverage file ready"
           else
-            echo "⚠️ No coverage data found"
+            echo "⚠️ No coverage file found"
           fi
         continue-on-error: true
 
