@@ -56,7 +56,7 @@ jobs:
           key: dotnet-tools-${{ runner.os }}
 
       - run: dotnet tool install --global dotnet-sonarscanner
-      
+
       - run: echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       - run: dotnet restore
@@ -68,7 +68,7 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.login="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /d:sonar.pullrequest.key=${{ github.event.pull_request.number }} \
-            /d:sonar.pullrequest.branch=${{ github.head_ref }} \
+            /d:sonar.pullrequest.branch=staging \
             /d:sonar.pullrequest.base=staging
 
       - run: dotnet build --configuration Release --no-restore
