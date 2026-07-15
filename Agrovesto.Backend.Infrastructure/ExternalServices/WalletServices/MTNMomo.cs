@@ -32,11 +32,12 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         Task<WalletResponseService<MomoPaymentStatusResponse>> GetRequestToPayStatus(string Reference, WalletProviderParameterModel[] parameters, string env);
         Task<WalletResponseService<MomoPaymentStatusResponse>> GetTransferStatus(string reference, WalletProviderParameterModel[] parameters, string env);
         Task<WalletResponseService<bool>> RequestDirectDebitApproval(MomoPreApprovalRequest request, WalletProviderParameterModel[] parameters, string env);
-        Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
+        //Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
     }
 
     public class MTNMomo : IGenericWalletService, IMTNMomo
     {
+
         private readonly IHttpService _httpService;
         private readonly ILogger<MTNMomo> _log;
         private readonly IConfiguration _configuration;
@@ -49,6 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
 
         public bool RequiresPreDebit => true;
+        public string ProviderKey => "Momo";
         public async Task<ProviderParams> RetrieveParams(WalletProviderParameterModel[] parameters, string Env)
         {
             var response = new ProviderParams();
@@ -378,14 +380,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         }
 
-        public async Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env)
-        {
-
-            throw new NotImplementedException();
-        
-           
-        }
-
         public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
@@ -503,7 +497,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
 
         public async Task<WalletResponseService<AccountValidationResponse>>
-            ValidateAccountAsync(
+            CreateWalletAsync(
                 UserProfileResponse data,
                 WalletProviderParameterModel[] parameters,
                 string Env)

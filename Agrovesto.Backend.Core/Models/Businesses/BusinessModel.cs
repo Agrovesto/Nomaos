@@ -15,6 +15,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? PhoneNumber { get; set; }
         public string? FullName { get; set; }    
         public string? NIN { get; set; }
+        public string? BVN { get; set; }
         public string? DOB { get; set; }
         public string TransactionPin { get; set; }
         public string? WalletProviderCode { get; set; }

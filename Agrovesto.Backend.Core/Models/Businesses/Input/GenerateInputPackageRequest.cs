@@ -142,7 +142,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public DateTimeOffset? RepaymentStartDate { get; set; }
         public DateTimeOffset? RepaymentEndDate { get; set; }
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
-        public InputPackageRepaymentMode RepaymentMode { get; set; }
+        public InputPackageRepaymentMode RepaymentModel { get; set; }
         public decimal RepaymentValue { get; set; }
         public RiskCategory RiskCategory { get; set; }
 
@@ -248,6 +248,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public List<InputPackageBreakdownDto> PackageInputs { get; set; }
         public List<AdditionalCostDto> AdditionalCosts { get; set; }
+        public List<RepaymentBreakdownDto> RepaymentBreakdown { get; set; }
     }
     public class InputPackageFinancingStructureDto
     {
@@ -567,6 +568,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class SubscriberInfoDto
     {
+        public string UserId { get; set; }
         public string Name { get; set; }
         public string PhoneNumber { get; set; }
         public string Type { get; set; }

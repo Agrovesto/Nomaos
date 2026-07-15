@@ -14,10 +14,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
   
     public interface IGenericWalletService
     {
+        string ProviderKey { get; } // e.g. "MTNMomo", "Etransact" — matches a DB column
+
         bool RequiresPreDebit { get; }
         // Create wallet/account with provider
-        Task<WalletResponseService<object>> CreateWalletAsync(CreateWalletRequest request, WalletProviderParameterModel[] parameters, string Env);
-
+        
         // Collect money from user (RequestToPay)
         Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
 
@@ -28,7 +29,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env);
 
         // Validate user account
-        Task<WalletResponseService<AccountValidationResponse>> ValidateAccountAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string Env);
-        }
+        Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
+    }
 
 }

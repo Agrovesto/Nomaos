@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Infrastructure.DB;
+﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -11,7 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
     public interface IModuleRepository
     {
-        Task<List<Module>> GetAllAsync();
+        Task<List<Module>> GetAllAsync(ListQueryParams args);
         Task<Module> GetByIdAsync(long id);
         Task AddAsync(Module module);
         Task UpdateAsync(Module module);
@@ -24,9 +25,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
         }
-        public async Task<List<Module>> GetAllAsync()
+        public async Task<List<Module>> GetAllAsync(ListQueryParams args)
         {
-            return await _context.Modules.ToListAsync();
+            return await _context.Modules.Where(x=>x.BusinessCode==args.businessCode).ToListAsync();
         }
         public async Task<Module> GetByIdAsync(long id)
         {

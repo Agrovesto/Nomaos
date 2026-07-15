@@ -60,7 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         // Backwards-compatible wrapper
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds);
+        Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
         Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
@@ -76,7 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args);
-        Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId);
+        Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId, string? organizationCode);
         Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
         Task EnsureFarmerIdIsValidAsync(long farmerId);
@@ -328,7 +328,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
 
                     var newOrganization =
-                        await _businessRepository.CreateOrUpdateOrganization(model, args);
+                        await _businessRepository.CreateOrUpdateOrganization(model, new OnBoardingArgs
+                        {
+                            UserId=args.userId,
+                            userType= args.userType,
+                            OnboardedByUserId=args.onboardedByUserId,
+                            Env= args.env,
+                            businessCode=args.businessCode,
+                            
+                        });
                     var updatedUser = await _onboardingRepository.UpdateUserProfileAsync(
                         args.userId,
                         new ProfileRequestModel
@@ -349,7 +357,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         {
                             if (args.env == Env.Live.ToString())
                             {
-                                await SendOnboardingNotificationsAsync(newOrganization, args.userId);
+                                await SendOnboardingNotificationsAsync(newOrganization, args.userId, args.businessCode);
                             }
                         }
                         catch (Exception ex)
@@ -396,7 +404,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
           private async Task SendOnboardingNotificationsAsync(
     OrganizationResponseModel organization,
-    string userId)
+    string userId, string businessCode)
         {
             var accountOfficer = await _onboardingRepository.GetUserById(userId);
 
@@ -413,9 +421,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             await SendGridService.DynamicBusinessOnboarding(mailRequest);
             await SendOnboardingSMSM(
                 organization.CompanyName,
-                organization.PhoneNumber);
+                organization.PhoneNumber, businessCode);
         }
-        private async Task SendOnboardingSMSM(string businessName, string phoneNumber)
+        private async Task SendOnboardingSMSM(string businessName, string phoneNumber, string businessCode)
         {
             var phone = _configuration["Official:Phone"];
             var messageBody = $"A new business {businessName} has been added to your merchant on NomaOS Platform." +
@@ -437,7 +445,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 to = $"+234{phone}",
                 sms = messageBody
-            });
+            }, businessCode);
         }
      
         public async Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args
@@ -697,12 +705,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             )
         {
             ValidateLoginModel(model);
+            model.BusinessCode = businessCode;
            // var login= await _onboardingRepository.Login(model, businessCode);
             var login= await _onboardingRepository.Login(model);
 
             return login;
         }
-        private async Task SendDefaultCredentialNotification(User user)
+        private async Task SendDefaultCredentialNotification(User user, string businessCode)
         {
             var senderEmail = _configuration["Official:Email"];
             if (!string.IsNullOrEmpty(user.Email))
@@ -719,7 +728,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 await _sMSService.SendSmsAsync( 
                     user.PhoneNumber,
-                    "You're using a default PIN/password. Please change it immediately."
+                    "You're using a default PIN/password. Please change it immediately.",
+                    businessCode
                 );
             }
         }
@@ -849,29 +859,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
                 case UserType.Agent:
                     await CreateAgentProfileAsync(model, args);
-
                     break;
 
                 case UserType.MemberShip:
-
                     //create first as cooperative
                     await CreateCooperativeProfileAsync(model, args);
                     break;
 
                 case UserType.Farmer:
-
                     await CreateFarmerProfileAsync(model, args);
                     break;
-             
-                case UserType.Processors:
+
+                case UserType.Organization:
+                    await CreateOrganization(model, args);
                     break;
+
+                case UserType.Processors:
+                    break;             
                 case UserType.Suppliers:
+                    break;
+                case UserType.ServiceProvider:
                     break;
             }
 
         }
 
-       
+       private async Task CreateOrganization(ProfileRequestModel model, OnBoardingArgs args)
+        {
+           var newOrganization =
+                        await _businessRepository.CreateOrUpdateOrganization(new OrganizationOnboardingModel
+                        {
+                            PhoneNumber= model.PhoneNumber,
+                            CompanyEmail= model.Email,
+                            ContactEmail=model.Email                            
+                        }, args);
+        }
 
         private async Task CreateAgentProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
@@ -1053,7 +1075,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 if (string.IsNullOrWhiteSpace(args.UserId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
-                var getFarmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(args.UserId, args.organizationCode);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
 
                 var agentIds = args.AgentIds
@@ -1188,7 +1210,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (createUser.IsExisting)
                     return;
 
-                await HandleUserNotificationsAsync(createUser.model, env);
+                await HandleUserNotificationsAsync(createUser.model, env,args.businessCode);
             }
             catch (Exception ex)
             {
@@ -1198,14 +1220,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     createUser.model.Id);
             }
         }
-     private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env)
+     private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env, string businessCode)
         {
             if (user.HasDefaultPassword)
             {
-                await SendDefaultCredentialChange(user);
+                await SendDefaultCredentialChange(user, businessCode);
             }
 
-            await GenerateAndSendOtp(user);
+            await GenerateAndSendOtp(user, businessCode);
         }
         private OnboardingResponseModel BuildResponse(
     OnboardingRequestModel model,
@@ -1224,102 +1246,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     : "User created successfully."
             };
         }
-        /**public async Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args)
-        {
-            string message = "";
-            string env = !string.IsNullOrEmpty(args.Env)
-              ? args.Env
-              : _configuration["Official:Env"] ?? string.Empty;
-            try
-            {
-                ValidateUserType(args);
-                ValidateQuickOnboarding(model);
-
-                if (string.IsNullOrEmpty(args.businessCode))
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Business code is required.");
-
-                var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
-                    ?? throw new BaseException(
-                        Core.Enums.ExceptionType.NOTFOUND,
-                        "Business does not exist.");
-
-                var createUser = await _onboardingRepository.RegisterUser(model, args);
-
-                if (!createUser.status)
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        createUser.message);
-
-                try
-                {
-                    await EnsureWalletExists(createUser.model, business);
-
-                    var updateProfile = await CreateUserProfile(new ProfileRequestModel
-                    {
-                        Email = model.Email,
-                        FirstName = model.FirstName,
-                        LastName = model.LastName,
-                        MiddleName = model.MiddleName,
-                        Id = createUser.model.Id,
-                        PhoneNumber = model.PhoneNumber,
-                        OnboardedByUserId = args.OnboardedByUserId
-                    }, args);
-
-                    await _onboardingRepository.TrackUserRoleAssignment(
-                        createUser.model.Id,
-                        args.userType);
-                    createUser.model.Env = env;
-                    if (!createUser.IsExisting) {
-                    if (env == Env.Live.ToString())
-                    {
-                        if (createUser.model.HasDefaultPassword)
-                        {
-                            await SendDefaultCredentialChange(createUser.model);
-                        }
-                     
-                        await GenerateAndSendOtp(createUser.model);
-                    }
-                    else
-                    {
-                        if (createUser.model.HasDefaultPassword)
-                        {
-                            await SendDefaultCredentialChange(createUser.model);
-                        }
-                        await GenerateAndSendOtp(createUser.model);
-                    }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _log.LogWarning(ex, $"Non-critical onboarding step failed for user {createUser.model.Id}. User may need to update profile manually.");
-                }
-
-                model.Id = createUser.model.Id;
-                return new OnboardingResponseModel
-                {
-                    Id = model.Id,
-                    Email = model.Email,
-                    PhoneNumber = model.PhoneNumber,
-                    IsExisting = createUser.IsExisting,
-                    Message = createUser.IsExisting
-           ? createUser.message
-           : $"User created successfully. {message}"
-                };
-            }
-            catch (BaseException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _log.LogError(ex, "User Registration failed unexpectedly");
-                throw new BaseException(
-                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
-                    "An unexpected error occurred. Please try again.");
-            }
-        }**/
         private static void ValidateUserType(OnBoardingArgs args)
         {
             if (!Enum.TryParse<UserType>(args.userType, true, out _))
@@ -1344,38 +1270,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                     });
         }
 
-    //    private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
-    //    {
-    //        var senderEmail = _configuration["Official:Email"];
-    //        var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
-    //            ? OtpTarget.Email
-    //            : OtpTarget.Phone;
-
-    //        var destination = otpTarget == OtpTarget.Email
-    //            ? model.Email
-    //            : model.PhoneNumber;
-
-
-    //        // ------------------ Send OTP ------------------
-    //        if (otpTarget == OtpTarget.Email)
-    //        {
-    //            //use aws
-    //            await _awsService.SendEmailAsync(
-    //                senderEmail,
-    //                destination,
-    //                "Change your password",
-    //                $"Your default password is {model.Password}. Kindly login and change this.",
-    //$"Your default password is {model.Password}. Kindly login and change this."
-    //                );
-    //        }
-    //        else
-    //        {
-    //            await _sMSService.SendSmsAsync(
-    //                    destination,
-    //                     $"Your default pin is {model.Pin}. Kindly login and change this.");
-    //        }
-    //    }
-        private async Task SendDefaultCredentialChange(OnboardingRequestModel model)
+        private async Task SendDefaultCredentialChange(OnboardingRequestModel model, string businessCode)
         {
             var senderEmail = _configuration["Official:Email"];
             var otpTarget = !string.IsNullOrWhiteSpace(model.Email) ? OtpTarget.Email : OtpTarget.Phone;
@@ -1401,11 +1296,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 // SMS fallback
                 await _sMSService.SendSmsAsync(
                     destination,
-                    $"Your default pin is {model.Pin}. Kindly login and change this."
+                    $"Your default pin is {model.Pin}. Kindly login and change this.",
+                    businessCode
                 );
             }
         }
-        private async Task GenerateAndSendOtp(OnboardingRequestModel model)
+        private async Task GenerateAndSendOtp(OnboardingRequestModel model, string businessCode)
         {
             var senderEmail = _configuration["Official:Email"];
             var otpTarget = !string.IsNullOrWhiteSpace(model.Email)
@@ -1450,7 +1346,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 await _sMSService.SendSmsAsync(
                         otp.Destination,
-                        $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+                        $"Your verification code is {otp.Code}. Expires in 5 minutes.",
+                        businessCode);
             }
             await _awsService.SendEmailAsync(
                   senderEmail,
@@ -1514,7 +1411,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     {
                         await _sMSService.SendSmsAsync(
                             otp.Destination,
-                            $"Your verification code is {otp.Code}. Expires in 5 minutes.");
+                            $"Your verification code is {otp.Code}. Expires in 5 minutes.",
+                          args.businessCode);
                     }
                     return "";
                 }
@@ -1617,7 +1515,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             user.model.Env = args.Env;
             if (args.Env == Env.Live.ToString())
             {
-                await GenerateAndSendOtp(user.model.ToEntity());
+                await GenerateAndSendOtp(user.model.ToEntity(), args.businessCode);
                 return "";
             }
             else { return await DummyGenerateAndSendOtp(user.model.ToEntity()); }
@@ -1651,13 +1549,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId)
+        public async Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId, string? organizationCode)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
-                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId, organizationCode);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
               
                 var profile = await _farmerRepository.RemoveFarmerFromCooperative(getFarmer.Id, cooperativeId);
@@ -1677,13 +1575,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
             }
         }
-        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds)
+        public async Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(userId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required.");
-                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId);
+                var getFarmer = await _farmerRepository.GetFarmerByUserId(userId, organizationCode);
                 if (getFarmer == null) { throw new BaseException(ExceptionType.BAD_REQUEST, "User Id is required."); }
               
                 var profile = await _farmerRepository.RemoveFarmerFromCooperatives(getFarmer.Id, cooperativeIds);
@@ -1988,7 +1886,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             };
             var mail = SendGridService.DynamicBusinessStaffOnboarding(mailRequest);
         }
-        private async Task SendOnboardingSMS(string businessName, string phoneNumber)
+        private async Task SendOnboardingSMS(string businessName, string phoneNumber, string businessCode)
         {
             var messageBody = $"A new business {businessName} has been added to your merchant list for Farmer Management Platform." +
                          $"You can always reach out to the business using {phoneNumber} ";
@@ -2009,7 +1907,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 to = $"2349061562512",
                 sms = messageBody
-            });
+            }, businessCode);
         }
 
 
@@ -2018,7 +1916,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var saveFace = new ImageUploadResponse();
             try
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId)
+                var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId, args.organizationCode)
                   ?? throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Farmer does not exist.");
 
 
@@ -2217,7 +2115,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
                 await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
-                await GenerateAndSendOtp(user);
+                await GenerateAndSendOtp(user, args.businessCode);
             }
             catch (Exception ex)
             {

@@ -89,6 +89,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
 
         // User
         public string? UserId { get; set; }
+        public string? MaxCheckSum { get; set; }
 
         // Wallet Provider
         public long WalletProviderId { get; set; }

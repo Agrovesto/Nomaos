@@ -26,8 +26,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
   //  [Authorize]
     public class AgentController : BaseController
     {
-        private static readonly string[] AllowedExtensions = { ".csv", ".xlsx", ".xls" };
-
+      
         private readonly IAgentManager _agentManager;
         private readonly IBusinessManager _businessManager;
         private readonly IOnBoardingManager _onBoardingManager;
@@ -38,7 +37,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IBulkMembershipUploadService _memberShipUploadService;
         private readonly ILogger<AgentController> _logger;
 
-        private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
+        private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+
+        private static readonly HashSet<string> AllowedExtensions =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+        ".xlsx", ".xls",    // Excel formats
+        ".csv"                               // OpenDocument (LibreOffice)
+            };
         public AgentController(IHttpContextAccessor httpContextAccessor, IAgentManager agentManager,
             IBusinessManager businessManager,
             IOnBoardingManager onBoardingManager,
@@ -204,7 +210,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!AllowedExtensions.Contains(extension))
-                return Error("FILE_TYPE_INVALID", "We couldn't read that file. Please upload an Excel (.xlsx) file.");
+                return Error("FILE_TYPE_INVALID",
+                    "Unsupported file type. Please upload an Excel file (.xlsx, .xls, .xlsb, .xlsm) or a .csv file.");
 
             // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))

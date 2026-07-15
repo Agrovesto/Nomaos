@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.4.11626.88 stable
+VisualStudioVersion = 18.4.11626.88
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.API", "Agrovesto.Backend.API\Agrovesto.Backend.API.csproj", "{ABD8F10D-6A79-4D12-86A7-71522016A63E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Core", "Agrovesto.Backend.Core\Agrovesto.Backend.Core.csproj", "{293BA9D5-4875-4CD8-A9C3-4911286797C4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Infrastructure", "Agrovesto.Backend.Infrastructure\Agrovesto.Backend.Infrastructure.csproj", "{9924CE8B-935F-4100-B192-DDC51C1E0A21}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NomaOS.Test", "NomaOS.Test\NomaOS.Test.csproj", "{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,8 +29,15 @@ Global
 		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9924CE8B-935F-4100-B192-DDC51C1E0A21}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {7075752C-963B-4EAF-A69A-10C542CB9580}
 	EndGlobalSection
 EndGlobal

@@ -329,7 +329,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         WalletNumber = request.WalletNumber,
                         BelongToBusinessCode = args.businessCode,
                         IsDeleted = false,
-                         };
+                        MaxCheckSum = request.MaxCheckSum
+                    };
 
                     _context.UserWallets.Add(userWallet);
                     await _context.SaveChangesAsync();

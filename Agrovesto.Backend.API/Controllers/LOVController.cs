@@ -155,7 +155,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
 
-                var type = await _storageCategoryRepository.GetAllAsync();
+                var type = await _storageCategoryRepository.GetAllAsync(args);
                 return Ok(new Response<List<StorageCategory>>()
                 {
                     Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -192,7 +192,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
 
-                var type = await _temperatureControlType.GetAllAsync();
+                var type = await _temperatureControlType.GetAllAsync(args);
                 return Ok(new Response<List<TemperatureControlType>>()
                 {
                     Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -229,7 +229,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
 
-                var type = await _moduleRepository.GetAllAsync();
+                var type = await _moduleRepository.GetAllAsync(args);
                 return Ok(new Response<List<Module>>()
                 {
                     Code = (type != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
@@ -545,7 +545,7 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(400)]
         [ProducesResponseType(422)]
         [ProducesResponseType(500)]
-        public async Task<IActionResult> SendSMS()
+        public async Task<IActionResult> SendSMS([FromQuery]string businessCode)
         {
             var messageBody = $"A new business  has been added to your merchant list for Farmer Management Platform." +
                         $"You can always reach out to the business using  ";
@@ -555,7 +555,7 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 to = $"2349061562512",
                 sms = messageBody
-            });
+            }, businessCode);
         
             return Ok(new Response<(TermiiResponse response, bool status)>()
             {
@@ -611,10 +611,10 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
 
-        public async Task<IActionResult> GetAllWallets()
+        public async Task<IActionResult> GetAllWallets([FromQuery] string businessCode)
         {
-            var result = await _walletProvider.GetAll();
-            return Ok(new Response<WalletProviderModel[]>()
+            var result = await _walletProvider.GetProvidersForBusiness(businessCode);
+            return Ok(new Response<BusinessWalletProviderModel[]>()
             {
                 Succeeded = true,
                 Data = result

@@ -3,6 +3,8 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -21,12 +23,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         private readonly ILogger<NotificationService> _log;
 
         private IConfiguration _config;
-        public NotificationService(IConfiguration config, ILogger<NotificationService> log)
+        private readonly ISMSProviderRepository _sMSProviderRepository;
+        public NotificationService(ISMSProviderRepository sMSProviderRepository,
+            IConfiguration config, ILogger<NotificationService> log)
         {
 
             _config = config;
             _log = log;
+            _sMSProviderRepository = sMSProviderRepository;
         }
+        public string smsProviderCode => "Termii";
+        public string Env => _config["Official:Env"] ?? "Live";
 
         public async Task<(SMSResponseModel response, bool status)> HandleAfricasTalkingSMS(WhisperSMSModel request)
         {
@@ -81,26 +88,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
         }
 
 
-        public async Task<(TermiiResponse response, bool status)> HandleTermiiSMS(TermiiSmsRequest request)
+        public async Task<(TermiiResponse response, bool status)> HandleTermiiSMS(TermiiSmsRequest request, string businessCode)
         {
-            var apikey = _config["TermiSMS:livekey"];
-            var from = _config["TermiSMS:from"];
-            var channel = _config["TermiSMS:channel"];
-            var type = _config["TermiSMS:type"];
-            var url = $"{_config["TermiSMS:url"]}/api/sms/send";
-
-            request.api_key = apikey;
-            request.from = from;
-            request.channel = channel;
-            request.type = type;
+            var parameters = await RetrieveParams(businessCode);
+            var _params = parameters.ToDictionary(x => x.Key);
 
             var payload = new
             {
                 to = request.to,
-                from = from,
+                from = _params["from"].Value,
                 sms = request.sms,
                 type = "plain",
-                api_key = apikey,
+                api_key = _params["livekey"].Value,
                 channel = "generic"
                 // Remove media if it's not accepted by the API
                 // media = new { url = "...", caption = "..." }
@@ -114,7 +113,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
             try
             {
-                var response = await client.PostAsync(url, content);
+                var response = await client.PostAsync($"{_params["BaseUrl"].Value}/api/sms/send", content);
                 var responseBody = await response.Content.ReadAsStringAsync();
 
                 var result = JsonConvert.DeserializeObject<TermiiResponse>(responseBody);
@@ -132,7 +131,24 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
 
         }
+        private void RetrieveSMSParams(out string? apikey, out string? from, out string? channel, out string? type, out string url)
+        {
+            apikey = _config["TermiSMS:livekey"];
+            from = _config["TermiSMS:from"];
+            channel = _config["TermiSMS:channel"];
+            type = _config["TermiSMS:type"];
+            url = $"{_config["TermiSMS:url"]}/api/sms/send";
+        }
+        public async Task<SMSProviderParameterModel[]> RetrieveParams(string businessCode)
+        {
+            var provider = await _sMSProviderRepository.GetProvidersForBusiness(businessCode);
+            var providerId = provider.Where(x => x.SMSProvider.Code == smsProviderCode).FirstOrDefault().ProviderId;
+            var parameters = await _sMSProviderRepository.GetParametersByProvider(providerId, businessCode, Env);
+            return parameters;
 
+        }
+
+        
 
         public async Task SendEmailAsync(string destination,string subject, string message)
         {
@@ -199,15 +215,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             }
 
 
-        public async Task SendSmsAsync(string destination, string message)
+        public async Task SendSmsAsync(string destination, string message, string businessCode)
         {
             var formattedDestination = FormatPhoneNumberToInternational(destination);
+            var parameters = await RetrieveParams(businessCode);
+            var _params = parameters.ToDictionary(x => x.Key);
 
-            var apikey = _config["TermiSMS:livekey"];
-            var from = _config["TermiSMS:from"];
-            var channel = _config["TermiSMS:channel"];
-            var type = _config["TermiSMS:type"];
-            var url = $"{_config["TermiSMS:url"]}/api/sms/send";
+            var url = $"{_params["BaseUrl"].Value}/api/sms/send";
+            var from = _params["from"].Value;
+            var channel = _params["channel"].Value;
+            var type = _params["type"].Value;
+            var apikey = _params["livekey"].Value;
 
 
             _log.LogWarning(
@@ -288,58 +306,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             return $"{countryCode}{localNumber}";
         }
 
-        //public async Task<bool> SendSMSAsync(TermiiSmsRequest request)
-        //{
-        //    var apikey = _config["TermiSMS:livekey"];
-        //    var from = _config["TermiSMS:from"];
-        //    var channel = _config["TermiSMS:channel"];
-        //    var type = _config["TermiSMS:type"];
-        //    var url = _config["TermiSMS:url"];
-
-        //    request.api_key = apikey;
-        //    request.from = from;
-        //    request.channel = channel;
-        //    request.type = type;
-
-        //    var payload = new
-        //    {
-        //        to = request.to,
-        //        from = from,
-        //        sms = request.sms,
-        //        type = "plain",
-        //        api_key = apikey,
-        //        channel = "generic"
-        //        // Remove media if it's not accepted by the API
-        //        // media = new { url = "...", caption = "..." }
-        //    };
-
-        //    var json = JsonConvert.SerializeObject(payload);
-
-        //    using var client = new HttpClient();
-        //    var content = new StringContent(json, Encoding.UTF8);
-        //    content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
-
-        //    try
-        //    {
-        //        var response = await client.PostAsync(url, content);
-        //        var responseBody = await response.Content.ReadAsStringAsync();
-
-        //        var result = JsonConvert.DeserializeObject<TermiiResponse>(responseBody);
-
-        //        Console.WriteLine($"Status Code: {response.StatusCode}");
-        //        Console.WriteLine($"Response: {responseBody}");
-
-        //        return (result, response.IsSuccessStatusCode);
-        //    }
-        //    catch (HttpRequestException ex)
-        //    {
-        //        Console.WriteLine($"Request error: {ex.Message}");
-        //        return (new TermiiResponse(), false);
-        //    }
-
-
-        //}
-
+      
     }
 }
 

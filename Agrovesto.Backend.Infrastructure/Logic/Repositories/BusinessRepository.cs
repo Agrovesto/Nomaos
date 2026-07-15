@@ -67,7 +67,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<OrganizationResponseModel> CreateOrUpdateOrganization(
        OrganizationOnboardingModel orgModel,
-       OrganizationOnboardingArgs args)
+       OnBoardingArgs args)
         {
             // STEP 1: Resolve Business
             var business = await _context.Businesses
@@ -80,8 +80,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             var orgExist = await _context.Organizations
                 .Include(x => x.OrganizationBusinesses)
                 .FirstOrDefaultAsync(x =>
-                    x.OrganizationCode == orgModel.OrganizationCode ||
-                    x.CompanyName == orgModel.CompanyName);
+                x.UserId == args.UserId 
+                //||
+                  //  x.OrganizationCode == orgModel.OrganizationCode ||
+                    //x.CompanyName == orgModel.CompanyName
+                    );
 
             if (orgExist != null)
             {
@@ -96,7 +99,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             orgModel.OrganizationCode = await GenerateOrganizationCodeAsync(orgModel.CompanyName);
 
             var org = orgModel.OnboardMap();
-            org.UserId = args.userId;
+            org.UserId = args.UserId;
             org.OrganizationCode = orgModel.OrganizationCode;
             org.BusinessCode = args.businessCode;
             org.OrganizationBusinesses.Add(new OrganizationBusiness
@@ -168,75 +171,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     CreatedOn = DateTimeOffset.Now
                 });
             }
-        } //   public async Task<OrganizationResponseModel> CreateOrUpdateOrganization(
-        //OrganizationOnboardingModel orgModel,
-        //OrganizationOnboardingArgs args)
-        //   {
-        //       var orgExist = await _context.BusinessOrganizations //organization
-        //           .FirstOrDefaultAsync(x =>
-        //               x.OrganizationCode == orgModel.OrganizationCode &&
-        //               x.CompanyName == orgModel.CompanyName);
-
-        //       if (orgExist != null)
-        //       {
-        //           if (!string.IsNullOrWhiteSpace(orgModel.ContactEmail))
-        //               orgExist.ContactEmail = orgModel.ContactEmail;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.CompanyEmail))
-        //               orgExist.OrganizationEmail = orgModel.CompanyEmail;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.CompanyName))
-        //               orgExist.CompanyName = orgModel.CompanyName;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.FirstName))
-        //               orgExist.FirstName = orgModel.FirstName;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.LastName))
-        //               orgExist.LastName = orgModel.LastName;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.PhoneNumber))
-        //               orgExist.PhoneNumber = orgModel.PhoneNumber;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.OrganizationPhone))
-        //               orgExist.OrganizationPhone = orgModel.OrganizationPhone;
-
-        //           if (orgModel.StateId > 0)
-        //               orgExist.StateId = orgModel.StateId;
-
-        //           if (orgModel.LgaId > 0)
-        //               orgExist.LgaId = orgModel.LgaId;
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.CompanyAddress))
-        //               orgExist.CompanyAddress = orgModel.CompanyAddress;
-
-        //           if (orgModel.CompanyType.HasValue)
-        //               orgExist.CompanyType = orgModel.CompanyType.ToString();
-
-        //           if (!string.IsNullOrWhiteSpace(orgModel.CACNumber))
-        //               orgExist.CACNumber = orgModel.CACNumber;
-
-        //           if (orgModel.RoleInOrganization.HasValue)
-        //               orgExist.RoleInOrganization = orgModel.RoleInOrganization.ToString();
-
-        //           await _context.SaveChangesAsync();
-
-        //           return orgExist.ViewOnboardMap();
-        //       }
-        //       var orgEmail = string.IsNullOrWhiteSpace(orgModel.CompanyEmail)
-        //                  ? orgModel.ContactEmail
-        //                  : orgModel.CompanyEmail;
-        //       orgModel.OrganizationCode = await GenerateOrganizationCodeAsync(orgModel.CompanyName);
-        //       Organization org = orgModel.OnboardMap();
-        //       org.UserId = args.userId;
-        //       org.OrganizationCode = orgModel.OrganizationCode;
-        //       org.BusinessCode = args.businessCode;
-
-        //       _context.Set<Organization>().Add(org);
-        //       //await _context.SaveChangesAsync();
-
-        //       return org.ViewOnboardMap();
-        //   }
-
+        } 
         private async Task<string> GenerateOrganizationCodeAsync(string companyName)
         {
             var cleanedName = companyName?
@@ -411,56 +346,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return result;
         }
-        //    public async Task<List<OrganizationModel>> GetBusinessOrganizationAsync(string businessCode)
-        //    {
-        //        var organizations = await (
-        //            from org in _context.BusinessOrganizations
-        //            join user in _context.Set<User>()
-        //on new { org.BusinessCode, Email = org.OrganizationEmail }
-        //equals new { user.BusinessCode, Email = user.Email }
-        //            where org.BusinessCode == businessCode
-        //            select new
-        //            {
-        //                Org = org,
-        //                User = user
-        //            }
-        //        ).ToListAsync();
-
-        //        if (organizations == null || organizations.Count == 0)
-        //            return null;
-
-        //        var result = organizations
-        //            .GroupBy(x => x.Org.OrganizationId)
-        //            .Select(g =>
-        //            {
-        //                var first = g.First();
-        //                var org = first.Org;
-        //                var creatorUser = g
-        //                    .OrderBy(u => u.User.CreatedOn)
-        //                    .First().User;
-
-        //                return new OrganizationModel
-        //                {
-        //                    OrganizaionId = org.OrganizationId,
-        //                    OrganizationName = org.CompanyName,
-        //                    BusinessCode = org.BusinessCode,
-        //                    OrganizationCode = org.OrganizationCode,
-        //                    ContacPerson = org.FullName,
-        //                    Contact = org.PhoneNumber,
-        //                    ContactEmail = org.ContactEmail,
-        //                    Location = org.CompanyAddress,
-        //                    OrganizationEmail = org.OrganizationEmail,
-
-        //                    // Pulled from Users table
-        //                    Kick = creatorUser.Password,          // Your “kick” field
-        //                    OnboardedOn = creatorUser.CreatedOn   // Date they were onboarded
-        //                };
-        //            })
-        //            .ToList();
-
-        //        return result;
-        //    }
-
+        
         public async Task<List<BusinessWorkerModel>> GetStaffByBusinessCode(long businessId, string organizationCode)
         {
             var query = from b in _context.BusinessWorkers
