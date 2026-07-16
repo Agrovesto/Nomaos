@@ -10,6 +10,8 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
         public static class ResponseMessages
         {
             public const string Successful = "Successful";
+            public const string Failed = "Failed";
+            public const string NotFound = "No record found";
         }
     
 }

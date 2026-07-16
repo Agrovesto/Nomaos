@@ -13,23 +13,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [ApiController]
     public class BulkUploadController : BaseController
     {
-        private readonly IOnBoardingManager _onBoardingManager;
-        private readonly IBusinessManager _businessManager;
         private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
-        private readonly ILogger<AuthenticationController> _logger;
+        private readonly ILogger<BulkUploadController> _logger;
         private static readonly HashSet<string> AllowedExtensions =
             new(StringComparer.OrdinalIgnoreCase)
             {
-        ".xlsx", ".xls",    // Excel formats
-        ".csv"                               // OpenDocument (LibreOffice)
+        ".xlsx", ".xls",  
+        ".csv"  
             };
-        public BulkUploadController(IHttpContextAccessor httpContextAccessor, IOnBoardingManager onBoardingManager,
-            IBusinessManager businessManager, IBulkFarmerUploadService bulkFarmerUploadService, ILogger<AuthenticationController> logger) : base(httpContextAccessor)
+        public BulkUploadController(IHttpContextAccessor httpContextAccessor,  
+            IBulkFarmerUploadService bulkFarmerUploadService,
+            ILogger<BulkUploadController> logger) : base(httpContextAccessor)
         {
-            _onBoardingManager = onBoardingManager;
-            _businessManager = businessManager;
             _bulkFarmerUploadService = bulkFarmerUploadService;
             _logger = logger;
         }
@@ -42,16 +39,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
             {
-
                 return BadRequest(new Response<Dictionary<string, string>>()
                 {
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value?.Errors.Any() == true)
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -110,14 +106,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            
 
         }
-        private IActionResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
-        {
-            return StatusCode(statusCode, new ApiErrorResponse
-            {
-                Code = code,
-                Message = message
-            });
-        }
-
+     
     }
 }

@@ -10,6 +10,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
@@ -40,7 +41,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
        }; private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
         private readonly IOnBoardingManager _onboardingManager;
-        private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
         private readonly IMembershipManager _membershipManager;
         private readonly IInputFinancingManager _inputFinancingManager;
         private readonly INomaOSWalletService _walletService;
@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 5 MB
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
-
+        private readonly DataContext _context;
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
             ILogger<OrganizationController> logger,
             IBusinessManager businessManager,
@@ -62,12 +62,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
              IInputFinancingManager inputFinancingManager,
              IOnBoardingManager onboardingManager,
              IFarmMappingManager farmMappingManager,
-
+             DataContext context,
                 IBulkFarmerUploadService bulkFarmerUploadService,
         IBulkMembershipExcelParser parser,
         IBulkMembershipValidator validator,
         IBulkMembershipUploadService memberShipUploadService) : base(httpContextAccessor)
         {
+            _context = context;
                 _walletService = walletService;
             _farmMappingManager = farmMappingManager;
             _organizationManager = organizationManager;
@@ -81,8 +82,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _validator = validator;
             _memberShipUploadService = memberShipUploadService;
             _membershipManager = membershipManager;
-            _context = (Agrovesto.Backend.Infrastructure.DB.DataContext)httpContextAccessor.HttpContext.RequestServices.GetService(typeof(Agrovesto.Backend.Infrastructure.DB.DataContext));
-        }
+         }
         #region settings
 
      
@@ -92,21 +92,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [FromQuery] ListQueryParams args)
         {
             if (!ModelState.IsValid)
-            {
-                var errors = ModelState
-                    .Where(x => x.Value?.Errors.Any() == true)
-                    .ToDictionary(
-                        x => x.Key,
-                        x => string.Join("; ", x.Value!.Errors.Select(e => e.ErrorMessage))
-                    );
-
-                return BadRequest(new Response<Dictionary<string, string>>
-                {
-                    Succeeded = false,
-                    Message = "Validation failed.",
-                    Data = errors
-                });
-            }
+                return ValidationProblemResponse();
 
             try
             {
@@ -154,8 +140,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             catch (Exception ex)
             {
-                //_logger.LogError(ex, "Unhandled exception");
-
+              
                 return StatusCode(StatusCodes.Status500InternalServerError,
                     new Response<string>
                     {
@@ -168,8 +153,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPatch("edit-location")]
         public async Task<IActionResult> UpdateLocationAsync([FromBody] EditLocationDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             if (!ModelState.IsValid)
             {
 
@@ -409,8 +393,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpDelete("delete-location")]
         public async Task<IActionResult> DeleteLocation([FromBody] DeleteLocationDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             if (!ModelState.IsValid)
             {
 
@@ -472,8 +455,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPatch("edit-sublocation")]
         public async Task<IActionResult> EditSubLocationAsync([FromBody] EditSubLocationDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             if (!ModelState.IsValid)
             {
 
@@ -537,7 +519,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [FromBody] CreateSubLocationDto model,
         [FromQuery] ListQueryParams args)
         {
-            // enrich request context
             args.organizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
 
@@ -869,23 +850,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpDelete("delete-sublocation")]
         public async Task<IActionResult> DeleteSubLocationAsync([FromBody] DeleteLocationDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
@@ -932,23 +900,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("add-inventory")]
         public async Task<IActionResult> AddInventoryAsync([FromBody] CreateInventoryDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.UserId = CurrentUserId;
@@ -994,23 +948,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpDelete("delete-inventory")]
         public async Task<IActionResult> DeleteInventory([FromBody] DeleteLocationDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
             try
             {
                 args.UserId = CurrentUserId;
@@ -1054,23 +993,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPatch("update-inventory")]
         public async Task<IActionResult> EditInventoryAsync([FromBody] EditInventoryDto model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
-            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.UserId = CurrentUserId;
@@ -1199,67 +1124,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        //[HttpGet("agent-by-location")]
-        //public async Task<IActionResult> GetAgentsByLocationAsync([FromQuery] ListQueryParams args)
-        //{
-        //    try
-        //    {
-        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
-        //        if (string.IsNullOrEmpty(args.organizationCode))
-        //        {
-        //            throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
-        //        }
-
-        //        var response = await _organizationManager.GetAgentsByLocationAsync(args);
-        //        return Ok(new PagedListResponse<List<LocationAgentDetailResponse>>()
-        //        {
-        //            Code = ResponseCodes.Success,
-        //            Succeeded = true,
-        //            Message = response != null ? "Successful" : "Failed",
-        //            Data = response.Data,
-        //            Count = response.Count,
-        //            PageSize = args.PageSize,
-        //            PageNumber = args.PageNumber
-        //        });
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.ExceptionMessage,
-        //            Succeeded = false,
-
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.Message,
-        //            Succeeded = false,
-        //        });
-        //    }
-
-        //}
-
         [HttpPost("create-role")]
         public async Task<IActionResult> CreateRole([FromBody] OrganizationRoleModel model, [FromQuery] ListQueryParams args)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
@@ -1387,20 +1257,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             (bool flowControl, IActionResult value) = ParameterValidator(request, query);
             if (!flowControl)
             {
@@ -1458,11 +1316,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count > 0 ? "Successful" : "Failed",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
+
                     Succeeded = true,
                     Count = result.Count,
-                    //PageNumber = query.PageNumber,
-                    //PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -1592,19 +1449,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> CreateOrganizationProduct([FromBody] OrganizationProductDto model, [FromQuery] ListQueryParams args)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
+
 
             try
             {
@@ -1727,19 +1573,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> EditProductAsync([FromBody] EditOrganizationProductDto model, [FromQuery] ListQueryParams args)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
 
             try
             {
@@ -2019,20 +1853,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -2076,22 +1898,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [AllowAnonymous]
         public async Task<IActionResult> EditAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -2242,20 +2051,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedById = CurrentUserId;
@@ -2274,7 +2071,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Data = request
                 });
 
@@ -2306,22 +2103,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> AssignAgentLocation([FromBody] LocationAgentAssignment  model,
            [FromQuery] ListQueryParams args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
@@ -2370,20 +2154,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedById = CurrentUserId;
@@ -2779,20 +2551,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
@@ -2858,7 +2618,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("FILE_TYPE_INVALID",
                     "Unsupported file type. Please upload an Excel file (.xlsx, .xls, .xlsb, .xlsm) or a .csv file.");
 
-            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload memberships.");
 
@@ -2869,7 +2628,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
 
-            // --- Parse file ---
             List<BulkMembershipRowDto> rows;
             try
             {
@@ -2890,7 +2648,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (rows.Count == 0)
                 return Error("FILE_EMPTY", "This file doesn't contain any membership records to upload.");
 
-            // --- Pre-validate ALL rows — zero DB writes until this passes ---
             var validationErrors = await _validator.ValidateAllAsync(rows, args);
             if (validationErrors.Any())
             {
@@ -2906,7 +2663,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
-            // --- Process (chunked transactions) ---
             try
             {
                 var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
@@ -2923,51 +2679,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     StatusCodes.Status500InternalServerError);
             }
         }
-
-        // public async Task<IActionResult> BulkMembershipUpload(
-        //IFormFile file,
-        //[FromQuery] OnBoardingArgs args)
-        // {
-        //     if (file == null || file.Length == 0)
-        //         return BadRequest("No file provided.");
-
-        //     var onboardedById = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-        //     args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-
-        //     using var stream = file.OpenReadStream();
-        //     List<BulkMembershipRowDto> rows;
-        //     try
-        //     {
-        //         rows = _parser.Parse(
-        //             stream, args.businessCode, onboardedById,
-        //             args.organizationCode, args.Id);
-        //     }
-        //     catch (Exception ex)
-        //     {
-        //         return BadRequest($"Could not parse file: {ex.Message}");
-        //     }
-
-        //     if (!rows.Any())
-        //         return BadRequest("The file contains no data rows.");
-
-        //     // Pre-validate ALL rows — zero DB writes until this passes
-        //     var validationErrors = await _validator.ValidateAllAsync(rows, args);
-        //     if (validationErrors.Any())
-        //     {
-        //         return UnprocessableEntity(new
-        //         {
-        //             Message = "Validation failed. No records were saved.",
-        //             Errors = validationErrors
-        //         });
-        //     }
-
-        //     // Process (chunked transactions)
-        //     var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
-
-        //     return result.FailureCount == 0
-        //         ? Ok(result)
-        //         : StatusCode(207, result); 
-        // }
 
         [HttpGet("membership-mgt-overview")]
         public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
@@ -3017,20 +2728,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -3162,20 +2861,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 if (string.IsNullOrEmpty(args.UserId))
@@ -3238,8 +2925,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result,
 
-
-                    Message = result != null ? "Successful" : "Could not retrieve data",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null ? true : false,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -3276,7 +2962,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         IFormFile file,
         [FromQuery] OnBoardingArgs args)
         {
-            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -3289,7 +2974,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("FILE_TYPE_INVALID",
                     "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
 
-            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
@@ -3301,7 +2985,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.organizationCode = OrganizationCode;
 
-            // --- Parse file ---
             List<BulkFarmerRowDto> rows;
             try
             {
@@ -3351,72 +3034,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Message = message
             });
         }
-        //[HttpPost("bulk-onboard")]
-        //public async Task<IActionResult> BulkOnboard(IFormFile file,[FromQuery] OnBoardingArgs args)
-        //{
-        //    if (!ModelState.IsValid)
-        //    {
-
-        //        return BadRequest(new Response<Dictionary<string, string>>()
-        //        {
-        //            Message = "Validation failed.",
-        //            Succeeded = false,
-        //            Data = ModelState
-        //                .Where(ms => ms.Value.Errors.Any())
-        //                .ToDictionary(
-        //                    ms => ms.Key,
-        //                    ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-        //                )
-        //        });
-        //    }
-        //    try
-        //    {
-
-        //        args.OnboardedByUserId = CurrentUserId;
-        //        args.UserId = CurrentUserId;
-
-        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
-
-        //        args.userType = "Farmer";
-
-        //        if (file == null || file.Length == 0)
-        //            return BadRequest("Excel file is required.");
-
-
-        //        using var stream = file.OpenReadStream();
-        //        var response = await _organizationManager.BulkOnboardFarmersBatchAsync(stream, args);
-
-        //        return Ok(new Response<BulkOnboardingQueueResponse>()
-        //        {
-        //            Code = ResponseCodes.Success,
-        //            Succeeded = true,
-        //            Message = ResponseMessages.Successful,
-        //            Data = response
-        //        });
-
-
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.ExceptionMessage,
-        //            Succeeded = false,
-
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-        //            Succeeded = false,
-        //        });
-        //    }
-
-        //}
-
-
+        
 
         [HttpGet("farmer/sales-overview")]
         public async Task<IActionResult> GetOrganizationFarmerSalesSummary([FromQuery] ListQueryParams query)
@@ -3812,20 +3430,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> RemoveFarmerFromCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
 
             try
             {
@@ -3883,20 +3488,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -4077,22 +3669,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("farmer-face-capture")]
         public async Task<IActionResult> SaveFarmerImage([FromForm] ProfileImageModel model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                if(string.IsNullOrEmpty(args.UserId))
@@ -4296,7 +3875,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "No Record Found",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -4346,7 +3925,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<FarmDetailsResponse>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -4374,20 +3953,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         #endregion FarmerMgt
-
-        private void NormalizeOrganizationCode(OnBoardingArgs args)
-        {
-            if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-            {
-                args.organizationCode = OrganizationCode;
-            }
-            if (string.IsNullOrEmpty(args.organizationCode))
-            {
-                throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Access Denied");
-            }
-        }
-              
+   
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
             if (args.Id != 0) return;
@@ -4412,25 +3978,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (!args.MembershipIds.Contains(coop.Id))
                 args.MembershipIds.Add(coop.Id);
         }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
-        {
-            //  if(CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-
-            var agent = await _businessManager.GetAgentDetailByUserId(args.AgentUserId);
-
-            if (agent == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Agent not found for the specified user.");
-
-            args.Id = agent.Id;
-
-            args.AgentIds ??= new List<long?>();
-
-            if (!args.AgentIds.Contains(agent.Id))
-                args.AgentIds.Add(agent.Id);
-        }
+        
         private async Task EnrichFarmerAsync(AssignmentArgs args)
         {
             if (args.Id != 0) return;
