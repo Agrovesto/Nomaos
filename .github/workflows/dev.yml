@@ -155,9 +155,11 @@ jobs:
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
         run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+          dotnet-coverage collect "dotnet test ${{ env.TEST_PROJECT_PATH }} \
             --configuration Release \
-            --verbosity normal         
+            --verbosity normal"   
+            --output coverage.xml \
+            --output-format xml            
           echo "✅ Tests completed with coverage"
         continue-on-error: true
         # Convert coverage to OpenCover format for SonarQube
