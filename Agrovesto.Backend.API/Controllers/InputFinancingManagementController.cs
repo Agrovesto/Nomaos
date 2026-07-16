@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
@@ -349,7 +350,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                         Succeeded = false,
-                        Message = "Successful",
+                        Message = ResponseMessages.Successful,
                         Data = bundle.data
                     });
                 }
@@ -408,7 +409,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = bundle.data
                 });
 
@@ -512,7 +513,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = input
                 });
 
@@ -567,7 +568,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = input
                 });
 
@@ -793,7 +794,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = input.status,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = input
                 });
 

@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using CsvHelper;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Authorization;
@@ -72,7 +73,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     IFormFile file,
     [FromQuery] OnBoardingArgs args)
         {
-            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -85,7 +85,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("FILE_TYPE_INVALID",
                     "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
 
-            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
@@ -97,7 +96,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.organizationCode = OrganizationCode;
             await EnrichAgentAsync(args);
-            // --- Parse file ---
+  
             List<BulkFarmerRowDto> rows;
             try
             {
@@ -119,7 +118,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (rows.Count == 0)
                 return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
 
-            // --- Process ---
+        
             try
             {
                 var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
@@ -261,8 +260,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
-            // --- Process (chunked transactions) ---
-            try
+                 try
             {
                 var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
 
@@ -344,7 +342,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //              {
         //                  Code = ResponseCodes.Success,
         //                  Succeeded = true,
-        //                  Message = "Successful",
+        //                  Message = ResponseMessages.Successful,
         //                  Data = response
         //              });
 
@@ -393,7 +391,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -514,7 +512,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = query.PageSize,
@@ -566,7 +564,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result,
 
                    
-                    Message = result !=null? "Successful": "Could not retrieve data",
+                    Message = result !=null? ResponseMessages.Successful: "Could not retrieve data",
                     Succeeded = result != null ? true : false,
               
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -627,7 +625,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
+
                     Data = request
                 });
 

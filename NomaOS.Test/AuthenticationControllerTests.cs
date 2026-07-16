@@ -1,13 +1,16 @@
 using Agrovesto.Backend.API.Controllers.V2.Internal;
 using Agrovesto.Backend.Core.CoreUtils;
-using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Amazon.Runtime.Internal.Util;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
+using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Moq;
 using Xunit;
-using FluentAssertions;
-using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 
 namespace NomaOS.Test
 {
@@ -23,8 +26,10 @@ namespace NomaOS.Test
 
             var httpContextAccessor = new HttpContextAccessor();
             var mockBusinessManager = new Mock<Agrovesto.Backend.Core.Interfaces.Managers.IBusinessManager>();
+            var mockBulk = new Mock<IBulkFarmerUploadService>();
+            var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<AuthenticationController>>();
 
-            var controller = new AuthenticationController(httpContextAccessor, mockOnBoarding.Object, mockBusinessManager.Object);
+            var controller = new AuthenticationController(httpContextAccessor, mockOnBoarding.Object, mockBusinessManager.Object, mockBulk.Object, mockLogger.Object);
 
             var request = new ConfirmOtpRequest
             {
@@ -63,8 +68,10 @@ namespace NomaOS.Test
 
             var httpContextAccessor = new HttpContextAccessor();
             var mockBusinessManager = new Mock<Agrovesto.Backend.Core.Interfaces.Managers.IBusinessManager>();
+            var mockBulk = new Mock<IBulkFarmerUploadService>();
+            var mockLogger = new Mock<Microsoft.Extensions.Logging.ILogger<AuthenticationController>>();
 
-            var controller = new AuthenticationController(httpContextAccessor, mockOnBoarding.Object, mockBusinessManager.Object);
+            var controller = new AuthenticationController(httpContextAccessor, mockOnBoarding.Object, mockBusinessManager.Object, mockBulk.Object, mockLogger.Object);
 
             var requestModel = new OnboardingRequestModel
             {

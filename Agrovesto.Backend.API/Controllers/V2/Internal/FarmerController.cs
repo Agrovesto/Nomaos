@@ -9,6 +9,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -65,7 +66,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result,
 
 
-                    Message = result != null ? "Successful" : "Could not retrieve data",
+                    Message = result != null ? ResponseMessages.Successful : "Could not retrieve data",
                     Succeeded = result != null ? true : false,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -109,7 +110,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<FarmerMembershipSummaryDto>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -163,7 +164,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<FarmerMembershipOverviewDto>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -323,7 +324,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<FarmerFinancialSummaryDto>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -358,7 +359,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<ProviderResponse>()
                 {
                     Data = response,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -393,7 +394,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<ProviderResponse>()
                 {
                     Data = response,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
