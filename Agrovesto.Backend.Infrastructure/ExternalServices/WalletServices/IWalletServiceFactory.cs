@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
     public interface IWalletServiceFactory
     {
-        IGenericWalletService GetService(WalletProviderType provider);
+        IGenericWalletService GetService(string providerKey);
     }
     public enum WalletProviderType
     {
@@ -17,7 +17,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         FCMB = 1,
         Sterling = 2,
         Credo = 3,
-        CafeOne = 4
+        CafeOne = 4,
+        Etransact = 5
     }
 
 }

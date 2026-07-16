@@ -31,8 +31,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [ApiController]
     public class OrganizationController : BaseController
     {
-        private static readonly string[] AllowedExtensions = { ".csv", ".xlsx", ".xls" };
-        private readonly IBusinessManager _businessManager;
+        private static readonly HashSet<string> AllowedExtensions =
+       new(StringComparer.OrdinalIgnoreCase)
+       {
+        ".xlsx", ".xls",   // Excel formats
+        ".csv"                                // OpenDocument (LibreOffice)
+       }; private readonly IBusinessManager _businessManager;
         private readonly IOrganizationManager _organizationManager;
         private readonly IOnBoardingManager _onboardingManager;
         private readonly Agrovesto.Backend.Infrastructure.DB.DataContext _context; 
@@ -45,7 +49,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         private readonly IBulkMembershipUploadService _memberShipUploadService;
         private readonly ILogger<OrganizationController> _logger;
 
-        private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
+        private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 5 MB
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
 
         public OrganizationController(IHttpContextAccessor httpContextAccessor,
@@ -83,8 +87,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
      
         [HttpPost("create-location")]
         public async Task<IActionResult> Location(
-      [FromBody] CreateLocationDto model,
-      [FromQuery] ListQueryParams args)
+        [FromBody] CreateLocationDto model,
+        [FromQuery] ListQueryParams args)
         {
             if (!ModelState.IsValid)
             {
@@ -155,7 +159,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     new Response<string>
                     {
                         Succeeded = false,
-                        Message = "An unexpected error occurred. Please contact your administrator."
+                        Message = ex.Message ?? "An unexpected error occurred. Please contact your administrator."
                     });
             }
         }
@@ -364,7 +368,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-
         [HttpGet("location")]
         public async Task<IActionResult> GetLocation([FromQuery] ListQueryParams query)
         {
@@ -465,8 +468,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-
-
         [HttpPatch("edit-sublocation")]
         public async Task<IActionResult> EditSubLocationAsync([FromBody] EditSubLocationDto model, [FromQuery] ListQueryParams args)
         {
@@ -530,11 +531,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-
         [HttpPost("create-sublocation")]
         public async Task<IActionResult> CreateSubLocationAsync(
-    [FromBody] CreateSubLocationDto model,
-    [FromQuery] ListQueryParams args)
+        [FromBody] CreateSubLocationDto model,
+        [FromQuery] ListQueryParams args)
         {
             // enrich request context
             args.organizationCode ??= OrganizationCode;
@@ -1301,7 +1301,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
         [HttpGet("roles")]
-
         public async Task<IActionResult> GetRolesAsync([FromQuery] ListQueryParams args)
         {
             try
@@ -1345,7 +1344,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("role")]
-
         public async Task<IActionResult> GetRoleById([FromQuery] ListQueryParams query)
         {
             try
@@ -1380,8 +1378,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
-
-
 
         #endregion settings
 
@@ -1590,7 +1586,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #endregion OrganizationWallet
 
-      #region OrganizationProduct
+        #region OrganizationProduct
         [HttpPost("create-product")]
         public async Task<IActionResult> CreateOrganizationProduct([FromBody] OrganizationProductDto model, [FromQuery] ListQueryParams args)
         {
@@ -2846,10 +2842,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("upload-bulk-membership")]
         [RequestSizeLimit(MaxFileSizeBytes)] // 10 MB cap
         public async Task<IActionResult> BulkMembershipUpload(
-    IFormFile file,
-    [FromQuery] OnBoardingArgs args)
+        IFormFile file,
+        [FromQuery] OnBoardingArgs args)
         {
-            // --- File presence & validation ---
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -2859,7 +2854,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (!AllowedExtensions.Contains(extension))
-                return Error("FILE_TYPE_INVALID", "We couldn't read that file. Please upload an Excel (.xlsx) file.");
+                return Error("FILE_TYPE_INVALID",
+                    "Unsupported file type. Please upload an Excel file (.xlsx, .xls, .xlsb, .xlsm) or a .csv file.");
 
             // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
@@ -3276,8 +3272,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkUpload(
-    IFormFile file,
-    [FromQuery] OnBoardingArgs args)
+        IFormFile file,
+        [FromQuery] OnBoardingArgs args)
         {
             // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
@@ -3847,7 +3843,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                                     .Where(x => x.HasValue)
                                     .Select(x => x.Value)
                                     .ToList();
-                var updateDetail = await _organizationManager.RemoveFarmerFromCooperatives(args.farmerUserId, CooperativeIds);
+                var updateDetail = await _organizationManager.RemoveFarmerFromCooperatives(args.farmerUserId, CooperativeIds, args.organizationCode);
 
 
                 return Ok(new Response<bool>()
@@ -4002,7 +3998,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Data.Count > 0,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = query.PageSize,
@@ -4143,7 +4139,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //assign agent
         [HttpPut("change-farmer-agents")]
         public async Task<IActionResult> ChangeFarmerAgents(
-       [FromQuery] AssignmentArgs args,
+        [FromQuery] AssignmentArgs args,
         [FromBody] AssignmentArgs model)
         {
             try {

@@ -1729,7 +1729,65 @@ namespace Agrovesto.Backend.Infrastructure
                 Env = model.Env.ToEnum<Env>()
             };
         }
+        public static BusinessWalletProviderModel Map(this BusinessWalletProvider entity)
+        {
+            if (entity == null) return null;
 
+            return new BusinessWalletProviderModel
+            {
+                BusinessWalletProviderId = entity.BusinessWalletProviderId,
+                BusinessCode = entity.BusinessCode,
+                ProviderId = entity.ProviderId,
+                Status = Enum.Parse<ProviderStatus>(entity.Status),
+                IsDefault = entity.IsDefault,
+                WalletProvider = entity.WalletProvider?.Map(),
+                Parameters = entity.Parameters?.Select(p => p.Map()).ToList() ?? new()
+            };
+        }
+
+        public static BusinessWalletProvider Map(this BusinessWalletProviderModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessWalletProvider
+            {
+                BusinessWalletProviderId = model.BusinessWalletProviderId,
+                BusinessCode = model.BusinessCode,
+                ProviderId = model.ProviderId,
+                Status = model.Status.ToString(),
+                IsDefault = model.IsDefault
+            };
+        }
+
+        public static BusinessWalletProviderParameterModel Map(this BusinessWalletProviderParameter entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessWalletProviderParameterModel
+            {
+                ParameterId = entity.ParameterId,
+                Key = entity.Key,
+                Value = entity.Value,
+                Description = entity.Description,
+                BusinessWalletProviderId = entity.BusinessWalletProviderId,
+                Env = Enum.Parse<Env>(entity.Env)
+            };
+        }
+
+        public static BusinessWalletProviderParameter Map(this BusinessWalletProviderParameterModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessWalletProviderParameter
+            {
+                ParameterId = model.ParameterId,
+                Key = model.Key,
+                Value = model.Value,
+                Description = model.Description,
+                BusinessWalletProviderId = model.BusinessWalletProviderId,
+                Env = model.Env.ToString()
+            };
+        }
 
         #endregion walletProvider
         #region Business
@@ -2568,5 +2626,123 @@ namespace Agrovesto.Backend.Infrastructure
 
 
         #endregion farmercategory
+
+        #region SMS
+        public static SMSProvider Map(this SMSProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new SMSProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                SMSProviderParameters = model.SMSProviderParameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static SMSProviderModel Map(this SMSProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new SMSProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                SMSProviderParameters = entity.SMSProviderParameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<ProviderStatus>()
+            };
+        }
+        public static SMSProviderParameter Map(this SMSProviderParameterModel model)
+        {
+            return new SMSProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                SMSProviderProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = Enum.GetName(typeof(Env), model.Env)//model.Env.ToString()
+            };
+        }
+        public static SMSProviderParameterModel Map(this SMSProviderParameter model)
+        {
+            return new SMSProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.SMSProviderProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+        public static BusinessSMSProviderModel Map(this BusinessSMSProvider entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessSMSProviderModel
+            {
+                BusinessSMSProviderId = entity.BusinessSMSProviderId,
+                BusinessCode = entity.BusinessCode,
+                ProviderId = entity.ProviderId,
+                Status = Enum.Parse<ProviderStatus>(entity.Status),
+                IsDefault = entity.IsDefault,
+                SMSProvider = entity.SMSProvider?.Map(),
+                Parameters = entity.Parameters?.Select(p => p.Map()).ToList() ?? new()
+            };
+        }
+
+        public static BusinessSMSProvider Map(this BusinessSMSProviderModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessSMSProvider
+            {
+                BusinessSMSProviderId = model.BusinessSMSProviderId,
+                BusinessCode = model.BusinessCode,
+                ProviderId = model.ProviderId,
+                Status = model.Status.ToString(),
+                IsDefault = model.IsDefault
+            };
+        }
+
+        public static BusinessSMSProviderParameterModel Map(this BusinessSMSProviderParameter entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessSMSProviderParameterModel
+            {
+                ParameterId = entity.ParameterId,
+                Key = entity.Key,
+                Value = entity.Value,
+                Description = entity.Description,
+                BusinessSMSProviderId = entity.BusinessSMSProviderId,
+                Env = Enum.Parse<Env>(entity.Env)
+            };
+        }
+
+        public static BusinessSMSProviderParameter Map(this BusinessSMSProviderParameterModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessSMSProviderParameter
+            {
+                ParameterId = model.ParameterId,
+                Key = model.Key,
+                Value = model.Value,
+                Description = model.Description,
+                BusinessSMSProviderId = model.BusinessSMSProviderId,
+                Env = model.Env.ToString()
+            };
+        }
+
+        #endregion SMS
     }
 }

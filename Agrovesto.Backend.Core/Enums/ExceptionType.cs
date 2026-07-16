@@ -11,6 +11,7 @@
         OPERATION_FAILED,
         CONFLICT,
         INTERNAL_SERVER_ERROR,
+        TOO_MANY_REQUESTS
     }
 
 }

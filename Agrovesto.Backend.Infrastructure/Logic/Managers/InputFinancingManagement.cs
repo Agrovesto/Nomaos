@@ -140,7 +140,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                                 {
                                     to = $"2349061562512",
                                     sms = messageBody
-                                });
+                                }, args.businessCode);
 
                             }
                             update = await _repository.SettlePendingFarmerBundleSubscriptionEquityToBusiness(request);
@@ -227,7 +227,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             foreach (var request in requestsByBusiness.Data)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
@@ -343,7 +343,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             foreach (var request in requestsByBusiness.Data)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
@@ -371,7 +371,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             foreach (var request in requestsByBusiness)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
@@ -396,7 +396,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (!requestsByBusiness.Any()) return null;
             foreach (var request in requestsByBusiness)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
@@ -429,7 +429,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                     var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                     var businessAccount = await _walletManager.GetUserSterlingAccount(business.UserId);
                     if (userSterlinWallet != null)
@@ -453,8 +453,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     var settlementPlatformSplitAmount = getInputInventory.CommissionPrice;
 
-                    //TODO: check if commission is enabled, then add the commission value, else don't
-
+                   
 
                     if (totalSettlment != (settlementSplitAmountBusiness + settlementPlatformSplitAmount))
                     {
@@ -565,7 +564,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     {
                         to = $"234{farmer.PhoneNumber.GetLast(10)}",
                         sms = messageBody
-                    });
+                    }, args.businessCode);
 
                     //responseObject = await RetrieveFarmerInputDisbursementReceipt(model, args);
 
@@ -671,7 +670,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     }
                     var getInputInventory = await _warehouseManagementRepository.GetBundleByIdAsync(business.BusinessCode, model.InterestedBundleId)
                          ?? throw new Exception("Bundle does not exist");
-                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
 
                     var sterlingCharge = decimal.Parse(_configuration["Sterling:Charge"]);
                     model.BelongToBusinessCode = args.businessCode;
@@ -723,7 +722,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                             createWarehouse.data.ExpectedTotalEquityPrice);
 
 
-                        await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer, business.BusinessName);
+                        await SendInputSubscriptionINterestSMS(response, getInputInventory, farmer, business.BusinessName, args.businessCode);
                         status = true;
                     //}
 
@@ -778,7 +777,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             return response;
         }
 
-        private async Task SendInputSubscriptionINterestSMS(BundleSubscriptionInterestResponseModel response, BundleModel getInputInventory, FarmerModel farmer, string businessName)
+        private async Task SendInputSubscriptionINterestSMS(BundleSubscriptionInterestResponseModel response, BundleModel getInputInventory, FarmerModel farmer, string businessName, string businessCode)
         {
             //var messageBody = $"You have indicated interest in input package: {getInputInventory.Name}." +
             //             $"Confirm your equity by adding {response.Amount} into {response.AccountNumber} {response.AccountName} {response.BankName}." +
@@ -810,7 +809,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 to = $"234{farmer.PhoneNumber.GetLast(10)}",
 
                 sms = messageBody
-            });
+            }, businessCode);
         }
 
         public async Task<BundleSubscriptionInterestModel> ApproveEquityForDisbursement(BundleSubscriptionInterestModel model, BusinessRegistrationArgs args)
@@ -1068,7 +1067,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             if (!requestsByBusiness.Any()) return null;
             foreach (var request in requestsByBusiness)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {
@@ -1095,7 +1094,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             foreach (var request in requestsByBusiness)
             {
-                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId) ?? throw new Exception("Farmer does not exist");
+                var farmer = await _farmerRepository.GetFarmerByUserId(request.FarmerUserId, args.organizationCode) ?? throw new Exception("Farmer does not exist");
                 var userSterlinWallet = await _walletManager.GetUserSterlingAccount(farmer.UserId);
                 if (userSterlinWallet != null)
                 {

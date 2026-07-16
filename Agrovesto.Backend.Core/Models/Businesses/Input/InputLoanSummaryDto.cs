@@ -9,7 +9,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
   
     public class RepaymentBreakdownDto
     {
-        public DateTimeOffset Date { get; set; }
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public DateTimeOffset? Date { get; set; }
         public decimal LoanAmount { get; set; }
         public decimal AmountPaid { get; set; }
         public string MethodOfPayment { get; set; }

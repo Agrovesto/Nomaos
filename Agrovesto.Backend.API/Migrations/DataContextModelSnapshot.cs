@@ -3646,7 +3646,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("CompanyName")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("CompanyType")
@@ -3656,7 +3655,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FirstName")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FullName")
@@ -3666,7 +3664,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("LastName")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<long?>("LgaId")
@@ -3676,7 +3673,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("OrganizationCode")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OrganizationEmail")
@@ -5298,6 +5294,138 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("BulkUploadJobs");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", b =>
+                {
+                    b.Property<long>("BusinessSMSProviderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("BusinessSMSProviderId"));
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("ProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("BusinessSMSProviderId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.HasIndex("BusinessCode", "ProviderId")
+                        .IsUnique();
+
+                    b.ToTable("BusinessSMSProviders");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProviderParameter", b =>
+                {
+                    b.Property<long>("ParameterId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ParameterId"));
+
+                    b.Property<long>("BusinessSMSProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Env")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ParameterId");
+
+                    b.HasIndex("BusinessSMSProviderId");
+
+                    b.ToTable("BusinessSMSProviderParameters");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProvider", b =>
+                {
+                    b.Property<long>("BusinessWalletProviderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("BusinessWalletProviderId"));
+
+                    b.Property<string>("BusinessCode")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit");
+
+                    b.Property<long>("ProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("BusinessWalletProviderId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.HasIndex("BusinessCode", "ProviderId")
+                        .IsUnique();
+
+                    b.ToTable("BusinessWalletProviders");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProviderParameter", b =>
+                {
+                    b.Property<long>("ParameterId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ParameterId"));
+
+                    b.Property<long>("BusinessWalletProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Env")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ParameterId");
+
+                    b.HasIndex("BusinessWalletProviderId");
+
+                    b.ToTable("BusinessWalletProviderParameters");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
                 {
                     b.Property<long>("Id")
@@ -5638,6 +5766,65 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("AspNetRoles", (string)null);
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", b =>
+                {
+                    b.Property<long>("ProviderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ProviderId"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ProviderId");
+
+                    b.ToTable("SMSProvider");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProviderParameter", b =>
+                {
+                    b.Property<long>("ParameterId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ParameterId"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Env")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("SMSProviderProviderId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ParameterId");
+
+                    b.HasIndex("SMSProviderProviderId");
+
+                    b.ToTable("SMSProviderParameters");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.States", b =>
                 {
                     b.Property<long>("StateId")
@@ -5783,7 +5970,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("BVN")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("BusinessCode")
                         .HasColumnType("nvarchar(max)");
@@ -5848,7 +6035,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("NIN")
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Name")
                         .HasColumnType("nvarchar(max)");
@@ -5904,7 +6091,19 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("BVN")
+                        .IsUnique()
+                        .HasFilter("[BVN] IS NOT NULL");
+
                     b.HasIndex("BusinessId");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasFilter("[Email] IS NOT NULL");
+
+                    b.HasIndex("NIN")
+                        .IsUnique()
+                        .HasFilter("[NIN] IS NOT NULL");
 
                     b.HasIndex("NormalizedEmail")
                         .HasDatabaseName("EmailIndex");
@@ -6030,6 +6229,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("MaxCheckSum")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
@@ -7564,6 +7766,50 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("OrganizationConfiguration");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", "SMSProvider")
+                        .WithMany("BusinessSMSProviders")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SMSProvider");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProviderParameter", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", "BusinessSMSProvider")
+                        .WithMany("Parameters")
+                        .HasForeignKey("BusinessSMSProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BusinessSMSProvider");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProvider", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", "WalletProvider")
+                        .WithMany("BusinessWalletProviders")
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("WalletProvider");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProviderParameter", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProvider", "BusinessWalletProvider")
+                        .WithMany("Parameters")
+                        .HasForeignKey("BusinessWalletProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BusinessWalletProvider");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Farmer", "Farmer")
@@ -7615,6 +7861,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasForeignKey("BusinessId");
 
                     b.Navigation("Business");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProviderParameter", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", "SMSProvider")
+                        .WithMany("SMSProviderParameters")
+                        .HasForeignKey("SMSProviderProviderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SMSProvider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.User", b =>
@@ -7944,6 +8201,16 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", b =>
+                {
+                    b.Navigation("Parameters");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProvider", b =>
+                {
+                    b.Navigation("Parameters");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", b =>
                 {
                     b.Navigation("Wards");
@@ -7964,6 +8231,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("Claims");
 
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", b =>
+                {
+                    b.Navigation("BusinessSMSProviders");
+
+                    b.Navigation("SMSProviderParameters");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.States", b =>
@@ -7992,6 +8266,8 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>
                 {
+                    b.Navigation("BusinessWalletProviders");
+
                     b.Navigation("WalletProviderParameters");
                 });
 #pragma warning restore 612, 618

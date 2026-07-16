@@ -47,11 +47,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _farmerRepository = farmerRepository;
             _businessRepository = businessRepository;
         }
-        public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode,string Env)
+        public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode,string Env, string businessCode)
         {
             //var response = new CafeOneParams();
-            var provider = await _providerRepo.GetActiveProvider();
-            var providerId = provider.Where(x => x.Code == WalletProviderCode).FirstOrDefault().ProviderId;
+            var provider = await _providerRepo.GetProvidersForBusiness(businessCode);
+            var providerId = provider.Where(x => x.WalletProvider.Code == WalletProviderCode).FirstOrDefault().ProviderId;
             WalletProviderParameterModel[] parameters = await _providerRepo.GetParametersByProvider(providerId, Env);
 
             return parameters;
@@ -76,7 +76,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 // Resolve wallet provider
                 var walletProviderCode = ResolveWalletProvider(orgConfig, args.SelectedProviderCode);
-                var providerParams = await RetrieveParams(walletProviderCode, args.env);
+                var providerParams = await RetrieveParams(walletProviderCode, args.env, args.businessCode);
                 var users = await _farmerRepository.GetFarmersByBusinessCode(args.businessCode, args);
                 if (users.Count < 0)
                     return (false, $"Organization {args.organizationCode} has no user");
@@ -157,7 +157,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 LastName = userModel.LastName,
                 PhoneNumber = userModel.PhoneNumber
             };
-            providerParams = await RetrieveParams(walletProviderCode, args.env);
+            providerParams = await RetrieveParams(walletProviderCode, args.env, args.businessCode);
             switch (walletProviderCode)
             {
                 case Providers.FCMBWallet:
@@ -290,7 +290,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     return (true, $"User Wallet Exist for {walletProviderCode}");
                 }
                 // 4. Retrieve provider parameters
-                var providerParams = await RetrieveParams(walletProviderCode, args.env);
+                var providerParams = await RetrieveParams(walletProviderCode, args.env, args.businessCode);
 
                 // 5. Build request payload
                 var walletRequest = new WalletsRequest

@@ -27,8 +27,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("bulk-onboard")]
         public async Task<IActionResult> BulkOnboard(
-    IFormFile file,
-    [FromQuery] OnBoardingArgs args)
+        IFormFile file,
+        [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
             {
@@ -279,8 +279,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("create-profile")]
         [AllowAnonymous]
         public async Task<IActionResult> CreateProfile(
-    [FromBody] ProfileRequestModel model,
-    [FromQuery] OnBoardingArgs args)
+        [FromBody] ProfileRequestModel model,
+        [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -335,8 +335,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("create-organization-profile")]
         [AllowAnonymous]
         public async Task<IActionResult> CreateOrganization(
-    [FromBody] OrganizationOnboardingModel model,
-    [FromQuery] OrganizationOnboardingArgs args)
+        [FromBody] OrganizationOnboardingModel model,
+        [FromQuery] OrganizationOnboardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();

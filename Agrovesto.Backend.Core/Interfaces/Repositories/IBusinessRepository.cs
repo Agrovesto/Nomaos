@@ -16,7 +16,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<BusinessWorkerModel> CreateBusinessWorker(BusinessWorkerModel bWorker);
         Task<LocationTypeModel> CreateLocationTypeAsync(LocationTypeModel model);
         Task<OrganizationModel> CreateOrganization(OrganizationModel orgModel);
-        Task<OrganizationResponseModel> CreateOrUpdateOrganization(OrganizationOnboardingModel orgModel, OrganizationOnboardingArgs args);
+        Task<OrganizationResponseModel> CreateOrUpdateOrganization(OrganizationOnboardingModel orgModel, OnBoardingArgs args);
         Task<BusinessModel> GetBusinessAsync(string businessName);
         Task<BusinessModel> GetBusinessByCodeAsync(string businessCode);
         Task<BusinessModel> GetBusinessByIdAsync(long businessId);

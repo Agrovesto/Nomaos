@@ -65,7 +65,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId);
         Task<CommitmentReminderDto?> GetCommitmentReminderAsync(long subscriptionId);
         Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter);
-        Task<long> RequestInputDisbursementApprovalAsync(long subscriptionId, string? reference, string userId);
+        Task<long> RequestInputDisbursementApprovalAsync(long subscriptionId, string? reference, string userId, string subscriberUserId);
         Task<decimal> GetTotalCommitmentPaidAsync(long subscriptionId);
         // Task<bool> RecordSuccessfulPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args);
         Task<bool> RecordSuccessfulPaymentAsync(long paymentId, PaymentConfirmationRequest request, string performedBy);
@@ -77,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> RemoveAdditionalCostFromPackageAsync(long packageId, long additionalCostId);
         Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs args);
         Task<bool> UpdateInputPackageWallets(long organizationId, long walletId, long providerId);
-        Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, string approvedByUserId);
+        Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, InputSubscriptionRequestArgs args);
         Task<decimal> GetAvailableBalanceAsync(long locationId);
         Task DeductAsync(long locationId, decimal amount, string referenceNumber, string agentUserId);
     }
@@ -180,8 +180,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             var package = await _context.InputPackages
                 .Where(x => x.OrganizationId == organizationId 
-                //&&
-               // x.WalletProviderId == providerId 
+                &&
+                x.WalletProviderId == providerId 
                 && !x.IsSelectedWalletProvisioned).ToListAsync();
 
             if (!package.Any()) return false;
@@ -319,7 +319,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         };
                     }
 
-                    if (request.RepaymentRequired)
+                    if (request.RepaymentRequired || request.RepaymentValue > 0)
                     {
                         package.RepaymentPlan = new RepaymentPlan
                         {
@@ -328,7 +328,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             RepaymentStartDate = request.RepaymentStartDate,
                             RepaymentEndDate = request.RepaymentEndDate,
                             RepaymentGracePeriod = request.RepaymentGracePeriod,
-                            RepaymentMode = request.RepaymentMode,
+                            RepaymentMode = request.RepaymentModel,
                             RepaymentValue = request.RepaymentValue,
                             RiskCategory = request.RiskCategory
                         };
@@ -515,6 +515,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var pageSize = Math.Max(1, request.PageSize);
 
             var query = _context.InputPackages
+                .Include(x=>x.RepaymentPlan)
+                .Include(x=>x.CommitmentPlan)
+                .Include(x=>x.InputFinancingCategory)
+
                 .Where(x => x.OrganizationId == request.OrganizationId);
 
             var totalCount = await query.CountAsync();
@@ -577,6 +581,26 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var commitment = package.CommitmentPlan;
             var repayment = package.RepaymentPlan;
 
+            const int repaymentPreviewCount = 5;
+
+            // Only pull the first few repayments here — full history is available
+            // via GetPackageRepaymentBreakdownAsync below, which supports paging.
+            var repaymentBreakdown = await _context.InputPackageSubscriptionPayments
+                .Where(x => x.PaymentType == PaymentType.Repayment
+                    && x.Subscription.InputPackageId == id)
+                .OrderByDescending(x => x.PaidOn)
+                .Take(repaymentPreviewCount)
+                .Select(x => new RepaymentBreakdownDto
+                {
+                    Id = x.Id,
+                    SubscriptionId = x.SubscriptionId,
+                    AmountPaid = x.AmountPaid,
+                    Date =  x.PaidOn,
+                    MethodOfPayment =EnumExtensions.GetDisplayName(x.PaymentChannel),
+                    LoanAmount= package.TotalFinancingValue
+                })
+                .ToListAsync();
+
             return new InputPackageDto
             {
                 IsActive = package.IsActive,
@@ -637,7 +661,49 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 {
                     Name = c.Name,
                     Amount = c.Amount
-                }).ToList()
+                }).ToList(),
+
+                RepaymentBreakdown = repaymentBreakdown
+            };
+        }
+
+        /// <summary>
+        /// Paginated repayment history for a package, for a dedicated API endpoint.
+        /// </summary>
+        public async Task<PagedResult<RepaymentBreakdownDto>> GetPackageRepaymentBreakdownAsync(
+            long packageId,
+            int pageNumber = 1,
+            int pageSize = 20)
+        {
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1) pageSize = 20;
+
+            var query = _context.InputPackageSubscriptionPayments
+                .Where(x => x.PaymentType == PaymentType.Repayment
+                    && x.Subscription.InputPackageId == packageId);
+
+            var totalCount = await query.CountAsync();
+
+            var items = await query
+                .OrderByDescending(x => x.PaidOn)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new RepaymentBreakdownDto
+                {
+                    Id = x.Id,
+                    SubscriptionId = x.SubscriptionId,
+                    AmountPaid = x.AmountPaid,
+                    Date = x.PaidOn
+                })
+                .ToListAsync();
+
+            return new PagedResult<RepaymentBreakdownDto>
+            {
+                Items = items,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Count = totalCount,
+                //TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
             };
         }
         public async Task<bool> DeactivatePackageAsync(long packageId, long organizationId)
@@ -1259,7 +1325,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     SubscriptionStatus.PendingDisbursement;
 
                 await RequestInputDisbursementApprovalAsync(subscription.Id,
-                    request.ExternalReference, performedBy);
+                    request.ExternalReference, performedBy, payment.Subscription.SubscriberUserId);
 
 
                 _context.OutboxMessages.Add(new OutboxMessage
@@ -1552,18 +1618,39 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         }
 
         public async Task<long> RequestInputDisbursementApprovalAsync(
-            long subscriptionId,
-            string? reference,
-            string userId)
+     long subscriptionId,
+     string? reference,
+     string userId, string subscriberuserId)
         {
             var subscription = await _context.InputPackageSubscriptions
-                .FirstOrDefaultAsync(x => x.Id == subscriptionId);
+                .FirstOrDefaultAsync(x => x.Id == subscriptionId && x.SubscriberUserId == subscriberuserId);
 
             if (subscription == null)
                 throw new Exception("Subscription not found");
 
-            if (subscription.Status != SubscriptionStatus.PendingDisbursement)
-                throw new Exception("Not ready for disbursement");
+            var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement, SubscriptionStatus.Active };
+            if (!allowedStatuses.Contains(subscription.Status))
+                throw new Exception($"Not ready for disbursement. Current subscription status: {subscription.Status}");
+
+            var blockingDisbursementStatuses = new[] { DisbursementStatus.PendingApproval, DisbursementStatus.Approved };
+
+            var existingDisbursement = await _context.InputSubscriptionDisbursements
+                .FirstOrDefaultAsync(x => x.SubscriptionId == subscriptionId
+                    && blockingDisbursementStatuses.Contains(x.Status));
+
+            if (existingDisbursement != null)
+            {
+                existingDisbursement.RequestedAmount = subscription.TotalFinancingValue;
+                existingDisbursement.RequestedByUserId = userId;
+                existingDisbursement.RequestCreatedOn = DateTimeOffset.Now;
+                existingDisbursement.Reference = reference;
+                existingDisbursement.Status = DisbursementStatus.PendingApproval;
+
+                subscription.Status = SubscriptionStatus.PendingApproval;
+                await _context.SaveChangesAsync();
+
+                return existingDisbursement.Id;
+            }
 
             var request = new InputSubscriptionDisbursement
             {
@@ -1576,13 +1663,14 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             };
             _context.InputSubscriptionDisbursements.Add(request);
 
+            subscription.Status = SubscriptionStatus.PendingApproval;
             await _context.SaveChangesAsync();
 
             return request.Id;
         }
         public async Task<bool> ApproveInputDisbursementRequestAsync(
-            ApproveDisbursementRequestDto request,
-            string approvedByUserId)
+       ApproveDisbursementRequestDto request,
+       InputSubscriptionRequestArgs args)
         {
             if (request == null)
                 throw new Exception("Invalid request");
@@ -1593,42 +1681,29 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         .ThenInclude(x => x.RepaymentPlan)
                 .AsQueryable();
 
-            if (request.RequestId.HasValue)
-            {
-                query = query.Where(x => x.Id == request.RequestId.Value);
-            }
-            else if (request.SubscriptionId.HasValue)
-            {
-                query = query.Where(x => x.SubscriptionId == request.SubscriptionId.Value);
-            }
-            else if (!string.IsNullOrWhiteSpace(request.Reference))
-            {
-                query = query.Where(x => x.Reference == request.Reference);
-            }
-            else
-            {
-                throw new Exception("No valid identifier provided");
-            }
+            query = query.Where(x => x.Subscription.SubscriberUserId == args.SubscriberUserId
+                && x.SubscriptionId == args.SubscriptionId);
 
-            var disbursementRequest = await query.FirstOrDefaultAsync();
+            var disbursementRequest = await query
+                .OrderByDescending(x => x.RequestCreatedOn)
+                .FirstOrDefaultAsync();
 
             if (disbursementRequest == null)
                 throw new Exception("Disbursement request not found");
 
             if (disbursementRequest.Status != DisbursementStatus.PendingApproval)
-                throw new Exception("Request already processed");
+                throw new Exception($"Request already processed. Current disbursement status: {disbursementRequest.Status}");
 
             disbursementRequest.Status = DisbursementStatus.Approved;
-            disbursementRequest.ApprovedByUserId = approvedByUserId;
+            disbursementRequest.ApprovedByUserId = args.UserId;
             disbursementRequest.ApprovedOn = DateTimeOffset.UtcNow;
-            disbursementRequest.Subscription.Status = SubscriptionStatus.PendingDisbursement;
+            disbursementRequest.Subscription.Status = SubscriptionStatus.Approved;
             disbursementRequest.ApprovedAmount = request.Amount.HasValue ? request.Amount.Value : disbursementRequest.RequestedAmount;
 
             await _context.SaveChangesAsync();
 
             return true;
         }
-
 
         public async Task<decimal> GetAvailableBalanceAsync(long locationId)
         {
@@ -1641,7 +1716,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .SumAsync(x => x.TotalAmount);
         }
 
-        // ── DeductAsync ───────────────────────────────────────────────────────────
         public async Task DeductAsync(
             long locationId,
             decimal amount,
@@ -1668,7 +1742,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     $"Insufficient funds at this location. " +
                     $"Available: {totalAvailable:N2}, Requested: {amount:N2}.");
 
-            // Drain rows one by one until the full amount is covered.
             decimal remaining = amount;
 
             foreach (var row in monetaryRows)
@@ -1680,8 +1753,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 row.TotalAmount -= deductFromThisRow;
                 remaining -= deductFromThisRow;
 
-                // Record an InventoryTransaction for every row touched
-                // so there is a full audit trail at the row level.
                 _context.InventoryTransactions.Add(new InventoryTransaction
                 {
                     FromLocationId = locationId,
@@ -1696,10 +1767,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 });
             }
 
-            // SaveChanges is intentionally NOT called here.
-            // The calling service (DisburseSubscriptionAsync) owns the transaction
-            // and will call SaveChangesAsync + CommitAsync itself.
-        }
+            }
         //for this disbursement, the input might be physical commodity based on 
         //the input package configuration, so to disburse that kind of input, we 
         //need to deduct the disbursed input package items from the organization product in
@@ -2882,6 +2950,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 SubscriptionId= subscription.Id,
                 Subscriber = new SubscriberInfoDto
                 {
+                    UserId= subscription.SubscriberUserId,
                     Name = subscription.SubscriberUser?.Name
        ?? subscription.SubscriberUser?.PhoneNumber
        ?? subscription.SubscriberUser?.Email

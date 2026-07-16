@@ -261,7 +261,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             {
                 var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode)
              ?? throw new Exception("Business does not exist");
-                var farmer = await _farmerRepository.GetFarmerByUserId(dto.FarmerUserId);
+                var farmer = await _farmerRepository.GetFarmerByUserId(dto.FarmerUserId, args.organizationCode);
                 if (farmer == null) throw new Exception("Farmer does not exist");
 
                 // Validate sub-activity belongs to activity type

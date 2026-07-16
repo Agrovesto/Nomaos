@@ -61,6 +61,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [MaxLength(50)]
         public string? BelongToBusinessCode { get; set; }
 
+        public string? MaxCheckSum { get; set; }
         // Navigation
         public ICollection<UserWalletTransactions> Transactions { get; set; }
             = new HashSet<UserWalletTransactions>();
