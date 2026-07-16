@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Infrastructure.Utilities;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -28,7 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         public string Message { get; set; }
         public T Data { get; set; }
 
-        public static WalletResponseService<T> Success(T data, string message = "Successful", int code = 200)
+        public static WalletResponseService<T> Success(T data, string message = ResponseMessages.Successful, int code = 200)
         {
             return new WalletResponseService<T>
             {

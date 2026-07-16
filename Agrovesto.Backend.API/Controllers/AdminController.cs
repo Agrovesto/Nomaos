@@ -19,6 +19,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Utilities;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -128,7 +129,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -185,7 +186,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -225,7 +226,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -282,7 +283,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -322,7 +323,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = true
                 });
 
@@ -380,7 +381,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -439,7 +440,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -498,7 +499,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -556,7 +557,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -615,7 +616,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -717,7 +718,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                         Succeeded = true,
-                        Message = "Successful",
+                        Message = ResponseMessages.Successful,
                         Data = bundle
                     });
 
@@ -1383,7 +1384,7 @@ namespace Agrovesto.Backend.API.Controllers
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -1419,7 +1420,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<OrganizationModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -1482,7 +1483,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
                 });
 

@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -45,7 +46,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<OrganizationModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -108,7 +109,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
                 });
 
@@ -197,7 +198,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<SubAccountModel>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -613,7 +614,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = registerUser
                 });
 
@@ -813,7 +814,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = registerUser
                 });
 
@@ -874,7 +875,7 @@ namespace Agrovesto.Backend.API.Controllers
                     {
                         Code = ResponseCodes.Success,
                         Succeeded = true,
-                        Message = "Successful",
+                        Message = ResponseMessages.Successful,
                         Data = model
                     });
 
@@ -964,7 +965,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = saveFarmerFace
                 });
 
@@ -1021,7 +1022,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.BusinessName} Successfully Onboarded"
                 });
 
@@ -1159,7 +1160,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = createWorker
                 });
 
@@ -1957,7 +1958,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<FarmerDetailDto>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded =true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success 
                 });

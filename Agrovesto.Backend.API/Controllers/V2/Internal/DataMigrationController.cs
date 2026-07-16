@@ -14,6 +14,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             _migrationService = migrationService;
         }
+
         [HttpPost("run-user")]
         public async Task<IActionResult> RunUserTableMigrationAsync()
         {            

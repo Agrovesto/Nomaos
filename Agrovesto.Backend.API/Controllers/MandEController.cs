@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.ExtendedProperties;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -261,7 +262,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityTypeModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count(),
                     PageNumber = query.PageNumber,
@@ -308,7 +309,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<IEnumerable<SubMandEActivityModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count(),
                  //   PageNumber = query.PageNumber,
@@ -353,7 +354,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<IEnumerable<TrackableMandEFieldModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count(),
                     //   PageNumber = query.PageNumber,
@@ -453,7 +454,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count(),
                     PageNumber = query.PageNumber,
@@ -497,7 +498,7 @@ var log = await _svc.SubmitEntryAsync(dto, args);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count(),
                     PageNumber = query.PageNumber,

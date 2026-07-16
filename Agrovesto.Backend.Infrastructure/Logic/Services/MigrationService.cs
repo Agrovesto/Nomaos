@@ -144,8 +144,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
 
         public async Task RunOrganizationProductCategoryTableMigrationAsync(
-            string sourceBusinessCode,
-            string newBusinessCode)
+        string sourceBusinessCode,
+        string newBusinessCode)
         {
             const string migrationName = "OrganizationProductCategories";
 
@@ -218,8 +218,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task RunInputFinancingCategoryTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode)
+        string sourceBusinessCode,
+        string newBusinessCode)
         {
             const string migrationName = "InputFinancingCategories";
             if (await _context.MigrationTrackers
@@ -292,9 +292,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task RunTemperatureControlTypeTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode,
-    string performedByUserId)
+        string sourceBusinessCode,
+        string newBusinessCode,
+        string performedByUserId)
         {
             const string migrationName = "TemperatureControlTypes";
 
@@ -371,9 +371,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             await _context.SaveChangesAsync();
         }
         public async Task RunStorageCategoryTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode,
-    string performedByUserId)
+        string sourceBusinessCode,
+        string newBusinessCode,
+        string performedByUserId)
         {
             const string migrationName = "StorageCategories";
 
@@ -450,8 +450,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             await _context.SaveChangesAsync();
         }
         public async Task RunLocationTypeTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode)
+        string sourceBusinessCode,
+        string newBusinessCode)
         {
             const string migrationName = "LocationTypes";
 
@@ -528,9 +528,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task RunMemberShipTypeTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode,
-    string performedByUserId)
+        string sourceBusinessCode,
+        string newBusinessCode,
+        string performedByUserId)
         {
             const string migrationName = "MemberShipTypes";
 
@@ -613,9 +613,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task RunModuleTableMigrationAsync(
-    string sourceBusinessCode,
-    string newBusinessCode,
-    string performedByUserId)
+        string sourceBusinessCode,
+        string newBusinessCode,
+        string performedByUserId)
         {
             const string migrationName = "Modules";
 

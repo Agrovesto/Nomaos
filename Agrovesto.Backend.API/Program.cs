@@ -280,13 +280,7 @@ builder.Services.AddSwaggerGen(option =>
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
-    //option.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
-    //{
-    //    Description = "Enter your API Key",
-    //    Type = SecuritySchemeType.ApiKey,
-    //    Name = "x-api-key",
-    //    In = ParameterLocation.Header
-    //});
+  
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -300,18 +294,7 @@ builder.Services.AddSwaggerGen(option =>
             },
             new string[]{}
         }
-        //,
-        //{
-        //    new OpenApiSecurityScheme
-        //    {
-        //        Reference = new OpenApiReference
-        //        {
-        //            Type = ReferenceType.SecurityScheme,
-        //            Id = "ApiKey"
-        //        }
-        //    },
-        //    new string[] {}
-        //}
+      
     });
 
 });
@@ -355,31 +338,12 @@ var app = builder.Build();
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
-// Configure the HTTP request pipeline.
 
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
-{
+//if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+//{
     app.UseSwagger();
 
-    //app.UseWhen(
-    //ctx => ctx.Request.Path.StartsWithSegments("/swagger/v1/swagger.json"),
-    //swaggerApp =>
-    //{
-    //    swaggerApp.Use(async (context, next) =>
-    //    {
-    //        var allowedKey = "nomaos123456789t";
-    //        var providedKey = context.Request.Headers["x-api-key"];
-
-    //        if (providedKey != allowedKey)
-    //        {
-    //            context.Response.StatusCode = 403;
-    //            await context.Response.WriteAsync("Forbidden");
-    //            return;
-    //        }
-
-    //        await next();
-    //    });
-    //});
+  
    
     
     app.UseSwaggerUI(c =>
@@ -389,7 +353,7 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
         //  c.RoutePrefix = "/docs";
 
     });
-}
+//}
 
 
 

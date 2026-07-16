@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Elasticsearch.Net;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -52,7 +53,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = bundle
                 });
 
@@ -114,7 +115,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = bundle
                 });
 
@@ -303,7 +304,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = createWarehouse.status,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = createWarehouse.data
                 });
 
@@ -359,7 +360,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = createWarehouse.status,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = createWarehouse.data
                 });
 
@@ -522,7 +523,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<WarehouseUserModel>()
                 {
                     Data = result.data,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = result.status,
 
                     Code = (result.status && result.data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -581,7 +582,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = createWarehouse.status,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = createWarehouse.data
                 });
 
@@ -723,7 +724,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<WarehouseInputInventoryModel>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
 
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -779,7 +780,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
 
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -834,7 +835,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<InputDeliveryTrackerModel>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
 
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -889,7 +890,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<bool>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
 
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -943,7 +944,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<bool>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
 
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed

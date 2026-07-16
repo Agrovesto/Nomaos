@@ -13,6 +13,7 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using CsvHelper;
 using Microsoft.AspNetCore.Authorization;
@@ -202,7 +203,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -248,7 +249,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data,
                     Count = type.Count,
                     PageNumber = args.PageNumber,
@@ -297,7 +298,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -342,7 +343,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = "Stock levels synchronized successfully"
               
                 });
@@ -381,7 +382,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -442,7 +443,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -505,7 +506,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -574,7 +575,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data,
                     Count = type.Count,
                     PageNumber = args.PageNumber,
@@ -622,7 +623,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type,
                 });
             }
@@ -668,7 +669,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type,
                 });
             }
@@ -711,7 +712,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type,
                 });
             }
@@ -755,7 +756,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type,
                 });
             }
@@ -799,7 +800,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data,
                     Count = type.Count,
                     PageNumber = args.PageNumber,
@@ -840,7 +841,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -902,7 +903,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -965,7 +966,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = true
                 });
 
@@ -1025,7 +1026,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = true
                 });
 
@@ -1275,7 +1276,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -1318,7 +1319,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -1356,7 +1357,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -1495,7 +1496,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<ProviderResponse>()
                 {
                     Data = response,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -1530,7 +1531,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<ProviderResponse>()
                 {
                     Data = response,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -1619,7 +1620,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data=true
                 });
             }
@@ -1855,7 +1856,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = items.Cast<object>().ToList(),
                     Count = total,
                     PageNumber = pageNumber,
@@ -1943,7 +1944,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -2106,7 +2107,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 
@@ -2468,7 +2469,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -2539,7 +2540,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -2610,7 +2611,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = response
                 });
             }
@@ -2674,7 +2675,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -2745,7 +2746,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = response.Data,
                     Count = response.Count,
                     PageSize = args.PageSize,
@@ -2985,7 +2986,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -3389,7 +3390,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //        {
         //            Code = ResponseCodes.Success,
         //            Succeeded = true,
-        //            Message = "Successful",
+        //            Message = ResponseMessages.Successful,
         //            Data = response
         //        });
 
@@ -3433,7 +3434,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -3729,7 +3730,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 
@@ -3782,7 +3783,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 
@@ -3850,7 +3851,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = updateDetail
                 });
 
@@ -3956,7 +3957,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -4108,7 +4109,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = saveFarmerFace
                 });
 
@@ -4201,7 +4202,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 
@@ -4245,7 +4246,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 

@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using CsvHelper;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Authorization;
@@ -259,8 +260,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
-            // --- Process (chunked transactions) ---
-            try
+                 try
             {
                 var result = await _memberShipUploadService.ProcessBulkMembershipUploadAsync(rows, args);
 
@@ -342,7 +342,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //              {
         //                  Code = ResponseCodes.Success,
         //                  Succeeded = true,
-        //                  Message = "Successful",
+        //                  Message = ResponseMessages.Successful,
         //                  Data = response
         //              });
 
@@ -391,7 +391,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -512,7 +512,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = query.PageSize,
@@ -564,7 +564,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result,
 
                    
-                    Message = result !=null? "Successful": "Could not retrieve data",
+                    Message = result !=null? ResponseMessages.Successful: "Could not retrieve data",
                     Succeeded = result != null ? true : false,
               
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -625,7 +625,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
+
                     Data = request
                 });
 
