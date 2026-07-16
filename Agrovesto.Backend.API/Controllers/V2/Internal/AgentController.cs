@@ -72,7 +72,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     IFormFile file,
     [FromQuery] OnBoardingArgs args)
         {
-            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -85,7 +84,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("FILE_TYPE_INVALID",
                     "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
 
-            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
@@ -97,7 +95,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.organizationCode = OrganizationCode;
             await EnrichAgentAsync(args);
-            // --- Parse file ---
+  
             List<BulkFarmerRowDto> rows;
             try
             {
@@ -119,7 +117,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (rows.Count == 0)
                 return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
 
-            // --- Process ---
+        
             try
             {
                 var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
