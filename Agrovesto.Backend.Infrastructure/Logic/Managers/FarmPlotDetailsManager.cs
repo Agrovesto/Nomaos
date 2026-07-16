@@ -137,7 +137,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
             try
             {
-                var plots = await _farmPlotDetailRepository.GetFarmDetailsByCooperative(args.CooperativeId, args.businessCode, args.organizationCode);
+                var plots = await _farmPlotDetailRepository.GetFarmDetailsByCooperative(args.CooperativeId.Value, args.businessCode, args.organizationCode);
                 if (plots == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
                 return plots;
@@ -305,7 +305,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                    var farmer = await _farmerRepository.GetFarmerByUserId(args.UserId, args.organizationCode);
                     if (farmer == null) throw new Exception("Farmer does not exist");
                     var getUserCred = await _authenticationRepository.GetUserById(args.UserId);
                     if (!getUserCred.status) throw new Exception("User taking coordinate not recognized");
@@ -487,7 +487,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                 await using var dbTransaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
-                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId);
+                    var farmer = await _farmerRepository.GetFarmerByUserId(model.FarmerUserId, args.organizationCode);
                     if (farmer == null) throw new Exception("Farmer does not exist");
                     var activityType = await _farmPlotDetailRepository.GetVisitationLogtypebyId(business.BusinessCode, model.FarmActivityId);
                     if (activityType == null) throw new Exception("Invalid Activity selected");
@@ -499,7 +499,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                     model.BelongToBusinessCode = business.BusinessCode;
                     model.FarmerName = farmer.Name;
                     model.FarmActivityId = activityType.Id;
-                    model.CooperativeId = farmer.BelongToCooperativeId;
+                    model.CooperativeId = args.CooperativeId;//farmer.BelongToCooperativeId;
                     model.OfficerInChargeId = args.UserId;
                     model.OfficerName = getUserCred.model.FirstName;
                     model.CreatedBy = getUserCred.model.FirstName;

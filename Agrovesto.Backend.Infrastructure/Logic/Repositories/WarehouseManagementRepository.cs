@@ -329,6 +329,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 ShouldAddCommission = model.ShouldAddCommission,
                 MaturityDate=model.MaturityDate,
                 BundleEquityPrice = model.BundleEquityPrice,
+                OrganizationCode=model.OrganizationCode,
                 BundleEquityPlusCommission = model.BundleEquityPlusCommission,
             };
             _context.Set<Bundle>().Add(bundle);
@@ -566,6 +567,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 delivery.QuantityReceived = model.QuantityReceived;
                 delivery.DeliveryDate = DateTimeOffset.Now;
                 delivery.Status = Enum.GetName(typeof(InputTransitStatus), model.Status);
+                
 
             }
             await _context.SaveChangesAsync();

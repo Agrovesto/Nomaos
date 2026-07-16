@@ -101,7 +101,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                if (query.CooperativeId == 0 && currentRole == "Cooperative")
+                if (query.CooperativeId == 0 && currentRole == "MemberShip")
                 {
                     var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
                     query.CooperativeId = coop.Id;
@@ -393,7 +393,7 @@ namespace Agrovesto.Backend.API.Controllers
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
 
-                if (query.CooperativeId == 0)
+                if (!query.CooperativeId.HasValue)
                 {
                     var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
                     query.CooperativeId = coop.Id;
@@ -446,7 +446,7 @@ namespace Agrovesto.Backend.API.Controllers
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
 
-                if (query.CooperativeId == 0 && currentRole == "Cooperative")
+                if (!query.CooperativeId.HasValue && currentRole == "MemberShip")
                 {
                     var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
                     query.CooperativeId = coop.Id;

@@ -3,9 +3,11 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -26,11 +28,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly ILogger<FarmerTransactionManager> _log;
         private readonly IAgentRepository _agentRepository;
         private readonly IFarmerRepository _farmerRepository;
-
+        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IConfiguration _configuration;
+
+        private readonly IInputFinancingRepository _inputFinancingRepository;
         public FarmerTransactionManager(IFarmerTransactionRepository repository, IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
            ILogger<FarmerTransactionManager> log,
-           IConfiguration configuration,
+           IConfiguration configuration, IInputFinancingRepository inputFinancingRepository,
+           IInputFinancingManagementRepository inputFinancingManagementRepository,
             IAgentRepository agentRepository, DataContext context, IFarmerRepository farmerRepository)
         {
             _businessRepository = businessRepository;
@@ -38,11 +43,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             _context = context;
             _repository = repository;
             _log = log;
+
+            _inputFinancingRepository = inputFinancingRepository;
             _configuration = configuration;
             _agentRepository = agentRepository;
             _farmerRepository = farmerRepository;
+            _inputFinancingManagementRepository = inputFinancingManagementRepository;
         }
-
+        public async Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(
+            ListQueryParams args)
+        {
+            try
+            {
+               var filter = new SubscriptionQueryFilter
+                {
+                    SubscriberUserId= args.UserId,
+                };
+                return await _inputFinancingRepository.GetSubscriptionObligationsAsync(filter, args.PageNumber, args.PageSize);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmerByUserId(
          TransactionQueryParams query)
         {
@@ -52,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (business == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
 
-                var farmer = await _farmerRepository.GetFarmerByUserId(query.UserId);
+                var farmer = await _farmerRepository.GetFarmerByUserId(query.UserId, query.organizationCode);
                 if (farmer == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found For Farmer");
                 var transactions = await _repository.GetTransactionByFarmer(farmer.UserId,
                     query.PageNumber, query.PageSize, query.transactionType,
@@ -103,7 +126,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                 if (farmer == null)
                 {
-                    farmer = await _farmerRepository.GetFarmerByUserId(query.UserId);
+                    farmer = await _farmerRepository.GetFarmerByUserId(query.UserId, query.organizationCode);
                 }
 
                 if (farmer == null)
@@ -171,7 +194,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
                     if (farmer == null)
                     {
-                        farmer = await _farmerRepository.GetFarmerByUserId(args.UserId);
+                        farmer = await _farmerRepository.GetFarmerByUserId(args.UserId, args.organizationCode);
                     }
 
                     if (farmer == null)

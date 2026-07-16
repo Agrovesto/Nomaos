@@ -33,12 +33,19 @@ namespace Agrovesto.Backend.Core.Models.Common
         public List<(UserModel user, bool status, string message)> Results { get; set; }
     }
 
+    public class BulkUploadProgress
+    {
+        public int TotalRows { get; set; }
+        public int ProcressedRows { get; set; }
+        public int SuccessfulRows { get; set; }
+        public int FailedRows { get; set; }
+        public string Status { get; set; }
+    }
     public class BulkUploadError
     {
         public int RowNumber { get; set; }
         public string Message { get; set; }
     }
-
     public class ExtractedFarmerRow
     {
         public int RowNumber { get; set; }
@@ -142,6 +149,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Pin { get; set; }
         public string? Password { get; set; }
         public string? Email { get; set; }
+        public string? Env { get; set; }
         //public UserType UserType { get; set; }
         public string UserType { get; set; }
         public string? OTP { get; set; }
@@ -184,8 +192,8 @@ namespace Agrovesto.Backend.Core.Models.Common
         Business,
         [Description("Farmer")]
         Farmer,
-        [Description("Cooperative")]
-        Cooperative,
+        [Description("MemberShip")]
+        MemberShip,
         [Description("Agent")]
         Agent,
         [Description("Suppliers")]
@@ -200,14 +208,17 @@ namespace Agrovesto.Backend.Core.Models.Common
         Trader,
 
         [Description("Organization")]
-        Organization
+        Organization,
+        [Description("ServiceProvider")]
+        ServiceProvider
     }
     public class LoginModel
     {
-        public string? Username { get; set; }
-        public string? password { get; set; }
-        public string? phonenumber { get; set; }
-        public string? pin { get; set; }
+        public string? Email { get; set; }
+        public string? BusinessCode { get; set; }
+        public string? Password { get; set; }
+        public string? Phonenumber { get; set; }
+        public string? Pin { get; set; }
         public LoginType LoginMethod { get; set; }
     }
 
@@ -226,11 +237,18 @@ namespace Agrovesto.Backend.Core.Models.Common
 
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
+        public string phone_number { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
         public List<OrganizationDto> Organizations { get; set; }
+        public List<BusinessModel> Businesses { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
-      //  public UserObject User { get; set; }
+        public string BusinessCode { get; set; }
+        public bool RequiresCredentialChange { get; set; }
+        public string SecurityNotice { get; set; }
+        //  public UserObject User { get; set; }
     }
     public class OrganizationDto
     {
@@ -248,6 +266,15 @@ namespace Agrovesto.Backend.Core.Models.Common
     public enum LoginType
     {
         Password,
-        Pin
+        Pin,
+        Otp
     }
+
+    public class PreparedUser
+    {
+        public UserModel User { get; set; }
+        public bool IsValid => string.IsNullOrEmpty(ValidationError);
+        public string ValidationError { get; set; }
+    }
+
 }

@@ -1,0 +1,477 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Commitment Payment Receipt</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 24px 16px;
+        }
+
+        .receipt {
+            background: #fff;
+            width: 100%;
+            max-width: 520px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+        }
+
+        /* ── HEADER ── */
+        .receipt-header {
+            background: #0B6E5B;
+            padding: 20px 22px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+            .receipt-header h1 {
+                color: #fff;
+                font-size: 20px;
+                font-weight: 700;
+                line-height: 1.25;
+            }
+
+            .receipt-header p {
+                color: rgba(255,255,255,0.75);
+                font-size: 12.5px;
+                margin-top: 4px;
+            }
+
+        .badge-paid {
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            border: 1.5px solid rgba(255,255,255,0.55);
+            border-radius: 6px;
+            padding: 4px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            white-space: nowrap;
+            margin-top: 2px;
+        }
+
+        /* ── META BAR ── */
+        .receipt-meta {
+            background: #f7f8fa;
+            border-bottom: 1px solid #e8eaed;
+            padding: 12px 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+            .receipt-meta .note {
+                font-size: 11.5px;
+                color: #6b7280;
+                font-style: italic;
+            }
+
+            .receipt-meta .ref-block {
+                text-align: right;
+            }
+
+            .receipt-meta .ref-num {
+                font-size: 11.5px;
+                color: #374151;
+                font-weight: 600;
+                font-family: monospace;
+            }
+
+            .receipt-meta .ref-date {
+                font-size: 12px;
+                color: #374151;
+                font-weight: 500;
+                margin-top: 2px;
+            }
+
+        .ref-date-dot {
+            color: #0B6E5B;
+            margin: 0 4px;
+        }
+
+        /* ── BODY ── */
+        .receipt-body {
+            padding: 16px 22px 0;
+        }
+
+        /* ── SECTION LABEL ── */
+        .section-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 8px;
+            margin-top: 16px;
+        }
+
+            .section-label:first-child {
+                margin-top: 0;
+            }
+
+            .section-label svg {
+                flex-shrink: 0;
+            }
+
+            .section-label span {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+                color: #6b7280;
+                text-transform: uppercase;
+            }
+
+        /* ── INFO CARD ── */
+        .info-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .info-row {
+            display: flex;
+            padding: 10px 14px;
+            border-bottom: 1px solid #f0f2f5;
+            align-items: center;
+            gap: 12px;
+        }
+
+            .info-row:last-child {
+                border-bottom: none;
+            }
+
+            .info-row .row-label {
+                font-size: 10.5px;
+                font-weight: 600;
+                letter-spacing: 0.6px;
+                color: #9ca3af;
+                text-transform: uppercase;
+                min-width: 110px;
+                flex-shrink: 0;
+            }
+
+            .info-row .row-value {
+                font-size: 13px;
+                color: #111827;
+                font-weight: 500;
+            }
+
+        .plan-dot {
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #0B6E5B;
+            margin: 0 6px;
+            vertical-align: middle;
+        }
+
+        /* ── AMOUNT PAID ── */
+        .amount-box {
+            margin: 16px 0 0;
+            background: #f0faf7;
+            border: 1.5px solid #b7e4d8;
+            border-radius: 10px;
+            padding: 14px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+            .amount-box .amount-label {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                color: #374151;
+                text-transform: uppercase;
+            }
+
+            .amount-box .amount-words {
+                font-size: 11px;
+                color: #6b7280;
+                margin-top: 3px;
+                font-style: italic;
+            }
+
+            .amount-box .amount-value {
+                font-size: 26px;
+                font-weight: 800;
+                color: #0B6E5B;
+                white-space: nowrap;
+            }
+
+        /* ── SUMMARY TILES ── */
+        .summary-tiles {
+            display: flex;
+            gap: 10px;
+            margin: 14px 0 0;
+        }
+
+        .tile {
+            flex: 1;
+            border-radius: 8px;
+            padding: 12px 14px;
+            text-align: center;
+        }
+
+            .tile.green {
+                background: #f0faf7;
+                border: 1.5px solid #b7e4d8;
+            }
+
+            .tile.red {
+                background: #fff5f5;
+                border: 1.5px solid #fecaca;
+            }
+
+            .tile .tile-label {
+                font-size: 9.5px;
+                font-weight: 700;
+                letter-spacing: 0.9px;
+                text-transform: uppercase;
+            }
+
+            .tile.green .tile-label {
+                color: #0B6E5B;
+            }
+
+            .tile.red .tile-label {
+                color: #dc2626;
+            }
+
+            .tile .tile-value {
+                font-size: 20px;
+                font-weight: 800;
+                margin-top: 4px;
+            }
+
+            .tile.green .tile-value {
+                color: #0B6E5B;
+            }
+
+            .tile.red .tile-value {
+                color: #dc2626;
+            }
+
+        /* ── QR SECTION ── */
+        .qr-section {
+            margin: 18px 0 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: #fafafa;
+        }
+
+        #qr-code canvas, #qr-code img {
+            display: block;
+            border-radius: 6px;
+            border: 3px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+        }
+
+        .qr-text {
+            flex: 1;
+        }
+
+            .qr-text .qr-title {
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.9px;
+                text-transform: uppercase;
+                color: #0B6E5B;
+                margin-bottom: 5px;
+            }
+
+            .qr-text .qr-desc {
+                font-size: 11px;
+                color: #6b7280;
+                line-height: 1.5;
+            }
+
+            .qr-text .qr-sub-id {
+                display: inline-block;
+                margin-top: 6px;
+                font-size: 10px;
+                font-family: monospace;
+                background: #e8f5f2;
+                color: #0B6E5B;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+
+        /* ── FOOTER ── */
+        .receipt-footer {
+            margin-top: 16px;
+            border-top: 1px solid #e5e7eb;
+            padding: 12px 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+            .receipt-footer .footer-ref {
+                font-size: 10.5px;
+                color: #9ca3af;
+                font-family: monospace;
+            }
+
+            .receipt-footer .footer-note {
+                font-size: 10.5px;
+                color: #9ca3af;
+                font-style: italic;
+                text-align: right;
+            }
+    </style>
+</head>
+<body>
+    <div class="receipt">
+
+        <!-- HEADER -->
+        <div class="receipt-header">
+            <div>
+                <h1>Commitment Payment Receipt</h1>
+                <p>Agricultural Input Financing</p>
+            </div>
+            <div class="badge-paid">PAID</div>
+        </div>
+
+        <!-- META -->
+        <div class="receipt-meta">
+            <span class="note">Present this receipt for input collection</span>
+            <div class="ref-block">
+                <div class="ref-num">{{ReceiptNumber}}</div>
+                <div class="ref-date">{{PaymentDate}} <span class="ref-date-dot">•</span> {{PaymentTime}}</div>
+            </div>
+        </div>
+
+        <!-- BODY -->
+        <div class="receipt-body">
+
+            <!-- SUBSCRIBER -->
+            <div class="section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                </svg>
+                <span>Subscriber</span>
+            </div>
+            <div class="info-card">
+                <div class="info-row"><span class="row-label">Full Name</span><span class="row-value">{{FullName}}</span></div>
+                <div class="info-row"><span class="row-label">Subscriber ID</span><span class="row-value">{{SubscriberId}}</span></div>
+                <div class="info-row"><span class="row-label">Type</span><span class="row-value">{{SubscriberType}}</span></div>
+            </div>
+
+            <!-- PACKAGE -->
+            <div class="section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+                <span>Package</span>
+            </div>
+            <div class="info-card">
+                <div class="info-row"><span class="row-label">Package</span><span class="row-value">{{PackageName}}</span></div>
+                <div class="info-row"><span class="row-label">Cycle</span><span class="row-value">{{GrowthCycle}}</span></div>
+                <div class="info-row">
+                    <span class="row-label">Plan</span>
+                    <span class="row-value">{{CommitmentPlan}}<span class="plan-dot"></span>{{InstallmentLabel}}</span>
+                </div>
+                <div class="info-row"><span class="row-label">Period</span><span class="row-value">{{PeriodStart}} – {{PeriodEnd}}</span></div>
+            </div>
+
+            <!-- PAYMENT -->
+            <div class="section-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0B6E5B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="5" width="20" height="14" rx="2" />
+                    <line x1="2" y1="10" x2="22" y2="10" />
+                </svg>
+                <span>Payment</span>
+            </div>
+            <div class="info-card">
+                <div class="info-row"><span class="row-label">Channel</span><span class="row-value">{{PaymentChannel}}</span></div>
+                <div class="info-row"><span class="row-label">Ref</span><span class="row-value">{{PaymentReference}}</span></div>
+                <div class="info-row">
+                    <span class="row-label">Collected By</span>
+                    <span class="row-value">{{CollectedByName}}<span class="plan-dot"></span>{{CollectedByCode}}</span>
+                </div>
+            </div>
+
+            <!-- AMOUNT PAID -->
+            <div class="amount-box">
+                <div>
+                    <div class="amount-label">Amount Paid</div>
+                    <div class="amount-words">{{AmountInWords}}</div>
+                </div>
+                <div class="amount-value">₦{{AmountPaid}}</div>
+            </div>
+
+            <!-- SUMMARY TILES -->
+            <div class="summary-tiles">
+                <div class="tile green">
+                    <div class="tile-label">Repayment Value</div>
+                    <div class="tile-value">₦{{RepaymentValue}}</div>
+                </div>
+                <div class="tile red">
+                    <div class="tile-label">Total Package Value</div>
+                    <div class="tile-value">₦{{TotalPackageValue}}</div>
+                </div>
+            </div>
+
+            <!-- QR CODE -->
+            <div class="qr-section">
+                <div id="qr-code"></div>
+                <div class="qr-text">
+                    <div class="qr-title">Verify Subscription</div>
+                    <div class="qr-desc">Scan to view full subscription details, payment history, and status for this subscriber.</div>
+                    <span class="qr-sub-id">{{SubscriptionId}}</span>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- FOOTER -->
+        <div class="receipt-footer">
+            <span class="footer-ref">{{ReceiptNumber}}</span>
+            <span class="footer-note">Keep this receipt as proof of your commitment payment</span>
+        </div>
+
+    </div>
+
+    <script>
+  // Replace {{QrUrl}} with the actual pre-built URL from the server
+  // e.g. https://yourapp.com/subscriptions/verify?id=12345&token=abc123
+  const qrUrl = "{{QrUrl}}";
+
+  new QRCode(document.getElementById("qr-code"), {
+    text: qrUrl,
+    width: 88,
+    height: 88,
+    colorDark: "#0B6E5B",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.M
+  });
+    </script>
+</body>
+</html>

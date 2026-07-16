@@ -701,6 +701,68 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
+        [HttpPost("new-bulkupload-farmers")]
+        public async Task<IActionResult> NewBulkUploadFarmers([FromForm] FarmerUploadModel model, [FromQuery] BusinessRegistrationArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+            if (model.file == null || model.file.Length == 0)
+                return BadRequest(new Response<string> { Message = "Uploaded file is empty.", Succeeded = false });
+
+            try
+            {
+
+                //if user to be created is a farmer, args.userId has to be cooperative user Id
+
+                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
+                {
+                    args.organizationCode = OrganizationCode;
+                }
+                var currentRole = CurrentUserRole;
+
+                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+
+                var registerUser = await _businessManager.NewBulkUploadFarmersAsync(model, args);
+
+                return Ok(new Response<BulkUploadFarmersResponse>()
+                {
+                    Data = registerUser,
+                    Message = registerUser.Message,
+                    Succeeded = true,//registerUser.Successful,
+                    Code = ResponseCodes.Success
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+        }
 
         [HttpPost("register")]
         [AllowAnonymous]
@@ -735,7 +797,7 @@ namespace Agrovesto.Backend.API.Controllers
                
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 
-                if (args.CooperativeId == 0  && currentRole == "Cooperative")
+                if (args.CooperativeId == 0  && currentRole == "MemberShip")
                 {
                    var coop= await _businessManager.GetCooperativeDetailByUserId(args.UserId);
                    args.CooperativeId = coop.Id;
@@ -1385,8 +1447,8 @@ namespace Agrovesto.Backend.API.Controllers
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId);
-                return Ok(new Response<CooperativeModel> ()
+                var result = await _businessManager.GetCooperativeDetailById(query.CooperativeId.Value);
+                return Ok(new Response<MemberShipModel> ()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1426,7 +1488,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByBusinessCode(query.UserId, query);
-                return Ok(new PagedListResponse<List<CooperativeModel>>()
+                return Ok(new PagedListResponse<List<MemberShipModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1469,7 +1531,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetCooperativesByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<CooperativeModel>>()
+                return Ok(new PagedListResponse<List<MemberShipResponseModel>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1616,56 +1678,56 @@ namespace Agrovesto.Backend.API.Controllers
 
         }
 
-        [HttpPost("assign-agent")]
-        public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
-        {
-            if (!ModelState.IsValid)
-            {
+        //[HttpPost("assign-agent")]
+        //public async Task<IActionResult> AssignAgentToCooperative([FromQuery] string agentId, [FromQuery] long cooperativeId)
+        //{
+        //    if (!ModelState.IsValid)
+        //    {
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-            try
-            {
-                var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
-                return Ok(new Response<CooperativeModel>()
-                {
-                    Data = result,
-                    Message = "Retrieved",
-                    Succeeded = true,
+        //        return BadRequest(new Response<Dictionary<string, string>>()
+        //        {
+        //            Message = "Validation failed.",
+        //            Succeeded = false,
+        //            Data = ModelState
+        //                .Where(ms => ms.Value.Errors.Any())
+        //                .ToDictionary(
+        //                    ms => ms.Key,
+        //                    ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+        //                )
+        //        });
+        //    }
+        //    try
+        //    {
+        //        var result = await _businessManager.AssignCooperativeToAgent(agentId, cooperativeId);
+        //        return Ok(new Response<MemberShipModel>()
+        //        {
+        //            Data = result,
+        //            Message = "Retrieved",
+        //            Succeeded = true,
 
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
+        //            Code = Core.CoreUtils.Constants.ResponseCodes.Success
+        //        });
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.ExceptionMessage,
+        //            Succeeded = false,
 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+        //        });
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return StatusCode(400, new Response<string>
+        //        {
+        //            Message = ex.Message,
+        //            Succeeded = false,
+        //        });
+        //    }
 
 
-        }
+        //}
        
         [HttpGet("farmers-byagent")]
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
@@ -1678,7 +1740,7 @@ namespace Agrovesto.Backend.API.Controllers
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _businessManager.GetFarmersByAgent(query.UserId, query);
-                return Ok(new PagedListResponse<List<FarmerModel>>()
+                return Ok(new PagedListResponse<List<FarmerAgentDto>>()
                 {
                     Data = result.Data,
                     Message = result.Message,
@@ -1722,7 +1784,7 @@ namespace Agrovesto.Backend.API.Controllers
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
 
-            if (query.CooperativeId == 0)
+            if (!query.CooperativeId.HasValue)
             {
                 var coop = await _businessManager.GetCooperativeDetailByUserId(query.UserId);
                 query.CooperativeId = coop.Id;

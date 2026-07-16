@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +11,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Managers
 {
     public interface IFarmerTransactionManager
     {
+        Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(ListQueryParams args);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerSalesTransactionsByCooperativeAsync(TransactionQueryParams query);
         Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmersTransactionByAgent(TransactionQueryParams query);
 

@@ -3,7 +3,9 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
+using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
 using Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsService;
@@ -11,7 +13,14 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.Utilities;
+using Agrovesto.Backend.Infrastructure.V2.Internal;
 
 namespace Agrovesto.Backend.API.Extensions
 {
@@ -29,9 +38,17 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddHttpContextAccessor();
 
             services.AddScoped<IHttpService, HttpService>();
-            services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+            services.Configure<SerilogServiceOptions>(
+    configuration.GetSection("AppLogs"));
+            //services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());
+
             services.AddSingleton<ILogService, SerilogService>();
            
+
+            services.AddScoped<IBulkFarmerUploadService, BulkFarmerUploadService>();
+            services.AddScoped<IBulkMembershipValidator, BulkMembershipValidator>();
+            services.AddScoped<IBulkMembershipExcelParser, BulkMembershipExcelParser>();
+            services.AddScoped<IBulkMembershipUploadService, BulkMembershipUploadService>();
             services.AddScoped<IBusinessRepository, BusinessRepository>();
             services.AddScoped<IRoleRepository, RoleRepository>();
             services.AddScoped<IAuthenticationRepository, AuthenticationRepository>();
@@ -39,7 +56,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IWalletRepository, WalletRepository>();
             services.AddScoped<IFarmerRepository, FarmerRepository>();
             services.AddScoped<IAgentRepository, AgentRepository>();
-            services.AddScoped<ICooperativeRepository, CooperativeRepository>();
+            services.AddScoped<IMembershipRepository, MembershipRepository>();
             services.AddScoped<IFarmPlotDetailRepository, FarmPlotDetailRepository>();
             services.AddScoped<IWarehouseManagementRepository, WarehouseManagementRepository>();
             services.AddScoped<IInputFinancingManagementRepository, InputFinancingManagementRepository>();
@@ -59,7 +76,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmPlotDetailsManager, FarmPlotDetailsManager>();
             services.AddScoped<IWarehouseManagementManager, WarehouseManagementManager>();
             services.AddScoped<IInputFinancingManagement, InputFinancingManagement>();
-            services.AddScoped<IFaceManager, FaceManager>();
+            services.AddScoped<IAWSRekognitionManager, AWSRekgnitionManager>();
             services.AddScoped<IFarmerTransactionManager, FarmerTransactionManager>();
             services.AddScoped<IReportManager, ReportManager>();
             services.AddScoped<IPaymentProviderManager, PaymentProviderManager>();
@@ -70,18 +87,26 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ISettingsManager, SettingsManager>();
             services.AddScoped<IInputFinancingSchemeManager, InputFinancingSchemeManager>();
             services.AddScoped<IFarmManager, FarmManager>();
+            services.AddScoped<IAgentManager, AgentManager>();
+            services.AddScoped<IMembershipManager, MembershipManager>();
+            services.AddScoped<IFarmMappingManager, FarmMappingManager>();
+            services.AddScoped<IOrganizationManager, OrganizationManager>();
 
 
 
-            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
-            services.AddScoped<ISMSService, SMSService>();
+            services.AddScoped<INotificationService, NotificationService>();
             services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();
             services.AddScoped<IGoogleDriveService, GoogleDriveService>();
             services.AddScoped<INigeriaStateImporterService, NigeriaStateImporterService>();
-            services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IRepaymentEngine, RepaymentEngine>();
+         
+            services.AddScoped<IOtpService, OtpService>();
+            services.AddScoped<IOnBoardingManager, OnBoardingManager>();
+            services.AddScoped<IOnboardingRepository, OnboardingRepository>();
+            services.AddScoped<IFarmMappingRepository, FarmMappingRepository>();
             //services.AddScoped<IFarmerCategoryService, FarmerCategoryService>();
            
 
@@ -91,6 +116,78 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IMandERepositories, MandERepositories>();
             services.AddScoped<IActivityEntryRepository, ActivityEntryRepository>();
             services.AddScoped<IMandEActivityManager, MandEActivityManager>();
+            services.AddScoped<IMandEServiceRepository, MandEServiceRepositories>();
+            services.AddScoped<IMandEFormulaEngine, MandEFormulaEngine>();
+            services.AddScoped<IActivityLogRepository, ActivityLogRepository>();
+            services.AddScoped<IOrganizationRepository, OrganizationRepository>();
+
+
+
+            //services.AddHttpClient<SterlingWalletService>();
+            //services.AddHttpClient<FCMBWalletService>();
+            //services.AddHttpClient<CafeOneWalletService>();
+            //  services.AddHttpClient<CredoService>();
+            services.AddScoped<IFarmerQueryService, FarmerQueryService>();
+            services.AddScoped<IUserWalletRepository, UserWalletRepository>();
+            services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
+            // Concrete registrations - required for WalletServiceFactory to resolve them
+           
+           
+            services.AddScoped<IGenericWalletService, MTNMomo>(); 
+            services.AddScoped<IGenericWalletService, EtransactWallet>();
+
+            // Interface registrations - only needed if something else in your code
+            // depends on IMTNMomo / IEtransactWallet directly
+            services.AddScoped<IMTNMomo, MTNMomo>();
+            services.AddScoped<IEtransactWallet, EtransactWallet>();
+
+
+            // The factory itself
+            services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
+            // services.AddScoped<IWalletServiceFactory, WalletServiceFactory>();
+
+
+
+            services.AddScoped<ICafeOneWalletService, CafeOneWalletService>();
+            services.AddScoped<IWalletService, FCMBWalletService>();
+            services.AddScoped<IWalletService, SterlingWalletService>();
+          //  services.AddScoped<MTNMomo>();
+           // services.AddScoped<IMTNMomo, MTNMomo>();
+
+          //  services.AddScoped<IGenericWalletService, MTNMomo>();
+            services.AddScoped<IAWSService, AWSService>();
+            services.AddScoped<ISalesRepository, SalesRepository>();
+
+            services.AddScoped<IWebhookRouter, WebhookRouter>();
+
+            services.AddScoped<IProviderWebhookHandler, PaystackWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FlutterwaveWebhookHandler>();
+
+            services.AddScoped<IProviderWebhookHandler, MtnMomoWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, SterlingWebhookHandler>();
+            services.AddScoped<IProviderWebhookHandler, FcmbWebhookHandler>();
+
+            services.AddScoped<IStorageCategoryRepository, StorageCategoryRepository>();
+            services.AddScoped<ITemperatureControlType, TemperatureControlTypeRepository>();
+            services.AddScoped<IModuleRepository, ModuleRepository>();
+            services.AddScoped<IInputFinancingManager, InputFinancingManager>();
+            services.AddScoped<IInputFinancingRepository, InputFinancingRepository>();
+
+            services.AddScoped<ITenantContextAccessor, TenantContextAccessor>();
+            services.AddScoped<ILicenseService, LicenseService>();
+            services.AddScoped<IModuleAccessService, SystemModuleAccessService>();
+            services.AddScoped<IMigrationService, MigrationService>();
+
+            services.AddScoped<RepaymentOverdueProcessor>();
+            services.AddHostedService<JobSchedulerService>();
+
+            services.AddTransient<OverdueRepaymentJob>();
+
+
+            services.Configure<RateLimitSettingsUtil>(configuration.GetSection("RateLimiting"));
+            services.AddSingleton<IRateLimitService, RateLimitServiceUtil>();
+            services.AddScoped<ISMSProviderRepository, SMSProviderRepository>();
+
 
         }
     }

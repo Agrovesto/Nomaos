@@ -2,12 +2,18 @@
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Core.Models.Market;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.Models.Payment.Flutterwave;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.S3;
+using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
+using LocationType = Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType;
 using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
 using States = Agrovesto.Backend.Infrastructure.Entities.Common.States;
 
@@ -15,6 +21,69 @@ namespace Agrovesto.Backend.Infrastructure
 {
     public static class Mapper
     {
+
+        public static OnboardingRequestModel ToEntity(this UserModel model)
+        {
+            if (model == null) return null;
+            return new OnboardingRequestModel
+            {
+                Id = model.Id,
+                PhoneNumber = model.PhoneNumber,
+                Email = model.Email,
+            };
+        }
+
+        public static KYCDetails ToEntity(this NINData model)
+        {
+            if (model == null) return null;
+            return new KYCDetails
+            {
+                // Id = model.Id,
+                Birthcountry = model.birthcountry,
+                Surname = model.surname,
+                Birthdate = model.birthdate,
+                Birthlga = model.birthlga,
+                // Birthstate = model.sta,
+                Firstname = model.firstname,
+                Gender = model.gender,
+                //LoggedOn = model.LoggedOn,
+                //Maidenname = model.,
+                Middlename = model.middlename,
+                Nin = model.nin,
+                Phonenumber = model.telephoneno,
+                Photourl = model.photo,
+                Residentialaddress = model.residence_address,
+                //    UserId = model.UserId,
+                //  VerifiedBy = model.VerifiedBy
+            };
+        }
+        public static KYCDetails ToEntity(this BVN_data model)
+        {
+            if (model == null) return null;
+            return new KYCDetails
+            {
+                // Id = model.Id,
+
+                Surname = model.lastName,
+                Birthdate = model.dateOfBirth,
+                Birthlga = model.lgaOfOrigin,
+                Birthstate = model.stateOfOrigin,
+
+                // Birthstate = model.sta,
+                Firstname = model.firstName,
+                Gender = model.gender,
+                //LoggedOn = model.LoggedOn,
+                //Maidenname = model.,
+                Middlename = model.middleName,
+                Nin = model.nin,
+                Phonenumber = model.phoneNumber1,
+
+                Residentialaddress = model.residentialAddress,
+                //    UserId = model.UserId,
+                //  VerifiedBy = model.VerifiedBy
+            };
+        }
+
         public static Dictionary<string, decimal> SafeDeserializeContributions(string json)
         {
             if (string.IsNullOrWhiteSpace(json)) return new();
@@ -38,6 +107,55 @@ namespace Agrovesto.Backend.Infrastructure
             }
         }
 
+        //public static MarketDayDto ToModel(this MarketDay entity)
+        //{
+        //    if (entity == null) return null;
+        //}
+        //public static MarketDay ToEntity(this MarketDayDto model)
+        //{
+        //    if (model == null) return null;
+        //}
+        public static MarketDto ToModel(this Market entity)
+        {
+            if (entity == null) return null;
+
+            return new MarketDto
+            {
+                EstimatedCapacityKg = entity.EstimatedCapacityKg,
+                Id = entity.Id,
+                Latitude = entity.Latitude,
+                LgaId = entity.LgaId,
+                Location = entity.Location,
+                Name = entity.Name,
+                StateId = entity.StateId,
+                Longitude = entity.Longitude,
+
+                MarketType = Enum.GetName(typeof(MarketType), entity.MarketType),
+                //MarketDays=entity.MarketDays.Select(md => md.ToModel()).ToList(),
+                // MarketCommodities= entity.MarketCommodities.Select(mc=> mc.ToModel()).ToList()
+
+            };
+        }
+        public static Market ToEntity(this MarketDto model)
+        {
+            if (model == null) return null;
+            return new Market
+            {
+                EstimatedCapacityKg = model.EstimatedCapacityKg,
+                Latitude = model.Latitude,
+                LgaId = model.LgaId,
+                Location = model.Location,
+                Name = model.Name,
+                StateId = model.StateId,
+                Longitude = model.Longitude,
+                MarketType = model.MarketType.ToEnum<MarketType>(),
+
+                //  MarketDays = model.MarketDays.Select(md => md.ToEntity()).ToList(),
+                // MarketCommodities= entity.MarketCommodities.Select(mc=> mc.ToModel()).ToList()
+
+            };
+        }
+
         public static InputFinancingConfigurationModel ToModel(this InputFinancingConfiguration entity)
         {
             if (entity == null) return null;
@@ -51,7 +169,7 @@ namespace Agrovesto.Backend.Infrastructure
                 ConfigurationName = entity.Name,
                 ConfigurationCode = entity.ConfigurationCode,
                 SubscriptionConfig = entity.SubscriptionConfigs?.ToModel(),
-                   
+
                 DisbursementConfig = entity.DisbursementConfigs?.ToModel(),
                 RepaymentConfig = entity.RepaymentConfigs?.ToModel()
             };
@@ -65,8 +183,8 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 Id = model.Id,
                 IsEnabled = model.IsEnabled,
-                Name=model.ConfigurationName,
-                ConfigurationCode=model.ConfigurationCode,
+                Name = model.ConfigurationName,
+                ConfigurationCode = model.ConfigurationCode,
                 BundleEnabled = model.BundleEnabled,
                 SubscriptionConfigs = model.SubscriptionConfig?.ToEntity(),
                 DisbursementConfigs = model.DisbursementConfig?.ToEntity(),
@@ -85,12 +203,12 @@ namespace Agrovesto.Backend.Infrastructure
                 RequiresEquity = model.RequiresEquity,
                 EquityType = model.EquityType,
                 ContributionSplitJson = model.ContributionSplitJson,
-            EquityStaticFee =model.EquityStaticFee,
-                IsEquityStaticFee=model.IsEquityStaticFee,
-                CooperativeContributes= model.CooperativeContributes,
-                EquityPercentage=model.EquityPercentage,
+                EquityStaticFee = model.EquityStaticFee,
+                IsEquityStaticFee = model.IsEquityStaticFee,
+                CooperativeContributes = model.CooperativeContributes,
+                EquityPercentage = model.EquityPercentage,
                 FinancialPartnerContributes = model.FinancialPartnerContributes,
-                IsEquityInPercentage=model.IsEquityInPercentage,
+                IsEquityInPercentage = model.IsEquityInPercentage,
                 OrganizationContributes = model.OrganizationContributes,
             };
         }
@@ -113,7 +231,7 @@ namespace Agrovesto.Backend.Infrastructure
                 FinancialPartnerContributes = entity.FinancialPartnerContributes,
                 IsEquityInPercentage = entity.IsEquityInPercentage,
                 OrganizationContributes = entity.OrganizationContributes,
-                Id= entity.Id,
+                Id = entity.Id,
                 ContributionSplits = SafeDeserializeContributions(entity.ContributionSplitJson),
             };
         }
@@ -125,7 +243,7 @@ namespace Agrovesto.Backend.Infrastructure
             return new DisbursementConfig
             {
                 DisbursementMode = model.DisbursementMode,
-                DisbursementTarget=model.DisbursementTarget,
+                DisbursementTarget = model.DisbursementTarget,
                 RequiresApprovalForDisbursement = model.RequiresApprovalForDisbursement,
                 UsesInvoiceReference = model.UsesInvoiceReference
             };
@@ -157,7 +275,7 @@ namespace Agrovesto.Backend.Infrastructure
                 AllowInstallments = model.AllowInstallments,
                 IsRepaymentInPercentage = model.IsRepaymentInPercentage,
                 IsRepaymentStaticFee = model.IsRepaymentStaticFee,
-                RepaymentStaticFee= model.RepaymentStaticFee
+                RepaymentStaticFee = model.RepaymentStaticFee
             };
         }
 
@@ -174,7 +292,7 @@ namespace Agrovesto.Backend.Infrastructure
                 IsRepaymentInPercentage = entity.IsRepaymentInPercentage,
                 IsRepaymentStaticFee = entity.IsRepaymentStaticFee,
                 RepaymentStaticFee = entity.RepaymentStaticFee,
-                Id=entity.Id
+                Id = entity.Id
             };
         }
 
@@ -199,10 +317,10 @@ namespace Agrovesto.Backend.Infrastructure
             return new WalletProviderConfiguration
             {
                 Id = model.Id,
-                DefaultWalletProvider=model.DefaultWalletProvider,
-                Currency=model.Currency,
-                IsDefault=model.IsDefault,
-                
+                DefaultWalletProvider = model.DefaultWalletProvider,
+                Currency = model.Currency,
+                IsDefault = model.IsDefault,
+
             };
         }
 
@@ -253,7 +371,7 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new StateModel
             {
-               // LGAs = entity.LGAs.Select(x => x.Map()).ToList(),
+                // LGAs = entity.LGAs.Select(x => x.Map()).ToList(),
                 State = entity.State,
                 StateId = entity.StateId,
             };
@@ -283,10 +401,10 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new LGAModel
             {
-               // Wards = entity.Wards.Select(x => x.Map()).ToList(),
-               StatesStateId = entity.StatesStateId,
-               LgaId = entity.LgaId,
-               Name = entity.Name,
+                // Wards = entity.Wards.Select(x => x.Map()).ToList(),
+                StatesStateId = entity.StatesStateId,
+                LgaId = entity.LgaId,
+                Name = entity.Name,
             };
         }
         public static LGA Map(this LGAModel model)
@@ -300,7 +418,7 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 Wards = model.Wards.Select(x => x.Map()).ToList(),
                 StatesStateId = model.StatesStateId,
-              //  LgaId = entity.LgaId,
+                //  LgaId = entity.LgaId,
                 Name = model.Name,
             };
         }
@@ -316,7 +434,7 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 WardId = entity.WardId,
                 Latitude = entity.Latitude,
-                LgaId=entity.LgaId,
+                LgaId = entity.LgaId,
                 Longitude = entity.Longitude,
                 Name = entity.Name,
             };
@@ -348,10 +466,10 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new NameEnquiryData
             {
-                destinationBankCode=model.bank_code,
-                destinationInstitutionCode=model.bank_code,
-                accountName=model.account_name,
-                accountNumber=model.account_number
+                destinationBankCode = model.bank_code,
+                destinationInstitutionCode = model.bank_code,
+                accountName = model.account_name,
+                accountNumber = model.account_number
             };
         }
         public static Payout Map(this PayoutModel model)
@@ -487,7 +605,7 @@ namespace Agrovesto.Backend.Infrastructure
                 CoordinateTakenByUserId = entity.CoordinateTakenByUserId,
                 BelongToBusinessCode = entity.BelongToBusinessCode,
                 CreatedOn = entity.CreatedOn,
-                FarmWard=entity.FarmWard,
+                FarmWard = entity.FarmWard,
                 OrganizationCode = entity.OrganizationCode,
 
                 CoordinateOverlapWithFarmerIds = entity.CoordinateOverlapWithFarmerIds,
@@ -497,7 +615,7 @@ namespace Agrovesto.Backend.Infrastructure
                 UnflaggedOn = entity.UnflaggedOn,
                 AuditTrails = entity.AuditTrails.Select(x => x.Map()).ToList(),
                 FarmUnflaggedByName = entity.FarmUnflaggedByName,
-                FarmUnflaggedByUserId=entity.FarmUnflaggedByUserId,
+                FarmUnflaggedByUserId = entity.FarmUnflaggedByUserId,
             };
         }
 
@@ -513,7 +631,7 @@ namespace Agrovesto.Backend.Infrastructure
                 FarmerId = model.FarmerId,
                 FarmerName = model.FarmerName,
                 FarmLga = model.FarmLga,
-                FarmWard= model.FarmWard,
+                FarmWard = model.FarmWard,
                 FarmLocation = model.FarmLocation,
                 Latitude1 = model.Latitude1,
                 Latitude2 = model.Latitude2,
@@ -552,13 +670,13 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new FarmFlagAuditTrailModel
             {
-              Action = entity.Action,
-              FarmPlotDetailsId = entity.FarmPlotDetailsId,
-              PerformedByName = entity.PerformedByName,
-              PerformedByUserId = entity.PerformedByUserId,
-              PerformedOn = entity.PerformedOn,
-              Remarks = entity.Remarks,
-              Id = entity.Id,
+                Action = entity.Action,
+                FarmPlotDetailsId = entity.FarmPlotDetailsId,
+                PerformedByName = entity.PerformedByName,
+                PerformedByUserId = entity.PerformedByUserId,
+                PerformedOn = entity.PerformedOn,
+                Remarks = entity.Remarks,
+                Id = entity.Id,
             };
         }
 
@@ -570,12 +688,12 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new FarmFlagAuditTrail
             {
-               FarmPlotDetailsId=model.FarmPlotDetailsId,
-               Action = model.Action,
-               PerformedByName=model.PerformedByName,
-               PerformedByUserId=model.PerformedByUserId,
-               PerformedOn=model.PerformedOn,
-               Remarks=model.Remarks,
+                FarmPlotDetailsId = model.FarmPlotDetailsId,
+                Action = model.Action,
+                PerformedByName = model.PerformedByName,
+                PerformedByUserId = model.PerformedByUserId,
+                PerformedOn = model.PerformedOn,
+                Remarks = model.Remarks,
             };
         }
 
@@ -646,7 +764,7 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalCost = entity.TotalCost,
                 InputQuantity = entity.InputQuantity,
                 InputType = entity.InputType,
-                SupportingImageUrl=entity.SupportingImageUrl,
+                SupportingImageUrl = entity.SupportingImageUrl,
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -679,7 +797,7 @@ namespace Agrovesto.Backend.Infrastructure
                 TotalCost = model.TotalCost,
                 InputQuantity = model.InputQuantity,
                 InputType = model.InputType,
-                SupportingImageUrl=model.SupportingImageUrl,
+                SupportingImageUrl = model.SupportingImageUrl,
                 OrganizationCode = model.OrganizationCode
             };
         }
@@ -794,7 +912,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Reference = entity.Reference,
                 Location = entity.Location,
                 CooperativeId = entity.CooperativeId,
-                
+
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -1236,22 +1354,23 @@ namespace Agrovesto.Backend.Infrastructure
                 State = entities.State,
                 Lga = entities.Lga,
                 OnboardedByUserId = entities.OnboardedByUserId,
-                BelongToCooperativeId = entities.BelongToCooperativeId,
+                // BelongToCooperativeId = entities.BelongToCooperativeId,
                 Ward = entities.Ward,
-             //   OrganizationCode = entities.OrganizationCode,
-                FarmerCategory=entities.FarmerCategory,
+                //   OrganizationCode = entities.OrganizationCode,
+                FarmerCategory = entities.FarmerCategory,
                 HighestLevelOfEducation = entities.HighestLevelOfEducation,
                 YearsInAgric = entities.YearsInAgric,
-                
+                Level = EnumExtensions.GetDisplayName(entities.Level)
             };
         }
 
         public static Farmer Map(this FarmerModel model)
         {
-            if (model == null) { return null; }
+            if (model == null) return null;
+
             return new Farmer
             {
-                //Id = model.Id,
+                // Id = model.Id,
                 Location = model.Location,
                 Name = model.Name,
                 Email = model.Email,
@@ -1264,19 +1383,40 @@ namespace Agrovesto.Backend.Infrastructure
                 PhoneNumber = model.PhoneNumber,
                 DateOfBirth = model.DateOfBirth,
                 Gender = model.Gender,
-                BelongToCooperativeId = model.BelongToCooperativeId,
-                Ward=model.Ward,
-                //OrganizationCode = model.OrganizationCode,
+                // BelongToCooperativeId = model.BelongToCooperativeId, // remove this
+                Ward = model.Ward,
+                // OrganizationCode = model.OrganizationCode,
                 FarmerCategory = model.FarmerCategory,
                 HighestLevelOfEducation = model.HighestLevelOfEducation,
-                YearsInAgric=model.YearsInAgric
+                YearsInAgric = model.YearsInAgric
             };
         }
 
-        public static CooperativeModel Map(this Cooperative entities)
+        public static FarmerMembershipModel ViewMap(this MemberShip entities)
         {
             if (entities == null) { return null; }
-            return new CooperativeModel
+            return new FarmerMembershipModel
+            {
+                Id = entities.Id,
+                Location = entities.Location,
+                Name = entities.Name,
+                Email = entities.Email,
+                PhoneNumber = entities.ContactPerson,
+                UserId = entities.UserId,
+
+                State = entities.State,
+                Lga = entities.Lga,
+                ContactPerson = entities.ContactPerson,
+                Ward = entities.Ward,
+                IsLeaderAFarmer = entities.IsLeaderAFarmer,
+                MemberShipTypeId = entities.MemberShipTypeId,
+                Tier = EnumExtensions.GetDisplayName(entities.TierLevel)
+            };
+        }
+        public static MemberShipModel Map(this MemberShip entities)
+        {
+            if (entities == null) { return null; }
+            return new MemberShipModel
             {
                 Id = entities.Id,
                 Location = entities.Location,
@@ -1289,17 +1429,25 @@ namespace Agrovesto.Backend.Infrastructure
                 Lga = entities.Lga,
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 ContactPerson = entities.ContactPerson,
-                IsAssignedToAgentId = entities.IsAssignedToAgentId,
+                //  IsAssignedToAgentId = entities.IsAssignedToAgentId,
                 HasbeenAssignedAgent = entities.HasbeenAssignedAgent,
                 Ward = entities.Ward,
-                OrganizationCode = entities.OrganizationCode
+                // OrganizationCode = entities.OrganizationCode,
+                MembershipLeaderMiddleName = entities.MembershipLeaderMiddleName,
+                MembershipLeaderFirstName = entities.MembershipLeaderFirstName,
+                MembershipLeaderLastName = entities.MembershipLeaderLastName,
+                MembershipLeaderGender = entities.MembershipLeaderGender,
+                OnboardedById = entities.OnboardedById,
+                IsLeaderAFarmer = entities.IsLeaderAFarmer,
+                MemberShipTypeId = entities.MemberShipTypeId,
+                Tier = EnumExtensions.GetDisplayName(entities.TierLevel)
             };
         }
 
-        public static Cooperative Map(this CooperativeModel model)
+        public static MemberShip Map(this MemberShipModel model)
         {
             if (model == null) { return null; }
-            return new Cooperative
+            return new MemberShip
             {
                 // Id = model.Id,
                 Location = model.Location,
@@ -1309,17 +1457,49 @@ namespace Agrovesto.Backend.Infrastructure
                 UserId = model.UserId,
                 State = model.State,
                 Lga = model.Lga,
-                BelongToBusinessCode = model.BelongToBusinessCode
-                ,
-                IsAssignedToAgentId = model.IsAssignedToAgentId,
+                BelongToBusinessCode = model.BelongToBusinessCode,
+                IsLeaderAFarmer = model.IsLeaderAFarmer,
+                MembershipLeaderMiddleName = model.MembershipLeaderMiddleName,
+                MembershipLeaderFirstName = model.MembershipLeaderFirstName,
+                MembershipLeaderLastName = model.MembershipLeaderLastName,
+                MembershipLeaderGender = model.MembershipLeaderGender,
+                // IsAssignedToAgentId = model.IsAssignedToAgentId,
                 PhoneNumber = model.PhoneNumber,
                 OnBoardedOn = model.OnBoardedOn,
                 HasbeenAssignedAgent = model.HasbeenAssignedAgent,
                 Ward = model.Ward,
-                OrganizationCode = model.OrganizationCode
+                //OrganizationCode = model.OrganizationCode,
+                OnboardedById = model.OnboardedById,
+                MemberShipTypeId = model.MemberShipTypeId,
+                TierLevel = model.Tier.ToEnum<Tier>(),
+
             };
         }
 
+        public static MemberShipTypeModel Map(this MemberShipType entities)
+        {
+            if (entities == null) { return null; }
+            return new MemberShipTypeModel
+            {
+                Id = entities.Id,
+                Name = entities.Name,
+                Description = entities.Description,
+                CreatedBy = entities.CreatedBy
+            };
+        }
+
+        public static MemberShipType Map(this MemberShipTypeModel model)
+        {
+            if (model == null) { return null; }
+            return new MemberShipType
+            {
+                // Id = model.Id,
+                Name = model.Name,
+                Description = model.Description,
+                CreatedBy = model.CreatedBy
+
+            };
+        }
 
         public static AgentModel Map(this Agent entities)
         {
@@ -1338,7 +1518,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = entities.BelongToBusinessCode,
                 SupervisorUserId = entities.SupervisorUserId,
                 Ward = entities.Ward,
-                OrganizationCode = entities.OrganizationCode
+                //  OrganizationCode = entities.OrganizationCode
             };
         }
 
@@ -1360,7 +1540,7 @@ namespace Agrovesto.Backend.Infrastructure
                 OnBoardedOn = model.OnBoardedOn,
                 SupervisorUserId = model.SupervisorUserId,
                 Ward = model.Ward,
-                OrganizationCode = model.OrganizationCode
+                //  OrganizationCode = model.OrganizationCode
             };
         }
 
@@ -1397,7 +1577,7 @@ namespace Agrovesto.Backend.Infrastructure
                 MiddleName = model.MiddleName,
                 SubAccountType = Enum.GetName(typeof(SubAccountType), model.SubAccountType),
 
-                IsNinVerified= model.IsNinVerified,
+                IsNinVerified = model.IsNinVerified,
                 OrganizationCode = model.OrganizationCode
             };
         }
@@ -1429,8 +1609,8 @@ namespace Agrovesto.Backend.Infrastructure
                 LastName = entity.LastName,
                 MiddleName = entity.MiddleName,
                 SubAccountType = entity.SubAccountType.ToEnum<SubAccountType>(),
-                IsNinVerified= entity.IsNinVerified,
-                
+                IsNinVerified = entity.IsNinVerified,
+
                 OrganizationCode = entity.OrganizationCode
             };
         }
@@ -1549,13 +1729,273 @@ namespace Agrovesto.Backend.Infrastructure
                 Env = model.Env.ToEnum<Env>()
             };
         }
+        public static BusinessWalletProviderModel Map(this BusinessWalletProvider entity)
+        {
+            if (entity == null) return null;
 
+            return new BusinessWalletProviderModel
+            {
+                BusinessWalletProviderId = entity.BusinessWalletProviderId,
+                BusinessCode = entity.BusinessCode,
+                ProviderId = entity.ProviderId,
+                Status = Enum.Parse<ProviderStatus>(entity.Status),
+                IsDefault = entity.IsDefault,
+                WalletProvider = entity.WalletProvider?.Map(),
+                Parameters = entity.Parameters?.Select(p => p.Map()).ToList() ?? new()
+            };
+        }
+
+        public static BusinessWalletProvider Map(this BusinessWalletProviderModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessWalletProvider
+            {
+                BusinessWalletProviderId = model.BusinessWalletProviderId,
+                BusinessCode = model.BusinessCode,
+                ProviderId = model.ProviderId,
+                Status = model.Status.ToString(),
+                IsDefault = model.IsDefault
+            };
+        }
+
+        public static BusinessWalletProviderParameterModel Map(this BusinessWalletProviderParameter entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessWalletProviderParameterModel
+            {
+                ParameterId = entity.ParameterId,
+                Key = entity.Key,
+                Value = entity.Value,
+                Description = entity.Description,
+                BusinessWalletProviderId = entity.BusinessWalletProviderId,
+                Env = Enum.Parse<Env>(entity.Env)
+            };
+        }
+
+        public static BusinessWalletProviderParameter Map(this BusinessWalletProviderParameterModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessWalletProviderParameter
+            {
+                ParameterId = model.ParameterId,
+                Key = model.Key,
+                Value = model.Value,
+                Description = model.Description,
+                BusinessWalletProviderId = model.BusinessWalletProviderId,
+                Env = model.Env.ToString()
+            };
+        }
 
         #endregion walletProvider
         #region Business
+
+        public static OrganizationRoleModel ViewMap(this OrganizationRole entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new OrganizationRoleModel
+            {
+                Id = entity.Id,
+                Description = entity.Description,
+                OrganizationId = entity.OrganizationId,
+                BusinessCode = entity.BusinessCode,
+                RoleName=entity.RoleName
+            };
+        }
+
+        public static OrganizationRole Map(this OrganizationRoleModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new OrganizationRole
+            {
+                Description = model.Description,
+                OrganizationId = model.OrganizationId,
+                BusinessCode = model.BusinessCode,
+                RoleName = model.RoleName
+            };
+        }
+
+
+        public static LocationCreateResponse CreateViewMap(this OrganizationLocation entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new LocationCreateResponse
+            {
+                Id = entity.Id,
+                Address=entity.Address,
+                StateId=entity.StateId,
+                LgaId=entity.LgaId,
+                LocationName=entity.LocationName,
+                LocationTypeId=entity.LocationTypeId,
+                Capacity = entity.Capacity,
+                CapacityType=entity.CapacityType,
+                StockLevel=entity.StockLevel,
+
+                CreatedOn = entity.CreatedOn,
+            };
+        }
+        public static OrganizationLocationModel ViewMap(this OrganizationLocation entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new OrganizationLocationModel
+            {
+                Id = entity.Id,
+                Address=entity.Address,
+                StateId=entity.StateId,
+                IsActive=entity.IsActive,
+                LgaId=entity.LgaId,
+                LocationName=entity.LocationName,
+                LocationTypeId=entity.LocationTypeId,
+                OrganizationId=entity.OrganizationId,
+                BusinessCode=entity.BusinessCode,
+                Capacity = entity.Capacity,
+                CapacityType=entity.CapacityType,
+                StockLevel=entity.StockLevel,
+               
+
+                ParentLocationId = entity.ParentLocationId,
+
+                CreatedOn = entity.CreatedOn,
+                CreatedByUserId = entity.CreatedByUserId
+            };
+        }
+
+        public static OrganizationLocation Map(this OrganizationLocationModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new OrganizationLocation
+            {
+                Address = model.Address,
+                StateId = model.StateId,
+                IsActive = model.IsActive,
+                LgaId = model.LgaId,
+                LocationName = model.LocationName,
+                LocationTypeId = model.LocationTypeId,
+                OrganizationId = model.OrganizationId,
+                BusinessCode=model.BusinessCode,
+                Capacity= model.Capacity,
+                CapacityType= model.CapacityType,
+                StockLevel=model.StockLevel,
+
+                ParentLocationId = model.ParentLocationId,
+
+                CreatedByUserId = model.CreatedByUserId
+            };
+        }
+
+        public static LocationTypeModel ViewMap(this LocationType entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new LocationTypeModel
+            {
+                Type = entity.Type,
+                Description = entity.Description,
+                Id=entity.Id,
+                BusinessCode=entity.BusinessCode
+            };
+        }
+
+        public static LocationType Map(this LocationTypeModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new LocationType
+            {
+                Type = model.Type,
+                Description = model.Description,
+                BusinessCode=model.BusinessCode
+            };
+        }
+
+        public static OrganizationResponseModel ViewOnboardMap(this Organization entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+
+            return new OrganizationResponseModel
+            {
+                Id = entity.OrganizationId,
+                CACNumber = entity.CACNumber,
+                CompanyAddress = entity.CompanyAddress,
+                CompanyName = entity.CompanyName,
+                CompanyType = entity.CompanyType?.ToString(),
+                ContactEmail = entity.ContactEmail,
+                FirstName = entity.FirstName,
+                LastName = entity.LastName,
+                // StateId = model.StateId,
+                // LgaId = modentityel.LgaId,
+                //FullName = $"{model.FirstName} {model.LastName}",
+                OnboardedOn = entity.OnboardedOn,
+                CompanyEmail = entity.OrganizationEmail,
+                RoleInOrganization = entity.RoleInOrganization,
+                OrganizationPhone = entity.OrganizationPhone,
+                PhoneNumber = entity.PhoneNumber,
+                OrganizationCode = entity.OrganizationCode,
+                UserId = entity.UserId
+            };
+        }
+
+        public static Organization OnboardMap(this OrganizationOnboardingModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+
+            return new Organization
+            {
+                CACNumber = model.CACNumber,
+                CompanyAddress = model.CompanyAddress,
+                CompanyName = model.CompanyName,
+                CompanyType = model.CompanyType?.ToString(),
+                ContactEmail = model.CompanyEmail,
+                FirstName = model.FirstName,
+                LastName = model.LastName,
+                StateId = model.StateId,
+                LgaId = model.LgaId,
+                FullName = $"{model.FirstName} {model.LastName}",
+                OnboardedOn = DateTimeOffset.Now,
+                OrganizationEmail = model.CompanyEmail,
+                RoleInOrganization = model.RoleInOrganization.ToString(),
+                OrganizationPhone = model.OrganizationPhone,
+                PhoneNumber = model.PhoneNumber,
+
+            };
+        }
         public static Organization Map(this OrganizationModel model)
         {
-            if(model == null)
+            if (model == null)
             {
                 return null;
             }
@@ -1563,32 +2003,32 @@ namespace Agrovesto.Backend.Infrastructure
             return new Organization
             {
                 BusinessCode = model.BusinessCode,
-                ContacPerson = model.ContacPerson,
+                FullName = model.ContacPerson,
                 ContactEmail = model.ContactEmail,
                 OrganizationCode = model.OrganizationCode,
-                Location = model.Location,
+                CompanyAddress = model.Location,
                 OrganizationEmail = model.OrganizationEmail,
-                OrganizationName = model.OrganizationName,
-                Contact=model.Contact
+                CompanyName = model.OrganizationName,
+                PhoneNumber = model.Contact
             };
         }
         public static OrganizationModel Map(this Organization entity)
         {
-            if(entity == null)
+            if (entity == null)
             {
                 return null;
             }
             return new OrganizationModel
             {
                 BusinessCode = entity.BusinessCode,
-                ContacPerson = entity.ContacPerson,
+                ContacPerson = entity.FullName,
                 ContactEmail = entity.ContactEmail,
                 OrganizationCode = entity.OrganizationCode,
-                Location = entity.Location,
+                Location = entity.CompanyAddress,
                 OrganizationEmail = entity.OrganizationEmail,
-                OrganizationName = entity.OrganizationName,
-                OrganizaionId   = entity.OrganizationId,
-                Contact=entity.Contact
+                OrganizationName = entity.CompanyName,
+                OrganizaionId = entity.OrganizationId,
+                Contact = entity.PhoneNumber
             };
         }
         public static Business Map(this BusinessModel model)
@@ -1993,9 +2433,9 @@ namespace Agrovesto.Backend.Infrastructure
             return new RepaymentBreakdownModel
             {
                 AmountOrEquivalent = entity.AmountOrEquivalent,
-                Id=entity.Id,
-                PaidOn=entity.PaidOn,
-               // RepaymentMode=  entity.RepaymentMode.ToEnum<RepaymentMode>(),
+                Id = entity.Id,
+                PaidOn = entity.PaidOn,
+                // RepaymentMode=  entity.RepaymentMode.ToEnum<RepaymentMode>(),
 
 
             };
@@ -2010,9 +2450,9 @@ namespace Agrovesto.Backend.Infrastructure
             return new RepaymentBreakdown
             {
                 RepaymentMode = Enum.GetName(typeof(RepaymentMode), model.RepaymentMode),
-                AmountOrEquivalent=model.AmountOrEquivalent,
+                AmountOrEquivalent = model.AmountOrEquivalent,
                 PaidOn = model.PaidOn,
-                RepaymentId=model.RepaymentId
+                RepaymentId = model.RepaymentId
             };
         }
         public static RepaymentModel Map(this Repayment entity)
@@ -2025,16 +2465,16 @@ namespace Agrovesto.Backend.Infrastructure
             {
                 RepaymentBreakdown = entity.RepaymentBreakdown.Select(x => x.Map()).ToList(),
 
-              PaymentDueDate = entity.PaymentDueDate,
-              AmountPaid=entity.AmountPaid,
-              AmountToRepay=entity.AmountToRepay,
-              BelongToBusinessCode=entity.BelongToBusinessCode,
-              OrganizationCode=entity.OrganizationCode,
-              CompletedOn=entity.CompletedOn,
-              FarmerUserId=entity.FarmerUserId,
-              Id=entity.Id,
-              InterestedBundleId=entity.InterestedBundleId,
-              IsComplete=entity.IsComplete
+                PaymentDueDate = entity.PaymentDueDate,
+                AmountPaid = entity.AmountPaid,
+                AmountToRepay = entity.AmountToRepay,
+                BelongToBusinessCode = entity.BelongToBusinessCode,
+                OrganizationCode = entity.OrganizationCode,
+                CompletedOn = entity.CompletedOn,
+                FarmerId = entity.FarmerId,
+                Id = entity.Id,
+                InterestedBundleId = entity.InterestedBundleId,
+                IsComplete = entity.IsComplete
             };
         }
 
@@ -2053,7 +2493,7 @@ namespace Agrovesto.Backend.Infrastructure
                 BelongToBusinessCode = model.BelongToBusinessCode,
                 OrganizationCode = model.OrganizationCode,
                 CompletedOn = model.CompletedOn,
-                FarmerUserId = model.FarmerUserId,
+                FarmerId = model.FarmerId,
                 InterestedBundleId = model.InterestedBundleId,
                 IsComplete = model.IsComplete
             };
@@ -2071,10 +2511,10 @@ namespace Agrovesto.Backend.Infrastructure
             }
             return new CreditScoreWeightsModel
             {
-              
+
                 Id = entity.Id,
-                BusinessCode= entity.BusinessCode,
-                OrganizationCode=entity.OrganizationCode,
+                BusinessCode = entity.BusinessCode,
+                OrganizationCode = entity.OrganizationCode,
                 RepaymentWeight = entity.RepaymentWeight,
                 SubcriptionWeight = entity.SubcriptionWeight,
                 TimelinessWeight = entity.TimelinessWeight,
@@ -2112,7 +2552,7 @@ namespace Agrovesto.Backend.Infrastructure
                 RiskLevel = entity.RiskLevel,
                 FarmerId = entity.FarmerId,
                 LastUpdated = entity.LastUpdated,
-                Score=entity.Score
+                Score = entity.Score
             };
         }
 
@@ -2152,7 +2592,7 @@ namespace Agrovesto.Backend.Infrastructure
                 Id = model.Id,
                 WalletProviderCode = model.WalletProviderCode,
                 OrganizationCode = model.OrganizationCode,
-                WalletBalance=model.WalletBalance
+                WalletBalance = model.WalletBalance
 
             };
         }
@@ -2170,13 +2610,13 @@ namespace Agrovesto.Backend.Infrastructure
                 WalletCode = entity.WalletCode,
                 AccountName = entity.AccountName,
                 AccountNumber = entity.AccountNumber,
-                BankName=entity.BankName,
-                CreatedBy=entity.CreatedBy,
-                CreatedOn=entity.CreatedOn,
+                BankName = entity.BankName,
+                CreatedBy = entity.CreatedBy,
+                CreatedOn = entity.CreatedOn,
                 Id = entity.Id,
-                WalletProviderCode=entity.WalletProviderCode,
+                WalletProviderCode = entity.WalletProviderCode,
                 OrganizationCode = entity.OrganizationCode,
-                WalletBalance=entity.WalletBalance
+                WalletBalance = entity.WalletBalance
             };
         }
 
@@ -2186,5 +2626,123 @@ namespace Agrovesto.Backend.Infrastructure
 
 
         #endregion farmercategory
+
+        #region SMS
+        public static SMSProvider Map(this SMSProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new SMSProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                SMSProviderParameters = model.SMSProviderParameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static SMSProviderModel Map(this SMSProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new SMSProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                SMSProviderParameters = entity.SMSProviderParameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<ProviderStatus>()
+            };
+        }
+        public static SMSProviderParameter Map(this SMSProviderParameterModel model)
+        {
+            return new SMSProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                SMSProviderProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = Enum.GetName(typeof(Env), model.Env)//model.Env.ToString()
+            };
+        }
+        public static SMSProviderParameterModel Map(this SMSProviderParameter model)
+        {
+            return new SMSProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.SMSProviderProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+        public static BusinessSMSProviderModel Map(this BusinessSMSProvider entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessSMSProviderModel
+            {
+                BusinessSMSProviderId = entity.BusinessSMSProviderId,
+                BusinessCode = entity.BusinessCode,
+                ProviderId = entity.ProviderId,
+                Status = Enum.Parse<ProviderStatus>(entity.Status),
+                IsDefault = entity.IsDefault,
+                SMSProvider = entity.SMSProvider?.Map(),
+                Parameters = entity.Parameters?.Select(p => p.Map()).ToList() ?? new()
+            };
+        }
+
+        public static BusinessSMSProvider Map(this BusinessSMSProviderModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessSMSProvider
+            {
+                BusinessSMSProviderId = model.BusinessSMSProviderId,
+                BusinessCode = model.BusinessCode,
+                ProviderId = model.ProviderId,
+                Status = model.Status.ToString(),
+                IsDefault = model.IsDefault
+            };
+        }
+
+        public static BusinessSMSProviderParameterModel Map(this BusinessSMSProviderParameter entity)
+        {
+            if (entity == null) return null;
+
+            return new BusinessSMSProviderParameterModel
+            {
+                ParameterId = entity.ParameterId,
+                Key = entity.Key,
+                Value = entity.Value,
+                Description = entity.Description,
+                BusinessSMSProviderId = entity.BusinessSMSProviderId,
+                Env = Enum.Parse<Env>(entity.Env)
+            };
+        }
+
+        public static BusinessSMSProviderParameter Map(this BusinessSMSProviderParameterModel model)
+        {
+            if (model == null) return null;
+
+            return new BusinessSMSProviderParameter
+            {
+                ParameterId = model.ParameterId,
+                Key = model.Key,
+                Value = model.Value,
+                Description = model.Description,
+                BusinessSMSProviderId = model.BusinessSMSProviderId,
+                Env = model.Env.ToString()
+            };
+        }
+
+        #endregion SMS
     }
 }

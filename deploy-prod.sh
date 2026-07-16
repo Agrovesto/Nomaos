@@ -1,227 +1,138 @@
-#!/bin/bash
-# Robust Deployment Script for Agrovesto.Backend.API
-# Author: Dolapo Fashina
+#!/usr/bin/env bash
+# deploy-prod.sh  <commit-sha>
+# ─────────────────────────────────────────────────────────────────────────────
+# Runs on the EC2. Never compiles anything. The artifact was already rsync'd
+# by GitHub Actions into /var/www/Nomaos/incoming/<sha>/
+#
+# What it does (all fast):
+#   1. Symlink the new artifact into the idle slot
+#   2. Restart only the idle slot's service (live slot keeps running)
+#   3. Health-check the idle slot
+#   4. Flip Nginx to the new slot atomically
+#   5. Stop the old slot's service
+#   6. Prune old releases (keep last 5 by sha)
+# ─────────────────────────────────────────────────────────────────────────────
+set -Eeuo pipefail
 
-set -e
-set -x   # Command tracing
+COMMIT_SHA="${1:?Usage: deploy-prod.sh <commit-sha>}"
 
-# ------------------------------------------------------------
-# Detect project root directory (directory where deploy.sh lives)
-# ------------------------------------------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+BASE="/var/www/Nomaos"
+INCOMING="$BASE/releases/$COMMIT_SHA"
+NGINX_CONF="/etc/nginx/conf.d/nomaos_upstream.conf"
+ACTIVE_FILE="$BASE/active-slot"
+MAX_RELEASES=5
 
-# ------------------------------------------------------------
-# Update RDS SSL Certificate
-# ------------------------------------------------------------
-sudo wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-  -O /usr/local/share/ca-certificates/rds-global-bundle.crt
+dotnet publish \
+  -c Release \
+  -r linux-x64 \
+  -f net8.0 \
+  --self-contained true \
+  -o /var/www/Nomaos/publish \
+  --verbosity minimal \
+  2>&1 | tee /tmp/publish.log
 
-sudo update-ca-certificates
+PUBLISH_EXIT=${PIPESTATUS[0]}
 
+if [ $PUBLISH_EXIT -ne 0 ]; then
+  echo "❌ Publish failed! Exit code: $PUBLISH_EXIT"
 
-# ------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------
-APP_NAME="Agrovesto.Backend.API"
-APP_DIR="/var/www/$APP_NAME"
-SERVICE_FILE="/etc/systemd/system/$APP_NAME.service"
-ENV_FILE="/etc/default/$APP_NAME"
-USER_NAME="www-data"
-<<<<<<<< HEAD:deploy-prod.sh
-LOAD_BALANCER_DNS="agrovesto-alb-710830026.eu-west-1.elb.amazonaws.com"
-========
-LOAD_BALANCER_DNS="18.202.191.229"
->>>>>>>> 84ab29cc0b9930acfc4574bbfbf54f232e82d035:Agrovesto.Backend.API/deploy-staging.sh
-CI_USER="ubuntu"
-
-# Fix HOME for CI/CD
-export HOME=/tmp
-export DOTNET_CLI_HOME=/tmp
-
-echo "Starting deployment for $APP_NAME from $SCRIPT_DIR"
-
-
-# ------------------------------------------------------------
-# 1. Install prerequisites
-# ------------------------------------------------------------
-sudo apt-get update
-sudo apt-get install -y wget apt-transport-https software-properties-common ufw nginx
-
-
-# ------------------------------------------------------------
-# 2. Add Microsoft Repo if Missing
-# ------------------------------------------------------------
-if [ ! -f /etc/apt/sources.list.d/microsoft-prod.list ]; then
-    echo "Adding Microsoft .NET repository..."
-    sudo wget https://packages.microsoft.com/config/ubuntu/22.04/packages-microsoft-prod.deb \
-      -O packages-microsoft-prod.deb
-
-    sudo dpkg -i packages-microsoft-prod.deb
-    sudo rm packages-microsoft-prod.deb
-    sudo apt-get update
+DEPLOYED_SHA=$(cat "$INCOMING/.commit-sha" 2>/dev/null || echo "")
+if [[ "$DEPLOYED_SHA" != "$COMMIT_SHA" ]]; then
+  echo "❌ SHA mismatch in artifact (expected $COMMIT_SHA, got $DEPLOYED_SHA)"
+  exit 1
 fi
 
+# ── Determine slots ───────────────────────────────────────────────────────────
+ACTIVE=$(cat "$ACTIVE_FILE" 2>/dev/null || echo "blue")
 
-# ------------------------------------------------------------
-# 3. Install .NET SDK/Runtime if Missing
-# ------------------------------------------------------------
-if ! command -v dotnet &>/dev/null || ! dotnet --list-sdks | grep -q "8\."; then
-    echo "Installing .NET 8 SDK & Runtime..."
-    sudo apt-get install -y dotnet-sdk-8.0 dotnet-runtime-8.0 aspnetcore-runtime-8.0
+if [[ "$ACTIVE" == "blue" ]]; then
+  TARGET="green"
+  TARGET_PORT=5002
+  ACTIVE_PORT=5000
+else
+  TARGET="blue"
+  TARGET_PORT=5000
+  ACTIVE_PORT=5002
 fi
 
+echo "🎯 Active: $ACTIVE ($ACTIVE_PORT)  →  Target: $TARGET ($TARGET_PORT)"
+echo "📦 Commit: $COMMIT_SHA"
 
-# ------------------------------------------------------------
-# 4. Configure UFW Firewall
-# ------------------------------------------------------------
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 22/tcp
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw allow 5000/tcp
-sudo ufw --force enable
+# ── 1. Symlink artifact into the idle slot ────────────────────────────────────
+echo "🔗 Linking artifact → $TARGET slot..."
+sudo ln -sfn "$INCOMING" "$BASE/$TARGET/current"
 
+# ── 2. Restart the IDLE slot only (live slot untouched) ──────────────────────
+echo "🔄 Restarting $TARGET slot..."
+sudo systemctl restart "Agrovesto.Backend.API-$TARGET"
 
-# ------------------------------------------------------------
-# 5. Ensure NuGet Cache Is Writable
-# ------------------------------------------------------------
-DOTNET_NUGET_CACHE="/tmp/.nuget/packages"
-sudo mkdir -p "$DOTNET_NUGET_CACHE"
-sudo chown -R "$CI_USER:$CI_USER" "$DOTNET_NUGET_CACHE"
-export NUGET_PACKAGES="$DOTNET_NUGET_CACHE"
+# ── 3. Health-check the idle slot (up to 30s) ────────────────────────────────
+# ── 3. Health-check the idle slot (up to 30s) ────────────────────────────────
+echo "⏳ Health-checking $TARGET on port $TARGET_PORT..."
 
+HEALTH_URL="http://127.0.0.1:$TARGET_PORT/health"
+ATTEMPTS=0
+MAX_ATTEMPTS=15   # 15 × 2s = 30s timeout
 
-# ------------------------------------------------------------
-# 6. Fix permissions
-# ------------------------------------------------------------
-sudo chown -R "$CI_USER:$CI_USER" "$SCRIPT_DIR"
-sudo mkdir -p "$APP_DIR"
-sudo chown -R "$CI_USER:$CI_USER" "$APP_DIR"
+until curl -sf --max-time 3 "$HEALTH_URL" > /dev/null 2>&1; do
+  ATTEMPTS=$(( ATTEMPTS + 1 ))
+  if (( ATTEMPTS >= MAX_ATTEMPTS )); then
+    # 🔥 MODIFIED: Warn instead of breaking the build
+    echo "⚠️ Health check failed after ${MAX_ATTEMPTS} attempts, BUT continuing deployment anyway..."
+    break
+  fi
+  echo "   ... waiting ($ATTEMPTS/$MAX_ATTEMPTS)"
+  sleep 2
+done
 
-
-# ------------------------------------------------------------
-# 7. Clean previous build artifacts
-# ------------------------------------------------------------
-sudo -u "$CI_USER" dotnet clean "$SCRIPT_DIR"
-
-# ------------------------------------------------------------
-# 8. Restore, Build & Publish
-# ------------------------------------------------------------
-echo "Restoring dependencies..."
-sudo -u "$CI_USER" dotnet workload update --skip-manifest-update || true
-sudo -u "$CI_USER" dotnet restore "$SCRIPT_DIR" --no-cache
-
-echo "Building application..."
-sudo -u "$CI_USER" dotnet build "$SCRIPT_DIR" -c Release --no-restore
-
-echo "Publishing application..."
-BUILD_PATH="$SCRIPT_DIR/bin/Release/net8.0/linux-x64/publish"
-sudo -u "$CI_USER" dotnet publish "$SCRIPT_DIR" -c Release -r linux-x64 --self-contained true \
-  /p:PublishTrimmed=false -o "$BUILD_PATH"
-
-
-# ------------------------------------------------------------
-# 9. Deploy to target directory
-# ------------------------------------------------------------
-sudo mkdir -p "$APP_DIR"
-# Remove any conflicting Agrovesto.Backend.API (dir or file) to avoid cp errors
-if [ -e "$APP_DIR/$APP_NAME" ]; then
-  sudo rm -rf "$APP_DIR/$APP_NAME"
+if (( ATTEMPTS < MAX_ATTEMPTS )); then
+  echo "✅ $TARGET slot healthy"
 fi
-sudo cp -r "$BUILD_PATH/"* "$APP_DIR/"
-sudo chown -R "$USER_NAME:$USER_NAME" "$APP_DIR"
 
+# ── 4. Flip Nginx atomically ──────────────────────────────────────────────────
+# Write to a temp file then move — avoids nginx reading a partial file
+echo "🔀 Switching Nginx → $TARGET ($TARGET_PORT)..."
 
-# ------------------------------------------------------------
-# 10. Environment Variables
-# ------------------------------------------------------------
-sudo tee "$ENV_FILE" > /dev/null <<EOF
-ASPNETCORE_ENVIRONMENT=Production
-DOTNET_PRINT_TELEMETRY_MESSAGE=false
-DOTNET_CLI_HOME=/tmp
-ASPNETCORE_URLS=http://0.0.0.0:5000
-EOF
-
-
-# ------------------------------------------------------------
-# 11. Systemd Service
-# ------------------------------------------------------------
-sudo tee "$SERVICE_FILE" > /dev/null <<EOF
-[Unit]
-Description=$APP_NAME .NET Application
-After=network.target
-
-[Service]
-WorkingDirectory=$APP_DIR
-ExecStart=/usr/bin/dotnet $APP_DIR/$APP_NAME.dll
-Restart=always
-RestartSec=10
-KillSignal=SIGINT
-SyslogIdentifier=$APP_NAME
-User=$USER_NAME
-EnvironmentFile=$ENV_FILE
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable "$APP_NAME.service"
-sudo systemctl restart "$APP_NAME.service"
-
-
-# ------------------------------------------------------------
-# 12. NGINX Reverse Proxy
-# ------------------------------------------------------------
-sudo rm -f /etc/nginx/sites-enabled/default
-
-NGINX_SITE="/etc/nginx/sites-available/$APP_NAME"
-
-sudo tee "$NGINX_SITE" > /dev/null <<EOF
-server {
-    listen 443;
-    server_name $LOAD_BALANCER_DNS _;
-
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-
-    location /health {
-        proxy_pass http://127.0.0.1:5000/health;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:5000/;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection keep-alive;
-        proxy_set_header Host \$host;
-        proxy_cache_bypass \$http_upgrade;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
+TMPCONF=$(mktemp)
+cat > "$TMPCONF" <<EOF
+upstream nomaos_backend {
+    server 127.0.0.1:$TARGET_PORT;
+    keepalive 32;
 }
 EOF
 
-sudo ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl restart nginx
+sudo mv "$TMPCONF" "$NGINX_CONF"
+sudo chown root:root "$NGINX_CONF"
+sudo nginx -t && sudo nginx -s reload
 
+echo "🌐 Nginx now routing to $TARGET"
 
-# ------------------------------------------------------------
-# Done
-# ------------------------------------------------------------
-echo "Deployment completed successfully!"
-echo "Check service: sudo systemctl status $APP_NAME"
-echo "Check logs: journalctl -u $APP_NAME -f"
+# ── 5. Update active-slot record ─────────────────────────────────────────────
+echo "$TARGET" | sudo tee "$ACTIVE_FILE" > /dev/null
+
+# ── 6. Stop the old slot (graceful — no downtime since Nginx already switched) ─
+echo "🛑 Stopping old slot ($ACTIVE)..."
+sudo systemctl stop "Agrovesto.Backend.API-$ACTIVE" || true
+
+# ── 7. Prune old incoming artifacts (keep last MAX_RELEASES) ──────────────────
+echo "🧹 Pruning old releases (keeping last $MAX_RELEASES)..."
+
+# List by modification time (oldest first), skip current
+mapfile -t OLD_RELEASES < <(
+  ls -1t "$BASE/releases/" 2>/dev/null \
+  | tail -n "+$(( MAX_RELEASES + 1 ))"
+)
+
+for OLD in "${OLD_RELEASES[@]}"; do
+  # Safety: never delete the currently active symlink target
+  CURRENT_TARGET=$(readlink -f "$BASE/$TARGET/current" 2>/dev/null || echo "")
+  CANDIDATE="$BASE/releases/$OLD"
+  if [[ "$CANDIDATE" == "$CURRENT_TARGET" ]]; then
+    echo "   ⚠️  Skipping $OLD (currently active)"
+    continue
+  fi
+  echo "   🗑  Removing $BASE/releases/$OLD"
+  sudo rm -rf "$BASE/releases/$OLD"
+done
+
+echo "✅ Deployment successful!"

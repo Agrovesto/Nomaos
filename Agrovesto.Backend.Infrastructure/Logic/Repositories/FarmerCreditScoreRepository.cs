@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
-        public async Task<CreditScoreWeightsModel> GetCreditScoreWeightByBusiness(string businessCode, string organizationCode=null)      
+        public async Task<CreditScoreWeightsModel> GetCreditScoreWeightByBusiness(string businessCode,  string organizationCode=null)      
         {
             var query = _context.CreditScoreWeights
         .Where(f => f.BusinessCode == businessCode);
@@ -53,35 +53,61 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             return await _context.FarmerCreditScores.FindAsync(farmerId);
         }
-        public async Task<PagedListResponse<List<FarmerCreditScoreModel>>> GetCreditScorebybusiness(
+        public async Task<PagedListResponse<List<FarmerCreditScoreModel>>> GetCreditScoreByBusiness(
     string businessCode,
     int pageNumber = 1,
     int pageSize = 10,
     string organizationCode = null)
         {
-            var query = from creditScore in _context.FarmerCreditScores
-                        join farmer in _context.Farmers on creditScore.FarmerId equals farmer.Id
-                        join cooperative in _context.Cooperatives on farmer.BelongToCooperativeId equals cooperative.Id
-                        join subaccount in _context.SubAccounts on farmer.UserId equals subaccount.UserId into subaccGroup
-                        from subaccount in subaccGroup.DefaultIfEmpty() // left join
-                        select new
-                        {
-                            FarmerName=farmer.Name,
-                            PhoneNumber=farmer.PhoneNumber,
-                            CreditScore = creditScore,
-                            FarmerNIN = subaccount.NIN,
-                            CooperativeName = cooperative.Name,
-                            SubaccountName = subaccount != null ? subaccount.SubAccountName : null
-                        };
+            // Base query: join credit scores to farmers and their cooperatives (via FarmerCooperatives)
+            var query =
+                from creditScore in _context.FarmerCreditScores.AsNoTracking()
+                join farmer in _context.Farmers.AsNoTracking()
+                    on creditScore.FarmerId equals farmer.Id
 
-            if (!string.IsNullOrEmpty(organizationCode))
+                // Join FarmerCooperatives for multiple cooperatives
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on farmer.Id equals fc.FarmerId into fcGroup
+                from farmerCoop in fcGroup.DefaultIfEmpty()
+
+                    // Join Cooperative table
+                join cooperative in _context.MemberShips.AsNoTracking()
+                    on farmerCoop.CooperativeId equals cooperative.Id into coopGroup
+                from coop in coopGroup.DefaultIfEmpty()
+
+                    // Left join subaccounts
+                join subaccount in _context.SubAccounts.AsNoTracking()
+                    on farmer.UserId equals subaccount.UserId into subaccGroup
+                from subaccount in subaccGroup.DefaultIfEmpty()
+
+                where farmer.BelongToBusinessCode == businessCode
+
+                select new
+                {
+                    FarmerName = farmer.Name,
+                    PhoneNumber = farmer.PhoneNumber,
+                    CreditScore = creditScore,
+                    FarmerNIN = subaccount.NIN,
+                    CooperativeName = coop != null ? coop.Name : null,
+                    SubaccountName = subaccount != null ? subaccount.SubAccountName : null
+                };
+
+            // Optional filter by organization
+            if (!string.IsNullOrWhiteSpace(organizationCode))
             {
                 query = query.Where(x => x.CreditScore.OrganizationCode == organizationCode);
             }
 
             var totalCount = await query.CountAsync();
 
-            if (totalCount == 0) return null;
+            if (totalCount == 0)
+                return new PagedListResponse<List<FarmerCreditScoreModel>>
+                {
+                    Data = new List<FarmerCreditScoreModel>(),
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
 
             var pagedResult = await query
                 .OrderByDescending(x => x.CreditScore.LastUpdated)
@@ -96,6 +122,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 model.CooperativeName = x.CooperativeName;
                 model.Name = x.FarmerName;
                 model.PhoneNumber = x.PhoneNumber;
+               // model.a = x.SubaccountName;
                 return model;
             }).ToList();
 

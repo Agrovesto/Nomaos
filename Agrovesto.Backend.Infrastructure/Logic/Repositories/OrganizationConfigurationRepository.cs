@@ -51,6 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return config.MapToModel();
         }
 
+
         public async Task<OrganizationConfigurationModel> CreateAsync(OrganizationConfigurationModel model)
         {
             if (model == null)

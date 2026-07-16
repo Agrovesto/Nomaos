@@ -44,6 +44,8 @@ namespace Agrovesto.Backend.Core.CoreUtils
         {
             public const string FCMBWallet = "FCMB";
             public const string SterlingWallet = "CafeOne";
+            public const string MTNMOMO = "MOMO";
+            public const string ETRANSACT = "Credo";
         }
     }
 

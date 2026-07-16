@@ -1,17 +1,49 @@
 ﻿
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Microsoft.AspNetCore.Identity;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
+    public class UserBusiness
+    {
+        [Key]
+        public long Id { get; set; }
+
+        public string UserId { get; set; }
+        public User User { get; set; }
+
+        public long BusinessId { get; set; }
+        public Business Business { get; set; }
+
+        // Role within that tenant
+        public string? Role { get; set; }  //admin, user, etc.
+
+        // Is this the currently selected/default tenant?
+        public bool IsDefault { get; set; }
+
+        // Membership status
+        public bool IsActive { get; set; } = true;
+
+        // Invitation/audit
+        public DateTimeOffset JoinedOn { get; set; }
+            = DateTimeOffset.UtcNow;
+
+        public string? InvitedBy { get; set; }
+    }
     public class User : IdentityUser
     {
+        public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
+        public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
-        public string PhoneNumber { get; set; }
+        public string? PhoneNumber { get; set; }
         public string? Pin { get; set; } 
         public string? PinEncrypt { get; set; }
         public string? Password { get; set; }         
@@ -23,19 +55,58 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? ModifiedBy { get; set; }
         public bool IsActive { get; set; }
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
-        public string Name { get; set; }
+        public string? Name { get; set; }
         public string? BusinessCode { get; set; }
+        public ICollection<UserBusiness> UserBusinesses
+        { get; set; }
+    = new HashSet<UserBusiness>();
+
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
+       // public UserLevel UserLevel { get; set; }
+        public bool IsPhoneVerified { get; set; } = false;
+        public bool IsEmailVerified { get; set; } = false;
+
+        public bool IsPinEnabled { get; set; } = false;
+      //  public string? DefaultPassword { get; set; }
+            public bool HasDefaultPassword { get; set; } = false;
+       // public string? DefaultPin { get; set; }
+        public bool HasDefaultPin { get; set; } = false;
+
+        // Add this to your User class
+        public bool IsLeaderProfileComplete { get; set; } = false;
     }
 
     public class UserOrganization
     {
         public string UserId { get; set; }
         public User User { get; set; }
-
+        public bool IsActive { get; set; } = true;
         public string OrganizationCode { get; set; }
+    }
+   
+    
+    public class OneTimePassword
+    {
+        public long Id { get; set; }
+
+        public string UserId { get; set; }
+        public User User { get; set; }
+
+        public string CodeHash { get; set; } // NEVER store raw OTP
+        public OtpTarget Target { get; set; } // Email | Phone
+        public string Destination { get; set; }
+
+        public OtpPurpose Purpose { get; set; }
+
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? UsedAt { get; set; }
+
+        public int AttemptCount { get; set; }
+        public DateTime CreatedAt { get; set; }
+
+        public bool IsUsed => UsedAt.HasValue;
     }
 
 }

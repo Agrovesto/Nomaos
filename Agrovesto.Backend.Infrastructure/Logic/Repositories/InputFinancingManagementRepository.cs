@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -23,6 +24,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             _context = context;
         }
+        #region inputfinancing
+
+
+      
+
+       
+        #endregion inputfinancing
+
+
         public async Task<List<SubscriptionData>> FarmerBundleSubscriptions(ListQueryParams args)
         {
             var queryable = _context.BundleSubscriptionInterests
@@ -271,40 +281,44 @@ DateTime? endDate)
             };
         }
 
-        public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(string businessCode, string farmerUserId, string reference)
+        public async Task<BundleInterestReceiptModel> RetrieveFarmerInputDisbursementReceipt(
+           string businessCode,
+           string farmerUserId,
+           string reference)
         {
-            var receipt = new BundleInterestReceiptModel();
             // Retrieve the bundle subscription interest
             var interest = await _context.BundleSubscriptionInterests
+                .AsNoTracking()
                 .FirstOrDefaultAsync(x =>
                     x.BelongToBusinessCode == businessCode &&
                     x.FarmerUserId == farmerUserId &&
                     x.Reference == reference);
 
-            if (interest == null)
-            {
-                return null;
-            }
+            if (interest == null) return null;
 
             // Fetch the farmer details
             var farmer = await _context.Farmers
+                .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.UserId == farmerUserId);
 
-            if (farmer == null)
+            if (farmer == null) return null;
+
+            // Fetch all cooperatives linked via FarmerCooperatives
+            var cooperatives = await (
+                from fc in _context.FarmerCooperatives.AsNoTracking()
+                join coop in _context.MemberShips.AsNoTracking()
+                    on fc.CooperativeId equals coop.Id
+                where fc.FarmerId == farmer.Id
+                select coop
+            ).ToListAsync();
+
+            // Map the receipt
+            var receipt = new BundleInterestReceiptModel
             {
-                return null;
-            }
-
-            // Fetch the cooperative details
-            var cooperative = await _context.Cooperatives
-                .FirstOrDefaultAsync(c => c.Id == farmer.BelongToCooperativeId);
-
-            // Map and return the result (assuming your model can handle these details)
-            receipt.SubscriptionInterest = interest.Map(); // Assuming Map returns BundleSubscriptionInterestModel
-
-            // If your model supports it, populate additional details
-            receipt.Farmer = farmer.Map(); // You may need to create a mapping method
-            receipt.Cooperative = cooperative?.Map(); // Optional chaining if cooperative is null
+                SubscriptionInterest = interest.Map(),
+                Farmer = farmer.Map(),
+                Cooperatives = cooperatives.Select(c => c.Map()).ToList()
+            };
 
             return receipt;
         }

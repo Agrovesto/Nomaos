@@ -10,6 +10,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
     public class FarmPlotDetails
     {
+        [Key]
+
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public long FarmerId { get; set; }
         public string FarmerName { get; set; }
@@ -28,35 +31,39 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string FarmWard { get; set; }
        
 
-        public string CoordinateTakenBy { get; set; }
-        public string CoordinateTakenByUserId { get; set; }
+        public string? CoordinateTakenBy { get; set; }
+        public string? CoordinateTakenByUserId { get; set; }
         public double AreaInDegress { get; set; }
         public double AreaInSqMetre { get; set; }
         public double AreaInHectare { get; set; }
+       // public string SubmittedByUserId { get; set; }
+       // public string? UpdatedByUserId { get; set; }
         public string BelongToBusinessCode { get; set; }
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.Now;
         public string? OrganizationCode { get; set; }
 
         // Flagging logic
-        public bool IsFarmFlaggedBySystem { get; set; }
+        public bool IsFarmFlaggedBySystem { get; set; } = false;
         public string? FlaggedReason { get; set; } // e.g. "Same as existing", "Overlapping with FarmerId: 202"
         public string? CoordinateOverlapWithFarmerIds { get; set; } // comma-separated list of FarmerIds
 
         // Unflagging audit
-        public bool UnflagFarm { get; set; }
+        public bool UnflagFarm { get; set; } = true;
         public string? FarmUnflaggedByUserId { get; set; }
         public string? FarmUnflaggedByName { get; set; }
         public DateTimeOffset? UnflaggedOn { get; set; }
         public ICollection<FarmFlagAuditTrail> AuditTrails { get; set; } = new List<FarmFlagAuditTrail>();
+        public ICollection<FarmLandDocument> FarmLandDocuments { get; set; } = new List<FarmLandDocument>();
 
     }
+   
     public class FarmFlagAuditTrail
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
         public long FarmPlotDetailsId { get; set; }
-        public string Action { get; set; } // e.g. "Flagged", "Unflagged"
+        public string Action { get; set; } // e.g. "Flagged", "Unflagged", "Document
         public string PerformedByUserId { get; set; }
         public string PerformedByName { get; set; }
         public DateTimeOffset PerformedOn { get; set; } = DateTimeOffset.UtcNow;

@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,6 +11,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
 {
     public interface IExcelConverterService
     {
+        List<BulkOnboardingExcelRow> BulkParseExcel(Stream fileStream);
         byte[] ConvertFarmerDetailsToExcel(IEnumerable<FarmerModel> farmers);
         byte[] ConvertFarmerDetailsToPdf(IEnumerable<FarmerModel> farmers);
         byte[] ConvertFarmerTransactionsToExcel(IEnumerable<FarmerSalesTrackerModel> farmers);
@@ -18,5 +20,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Services
         byte[] ConvertSubscriptionToPDF(IEnumerable<BundleSubscriptionInterestModel> farmers);
         Task<(List<UserModel> ValidItems, List<(int Row, string ErrorMessage)> Errors)> ExtractFarmersFromExcel(Stream content, BusinessRegistrationArgs args);
         Task<byte[]> GenerateFarmerExcel(List<FarmerDetailDto> farmers);
+        List<BulkOnboardingExcelRow> ParseExcel(Stream fileStream);
     }
 }

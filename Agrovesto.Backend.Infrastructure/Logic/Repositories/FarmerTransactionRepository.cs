@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common.Dashboard;
 using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -21,7 +22,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
 
         }
+        public async Task<FarmerSalesSummaryDto?> GetSalesSummary(
+    ListQueryParams args)
+        {
+            var query = _context.FarmerSalesTracker
+                .Where(x => x.FarmerUserId == args.UserId)
+                .AsNoTracking();
 
+            var summary = await query
+                .GroupBy(x => 1) 
+                .Select(g => new FarmerSalesSummaryDto
+                {
+                    TotalVolumeSold = g.Sum(x => (decimal?)x.QuantitySoldToday) ?? 0,
+                    TotalRevenue = g.Sum(x => (decimal?)x.TotalPriceSold) ?? 0,
+                    AverageSalesValue = g.Average(x => (decimal?)x.TotalPriceSold) ?? 0
+                })
+                .FirstOrDefaultAsync();
+
+            return summary; 
+        }
+        public async Task<PagedListResponse<List<FarmerSalesHistoryModel>>?> GetSalesHistory(
+    ListQueryParams args)
+        {
+            var query = _context.FarmerSalesTracker
+                .Where(x => x.FarmerUserId == args.UserId)
+                .AsNoTracking(); 
+         
+            if (args.startDate.HasValue)
+                query = query.Where(x => x.CollectionDate >= args.startDate.Value);
+
+            if (args.endDate.HasValue)
+                query = query.Where(x => x.CollectionDate <= args.endDate.Value);
+
+
+            var totalCount = await query.CountAsync();
+
+            if (totalCount == 0)
+                return null;
+
+            var data = await query
+                .OrderByDescending(x => x.CollectionDate)
+                .Skip((args.PageNumber - 1) * args.PageSize)
+                .Take(args.PageSize)
+                .Select(x => new FarmerSalesHistoryModel
+                {
+                    Id = x.Id,
+                    UserId = x.FarmerUserId,
+                    ProductSold = x.CropSold,
+                    Quantity = x.QuantitySoldToday,
+                    UnitPrice = x.CropPricePerUnitSold,
+                    Date = x.TransactionActualDate,
+                    TotalAmount = x.TotalPriceSold,
+                    PaymentStatus = EnumExtensions.GetDisplayName(x.PaymentStatus)
+                })
+                .ToListAsync();
+
+            return new PagedListResponse<List<FarmerSalesHistoryModel>>
+            {
+                Data = data,
+                Count = totalCount,
+                PageNumber = args.PageNumber,
+                PageSize = args.PageSize
+            };
+        }
         #region Report
         public async Task<List<FarmerSalesTrackerModel>> FilterFarmerTransactionForDownload(
 string? businessCode,
@@ -238,44 +301,52 @@ DateTime? endDate)
         //TODO: get all farmertransaction by cooperative
 
         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetFarmerSalesTransactionsByCooperativeAsync(
-         long cooperativeId,
-         int pageNumber = 1,
-         int pageSize = 10,
-         string? transactionType = null,
-         DateTimeOffset? startDate = null,
-         DateTimeOffset? endDate = null,
-         string? location = null)
+           long cooperativeId,
+           int pageNumber = 1,
+           int pageSize = 10,
+           string? transactionType = null,
+           DateTimeOffset? startDate = null,
+           DateTimeOffset? endDate = null,
+           string? location = null)
         {
-            var query = from t in _context.FarmerSalesTracker
-                        join f in _context.Farmers on t.FarmerUserId equals f.UserId
-                        where f.BelongToCooperativeId == cooperativeId
-                        select new { Transaction = t, Farmer = f };
+            // Base query: join sales transactions to farmers via FarmerCooperatives
+            var query =
+                from t in _context.FarmerSalesTracker.AsNoTracking()
+                join f in _context.Farmers.AsNoTracking()
+                    on t.FarmerUserId equals f.UserId
 
-            // Apply filters
+                // Join FarmerCooperatives to handle multiple cooperatives
+                join fc in _context.FarmerCooperatives.AsNoTracking()
+                    on f.Id equals fc.FarmerId
+                where fc.CooperativeId == cooperativeId
+                select new { Transaction = t, Farmer = f };
+
+            // Apply optional filters
             if (!string.IsNullOrWhiteSpace(transactionType))
-            {
                 query = query.Where(x => x.Transaction.SalesType == transactionType);
-            }
 
             if (startDate.HasValue)
-            {
                 query = query.Where(x => x.Transaction.CollectionDate >= startDate.Value);
-            }
 
             if (endDate.HasValue)
-            {
                 query = query.Where(x => x.Transaction.CollectionDate <= endDate.Value);
-            }
 
             if (!string.IsNullOrWhiteSpace(location))
-            {
                 query = query.Where(x => x.Farmer.Location == location);
-            }
-            if (query.Count() == 0) { return null; }
-            // Get total count before pagination
-            var totalCount = await query.CountAsync();
 
-            // Paginated result
+            var totalCount = await query.CountAsync();
+            if (totalCount == 0)
+            {
+                return new PagedListResponse<List<FarmerSalesTrackerModel>>
+                {
+                    Data = new List<FarmerSalesTrackerModel>(),
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+
+            // Apply pagination
             var items = await query
                 .OrderByDescending(x => x.Transaction.CollectionDate)
                 .Skip((pageNumber - 1) * pageSize)
@@ -285,7 +356,7 @@ DateTime? endDate)
 
             return new PagedListResponse<List<FarmerSalesTrackerModel>>
             {
-                Data = items.Select(x=>x.Map()).ToList(),
+                Data = items.Select(x => x.Map()).ToList(),
                 Count = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize

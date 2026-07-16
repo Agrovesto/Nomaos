@@ -8,9 +8,7 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 {
-    public class MandE
-    {
-    }
+    
     public class MandEActivityType
     {
         [Key]

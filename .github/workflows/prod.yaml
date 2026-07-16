@@ -1,66 +1,165 @@
 name: CI/CD Deploy Agrovesto.Backend.API
+
 on:
-  pull_request:
-    branches:
-      - master
   push:
     branches:
       - master
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4.3.1
-      
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
-      
-      - name: Restore dependencies
-        run: dotnet restore
-      
-      - name: Build application
-        run: dotnet build -c Release --no-restore
-      
-      - name: Publish application
-        run: dotnet publish -c Release -r linux-x64 --self-contained true /p:PublishTrimmed=false -o ./publish
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-publish
-          path: ./publish
 
-          
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    env:
+      APP: Agrovesto.Backend.API
+      PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+      PUBLISH_DIR: ${{ github.workspace }}/publish
+      COMMIT_SHA: ${{ github.sha }}
+
     steps:
-      - uses: actions/checkout@v4.3.1
-  
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      # ── Who raised and approved this PR? ─────────────────────────────────────
+      - name: Resolve PR author and approver
+        id: pr_meta
+        env:
+          GH_TOKEN: ${{ secrets.GIT_SECRET_TOKEN}}
+        run: |
+          # Find the PR that was merged into staging by this exact commit
+          PR_DATA=$(gh pr list \
+            --state merged \
+            --base staging \
+            --json number,author,reviews \
+            --jq "map(select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\" or .headRefOid == \"${{ env.COMMIT_SHA }}\")) | first" \
+            2>/dev/null || echo "{}")
+
+          # Fallback: search by the commit message merge ref
+          if [[ "$PR_DATA" == "{}" || "$PR_DATA" == "null" || -z "$PR_DATA" ]]; then
+            PR_NUMBER=$(gh pr list \
+              --state merged \
+              --base staging \
+              --json number,mergeCommit \
+              --jq ".[] | select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\") | .number" \
+              2>/dev/null || echo "")
+
+            if [[ -n "$PR_NUMBER" ]]; then
+              PR_DATA=$(gh pr view "$PR_NUMBER" \
+                --json number,author,reviews \
+                2>/dev/null || echo "{}")
+            fi
+          fi
+
+          # Extract author
+          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.author.login // "unknown"')
+
+          # Extract the first approving reviewer
+          PR_APPROVER=$(echo "$PR_DATA" | jq -r '
+            .reviews
+            | map(select(.state == "APPROVED"))
+            | sort_by(.submittedAt)
+            | last
+            | .author.login // "unknown"
+          ')
+
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // "N/A"')
+
+          echo "pr_author=$PR_AUTHOR"     >> "$GITHUB_OUTPUT"
+          echo "pr_approver=$PR_APPROVER" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER"     >> "$GITHUB_OUTPUT"
+
+          echo "📋 PR #$PR_NUMBER | Author: $PR_AUTHOR | Approver: $PR_APPROVER"
+      # ── Build artifact in CI (never on the server) ──────────────────────────
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v5
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-  
+          dotnet-version: "8.0.x"
+
+      # ── Clean stale obj/ and bin/ before every build ─────────────────────────
+      - name: Clean
+        run: |
+          dotnet clean ${{ env.PROJECT_PATH }} --configuration Release || true
+          rm -rf ${{ env.PROJECT_PATH }}/../obj
+          rm -rf ${{ env.PROJECT_PATH }}/../bin          
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}-${{ github.run_id }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore ${{ env.PROJECT_PATH }}
+
+
+      - name: Publish
+        run: |
+          dotnet publish ${{ env.PROJECT_PATH }} \
+            -c Release \
+            -f net8.0 \
+            --no-restore \
+            -o ${{ env.PUBLISH_DIR }}
+
+          # Stamp the artifact with full deployment metadata
+          cat > ${{ env.PUBLISH_DIR }}/.deploy-meta <<EOF
+          commit=${{ env.COMMIT_SHA }}
+          pr_number=${{ steps.pr_meta.outputs.pr_number }}
+          pr_author=${{ steps.pr_meta.outputs.pr_author }}
+          pr_approver=${{ steps.pr_meta.outputs.pr_approver }}
+          deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          deployed_by=${{ github.actor }}
+          branch=${{ github.ref_name }}
+          EOF
+
+          # Stamp the build with the commit SHA for traceability
+          echo "${{ env.COMMIT_SHA }}" > ${{ env.PUBLISH_DIR }}/.commit-sha
+
+      # ── Ship artifact to EC2 via rsync ───────────────────────────────────────
+      - name: Setup SSH Agent
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-  
-      - name: Copy repo to EC2
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo mkdir -p /var/www/Agrovesto.Backend.API && sudo chown -R ubuntu:ubuntu /var/www/Agrovesto.Backend.API"
-          rsync -avz --delete --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:/var/www/Agrovesto.Backend.API/
-  
-      - name: Execute deployment script
-        run: |
-          ssh ubuntu@${{ secrets.EC2_HOST }} "sudo bash /var/www/Agrovesto.Backend.API/deploy-prod.sh"
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
 
+      - name: Rsync artifact to EC2 (incoming staging area)
+        run: |
+          # Rsync to a per-commit staging area so the live service is never touched
+          # during transfer. The swap happens atomically via symlink in the next step.
+          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+
+          rsync -az --delete \
+            --checksum \
+            ${{ env.PUBLISH_DIR }}/ \
+            ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
+
+      # ── Atomic slot-swap on EC2 (no compiling, just symlink + systemctl) ─────
+      - name: Swap slot
+        run: |
+          ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} \
+              "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
+
+      # ── Deployment summary ────────────────────────────────────────────────────
+      - name: Write deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| PR | #${{ steps.pr_meta.outputs.pr_number }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Raised by | \`${{ steps.pr_meta.outputs.pr_author }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Approved by | \`${{ steps.pr_meta.outputs.pr_approver }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Merged by | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ env.COMMIT_SHA }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u) |" >> $GITHUB_STEP_SUMMARY

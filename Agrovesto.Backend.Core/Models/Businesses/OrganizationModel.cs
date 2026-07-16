@@ -19,6 +19,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Location { get; set; }
         public string? Password { get; set; }
         public string? Kick { get; set; }
-        public DateTimeOffset OnboardedOn { get; set; } = DateTimeOffset.Now;
+        public string? PhoneNumber { get; set; }
+        public long UserCount { get; set; }
+        public long ActiveUserCount { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
+        public DateTimeOffset OnboardedOn { get; set; }// = DateTimeOffset.Now;
+    }
+
+    public class BusinessOrganizationDashboardResponse
+    {
+        public int TotalOrganizations { get; set; }
+        public int TotalActiveOrganizations { get; set; }
+        public int TotalUsers { get; set; }
+        public decimal TotalEquityPaid { get; set; }
+        public decimal TotalProduceSold { get; set; }
     }
 }

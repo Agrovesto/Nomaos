@@ -1,46 +1,121 @@
-using Agrovesto.Backend.API.Extensions;
+﻿using Agrovesto.Backend.API.Extensions;
 using Agrovesto.Backend.API.HealthChecks;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
-using Agrovesto.Backend.Infrastructure.DB;
+using Agrovesto.Backend.Infrastructure;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
 using Amazon.Rekognition;
 using Amazon.S3;
+using AWS.Logger;
+using AWS.Logger.AspNetCore;
+using AWS.Logger.SeriLog;
+using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
+using Hangfire;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OfficeOpenXml;
+using QuestPDF.Infrastructure;
+using Serilog;
+using SixLabors.ImageSharp;
 using System;
 using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json;
+using VaultSharp;
+using VaultSharp.Extensions.Configuration;
+using VaultSharp.V1.AuthMethods.AppRole;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+var logConfig = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console();
+var logFilePath = Environment.GetEnvironmentVariable("LOG_FILE_PATH");
+if (!string.IsNullOrEmpty(logFilePath))
+{
+    logConfig.WriteTo.File(logFilePath, rollingInterval: RollingInterval.Day);
+}
+Log.Logger = logConfig
+    .WriteTo.AWSSeriLog(new AWSLoggerConfig
+    {
+        LogGroup = "/nomaos/prod/api",
+        Region = "eu-west-1",
+    })
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+
+
+//var vaultUrl = "https://dev-vault.agrovesto.com"; //local
+
+//var roleId = "69d8526c-0bf6-56c8-40cd-8e8b37c213b4"; //local
+//var secretId = "444fa57a-84a9-5665-857d-815d8744e1a5"; //local
+
+
+if (!builder.Environment.IsDevelopment())
+{
+    var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
+    var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
+    var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+
+    if (!string.IsNullOrEmpty(roleId) &&
+        !string.IsNullOrEmpty(secretId) &&
+        !string.IsNullOrEmpty(vaultUrl))
+    {
+        ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+            () => new VaultOptions(
+                vaultUrl,
+                new AppRoleAuthMethodInfo(roleId, secretId),
+                reloadOnChange: true,
+                reloadCheckIntervalSeconds: 60
+            ),
+            "nomaos/prod/appsettings",
+            "kv"
+        );
+    }
+}
+//if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
+//{
+//    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
+//    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
+//        () => new VaultOptions(
+//            vaultUrl,
+//            new AppRoleAuthMethodInfo(roleId, secretId),
+//            reloadOnChange: true,
+//            reloadCheckIntervalSeconds: 60
+//        ),
+//        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
+//        "kv"              // Your KV engine name
+//    );
+
+//    Log.Information("Vault configuration provider added.");
+//}
+
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
-// Prefer awaiting the async implementation to avoid blocking threads
-//await Agrovesto.Backend.Infrastructure.ExternalServices.AwsSecretsConfigurator.AddSecretsToConfigurationAsync(builder.Configuration);
+Console.WriteLine($"Loading AWS Secrets... config {builder.Configuration.GetConnectionString("DefaultConnection")}");
 
-// Add services to the container.
-//builder.Services.AddDbContext<DataContext>(options =>
+builder.Services.AddStackExchangeRedisCache(options =>
+{
+    options.Configuration = builder.Configuration["Redis:ConnectionString"];
+});
 
-//              options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), 
-//                  b => b.MigrationsAssembly("Agrovesto.Backend.API"))
-
-//              );
 
 builder.Services.AddDbContext<DataContext>(options =>
     options.UseSqlServer(
@@ -52,15 +127,31 @@ builder.Services.AddDbContext<DataContext>(options =>
                 maxRetryCount: 5,
                 maxRetryDelay: TimeSpan.FromSeconds(10),
                 errorNumbersToAdd: null);
-            sqlOptions.CommandTimeout(60); // Optional: Increases command timeout
-        }));
+            sqlOptions.CommandTimeout(300);
+            sqlOptions.UseNetTopologySuite(); 
+        }
+    )
+);
+builder.Services.AddHangfire(config =>
+    config.UseSqlServerStorage(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddHangfireServer();
 
-builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+//builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
+builder.Services.Configure<IdentitypassOptions>(
+    builder.Configuration.GetSection("IdentityPass"));
 
-builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+//builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
+builder.Services.Configure<AesOptions>(
+    builder.Configuration.GetSection("AesOptions"));
+
+builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
+builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
-
+builder.Services.AddScoped<BulkOnboardingProcessor>();
+builder.Services.Configure<ReconciliationEmailSettings>(
+    builder.Configuration.GetSection("ReconciliationEmailSettings"));
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
@@ -85,8 +176,17 @@ builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
 builder.Services.AddAWSService<IAmazonS3>();
 builder.Services.AddAWSService<IAmazonRekognition>();
 
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 50 * 1024 * 1024; // 50 MB
+});
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+   // JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters()
@@ -99,27 +199,40 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
-        )
+        ),
+        RoleClaimType = "Roles"
     };
 });
-//builder.Services.Configure<JwtBearerOptions>(options =>
+//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(opt => {
+//opt.TokenValidationParameters = new TokenValidationParameters
 //{
-//    options.UseSecurityTokenValidators = true;
+//    ValidateIssuer = true,
+//    ValidateAudience = true,
+//    ValidateLifetime = true,
+//    ValidateIssuerSigningKey = true,
+//    ValidAudience = builder.Configuration["Jwt:Audience"],
+//    ValidIssuer = builder.Configuration["Jwt:Issuer"],
+//    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
+//    RoleClaimType = ClaimTypes.Role,   
+//    // maps to http://schemas.microsoft.com/ws/2008/06/identity/claims/role
+//    NameClaimType = ClaimTypes.Name   
+//    // maps to http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name
+//    };
 //});
+
 builder.Services.Configure<FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
     o.MultipartBodyLengthLimit = int.MaxValue;
     o.MemoryBufferThreshold = int.MaxValue;
 });
+QuestPDF.Settings.License = LicenseType.Community;
 
 
 builder.Services.AddControllers();
 
-// Add health checks
 builder.Services.AddHttpClient();
 builder.Services.AddHealthChecks()
-    // Database health checks
     .AddDbContextCheck<DataContext>("Database", tags: new[] { "database", "critical" })
     .AddSqlServer(
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
@@ -128,36 +241,36 @@ builder.Services.AddHealthChecks()
         timeout: TimeSpan.FromSeconds(5),
         tags: new[] { "database", "critical" })
     
-    // External service health checks
     .AddCheck<IdentityPassHealthCheck>("IdentityPass API", tags: new[] { "external" })
     .AddCheck<TermiiSmsHealthCheck>("Termii SMS API", tags: new[] { "external" })
     .AddCheck<CountryStateCityApiHealthCheck>("Country State City API", tags: new[] { "external" })
     .AddCheck<SendGridHealthCheck>("SendGrid API", tags: new[] { "external" })
     .AddS3(options =>
     {
+
         options.BucketName = builder.Configuration["AWS:BucketName"];
         options.AccessKey = builder.Configuration["AWS:AccessKey"];
         options.SecretKey = builder.Configuration["AWS:SecretKey"];
-       // options.RegionEndpoint = Amazon.RegionEndpoint.GetBySystemName(builder.Configuration["AWS:Region"]);
     }, name: "AWS S3", tags: new[] { "external", "storage" })
     
-    // API endpoint health checks
     .AddCheck<ApiEndpointHealthCheck>("API Endpoints", tags: new[] { "api", "endpoints" })
     .AddCheck<ApplicationComponentHealthCheck>("Application Components", tags: new[] { "components", "critical" });
 
-// Register health check classes
 builder.Services.AddScoped<IdentityPassHealthCheck>();
 builder.Services.AddScoped<TermiiSmsHealthCheck>();
 builder.Services.AddScoped<CountryStateCityApiHealthCheck>();
 builder.Services.AddScoped<SendGridHealthCheck>();
 builder.Services.AddScoped<ApiEndpointHealthCheck>();
 builder.Services.AddScoped<ApplicationComponentHealthCheck>();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSwaggerGen(option =>
 {
-    option.SwaggerDoc("v1", new OpenApiInfo { Title = "NOMAOS Platform", Version = "v1" });
+    option.SwaggerDoc("v1", new OpenApiInfo
+    { 
+        Title = "NOMAOS Platform API",
+        Version = "v1" 
+    });
     option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -167,7 +280,13 @@ builder.Services.AddSwaggerGen(option =>
         BearerFormat = "JWT",
         Scheme = "Bearer"
     });
-
+    //option.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+    //{
+    //    Description = "Enter your API Key",
+    //    Type = SecuritySchemeType.ApiKey,
+    //    Name = "x-api-key",
+    //    In = ParameterLocation.Header
+    //});
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -181,20 +300,41 @@ builder.Services.AddSwaggerGen(option =>
             },
             new string[]{}
         }
+        //,
+        //{
+        //    new OpenApiSecurityScheme
+        //    {
+        //        Reference = new OpenApiReference
+        //        {
+        //            Type = ReferenceType.SecurityScheme,
+        //            Id = "ApiKey"
+        //        }
+        //    },
+        //    new string[] {}
+        //}
     });
 
-   // option.OperationFilter<AddCustomHeaderParameter>();
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto;
 
-// Add logging
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
-// Register your service
 builder.Services.AddHealthChecks();
 
-var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+//var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
+var corsOrigins = builder.Configuration
+    .GetValue<string>("CorsOrigins")?
+    .Split(",") ?? Array.Empty<string>();
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(
@@ -210,71 +350,60 @@ builder.Services.AddCors(options =>
         });
 });
 
+
 var app = builder.Build();
 
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
-
+app.UseForwardedHeaders();
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+
+    //app.UseWhen(
+    //ctx => ctx.Request.Path.StartsWithSegments("/swagger/v1/swagger.json"),
+    //swaggerApp =>
+    //{
+    //    swaggerApp.Use(async (context, next) =>
+    //    {
+    //        var allowedKey = "nomaos123456789t";
+    //        var providedKey = context.Request.Headers["x-api-key"];
+
+    //        if (providedKey != allowedKey)
+    //        {
+    //            context.Response.StatusCode = 403;
+    //            await context.Response.WriteAsync("Forbidden");
+    //            return;
+    //        }
+
+    //        await next();
+    //    });
+    //});
+   
+    
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
+        c.DocumentTitle = "NOMAOS Platform API";
+        //  c.RoutePrefix = "/docs";
+
+    });
 }
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
-    c.DocumentTitle = "NOMAOS Platform";
-    //  c.RoutePrefix = "/docs";
-
-});
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-    db.Database.Migrate();
-}
-
-//using (var scope = app.Services.CreateScope())
-//{
-//    var services = scope.ServiceProvider;
-//    var logger = services.GetRequiredService<ILogger<Program>>();
-
-//    try
-//    {
-//        //await DbInitializer.SeedRolesAndSuperAdminAsync(services);
-//        await DbInitializer.SeedWeight(services);
-//    }
-//    catch (Exception ex)
-//    {
-//        logger.LogError($"Database seeding encountered an error but will not stop application: {ex.Message}");
-//    }
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var importer = scope.ServiceProvider.GetRequiredService<INigeriaStateImporterService>();
-//    await importer.ImportLocationsFromJsonAsync();
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var importer = scope.ServiceProvider.GetRequiredService<IFarmerCategoryService>();
-//    await importer.ImportFarmerValuesFromJsonAsync();
-//}
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
-//    db.Database.Migrate();
-//    await SeedData.EnsureSeededAsync(db);
-//}
 
 
+
+app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseRouting();
 app.UseHttpsRedirection();
 
 // Enable static files for health dashboard
 app.UseStaticFiles();
-
+app.UseHangfireDashboard("/hangfire");
 app.UseAuthentication();
+//app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
+//app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
 
 // The health check endpoints are now handled by the HealthController
