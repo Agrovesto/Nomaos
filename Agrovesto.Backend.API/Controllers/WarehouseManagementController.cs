@@ -25,23 +25,8 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("bundle-equity")]
         public async Task<IActionResult> UpdateBundleEquityPrice([FromBody] BundleModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, "Forbidden");
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
 
             try
             {
@@ -82,7 +67,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("bundle")]
         public async Task<IActionResult> CreateBundleAsync([FromBody] BundleModel model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
           //  if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -272,7 +257,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("warehouse")]
         public async Task<IActionResult> CreateWarehouse([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
            // if (isAdmin == null || (!isAdmin.Equals("Business")) || (!isAdmin.Equals("Organization"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
@@ -332,24 +317,8 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPatch("update-warehouse")]
         public async Task<IActionResult> UpdateWarehouseInformation([FromBody] WarehouseModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
             try
             {
                 args.UserId = CurrentUserId;
@@ -552,24 +521,9 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPatch("update-warehouse-manager")]
         public async Task<IActionResult> UpdateWarehouseManager([FromBody] WarehouseUserModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
 
             if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
             try
             {
                 args.UserId ??= CurrentUserId;

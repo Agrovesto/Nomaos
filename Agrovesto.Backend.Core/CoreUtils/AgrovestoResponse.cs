@@ -12,17 +12,17 @@ namespace Agrovesto.Backend.Core.CoreUtils
     public class ApiResponse<T>
     {
         public bool Succeeded { get; set; }
-        public string Message { get; set; }
-        public T Data { get; set; }
-        public string Code { get; set; }
-        public string TraceId { get; set; }
+        public string Message { get; set; } ="Successful";
+        public T? Data { get; set; }
+        public string? Code { get; set; }
+        public string? TraceId { get; set; }
         public int? Count { get; set; }
         public int? PageNumber { get; set; }
         public int? PageSize { get; set; }
         public int? TotalPages { get; set; }
 
-        public Dictionary<string, string[]> Errors { get; set; }
-        public static ApiResponse<T> Success(T data, string code, string message = "Success", string traceId = null)
+        public Dictionary<string, string[]>? Errors { get; set; }
+        public static ApiResponse<T> Success(T data, string code, string message = "Success", string? traceId = null)
         {
             return new ApiResponse<T>
             {
@@ -34,7 +34,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
             };
         }
 
-        public static ApiResponse<T> Fail(string message, string code, string traceId = null, T data = default )
+        public static ApiResponse<T> Fail(string message, string code, string? traceId = null, T? data = default )
         {
             return new ApiResponse<T>
             {
@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
        string message,
         string code,
        Dictionary<string, string[]> errors,
-       string traceId = null)
+       string? traceId = null)
         {
             return new ApiResponse<T>
             {
@@ -63,8 +63,8 @@ namespace Agrovesto.Backend.Core.CoreUtils
         public static ApiResponse<T> SuccessPaged<TItem>(
         PagedResult<TItem> paged,
         string message = "Success",
-        string code = null,
-        string traceId = null)
+        string? code = null,
+        string? traceId = null)
         {
             return new ApiResponse<T>
             {
@@ -85,15 +85,15 @@ namespace Agrovesto.Backend.Core.CoreUtils
     public class ApiResponse
     {
         public bool Succeeded { get; set; }
-        public string Message { get; set; }
-        public string TraceId { get; set; }
+        public string? Message { get; set; }
+        public string? TraceId { get; set; }
         public int? Count { get; set; }
         public int? PageNumber { get; set; }
         public int? PageSize { get; set; }
         public int? TotalPages { get; set; }
 
-        public string Code { get; set; }
-        public static ApiResponse Success(string message = "Success", string traceId = null)
+        public string? Code { get; set; }
+        public static ApiResponse Success(string message = "Success", string? traceId = null)
         {
             return new ApiResponse
             {
@@ -103,7 +103,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
             };
         }
 
-        public static ApiResponse Fail(string message, string traceId = null)
+        public static ApiResponse Fail(string message, string? traceId = null)
         {
             return new ApiResponse
             {
@@ -144,10 +144,10 @@ namespace Agrovesto.Backend.Core.CoreUtils
     }
     public class Response<T>
     {
-        public string Code { get; set; }
+        public string? Code { get; set; }
         public bool Succeeded { get; set; }
-        public string Message { get; set; }
-        public T Data { get; set; }
+        public string? Message { get; set; }
+        public T? Data { get; set; }
     }
     public class ApiErrorResponse
     {
@@ -157,10 +157,10 @@ namespace Agrovesto.Backend.Core.CoreUtils
     }
     public class PagedListResponse<T>
     {
-        public string Code { get; set; }
+        public string? Code { get; set; }
         public bool Succeeded { get; set; }
-        public string Message { get; set; }
-        public T Data { get; set; }
+        public string? Message { get; set; }
+        public T? Data { get; set; }
         public int Count { get; set; }
         public int PageSize { get; set; }
         public int PageNumber { get; set; }
@@ -183,10 +183,10 @@ namespace Agrovesto.Backend.Core.CoreUtils
         /// <summary>
         /// The result of the response
         /// </summary>
-        public T Result { get; set; }
+        public T? Result { get; set; }
         public ResultType ResultType { get; set; }
-        public string Message { get; set; }
-        public List<string> ValidationMessages { get; set; }
+        public string? Message { get; set; }
+        public List<string>? ValidationMessages { get; set; }
 
 
         /// <summary>

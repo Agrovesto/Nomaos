@@ -101,7 +101,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
-                var isAdmin = CurrentUserRole;
+                
 
                 var createMerchant = await _businessManager.CreateOrganization(model, args);
 
@@ -994,7 +994,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("onboard-business")]
         public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
@@ -1127,10 +1127,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-staff")]
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-
-
+            
             if (!ModelState.IsValid)
             {
 
@@ -1187,9 +1184,8 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-role")]
         public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-
+            
+            
             if (!ModelState.IsValid)
             {
 
@@ -1237,8 +1233,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("update-profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery] ParameterArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             args.UserId = CurrentUserId;
             if (!ModelState.IsValid)
             {
@@ -1287,12 +1282,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("roles")]
         public async Task<IActionResult> GetRoles()
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) return StatusCode(403, new Response<string>
-            {
-                Message = "Forbidden",//"An unexpected error occurred. Please contact your administrator.",
-                Succeeded = false,
-            });
+           
             try
             {
                 var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);

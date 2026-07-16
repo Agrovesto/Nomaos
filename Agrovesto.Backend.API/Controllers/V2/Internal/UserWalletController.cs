@@ -42,8 +42,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = true,
                     Count = result.Count,
 
-                    //PageNumber = query.PageNumber,
-                    //PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -214,48 +212,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
 
-        //[HttpGet("wallet-detail")]
-        //public async Task<IActionResult> GetUserWalletDetail([FromQuery] UserWalletParams query)
-        //{
-        //    try
-        //    {
-
-        //        query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-        //        var result = await _walletManager.GetUserWallletsByUserId(query);
-        //        return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
-        //        {
-        //            Data = result.Data,
-        //            Message = result.Count > 0 ? "Successful" : "Failed",
-        //            Succeeded = true,
-        //            Count = result.Count,
-
-        //            //PageNumber = query.PageNumber,
-        //            //PageSize = 10,
-        //            Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-        //        });
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.ExceptionMessage,
-        //            Succeeded = false,
-
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.Message,
-        //            Succeeded = false,
-        //        });
-        //    }
-
-
-        //}
-
-
         /// <summary>
         /// Create a wallet for a user (Personal or Organization context)
         /// </summary>
@@ -263,20 +219,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request,[FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             if (string.IsNullOrWhiteSpace(query.env))
                 return BadRequest("Environment is required");
 
@@ -356,30 +300,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(); // still return 200 to avoid retries storm
             }
         }
-        ///// <summary>
-        ///// Get all wallets for a user
-        ///// </summary>
-        //[HttpGet("user/{userId}")]
-        //public async Task<IActionResult> GetUserWallets(string userId, [FromQuery] string? businessCode = null)
-        //{
-        //    if (string.IsNullOrWhiteSpace(userId))
-        //        return BadRequest("UserId is required");
-
-        //    try
-        //    {
-        //        var wallets = await _walletManager.GetUserWallletsByUserId(new UserWalletParams
-        //        {
-        //            UserId = userId,
-        //            businessCode = businessCode
-        //        });
-
-        //        return Ok(new { success = true, data = wallets });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(500, new { success = false, message = $"Internal server error: {ex.Message}" });
-        //    }
-        //}
        
     }
 }

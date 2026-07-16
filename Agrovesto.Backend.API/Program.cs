@@ -91,23 +91,6 @@ if (!builder.Environment.IsDevelopment())
         );
     }
 }
-//if (!string.IsNullOrEmpty(roleId) && !string.IsNullOrEmpty(secretId) && !string.IsNullOrEmpty(vaultUrl))
-//{
-//    // Important: We cast to IConfigurationBuilder to ensure the extension method is found
-//    ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
-//        () => new VaultOptions(
-//            vaultUrl,
-//            new AppRoleAuthMethodInfo(roleId, secretId),
-//            reloadOnChange: true,
-//            reloadCheckIntervalSeconds: 60
-//        ),
-//        "nomaos/staging/appsettings", // Path in Vault: secret/nomaos/staging/api
-//        "kv"              // Your KV engine name
-//    );
-
-//    Log.Information("Vault configuration provider added.");
-//}
-
 // Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
 Console.WriteLine($"Loading AWS Secrets... config {builder.Configuration.GetConnectionString("DefaultConnection")}");
 
@@ -138,11 +121,9 @@ builder.Services.AddHangfire(config =>
 
 builder.Services.AddHangfireServer();
 
-//builder.Services.AddSingleton(builder.Configuration.GetSection("IdentityPass").Get<IdentitypassOptions>());
 builder.Services.Configure<IdentitypassOptions>(
     builder.Configuration.GetSection("IdentityPass"));
 
-//builder.Services.AddSingleton(builder.Configuration.GetSection("AesOptions").Get<AesOptions>());
 builder.Services.Configure<AesOptions>(
     builder.Configuration.GetSection("AesOptions"));
 
@@ -186,7 +167,6 @@ builder.Services.AddAuthentication(options =>
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-   // JwtBearerDefaults.AuthenticationScheme)
 .AddJwtBearer(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters()
@@ -203,22 +183,7 @@ builder.Services.AddAuthentication(options =>
         RoleClaimType = "Roles"
     };
 });
-//builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(opt => {
-//opt.TokenValidationParameters = new TokenValidationParameters
-//{
-//    ValidateIssuer = true,
-//    ValidateAudience = true,
-//    ValidateLifetime = true,
-//    ValidateIssuerSigningKey = true,
-//    ValidAudience = builder.Configuration["Jwt:Audience"],
-//    ValidIssuer = builder.Configuration["Jwt:Issuer"],
-//    IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])),
-//    RoleClaimType = ClaimTypes.Role,   
-//    // maps to http://schemas.microsoft.com/ws/2008/06/identity/claims/role
-//    NameClaimType = ClaimTypes.Name   
-//    // maps to http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name
-//    };
-//});
+
 
 builder.Services.Configure<FormOptions>(o =>
 {
@@ -313,7 +278,6 @@ builder.Logging.AddConsole();
 
 builder.Services.AddHealthChecks();
 
-//var corsOrigins = builder.Configuration.GetValue<string>("CorsOrigins").Split(",");
 var corsOrigins = builder.Configuration
     .GetValue<string>("CorsOrigins")?
     .Split(",") ?? Array.Empty<string>();
@@ -339,8 +303,8 @@ var app = builder.Build();
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
 
-//if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
-//{
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsProduction())
+{
     app.UseSwagger();
 
   
@@ -350,16 +314,46 @@ app.UseForwardedHeaders();
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "NomaOS ");
         c.DocumentTitle = "NOMAOS Platform API";
-        //  c.RoutePrefix = "/docs";
+    
 
     });
-//}
+}
 
 
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseRouting();
+
+var customHealthResponseWriter = async (HttpContext context, HealthReport report) =>
+{
+    context.Response.ContentType = "application/json";
+    var result = new
+    {
+        status = report.Status.ToString(),
+        checks = report.Entries.Select(e => new
+        {
+            name = e.Key,
+            status = e.Value.Status.ToString(),
+            description = e.Value.Description,
+            duration = e.Value.Duration.TotalMilliseconds,
+            data = e.Value.Data
+        })
+    };
+
+    await context.Response.WriteAsJsonAsync(result);
+};
+
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
+});
+
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("critical"),
+    ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
+});
 app.UseHttpsRedirection();
 
 // Enable static files for health dashboard
@@ -369,9 +363,6 @@ app.UseAuthentication();
 //app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
 //app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
-
-// The health check endpoints are now handled by the HealthController
-// No additional mapping needed as we're using controller routes
 
 app.MapControllers();
 

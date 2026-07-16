@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -63,7 +64,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "No Record Found",
+
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -114,7 +116,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "No Record Found",
+
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -186,7 +189,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "No Record Found",
+
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -237,7 +241,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<FarmDetailsResponse>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -271,19 +275,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
       [FromQuery] FarmMappingArgs args)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
+
 
             try
             {
@@ -326,7 +319,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request < 1 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Data = request
                 });
             }
@@ -346,79 +339,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = false
                 });
             }
-        }  //private async Task EnrichArgsByRoleAsync(FarmMappingArgs args)
-           //{
-           //    var currentRole = CurrentUserRole;
-
-        //    switch (currentRole)
-        //    {
-        //        case "MemberShip":
-        //            await EnrichCooperativeAsync(args);
-        //            break;
-
-        //        case "Agent":
-        //            await EnrichAgentAsync(args);
-        //            break;
-        //        case "Farmer":
-        //            await EnrichFarmerAsync(args);
-        //            break;
-        //    }
-        //}
-        //private async Task EnrichFarmerAsync(FarmMappingArgs args)
-        //{
-        //    //  if (CurrentUserRole != args.userType) return;
-        //    if (args.farmerId != 0) return;
-
-        //    var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-        //    if (coop == null)
-        //        throw new BaseException(
-        //            ExceptionType.NOTFOUND,
-        //            "Cooperative not found for the specified user.");
-
-        //    args.Id = coop.Id;
-
-        //    args.CooperativeIds ??= new List<long?>();
-
-        //    if (!args.CooperativeIds.Contains(coop.Id))
-        //        args.CooperativeIds.Add(coop.Id);
-        //}
-        //private async Task EnrichCooperativeAsync(FarmMappingArgs args)
-        //{
-
-        //    var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-        //    if (coop == null)
-        //        throw new BaseException(
-        //            ExceptionType.NOTFOUND,
-        //            "Cooperative not found for the specified user.");
-
-        //    args.Id = coop.Id;
-
-        //    args.CooperativeIds ??= new List<long?>();
-
-        //    if (!args.CooperativeIds.Contains(coop.Id))
-        //        args.CooperativeIds.Add(coop.Id);
-        //}
-        //private async Task EnrichAgentAsync(FarmMappingArgs args)
-        //{
-        //    //  if(CurrentUserRole != args.userType) return;
-        //    if (args.Id != 0) return;
-
-        //    var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
-
-        //    if (agent == null)
-        //        throw new BaseException(
-        //            ExceptionType.NOTFOUND,
-        //            "Agent not found for the specified user.");
-
-        //    args.Id = agent.Id;
-
-        //    args.AgentIds ??= new List<long?>();
-
-        //    if (!args.AgentIds.Contains(agent.Id))
-        //        args.AgentIds.Add(agent.Id);
-        //}
+        }  
 
         private void NormalizeOrganizationCode(FarmMappingArgs args)
         {
@@ -432,7 +353,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
       
          private async Task EnrichFarmerAsync(FarmMappingArgs args)
         {
-            //  if(CurrentUserRole != args.userType) return;
             if (args.farmerId != 0) return;
 
             var farmer = await _businessManager.GetFarmerByUserId(CurrentUserId);

@@ -24,7 +24,31 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _httpContextAccessor = httpContextAccessor;
         }
-        public string DomainHeader
+        public IActionResult ValidationProblemResponse()
+        {
+            return BadRequest(new Response<Dictionary<string, string>>()
+            {
+                Message = "Validation failed.",
+                Succeeded = false,
+                Data = ModelState
+                    .Where(ms => ms.Value?.Errors.Any() == true)
+                    .ToDictionary(
+                        ms => ms.Key,
+                        ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
+                    )
+            });
+
+
+        }
+        public ObjectResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
+        {
+            return StatusCode(statusCode, new ApiErrorResponse
+            {
+                Code = code,
+                Message = message
+            });
+        }
+        public string? DomainHeader
         {
             get
             {
@@ -34,16 +58,6 @@ namespace Agrovesto.Backend.API.Controllers
                 return header;
             }
         }
-        //public string Token
-        //{
-        //    get
-        //    {
-        //        var token = _httpContextAccessor.HttpContext?.Request.Headers[HeaderNames.Authorization];
-        //        if (!AuthenticationHeaderValue.TryParse(token, out var headerValue))
-        //            return string.Empty;
-        //        return headerValue.Parameter;
-        //    }
-        //}
 
         protected JsonWebToken? TryReadJwt()
         {
@@ -74,10 +88,9 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
-        //    public string? CurrentUserRole =>
-        //TryReadJwt()?
-        //    .Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase))
-        //    ?.Value;
+     
+        
+        
         public string? CurrentUserRole
         {
             get
@@ -91,7 +104,6 @@ namespace Agrovesto.Backend.API.Controllers
 
                 if (roleClaim != null) return roleClaim.Value;
 
-                // fallback to "Roles" claim
                 roleClaim = jwt.Claims.FirstOrDefault(c => c.Type.Equals("Roles", StringComparison.OrdinalIgnoreCase));
                 return roleClaim?.Value;
             }
@@ -152,11 +164,11 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 if (_httpContextAccessor.HttpContext?.Request.Headers.TryGetValue(HeaderNames.Authorization, out var tokenValues) == true)
                 {
-                    var token = tokenValues.ToString().Trim(); // Trim to remove any unwanted spaces
+                    var token = tokenValues.ToString().Trim(); 
 
                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        return token.Substring("Bearer ".Length).Trim(); // Extract the token part
+                        return token.Substring("Bearer ".Length).Trim(); 
                     }
                 }
                 return string.Empty;
@@ -166,8 +178,8 @@ namespace Agrovesto.Backend.API.Controllers
       
         public class OrganizationClaim
         {
-            public string OrganizationCode { get; set; }
-            public string OrganizationName { get; set; }
+            public string? OrganizationCode { get; set; }
+            public string? OrganizationName { get; set; }
         }
 
     }

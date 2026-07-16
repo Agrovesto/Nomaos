@@ -23,29 +23,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [ApiController]
     public class FarmerController : BaseController
     {
-        private readonly IMembershipManager _membershipManager;
         private readonly IBusinessManager _businessManager;
-        private readonly IOnBoardingManager _onBoardingManager;
         private readonly INomaOSWalletService _walletService;
         private readonly IFarmMappingManager _farmMappingManager;
         private readonly IFarmerTransactionManager _farmerTransactionManager;
-        private readonly IInputFinancingManager _inputFinancingManager;
         public FarmerController(IHttpContextAccessor httpContextAccessor,
-            IOnBoardingManager onBoardingManager,
             INomaOSWalletService walletService,
             IFarmMappingManager farmMappingManager,
-            IMembershipManager membershipManager,
             IFarmerTransactionManager farmerTransactionManager,
-            IBusinessManager businessManager,
-            IInputFinancingManager inputFinancingManager) : base(httpContextAccessor)
+            IBusinessManager businessManager) : base(httpContextAccessor)
         {
-            _onBoardingManager = onBoardingManager;
-            _membershipManager = membershipManager;
             _businessManager = businessManager;
             _farmMappingManager = farmMappingManager;
             _walletService = walletService;
             _farmerTransactionManager = farmerTransactionManager;
-            _inputFinancingManager = inputFinancingManager;
         }
 
         [HttpGet("dashboard")]
@@ -64,9 +55,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<FarmerDashboardDto>()
                 {
                     Data = result,
-
-
-                    Message = result != null ? ResponseMessages.Successful : "Could not retrieve data",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null ? true : false,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -202,11 +191,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count > 0 ? "Successful" : "Failed",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Succeeded = true,
                     Count = result.Count,
-                    //PageNumber = query.PageNumber,
-                    //PageSize = 10,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -234,20 +221,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(query.env))
@@ -444,7 +419,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<List<FarmListRespopnseObject>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -493,7 +468,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<FarmDetailsResponse>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "Farm Details not found",
+
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null,
                     Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -523,22 +499,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [AllowAnonymous]
         public async Task<IActionResult> CreateFarm([FromForm] SubmitFarmRequest model, [FromQuery] FarmMappingArgs query)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 query.performedByUserId = CurrentUserId;
@@ -563,7 +526,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = request != null ? "Successful" : "Failed",
+                    Message = request < 1 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Data = request
                 });
 
@@ -648,7 +611,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
                 {
                     Data = result.Data,
-                    Message = result.Count > 0 ? "Successful" : "No record found",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -695,7 +658,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<InputObligationDto>>()
                 {
                     Data = result.Items,
-                    Message = result.Count > 0 ? "Successful" : "No record found",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -735,7 +698,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private async Task EnrichFarmerAsync(FarmMappingArgs args)
         {
-            //  if(CurrentUserRole != args.userType) return;
             if (args.farmerId != 0) return;
 
             var farmer = await _businessManager.GetFarmerByUserId(CurrentUserId);

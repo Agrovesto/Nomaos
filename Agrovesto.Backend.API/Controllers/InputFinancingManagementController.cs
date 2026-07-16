@@ -302,7 +302,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("indicate-interest")]
         public async Task<IActionResult> CreateInterest([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -380,7 +380,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("confirm-equity-payment")]
         public async Task<IActionResult> ConfirmPayment([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
            // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED,"Forbidden");
          
             if (!ModelState.IsValid)
@@ -481,7 +481,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("confirm-disbursement")]
         public async Task<IActionResult> SubmitDisbursement([FromForm] BundleDisbursementModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -540,7 +540,7 @@ namespace Agrovesto.Backend.API.Controllers
            [HttpPost("approve-disbursement")]
         public async Task<IActionResult> ApproveEquityForDisbursement([FromBody] BundleSubscriptionInterestModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -686,10 +686,9 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<BundleSubscriptionInterestModel>>()
                 {
                     Data = result,
-                    Message = result != null ? "Successful" : "No Record",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result !=null ? true : false,
                     Count = result !=null ? result.Count: 0,
-                    //PageNumber = ,
                     PageSize = 10,
                     Code = result!=null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 }); ;
@@ -762,7 +761,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("save-repayment")]
         public async Task<IActionResult> SaveBundleSubscriptionRepayment([FromBody] RepaymentBreakdownModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {

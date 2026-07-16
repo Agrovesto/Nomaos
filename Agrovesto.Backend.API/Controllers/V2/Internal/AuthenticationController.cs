@@ -21,18 +21,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IBusinessManager _businessManager;
-        private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+        private const long MaxFileSizeBytes = 10 * 1024 * 1024;
 
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         private readonly ILogger<AuthenticationController> _logger;
         private static readonly HashSet<string> AllowedExtensions =
             new(StringComparer.OrdinalIgnoreCase)
             {
-        ".xlsx", ".xls",    // Excel formats
-        ".csv"                               // OpenDocument (LibreOffice)
+        ".xlsx", ".xls",  
+        ".csv"         
             };
-        public AuthenticationController(IHttpContextAccessor httpContextAccessor, IOnBoardingManager onBoardingManager,
-            IBusinessManager businessManager, IBulkFarmerUploadService bulkFarmerUploadService, ILogger<AuthenticationController> logger) : base(httpContextAccessor)
+        public AuthenticationController(IHttpContextAccessor httpContextAccessor,
+            IOnBoardingManager onBoardingManager,
+            IBusinessManager businessManager, IBulkFarmerUploadService bulkFarmerUploadService, 
+            ILogger<AuthenticationController> logger) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
             _businessManager = businessManager;
@@ -47,20 +49,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -75,7 +65,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.OnboardedByUserId = CurrentUserId;
             NormalizeOrganizationCode(args);
-            //ResolveUserContext(args);
+         
             if (CurrentUserId != null && CurrentUserRole != args.userType)
             {
                 await EnrichArgsByRoleAsync(args);
@@ -118,53 +108,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
                     StatusCodes.Status500InternalServerError);
             }
-
-            //var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
-
-            //return Ok(new Response<BulkOnboardingResult>()
-            //{
-            //    Code = ResponseCodes.Success,
-            //    Succeeded = true,
-            //    Message = ResponseMessages.Successful,
-            //    Data = response
-            //});
-
-
         }
-        private IActionResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
-        {
-            return StatusCode(statusCode, new ApiErrorResponse
-            {
-                Code = code,
-                Message = message
-            });
-        }
+     
         [HttpPost("create-account")]
         [AllowAnonymous]
         public async Task<IActionResult> Register([FromBody] OnboardingRequestModel model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
                 args.OnboardedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(args);
-                // ResolveUserContext(args);
                 if (CurrentUserId != null && CurrentUserRole != args.userType)
                 {
                     await EnrichArgsByRoleAsync(args);
@@ -196,8 +153,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 return StatusCode(400, new Response<string>
                 {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
+                    Message = ex.Message,  Succeeded = false,
                 });
             }
 
@@ -207,22 +163,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [AllowAnonymous]
         public async Task<IActionResult> VerifyOtp([FromBody] ConfirmOtpRequest model)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
@@ -262,22 +205,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [AllowAnonymous]
         public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
 
@@ -334,9 +264,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         "UserId must be provided to create a profile for the farmer."
                     );
                 }
-                // ResolveUserContext(args);
                 if (CurrentUserId != null)
-                //&&  !CurrentUserRoles.Contains(args.userType))
                 {
                     await EnrichArgsByRoleAsync(args);
                 }
@@ -411,246 +339,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
-
-        /** public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
-         {
-
-             if (!ModelState.IsValid)
-             {
-
-                 return BadRequest(new Response<Dictionary<string, string>>()
-                 {
-                     Message = "Validation failed.",
-                     Succeeded = false,
-                     Data = ModelState
-                         .Where(ms => ms.Value.Errors.Any())
-                         .ToDictionary(
-                             ms => ms.Key,
-                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                         )
-                 });
-             }
-             try
-             {
-                 if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                 {
-                     args.organizationCode = OrganizationCode;
-                 }
-                 var currentRole = CurrentUserRole;
-
-                 // FARMER: allow implicit self-onboarding
-                 if (currentRole == "Farmer")
-                 {
-
-
-                     args.UserId = !string.IsNullOrWhiteSpace(CurrentUserId)
-                         ? CurrentUserId
-                         : args.UserId;
-                 }
-                 else
-                 {
-                     // NON-FARMER: must explicitly provide UserId
-                     if (string.IsNullOrWhiteSpace(args.UserId))
-                     {
-                         throw new BaseException(
-                             ExceptionType.BAD_REQUEST,
-                             "UserId must be provided to create a profile for the farmer."
-                         );
-                     }
-
-                 }
-
-
-                 model.OnboardedByUserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : null;
-                 // args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-
-                 if (args.Id == 0 && currentRole == "Cooperative")
-                 {
-                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-
-                     if (coop == null)
-                     {
-                         throw new BaseException(
-                             ExceptionType.NOTFOUND,
-                             "Cooperative not found for the specified user."
-                         );
-                     }
-
-                     // Set cooperative Id
-                     args.Id = coop.Id;
-
-                     // Ensure CooperativeIds list exists
-                     args.CooperativeIds ??= new List<long?>();
-
-                     // Add cooperative Id if not already present
-                     if (!args.CooperativeIds.Any(x => x == coop.Id))
-                     {
-                         args.CooperativeIds.Add(coop.Id);
-                     }
-                 }// ================= COOPERATIVE ROLE =================
-                 if (args.Id == 0 && currentRole == "Cooperative")
-                 {
-                     var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-
-                     if (coop == null)
-                     {
-                         throw new BaseException(
-                             ExceptionType.NOTFOUND,
-                             "Cooperative not found for the specified user."
-                         );
-                     }
-
-                     args.Id = coop.Id;
-
-                     args.CooperativeIds ??= new List<long?>();
-
-                     if (!args.CooperativeIds.Any(x => x == coop.Id))
-                     {
-                         args.CooperativeIds.Add(coop.Id);
-                     }
-                 }
-
-                 // ================= AGENT ROLE =================
-                 if (args.Id == 0 && currentRole == "Agent")
-                 {
-                     var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
-
-                     if (agent == null)
-                     {
-                         throw new BaseException(
-                             ExceptionType.NOTFOUND,
-                             "Agent not found for the specified user."
-                         );
-                     }
-
-                     args.Id = agent.Id;
-
-                     args.AgentIds ??= new List<long?>();
-
-                     if (!args.AgentIds.Any(x => x == agent.Id))
-                     {
-                         args.AgentIds.Add(agent.Id);
-                     }
-                 }
-
-                 var request = await _onBoardingManager.CreateUserProfile(model, args);
-
-
-                 return Ok(new Response<(bool status, string message)>()
-                 {
-                     Code = ResponseCodes.Success,
-                     Succeeded = true,
-                     Message = ResponseMessages.Successful,
-                     Data = request
-                 });
-
-
-             }
-             catch (BaseException ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.ExceptionMessage,
-                     Succeeded = false,
-
-                 });
-             }
-             catch (Exception ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                     Succeeded = false,
-                 });
-             }
-
-         }
-
-        [HttpPost("bulk-onboard-farmers")]
-        public async Task<IActionResult> BulkOnboardFarmers(
-            IFormFile file,
-            [FromQuery] OnBoardingArgs args)
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
-
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-                if (file == null || file.Length == 0)
-                    return BadRequest("Excel file is required.");
-
-                using var stream = file.OpenReadStream();
-
-                var response = await _onBoardingManager.BulkOnboardFarmers(stream, args, CurrentUserId, CurrentUserRole);
-
-                return Ok(new Response<BulkOnboardingResult>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = ResponseMessages.Successful,
-                    Data = response
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
-        }
-         **/
-
         [HttpPost("login")]
         [AllowAnonymous]
         public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string? businessCode)
         {
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-         //   var isAgrovesto = "IsBusiness";//DomainHeader;
             try
             {
                 var createUser = await _onBoardingManager.Login(model, businessCode);
@@ -783,247 +478,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        /** [HttpPost("forgot-password")]
-         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
-         {
-             if (!ModelState.IsValid)
-             {
-
-                 return BadRequest(new Response<Dictionary<string, string>>()
-                 {
-                     Message = "Validation failed.",
-                     Succeeded = false,
-                     Data = ModelState
-                         .Where(ms => ms.Value.Errors.Any())
-                         .ToDictionary(
-                             ms => ms.Key,
-                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                         )
-                 });
-             }
-             try
-             {
-
-                 var request = await _authenticationRepository.ForgotPassword(model.Username);
-                 return Ok(new Response<string>()
-                 {
-                     Code = ResponseCodes.Success,
-                     Succeeded = true,
-                     Message = ResponseMessages.Successful,
-                     Data = request.Message
-                 });
-             }
-             catch (BaseException ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.ExceptionMessage,
-                     Succeeded = false,
-
-                 });
-             }
-             catch (Exception ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                     Succeeded = false,
-                 });
-             }
-         }
-         [HttpPost("reset-password")]
-         public async Task<IActionResult> ResetPassword(PasswordResetModel model)
-         {
-             if (!ModelState.IsValid)
-             {
-
-                 return BadRequest(new Response<Dictionary<string, string>>()
-                 {
-                     Message = "Validation failed.",
-                     Succeeded = false,
-                     Data = ModelState
-                         .Where(ms => ms.Value.Errors.Any())
-                         .ToDictionary(
-                             ms => ms.Key,
-                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                         )
-                 });
-             }
-
-             try
-             {
-                 var resetPasswordRequest = await _authenticationRepository.ResetPassword(model);
-                 if (resetPasswordRequest.Status)
-                 {
-                     return Ok(new Response<(bool Status, string Message)>()
-                     {
-                         Code = ResponseCodes.Success,
-                         Succeeded = true,
-                         Message = "Success",
-                         Data = resetPasswordRequest
-                     });
-                 }
-                 else
-                 {
-                     return BadRequest(new Response<(bool Status, string Message)>()
-                     {
-                         Code = ResponseCodes.NotSuccessful,
-                         Succeeded = false,
-                         Message = "Failed",
-                         Data = resetPasswordRequest
-                     });
-                 }
-             }
-             catch (BaseException ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.ExceptionMessage,
-                     Succeeded = false,
-
-                 });
-             }
-             catch (Exception ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                     Succeeded = false,
-                 });
-             }
-         }
-         [HttpPost("change-password")]
-         public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
-         {
-             if (!ModelState.IsValid)
-             {
-
-                 return BadRequest(new Response<Dictionary<string, string>>()
-                 {
-                     Message = "Validation failed.",
-                     Succeeded = false,
-                     Data = ModelState
-                         .Where(ms => ms.Value.Errors.Any())
-                         .ToDictionary(
-                             ms => ms.Key,
-                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                         )
-                 });
-             }
-
-             try
-             {
-                 model.UserName = CurrentUserEmail;
-                 var resetPasswordRequest = await _authenticationRepository.ChangePassword(model);
-                 if (resetPasswordRequest.Status)
-                 {
-                     return Ok(new Response<(bool Status, string Message)>()
-                     {
-                         Code = ResponseCodes.Success,
-                         Succeeded = true,
-                         Message = "Success",
-                         Data = resetPasswordRequest
-                     });
-                 }
-                 else
-                 {
-                     return BadRequest(new Response<(bool Status, string Message)>()
-                     {
-                         Code = ResponseCodes.NotSuccessful,
-                         Succeeded = false,
-                         Message = "Failed",
-                         Data = resetPasswordRequest
-                     });
-                 }
-             }
-             catch (BaseException ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.ExceptionMessage,
-                     Succeeded = false,
-
-                 });
-             }
-             catch (Exception ex)
-             {
-                 return StatusCode(400, new Response<string>
-                 {
-                     Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                     Succeeded = false,
-                 });
-             }
-         }
-         **/
-        //[HttpPost("Verify-NIN")]
-        //[AllowAnonymous]
-        //public async Task<IActionResult> VerifyNIN([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
-        //{
-
-        //    if (!ModelState.IsValid)
-        //    {
-
-        //        return BadRequest(new Response<Dictionary<string, string>>()
-        //        {
-        //            Message = "Validation failed.",
-        //            Succeeded = false,
-        //            Data = ModelState
-        //                .Where(ms => ms.Value.Errors.Any())
-        //                .ToDictionary(
-        //                    ms => ms.Key,
-        //                    ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-        //                )
-        //        });
-        //    }
-        //    try
-        //    {
-        //        if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-        //        {
-        //            args.organizationCode = OrganizationCode;
-        //        }
-        //        var currentRole = CurrentUserRole;
-
-        //        model.OnboardedByUserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : null;
-        //        args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
-
-        //        if (args.Id == 0 && currentRole == "Cooperative")
-        //        {
-        //            var coop = await _businessManager.GetCooperativeDetailByUserId(args.UserId);
-        //            args.Id = coop.Id;
-        //        }
-        //        var request = await _onBoardingManager.CreateUserProfile(model, args);
-
-
-        //        return Ok(new Response<(bool status, string message)>()
-        //        {
-        //            Code = ResponseCodes.Success,
-        //            Succeeded = true,
-        //            Message = ResponseMessages.Successful,
-        //            Data = request
-        //        });
-
-
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.ExceptionMessage,
-        //            Succeeded = false,
-
-        //        });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string>
-        //        {
-        //            Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-        //            Succeeded = false,
-        //        });
-        //    }
-
-        //}
-
         private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
         {
             var currentRole = CurrentUserRole;
@@ -1078,19 +532,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.AgentIds.Add(agent.Id);
         }
 
-        private IActionResult ValidationProblemResponse()
-        {
-            return BadRequest(new Response<Dictionary<string, string>>
-            {
-                Message = "Validation failed.",
-                Succeeded = false,
-                Data = ModelState
-                    .Where(ms => ms.Value.Errors.Any())
-                    .ToDictionary(
-                        ms => ms.Key,
-                        ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage)))
-            });
-        }
+       
         private void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
@@ -1099,25 +541,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.organizationCode = OrganizationCode;
             }
         }
-        //private void ResolveUserContext(OnBoardingArgs args)
-        //{
-        //    var currentRole = CurrentUserRole;
-
-        //    if (currentRole == "Farmer")
-        //    {
-        //        args.UserId ??= CurrentUserId;
-        //    }
-        //    else
-        //    {
-        //        if (string.IsNullOrWhiteSpace(args.UserId))
-        //        {
-        //            throw new BaseException(
-        //                ExceptionType.BAD_REQUEST,
-        //                "UserId must be provided to create a profile for the farmer."
-        //            );
-        //        }
-        //    }
-        //}
-
+      
     }
 }
