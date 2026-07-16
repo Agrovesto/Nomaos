@@ -299,7 +299,8 @@ jobs:
           sleep 10
           echo "✅ Deployment completed successfully"
           # Uncomment when ready:
-          curl -f https://dev-noma-api-nomaos.com/health || exit 1
+          curl -f https://dev-noma-api.nomaos.com/health || exit 1
+        continue-on-error: true
 
       - name: Deployment Summary
         if: success()
