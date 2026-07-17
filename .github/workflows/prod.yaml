@@ -159,7 +159,7 @@ jobs:
 
       - name: Rsync artifact to EC2 (incoming staging area)
         run: |
-          rsync -avz --delete \
+          sudo rsync -avz --delete \
             --exclude='.git' \
             --exclude='*.pdb' \
             --exclude='*.xml' \
