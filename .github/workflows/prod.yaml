@@ -18,6 +18,7 @@ jobs:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
+      DOTNET_VERSION: 8.0.x
 
     steps:
       - name: Checkout
@@ -35,7 +36,7 @@ jobs:
             --base staging \
             --json number,author,reviews \
             --jq "map(select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\" or .headRefOid == \"${{ env.COMMIT_SHA }}\")) | first" \
-            2>/dev/null || echo "{}")
+            2>/PROD/null || echo "{}")
 
           # Fallback: search by the commit message merge ref
           if [[ "$PR_DATA" == "{}" || "$PR_DATA" == "null" || -z "$PR_DATA" ]]; then
@@ -44,12 +45,12 @@ jobs:
               --base staging \
               --json number,mergeCommit \
               --jq ".[] | select(.mergeCommit.oid == \"${{ env.COMMIT_SHA }}\") | .number" \
-              2>/dev/null || echo "")
+              2>/PROD/null || echo "")
 
             if [[ -n "$PR_NUMBER" ]]; then
               PR_DATA=$(gh pr view "$PR_NUMBER" \
                 --json number,author,reviews \
-                2>/dev/null || echo "{}")
+                2>/PROD/null || echo "{}")
             fi
           fi
 
@@ -76,7 +77,42 @@ jobs:
       - name: Setup .NET 8
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Configure .NET SDK
+        run: |
+          # Pin an explicit SDK version that actually exists on the runner
+          INSTALLED_SDK=$(dotnet --list-sdks | grep '^8\.' | tail -1 | awk '{print $1}')
+          echo "Using SDK version: $INSTALLED_SDK"
+          
+          cat > global.json << EOF
+          {
+            "sdk": {
+              "version": "$INSTALLED_SDK",
+              "rollForward": "disable"
+            }
+          }
+          EOF
+          
+          cat global.json
+          dotnet --version
+
+      - name: Debug SDK version
+        run: |
+          echo "===== global.json ====="
+          cat global.json
+          echo ""
+          echo "===== dotnet --version ====="
+          dotnet --version
+          echo ""
+          echo "===== dotnet --list-sdks ====="
+          dotnet --list-sdks
+          echo ""
+          echo "===== which dotnet ====="
+          which dotnet
+          echo ""
+          echo "===== DOTNET_ROOT ====="
+          echo "$DOTNET_ROOT"
 
       # ── Clean stale obj/ and bin/ before every build ─────────────────────────
       - name: Clean
@@ -92,17 +128,34 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}-${{ github.run_id }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Restore
-        run: dotnet restore ${{ env.PROJECT_PATH }}
+      - name: Cache dotnet tools
+        uses: actions/cache@v4
+        with:
+          path: ~/.dotnet/tools
+          key: dotnet-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
+          restore-keys: dotnet-tools-${{ runner.os }}-
+
+      - name: Restore Dependencies
+        run: |
+          dotnet restore ${{ env.PROJECT_PATH }} \
+            --runtime linux-x64 
+
+      - name: Build
+        run: |
+          dotnet build ${{ env.PROJECT_PATH }} \
+            --configuration Release \
+            --no-restore
 
 
-      - name: Publish
+      - name: Publish Artifact
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
-            -c Release \
-            -f net8.0 \
+            --configuration Release \
+            --runtime linux-x64 \
+            --framework net8.0 \
+            --self-contained true \
             --no-restore \
-            -o ${{ env.PUBLISH_DIR }}
+            --output ${{ env.PUBLISH_DIR }}
 
           # Stamp the artifact with full deployment metadata
           cat > ${{ env.PUBLISH_DIR }}/.deploy-meta <<EOF
@@ -122,32 +175,45 @@ jobs:
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
 
       - name: Add EC2 host to known_hosts
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_HOST_DEV }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.EC2_HOST_PROD }} >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
 
       - name: Rsync artifact to EC2 (incoming staging area)
         run: |
           # Rsync to a per-commit staging area so the live service is never touched
           # during transfer. The swap happens atomically via symlink in the next step.
-          ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
+          ssh ubuntu@${{ secrets.EC2_HOST_PROD }} \
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
           rsync -az --delete \
             --checksum \
             ${{ env.PUBLISH_DIR }}/ \
-            ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
+            ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
+
+      - name: Verify artifact on server
+        run: |
+          REMOTE_SHA=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_PROD }} \
+            "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/PROD/null || echo 'NOT_FOUND'")
+          if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
+            echo "✅ SHA verified on server: $REMOTE_SHA"
+          else
+            echo "❌ SHA mismatch! Expected: ${{ env.COMMIT_SHA }}, Got: $REMOTE_SHA"
+            exit 1
+          fi
 
       # ── Atomic slot-swap on EC2 (no compiling, just symlink + systemctl) ─────
       - name: Swap slot
         run: |
           ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
+              ubuntu@${{ secrets.EC2_HOST_PROD }} \
+              "bash /var/www/Nomaos/deploy-prod.sh ${{ env.COMMIT_SHA }}"
 
       # ── Deployment summary ────────────────────────────────────────────────────
       - name: Write deployment summary
