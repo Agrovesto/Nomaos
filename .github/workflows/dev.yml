@@ -143,8 +143,8 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /v:"${{ env.VERSION }}" \
-            /d:sonar.cs.vstest.reportsPaths="**/*.trx" \
-            /d:sonar.coverageReportPaths="**/coverage.cobertura.xml" \
+            /d:sonar.cs.vstest.reportsPaths="TestResults/*.trx" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
@@ -159,10 +159,11 @@ jobs:
           dotnet test ${{ env.TEST_PROJECT_PATH }} \
             --configuration Release \
             --logger "trx" \
-            --collect:"XPlat Code Coverage" \
+            --collect:"XPlat Code Coverage;Format=opencover" \            
             --results-directory TestResults
 
           echo "Generated files:"
+          
           find TestResults -type f
         continue-on-error: true
 
