@@ -53,7 +53,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 query.organizationCode = query.organizationCode ?? OrganizationCode;
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
 
-                await EnsureRoleAsync(query.userId, "Agent");
+                await EnsureRoleAsync(query.userId!, "Agent");
 
                 return await _farmMappingManager.FetchAllFarmsByFarmersBelongingToAnAgent(query);
             },
@@ -95,7 +95,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return await ExecuteAsync(async () =>
             {
                 args.performedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+                NormalizeOrganizationCode(new Core.V2.Onboarding.OnBoardingArgs { organizationCode=args.organizationCode});
 
                 await ResolveOrValidateFarmerIdAsync(args);
 
@@ -110,11 +110,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }));
         }
 
-        private void NormalizeOrganizationCode(FarmMappingArgs args)
-        {
-            if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                args.organizationCode = OrganizationCode;
-        }
 
         private async Task EnrichFarmerAsync(FarmMappingArgs args)
         {

@@ -260,21 +260,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
         }
 
-        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
-        {
-            var currentRole = CurrentUserRole;
-
-            switch (currentRole)
-            {
-                case "MemberShip":
-                    await EnrichCooperativeAsync(args);
-                    break;
-
-                case "Agent":
-                    await EnrichAgentAsync(args);
-                    break;
-            }
-        }
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
             //  if (CurrentUserRole != args.userType) return;
@@ -312,33 +297,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             if (!args.AgentIds.Contains(agent.Id))
                 args.AgentIds.Add(agent.Id);
-        }
-        private void NormalizeOrganizationCode(OnBoardingArgs args)
-        {
-            if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-            {
-                args.organizationCode = OrganizationCode;
-            }
-        }
-        private void ResolveUserContext(OnBoardingArgs args)
-        {
-            var currentRole = CurrentUserRole;
-
-            if (currentRole == "Farmer")
-            {
-                args.UserId ??= CurrentUserId;
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(args.UserId))
-                {
-                    throw new BaseException(
-                        ExceptionType.BAD_REQUEST,
-                        "UserId must be provided to create a profile for the farmer."
-                    );
-                }
-            }
         }
        
     }
