@@ -155,17 +155,17 @@ jobs:
       - name: Create release directory on server
         run: |
           ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "sudo mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
       - name: Rsync artifact to EC2 (incoming staging area)
         run: |
-          sudo rsync -avz --delete \
-            --exclude='.git' \
-            --exclude='*.pdb' \
-            --exclude='*.xml' \
-            --timeout=30 \
-            ${{ env.PUBLISH_DIR }}/ \
-            ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
+           rsync -avz --delete \
+              --exclude='.git' \
+              --exclude='*.pdb' \
+              --exclude='*.xml' \
+              --timeout=30 \
+              ${{ env.PUBLISH_DIR }}/ \
+              ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/
 
       - name: Verify artifact on server
         run: |
