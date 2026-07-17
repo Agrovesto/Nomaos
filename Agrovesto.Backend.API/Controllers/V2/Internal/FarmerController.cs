@@ -228,7 +228,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return await ExecuteAsync(async () =>
             {
                 query.performedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(query);
+                NormalizeOrganizationCode(new Core.V2.Onboarding.OnBoardingArgs { organizationCode= query.organizationCode});
                 await EnrichFarmerAsync(query);
                 return await _farmMappingManager.SubmitFarmAsync(model, query);
             },
@@ -297,14 +297,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                        }));
         }
 
-        private void NormalizeOrganizationCode(FarmMappingArgs args)
-        {
-            if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-            {
-                args.organizationCode = OrganizationCode;
-            }
-        }
+     
 
         private async Task EnrichFarmerAsync(FarmMappingArgs args)
         {
