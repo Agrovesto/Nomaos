@@ -128,15 +128,38 @@ jobs:
 
       - name: Configure .NET SDK
         run: |
-          cat > global.json << 'EOF'
+          # Pin an explicit SDK version that actually exists on the runner
+          INSTALLED_SDK=$(dotnet --list-sdks | grep '^8\.' | tail -1 | awk '{print $1}')
+          echo "Using SDK version: $INSTALLED_SDK"
+          
+          cat > global.json << EOF
           {
             "sdk": {
-              "version": "${{ env.DOTNET_VERSION }}",
-              "rollForward": "latestFeature"
+              "version": "$INSTALLED_SDK",
+              "rollForward": "disable"
             }
           }
           EOF
+          
+          cat global.json
           dotnet --version
+
+      - name: Debug SDK version
+        run: |
+          echo "===== global.json ====="
+          cat global.json
+          echo ""
+          echo "===== dotnet --version ====="
+          dotnet --version
+          echo ""
+          echo "===== dotnet --list-sdks ====="
+          dotnet --list-sdks
+          echo ""
+          echo "===== which dotnet ====="
+          which dotnet
+          echo ""
+          echo "===== DOTNET_ROOT ====="
+          echo "$DOTNET_ROOT"
 
       # ============================================================
       # 📦 CACHING
@@ -220,7 +243,6 @@ jobs:
         run: |
           dotnet build ${{ env.SOLUTION_PATH }} \
             --configuration Release \
-            --runtime linux-x64 \
             --no-restore
 
       # ============================================================
