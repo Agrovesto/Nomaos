@@ -405,7 +405,7 @@ jobs:
               exit 0
             fi
             echo "   Retry $i/10..."
-            sleep 5
+            sleep 10
           done
           echo "❌ Health check failed after 10 attempts"
           exit 1
