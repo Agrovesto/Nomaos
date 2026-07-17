@@ -19,7 +19,7 @@ env:
   DOTNET_VERSION: 8.0.x
   SOLUTION_PATH: Agrovesto.Backend.sln
   PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-  TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
+  # TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
   SONAR_PROJECT_KEY: Agrovesto.Backend.API
   PUBLISH_DIR: ${{ github.workspace }}/publish
   COMMIT_SHA: ${{ github.sha }}
@@ -80,7 +80,7 @@ jobs:
       # ✅ Run tests with coverage (for PR feedback)
       - name: Run tests
         run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
+          dotnet test ${{ env.SOLUTION_PATH }} \
             --configuration Release \
             --no-build \
             --verbosity normal \
@@ -223,7 +223,7 @@ jobs:
 
       - name: Test with Coverage
         run: >-
-          dotnet test ${{ env.TEST_PROJECT_PATH }}
+          dotnet test ${{ env.SOLUTION_PATH }}
           --configuration Release
           --no-build
           --logger "trx"
