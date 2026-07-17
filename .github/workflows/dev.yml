@@ -155,10 +155,11 @@ jobs:
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
         run: |
-          dotnet-coverage collect \
-            "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
-            -f xml \
-            -o coverage.xml
+          dotnet-coverage collect --output coverage.xml --output-format xml -- \
+            "dotnet test ${{ env.TEST_PROJECT_PATH }} \
+             --configuration Release \
+             --no-build \
+             --verbosity normal" \
 
           ls -lh coverage.xml
 
