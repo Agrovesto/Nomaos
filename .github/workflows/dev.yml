@@ -159,8 +159,6 @@ jobs:
             --configuration Release \
             --verbosity normal         
           echo "✅ Tests completed with coverage"
-        continue-on-error: true
-        # Convert coverage to OpenCover format for SonarQube
 
       ###### ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
