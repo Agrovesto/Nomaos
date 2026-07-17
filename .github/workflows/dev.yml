@@ -155,10 +155,14 @@ jobs:
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
         run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
-            --configuration Release \
-            --verbosity normal         
-          echo "✅ Tests completed with coverage"
+          dotnet-coverage collect \
+            "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
+            -f xml \
+            -o coverage.xml
+
+          ls -lh coverage.xml
+
+          echo "✅ Coverage report generated"
 
       ###### ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
@@ -174,22 +178,23 @@ jobs:
         run: |
           echo "Waiting for SonarQube analysis to complete..."
           sleep 10
-          
+
           # Get the analysis ID from the report task file
           if [ -f ".sonarqube/out/.sonar/report-task.txt" ]; then
             ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' .sonarqube/out/.sonar/report-task.txt)
             echo "Analysis ID: $ANALYSIS_ID"
-            
+
             # Poll for task completion
             MAX_ATTEMPTS=60
             ATTEMPT=0
+
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
               STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" | \
-                jq -r '.task.status')
-              
-              echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS - Status: $STATUS"
-              
+                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" \
+                | jq -r '.task.status')
+
+              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS - Status: $STATUS"
+
               if [ "$STATUS" = "SUCCESS" ]; then
                 echo "✅ Analysis completed successfully"
                 break
@@ -197,31 +202,45 @@ jobs:
                 echo "❌ Analysis failed with status: $STATUS"
                 exit 1
               fi
-              
+
               sleep 5
-              ATTEMPT=$((ATTEMPT+1))
+              ATTEMPT=$((ATTEMPT + 1))
             done
-            
+
             if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
               echo "❌ Timeout waiting for analysis to complete"
               exit 1
             fi
-            
-            # Check Quality Gate status
-            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" | \
-              jq -r '.projectStatus.status')
-            
+
+            echo "===== Quality Gate Response ====="
+
+            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+
+            echo "$QG_RESPONSE" | jq
+
+            QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status')
+
             echo "Quality Gate Status: $QG_STATUS"
-            
+
             if [ "$QG_STATUS" != "OK" ]; then
-              echo "❌ Quality Gate failed with status: $QG_STATUS"
+              echo ""
+              echo "❌ Quality Gate FAILED"
+              echo ""
+              echo "Failed conditions:"
+
+              echo "$QG_RESPONSE" | jq -r '
+                .projectStatus.conditions[]
+                | select(.status == "ERROR")
+                | "- \(.metricKey): actual=\(.actualValue // "N/A"), required=\(.errorThreshold // "N/A")"
+              '
+
               exit 1
             fi
-            
+
             echo "✅ Quality Gate passed!"
           else
-            echo "❌ Report task file not found"
+            echo "❌ SonarQube report-task.txt not found"
             exit 1
           fi
 
