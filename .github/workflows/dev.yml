@@ -36,6 +36,18 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.100",
+              "rollForward": "latestFeature"
+            }
+          }
+          EOF
+          dotnet --version
+
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
@@ -61,7 +73,6 @@ jobs:
           name: Test Results
           path: '**/test-results.trx'
           reporter: dotnet-trx
-        continue-on-error: true
 
   # ============================================================
   # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
@@ -89,6 +100,18 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.100",
+              "rollForward": "latestFeature"
+            }
+          }
+          EOF
+          dotnet --version
 
       # ✅ OPTIMIZED CACHING
       - name: Cache NuGet packages
@@ -161,41 +184,36 @@ jobs:
 
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
-        run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
-            --configuration Release \
-            --logger "trx" \
-            --collect:"XPlat Code Coverage;Format=opencover" \    
-            --results-directory TestResults
+        run: >-
+          dotnet test ${{ env.TEST_PROJECT_PATH }}
+          --configuration Release
+          --logger "trx"
+          --collect:"XPlat Code Coverage;Format=opencover"
+          --results-directory ./TestResults
 
-          echo "Generated files:"          
-          find TestResults -type f
-        continue-on-error: true
-
+      # ✅ FIX #3: Debug step must never fail the job (this is what actually killed
+      #    your pipeline after the test step's continue-on-error let it through)
       - name: Verify Coverage Files
+        if: always()
         run: |
           echo "===== ALL FILES ====="
-          find TestResults -type f
-
-          echo ""
-          echo "===== XML ====="
-          find TestResults -name "*.xml"
+          find TestResults -type f 2>/dev/null || echo "⚠️ TestResults directory not found"
 
           echo ""
           echo "===== OpenCover ====="
-          find TestResults -name "*.opencover.xml"
+          find TestResults -name "*.opencover.xml" 2>/dev/null || true
 
           echo ""
-          echo "===== Coverage ====="
-          find TestResults -name "coverage*"
+          echo "===== TRX ====="
+          find TestResults -name "*.trx" 2>/dev/null || true
 
-      ###### ✅ END SONARQUBE ANALYSIS
+      # ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
-      # 🔧 ALTERNATIVE: Manual Quality Gate Check using SonarQube API
+      # 🔧 Manual Quality Gate Check using SonarQube API
       - name: Check SonarQube Quality Gate (Manual)
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -324,13 +342,13 @@ jobs:
           echo "🔍 Verifying deployment artifact..."
           REMOTE_SHA=$(ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo 'NOT_FOUND'")
-          
           if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
             echo "✅ SHA verified on server: $REMOTE_SHA"
           else
             echo "❌ SHA mismatch! Expected: ${{ env.COMMIT_SHA }}, Got: $REMOTE_SHA"
             exit 1
           fi
+
       - name: Swap deployment slot
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
@@ -338,11 +356,9 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 10
-          echo "✅ Deployment completed successfully"
-          # Uncomment when ready:
+          sleep 30
           curl -f https://dev-noma-api.nomaos.com/health || exit 1
-        continue-on-error: true
+          echo "✅ Deployment completed successfully"
 
       - name: Deployment Summary
         if: success()
