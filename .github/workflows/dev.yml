@@ -190,7 +190,8 @@ jobs:
       # 🏗️ RESTORE (only step allowed before sonar begin)
       # ============================================================
       - name: Restore dependencies
-        run: dotnet restore ${{ env.SOLUTION_PATH }}
+        run: dotnet restore ${{ env.SOLUTION_PATH }} \
+          --runtime linux-x64 
 
       # ============================================================
       # 🔍 SONAR BEGIN ── MUST come BEFORE build
@@ -215,7 +216,10 @@ jobs:
       # 🏗️ BUILD (instrumented by Sonar)
       # ============================================================
       - name: Build
-        run: dotnet build ${{ env.SOLUTION_PATH }} --configuration Release --no-restore
+        run: dotnet build ${{ env.SOLUTION_PATH }} \
+                --configuration Release \
+                --runtime linux-x64 \
+                --no-restore
 
       # ============================================================
       # 🧪 TEST (uses build output — NO --no-build here would rebuild without instrumentation, so keep --no-build)
@@ -313,10 +317,7 @@ jobs:
             --framework net8.0 \
             --self-contained true \
             --no-restore \
-            --output ${{ env.PUBLISH_DIR }} \
-            /p:PublishTrimmed=false \
-            /p:PublishSingleFile=false \
-            /p:EnableSourceControlManagerQueries=false
+            --output ${{ env.PUBLISH_DIR }}
 
       - name: Create deployment metadata
         run: |
