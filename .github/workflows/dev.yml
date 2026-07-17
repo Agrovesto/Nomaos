@@ -68,7 +68,10 @@ jobs:
 
       # ✅ Solution-level restore (faster than per-project)
       - name: Restore dependencies
-        run: dotnet restore ${{ env.SOLUTION_PATH }}
+        run: |
+          dotnet restore ${{ env.SOLUTION_PATH }} \
+            --verbosity normal \
+            /warnaserror:NU1603  # ✅ Fail CI if NuGet has to resolve a different version
 
       # ✅ Build entire solution
       - name: Build
