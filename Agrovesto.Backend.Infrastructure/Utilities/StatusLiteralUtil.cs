@@ -12,6 +12,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
             public const string Successful = "Successful";
             public const string Failed = "Failed";
             public const string NotFound = "No record found";
+            public const string AccessDenied = "Access Denied";
         }
     
 }
