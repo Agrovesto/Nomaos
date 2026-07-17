@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Businesses.MandE;
 using Agrovesto.Backend.Core.Models.Common.MandEService;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using CsvHelper.Expressions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -108,7 +109,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
                 return Ok(new Response<DatasetOverviewDto>()
                 {
                     Data = datasets,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -147,7 +148,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
                 return Ok(new PagedListResponse<IEnumerable<MandEDatasetListDto>>()
                 {
                     Data = datasets,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = datasets !=null ? datasets.Count() : 0,
                     PageNumber = query.PageNumber,
@@ -261,7 +262,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
                 return Ok(new PagedListResponse<IEnumerable<MandEFieldDto>>()
                 {
                     Data = fields,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = fields != null ? fields.Count() : 0,
                    // PageNumber = query.PageNumber,

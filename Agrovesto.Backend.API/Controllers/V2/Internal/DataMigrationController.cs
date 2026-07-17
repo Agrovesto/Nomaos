@@ -1,6 +1,5 @@
 ﻿using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
@@ -14,6 +13,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             _migrationService = migrationService;
         }
+
         [HttpPost("run-user")]
         public async Task<IActionResult> RunUserTableMigrationAsync()
         {            

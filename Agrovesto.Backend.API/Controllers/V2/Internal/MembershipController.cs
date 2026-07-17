@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -47,7 +48,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     IFormFile file,
     [FromQuery] OnBoardingArgs args)
         {
-            // --- File presence & basic validation ---
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
 
@@ -60,7 +60,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("FILE_TYPE_INVALID",
                     "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
 
-            // --- Request/auth validation ---
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
@@ -72,7 +71,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             args.organizationCode = OrganizationCode;
               await EnrichCooperativeAsync(args);
-            // --- Parse file ---
             List<BulkFarmerRowDto> rows;
             try
             {
@@ -94,7 +92,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (rows.Count == 0)
                 return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
 
-            // --- Process ---
             try
             {
                 var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
@@ -113,79 +110,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     StatusCodes.Status500InternalServerError);
             }
         }
-        private IActionResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
-        {
-            return StatusCode(statusCode, new ApiErrorResponse
-            {
-                Code = code,
-                Message = message
-            });
-        }
-        //public async Task<IActionResult> BulkUpload(
-        //    IFormFile file,
-        //    [FromQuery] OnBoardingArgs args)
-        //{
-        //    // ── Basic input checks ────────────────────────────────────────
-        //    if (file is null || file.Length == 0)
-        //        return BadRequest("No file uploaded.");
-
-        //    if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
-        //        return BadRequest("Only CSV files are accepted.");
-
-        //    if (string.IsNullOrWhiteSpace(args.businessCode))
-        //        return BadRequest("businessCode is required.");
-
-        //    args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-
-        //    if (string.IsNullOrWhiteSpace(args.UserId))
-        //        return Unauthorized("Access Denied");
-        //    args.organizationCode = OrganizationCode;
-        //    await EnrichCooperativeAsync(args);
-
-
-        //    List<BulkFarmerRowDto> rows;
-        //    try
-        //    {
-        //        await using var stream = file.OpenReadStream();
-        //        rows = BulkFarmerCsvParser.Parse(stream);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return BadRequest($"Could not parse CSV: {ex.Message}");
-        //    }
-
-        //    if (rows.Count == 0)
-        //        return BadRequest("The uploaded file contains no data rows.");
-
-        //    var uploadedBy = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-
-
-        //    var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
-
-        //    int statusCode = result.Failed > 0 ? StatusCodes.Status207MultiStatus
-        //                                       : StatusCodes.Status200OK;
-
-        //    return StatusCode(statusCode, result);
-        //}
-
+       
+        
 
         [HttpPut("update-farmer-profile")]
         public async Task<IActionResult> UpdateFarmerProfile([FromBody] MemberShipModel model, [FromQuery] string? userId)
         {
             if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
+                return ValidationProblemResponse();
 
             try
             {
@@ -230,76 +162,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-
-      /**  [HttpPost("bulk-onboard")]
-        public async Task<IActionResult> BulkOnboard(
-        IFormFile file,
-        [FromQuery] OnBoardingArgs args)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-            try
-            {
-
-                args.OnboardedByUserId = CurrentUserId;
-                args.UserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
-                args.userType = "Farmer";
-                await EnrichCooperativeAsync(args);
-
-                if (file == null || file.Length == 0)
-                    return BadRequest("Excel file is required.");
-
-
-                using var stream = file.OpenReadStream();
-               // var response = await _onBoardingManager.BulkOnboardFarmers(stream, args);
-                var response = await _onBoardingManager.BulkOnboardFarmersBatchAsync(stream, args);
-
-                return Ok(new Response<BulkOnboardingQueueResponse>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = "Successful",
-                    Data = response
-                });
-
-
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
-
-        }
-        **/
-
-
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
         {
@@ -325,8 +187,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result,
 
-
-                    Message = result != null ? "Successful" : "Could not retrieve data",
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = result != null ? true : false,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
@@ -358,20 +219,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -561,7 +410,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = profile
                 });
             }
@@ -614,7 +463,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = profile
                 });
             }
@@ -637,7 +486,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task GetAgentIdFromUserIdAsync(ListQueryParams args)
         {
-            //  if(CurrentUserRole != args.userType) return;
+           
             if (args.Id != 0) return;
 
             var agent = await _businessManager.GetAgentDetailByUserId(args.UserId);
@@ -655,22 +504,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("update-membership-profile")]
         public async Task<IActionResult> UpdateMembershipUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
@@ -692,7 +528,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = null
                 });
 
@@ -721,22 +557,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("create-agent")]
         public async Task<IActionResult> CreateAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
-
             if (!ModelState.IsValid)
-            {
+                return ValidationProblemResponse();
 
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
             try
             {
                 args.OnboardedByUserId = CurrentUserId;
@@ -750,7 +573,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                //  ResolveUserContext(args);
                 await EnrichCooperativeAsync(args);
 
 
@@ -865,7 +687,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = request
                 });
 

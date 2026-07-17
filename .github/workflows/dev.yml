@@ -124,9 +124,15 @@ jobs:
 
       # ✅ GET VERSION
       - name: Get project version
+        shell: bash
         run: |
-          VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} | head -1 || echo "1.0.0")
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ env.PROJECT_PATH }}" || true)
+
+          if [ -z "$VERSION" ]; then
+            VERSION="1.0.${{ github.run_number }}"
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Project version: $VERSION"
 
       - name: Restore dependencies
@@ -143,7 +149,8 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /v:"${{ env.VERSION }}" \
-            /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml \
+            /d:sonar.cs.vstest.reportsPaths="TestResults/*.trx" \
+            /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
@@ -157,10 +164,30 @@ jobs:
         run: |
           dotnet test ${{ env.TEST_PROJECT_PATH }} \
             --configuration Release \
-            --verbosity normal         
-          echo "✅ Tests completed with coverage"
+            --logger "trx" \
+            --collect:"XPlat Code Coverage;Format=opencover" \    
+            --results-directory TestResults
+
+          echo "Generated files:"          
+          find TestResults -type f
         continue-on-error: true
-        # Convert coverage to OpenCover format for SonarQube
+
+      - name: Verify Coverage Files
+        run: |
+          echo "===== ALL FILES ====="
+          find TestResults -type f
+
+          echo ""
+          echo "===== XML ====="
+          find TestResults -name "*.xml"
+
+          echo ""
+          echo "===== OpenCover ====="
+          find TestResults -name "*.opencover.xml"
+
+          echo ""
+          echo "===== Coverage ====="
+          find TestResults -name "coverage*"
 
       ###### ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
@@ -176,22 +203,23 @@ jobs:
         run: |
           echo "Waiting for SonarQube analysis to complete..."
           sleep 10
-          
+
           # Get the analysis ID from the report task file
           if [ -f ".sonarqube/out/.sonar/report-task.txt" ]; then
             ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' .sonarqube/out/.sonar/report-task.txt)
             echo "Analysis ID: $ANALYSIS_ID"
-            
+
             # Poll for task completion
             MAX_ATTEMPTS=60
             ATTEMPT=0
+
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
               STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" | \
-                jq -r '.task.status')
-              
-              echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS - Status: $STATUS"
-              
+                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" \
+                | jq -r '.task.status')
+
+              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS - Status: $STATUS"
+
               if [ "$STATUS" = "SUCCESS" ]; then
                 echo "✅ Analysis completed successfully"
                 break
@@ -199,31 +227,45 @@ jobs:
                 echo "❌ Analysis failed with status: $STATUS"
                 exit 1
               fi
-              
+
               sleep 5
-              ATTEMPT=$((ATTEMPT+1))
+              ATTEMPT=$((ATTEMPT + 1))
             done
-            
+
             if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
               echo "❌ Timeout waiting for analysis to complete"
               exit 1
             fi
-            
-            # Check Quality Gate status
-            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" | \
-              jq -r '.projectStatus.status')
-            
+
+            echo "===== Quality Gate Response ====="
+
+            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+
+            echo "$QG_RESPONSE" | jq
+
+            QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status')
+
             echo "Quality Gate Status: $QG_STATUS"
-            
+
             if [ "$QG_STATUS" != "OK" ]; then
-              echo "❌ Quality Gate failed with status: $QG_STATUS"
+              echo ""
+              echo "❌ Quality Gate FAILED"
+              echo ""
+              echo "Failed conditions:"
+
+              echo "$QG_RESPONSE" | jq -r '
+                .projectStatus.conditions[]
+                | select(.status == "ERROR")
+                | "- \(.metricKey): actual=\(.actualValue // "N/A"), required=\(.errorThreshold // "N/A")"
+              '
+
               exit 1
             fi
-            
+
             echo "✅ Quality Gate passed!"
           else
-            echo "❌ Report task file not found"
+            echo "❌ SonarQube report-task.txt not found"
             exit 1
           fi
 

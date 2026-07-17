@@ -29,9 +29,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
             var logConfig = new LoggerConfiguration()
                 .Enrich.FromLogContext()
                 
-                //.WriteTo.File();
-             .WriteTo.Elasticsearch(elasticOptions); //TODO: rewrite to file
-
+             .WriteTo.Elasticsearch(elasticOptions); 
             if (options.Value.LogToFile)
             {
                 logConfig = logConfig.WriteTo.File(@"logs/log-{Date}.txt", rollingInterval: RollingInterval.Day);
@@ -91,7 +89,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.LoggingService
 
     public class SerilogServiceOptions
     {
-        public string ElasticUrls { get; set; } = "http://elastic.cyberpay.ng";
+        public string? ElasticUrls { get; set; }
         public string ElasticIndex { get; set; } = "agrovesto-trade";
         public bool LogToFile { get; set; } = true;
     }

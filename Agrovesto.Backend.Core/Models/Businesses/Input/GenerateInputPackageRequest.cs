@@ -298,7 +298,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class PagedResult<T>
     {
-        public List<T> Items { get; set; }
+        public List<T>? Data { get; set; }
         public int Count { get; set; }
 
         public int PageNumber { get; set; }

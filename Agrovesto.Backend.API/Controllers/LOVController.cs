@@ -11,6 +11,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.LocationService;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -86,7 +87,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -124,7 +125,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -162,7 +163,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -199,7 +200,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -236,7 +237,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -276,7 +277,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -315,7 +316,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -355,7 +356,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }
@@ -394,7 +395,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
             }

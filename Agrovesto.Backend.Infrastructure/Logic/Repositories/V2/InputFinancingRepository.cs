@@ -544,7 +544,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<InputPackageListModel>
             {
-                Items = data.Select(x => new InputPackageListModel
+                Data = data.Select(x => new InputPackageListModel
                 {
                     Id = x.Id,
                     Name = x.Name,
@@ -699,7 +699,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<RepaymentBreakdownDto>
             {
-                Items = items,
+                Data = items,
                 PageNumber = pageNumber,
                 PageSize = pageSize,
                 Count = totalCount,
@@ -2484,7 +2484,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             {
                 return new PagedResult<SubscriptionDetailDto>
                 {
-                    Items = [],
+                    Data = [],
                     Count = 0,
                     PageNumber = pageNumber,
                     PageSize = pageSize
@@ -2580,7 +2580,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<SubscriptionDetailDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3129,7 +3129,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<InputObligationDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3279,7 +3279,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<FinancingBreakdownDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3446,7 +3446,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<RepaymentBreakdownDto>
             {
-                Items = result,
+                Data = result,
                 Count = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -4067,7 +4067,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<EopDto>
             {
-                Items = items,
+                Data = items,
                 Count = totalCount,
                 PageNumber = request.Page,
                 PageSize = request.PageSize

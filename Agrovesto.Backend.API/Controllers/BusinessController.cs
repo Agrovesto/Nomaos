@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -45,7 +46,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<OrganizationModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -100,7 +101,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
-                var isAdmin = CurrentUserRole;
+                
 
                 var createMerchant = await _businessManager.CreateOrganization(model, args);
 
@@ -108,7 +109,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
                 });
 
@@ -197,7 +198,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<SubAccountModel>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success
                 });
@@ -613,7 +614,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = registerUser
                 });
 
@@ -813,7 +814,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = registerUser
                 });
 
@@ -874,7 +875,7 @@ namespace Agrovesto.Backend.API.Controllers
                     {
                         Code = ResponseCodes.Success,
                         Succeeded = true,
-                        Message = "Successful",
+                        Message = ResponseMessages.Successful,
                         Data = model
                     });
 
@@ -964,7 +965,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = saveFarmerFace
                 });
 
@@ -993,7 +994,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("onboard-business")]
         public async Task<IActionResult> CreateMerchant([FromBody] BusinessModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             //  if (isAdmin == null || !isAdmin.Equals("Admin")) throw new Exception("Forbidden");
 
 
@@ -1021,7 +1022,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.BusinessName} Successfully Onboarded"
                 });
 
@@ -1126,10 +1127,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-staff")]
         public async Task<IActionResult> CreateBusinessWorker([FromBody] BusinessWorkerModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-
-
+            
             if (!ModelState.IsValid)
             {
 
@@ -1159,7 +1157,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = createWorker
                 });
 
@@ -1186,9 +1184,8 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-role")]
         public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
-
+            
+            
             if (!ModelState.IsValid)
             {
 
@@ -1236,8 +1233,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("update-profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] SubAccountModel model, [FromQuery] ParameterArgs args)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
+            
             args.UserId = CurrentUserId;
             if (!ModelState.IsValid)
             {
@@ -1286,12 +1282,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("roles")]
         public async Task<IActionResult> GetRoles()
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || (!isAdmin.Equals("Business"))) return StatusCode(403, new Response<string>
-            {
-                Message = "Forbidden",//"An unexpected error occurred. Please contact your administrator.",
-                Succeeded = false,
-            });
+           
             try
             {
                 var data = await _roleManager.GetRolesByBusinessAsync(CurrentUserId);
@@ -1957,7 +1948,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new Response<FarmerDetailDto>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded =true,
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success 
                 });
