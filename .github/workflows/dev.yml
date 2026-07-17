@@ -117,7 +117,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd
         with:
           fetch-depth: 0
 
@@ -139,9 +139,8 @@ jobs:
           dotnet --version
 
       # ============================================================
-      # 📦 CACHING STRATEGY (Multi-layer)
+      # 📦 CACHING
       # ============================================================
-
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
@@ -156,21 +155,18 @@ jobs:
         with:
           path: ~/.sonar/cache
           key: sonar-scanner-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
-          restore-keys: |
-            sonar-scanner-${{ runner.os }}
+          restore-keys: sonar-scanner-${{ runner.os }}
 
       - name: Cache dotnet tools
         uses: actions/cache@v4
         with:
           path: ~/.dotnet/tools
           key: dotnet-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
-          restore-keys: |
-            dotnet-tools-${{ runner.os }}-
+          restore-keys: dotnet-tools-${{ runner.os }}-
 
       # ============================================================
-      # 🔧 TOOL INSTALLATION (Parallel where possible)
+      # 🔧 TOOLS
       # ============================================================
-
       - name: Install SonarScanner and Coverage tools
         run: |
           dotnet tool install --global dotnet-sonarscanner --version 7.1.0 || true
@@ -178,9 +174,8 @@ jobs:
           echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
 
       # ============================================================
-      # 📊 PROJECT METADATA
+      # 📊 METADATA
       # ============================================================
-
       - name: Get project version
         shell: bash
         run: |
@@ -192,19 +187,14 @@ jobs:
           echo "📦 Project version: $VERSION"
 
       # ============================================================
-      # 🏗️ BUILD & TEST PHASE
+      # 🏗️ RESTORE (only step allowed before sonar begin)
       # ============================================================
-
       - name: Restore dependencies
         run: dotnet restore ${{ env.SOLUTION_PATH }}
 
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
       # ============================================================
-      # 🔍 SONARQUBE ANALYSIS
+      # 🔍 SONAR BEGIN ── MUST come BEFORE build
       # ============================================================
-
       - name: Begin SonarQube Analysis
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -218,17 +208,26 @@ jobs:
             /d:sonar.cs.vstest.reportsPaths="TestResults/*.trx" \
             /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
-            /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
-            /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+            /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/*Test/**,**/Program.cs,**/Startup.cs" \
+            /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**,**/*Test/**"
 
+      # ============================================================
+      # 🏗️ BUILD (instrumented by Sonar)
+      # ============================================================
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION_PATH }} --configuration Release --no-restore
+
+      # ============================================================
+      # 🧪 TEST (uses build output — NO --no-build here would rebuild without instrumentation, so keep --no-build)
+      # ============================================================
       - name: Test with Coverage
-        run: >-
-          dotnet test ${{ env.SOLUTION_PATH }}
-          --configuration Release
-          --no-build
-          --logger "trx"
-          --collect:"XPlat Code Coverage;Format=opencover"
-          --results-directory ./TestResults
+        run: |
+          dotnet test ${{ env.SOLUTION_PATH }} \
+            --configuration Release \
+            --no-build \
+            --logger "trx" \
+            --collect:"XPlat Code Coverage;Format=opencover" \
+            --results-directory ./TestResults
 
       - name: Verify Coverage Files
         if: always()
@@ -237,15 +236,17 @@ jobs:
           find TestResults -name "*.opencover.xml" 2>/dev/null || echo "⚠️ No coverage files found"
           find TestResults -name "*.trx" 2>/dev/null || echo "⚠️ No TRX files found"
 
+      # ============================================================
+      # 🔍 SONAR END
+      # ============================================================
       - name: End SonarQube Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
       # ============================================================
-      # 🎯 SONARQUBE QUALITY GATE CHECK (Optimized)
+      # 🎯 QUALITY GATE CHECK
       # ============================================================
-
       - name: Check SonarQube Quality Gate
         id: quality-gate
         env:
@@ -254,7 +255,6 @@ jobs:
         run: |
           echo "🔍 Waiting for SonarQube analysis to complete..."
 
-          # Get analysis ID
           if [ ! -f ".sonarqube/out/.sonar/report-task.txt" ]; then
             echo "❌ SonarQube report-task.txt not found"
             exit 1
@@ -263,10 +263,8 @@ jobs:
           ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' .sonarqube/out/.sonar/report-task.txt)
           echo "📋 Analysis ID: $ANALYSIS_ID"
 
-          # Poll for task completion (optimized with exponential backoff)
           MAX_ATTEMPTS=40
           ATTEMPT=0
-          BASE_DELAY=3
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
@@ -276,47 +274,25 @@ jobs:
             echo "⏳ Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS - Status: $STATUS"
 
             case "$STATUS" in
-              SUCCESS)
-                echo "✅ Analysis completed successfully"
-                break
-                ;;
-              FAILED|CANCELED)
-                echo "❌ Analysis failed with status: $STATUS"
-                exit 1
-                ;;
-              UNKNOWN)
-                echo "⚠️ Unable to query SonarQube API"
-                sleep $BASE_DELAY
-                ;;
-              *)
-                # Exponential backoff with cap at 10s
-                DELAY=$(( BASE_DELAY * (2 ** ATTEMPT) ))
-                DELAY=$(( DELAY > 10 ? 10 : DELAY ))
-                sleep $DELAY
-                ;;
+              SUCCESS) echo "✅ Analysis completed"; break ;;
+              FAILED|CANCELED) echo "❌ Analysis $STATUS"; exit 1 ;;
+              *) sleep 5 ;;
             esac
-
             ATTEMPT=$((ATTEMPT + 1))
           done
 
           if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-            echo "❌ Timeout waiting for analysis to complete"
+            echo "❌ Timeout waiting for analysis"
             exit 1
           fi
 
-          # Check Quality Gate
-          echo "📊 Fetching Quality Gate status..."
           QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
             "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
-
           QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status')
-          echo "🎯 Quality Gate Status: $QG_STATUS"
+          echo "🎯 Quality Gate: $QG_STATUS"
 
           if [ "$QG_STATUS" != "OK" ]; then
-            echo ""
             echo "❌ Quality Gate FAILED"
-            echo ""
-            echo "Failed conditions:"
             echo "$QG_RESPONSE" | jq -r '
               .projectStatus.conditions[]
               | select(.status == "ERROR")
@@ -325,12 +301,10 @@ jobs:
           fi
 
           echo "✅ Quality Gate passed!"
-          echo "quality_gate_passed=true" >> "$GITHUB_OUTPUT"
 
       # ============================================================
-      # 🚀 DEPLOYMENT PHASE (Only after Quality Gate passes)
+      # 🚀 DEPLOYMENT
       # ============================================================
-
       - name: Publish artifact
         run: |
           dotnet publish ${{ env.PROJECT_PATH }} \
@@ -338,6 +312,7 @@ jobs:
             --runtime linux-x64 \
             --framework net8.0 \
             --self-contained true \
+            --no-restore \
             --output ${{ env.PUBLISH_DIR }} \
             /p:PublishTrimmed=false \
             /p:PublishSingleFile=false \
@@ -349,10 +324,6 @@ jobs:
           echo "${{ env.VERSION }}" > ${{ env.PUBLISH_DIR }}/.version
           echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > ${{ env.PUBLISH_DIR }}/.deployed-at
           echo "✅ Deployment metadata created"
-
-      # ============================================================
-      # 🔐 SSH SETUP & DEPLOYMENT
-      # ============================================================
 
       - name: Setup SSH Agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -383,7 +354,6 @@ jobs:
 
       - name: Verify artifact on server
         run: |
-          echo "🔍 Verifying deployment artifact..."
           REMOTE_SHA=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo 'NOT_FOUND'")
           if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
@@ -414,24 +384,14 @@ jobs:
           echo "❌ Health check failed after 10 attempts"
           exit 1
 
-      # ============================================================
-      # 📝 DEPLOYMENT SUMMARY
-      # ============================================================
-
       - name: Deployment Summary
         if: success()
         run: |
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "✅ DEPLOYMENT SUCCESSFUL"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "📦 Version: ${{ env.VERSION }}"
           echo "🔖 Commit: ${{ env.COMMIT_SHA }}"
           echo "🕐 Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           echo "🌍 Environment: Staging"
-          echo "🔗 URL: https://dev-noma-api.nomaos.com/health"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-      - name: Cleanup old releases
-        if: success()
-        run: |
-          echo "🧹 Old releases cleanup is handled by deploy-staging.sh on the server"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
