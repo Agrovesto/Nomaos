@@ -24,14 +24,10 @@ namespace Agrovesto.Backend.API.Controllers
     public class BaseController : ControllerBase
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
-        public const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+        protected const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
-        public static readonly HashSet<string> AllowedExtensions =
-            new(StringComparer.OrdinalIgnoreCase)
-            {
-        ".xlsx", ".xls",
-        ".csv"
-            };
+        protected static readonly IReadOnlySet<string> AllowedExtensions =
+     new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".xlsx", ".xls", ".csv" };
         public BaseController(IHttpContextAccessor httpContextAccessor)
         {
             _httpContextAccessor = httpContextAccessor;
@@ -57,18 +53,20 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         // For endpoints that always report Succeeded = true and derive Code from data presence
-        protected Response<T> Wrap<T>(T data, string successMessage = null, string notFoundMessage = null)
+        protected Response<T> Wrap<T>(T data, string? successMessage = null, string? notFoundMessage = null)
         {
+            bool hasValue = !EqualityComparer<T>.Default.Equals(data, default);
+
             return new Response<T>
             {
-                Code = data != null ? ResponseCodes.Success : ResponseCodes.Failed,
+                Code = hasValue ? ResponseCodes.Success : ResponseCodes.Failed,
                 Succeeded = true,
-                Message = data != null ? (successMessage ?? ResponseMessages.Successful) : (notFoundMessage ?? "No record found"),
+                Message = hasValue ? (successMessage ?? ResponseMessages.Successful) : (notFoundMessage ?? "No record found"),
                 Data = data
             };
         }
 
-        protected PagedListResponse<List<T>> WrapPaged<T>(PagedListResponse<List<T>> result, int pageNumber, int pageSize, string message = null)
+        protected PagedListResponse<List<T>> WrapPaged<T>(PagedListResponse<List<T>> result, int pageNumber, int pageSize, string? message = null)
         {
             return new PagedListResponse<List<T>>
             {
@@ -119,7 +117,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Error("FILE_EMPTY", "This file doesn't contain any membership records to upload.");
 
             var validationErrors = await validator.ValidateAllAsync(rows, args);
-            if (validationErrors.Any())
+            if (validationErrors.Count > 0)
             {
                 return UnprocessableEntity(new ApiErrorResponse
                 {
@@ -188,7 +186,7 @@ namespace Agrovesto.Backend.API.Controllers
                     StatusCodes.Status500InternalServerError);
             }
         }
-        public IActionResult? ValidateUploadFile(IFormFile file)
+        protected IActionResult? ValidateUploadFile(IFormFile file)
         {
             if (file is null || file.Length == 0)
                 return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
@@ -204,7 +202,6 @@ namespace Agrovesto.Backend.API.Controllers
 
             return null;
         }
-        // Single-item version of ExecuteAsync (no paging)
         protected async Task<IActionResult> ExecuteAsync<T>(
             Func<Task<T>> action,
             Func<T, IActionResult> onSuccess)
@@ -224,7 +221,6 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        // Small helper for wrapping a successful single-item response
         protected Response<T> Success<T>(T data, string message = null, string code = ResponseCodes.Success)
         {
             return new Response<T>
@@ -252,7 +248,7 @@ namespace Agrovesto.Backend.API.Controllers
                     : Core.CoreUtils.Constants.ResponseCodes.Failed
             };
         }
-        public IActionResult ValidationProblemResponse()
+        protected IActionResult ValidationProblemResponse()
         {
             return BadRequest(new Response<Dictionary<string, string>>()
             {
@@ -268,7 +264,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
         }
-        public ObjectResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
+        protected ObjectResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
         {
             return StatusCode(statusCode, new ApiErrorResponse
             {
@@ -402,7 +398,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return string.Empty;
             }
         }
-        public void NormalizeOrganizationCode(OnBoardingArgs args)
+        protected void NormalizeOrganizationCode(OnBoardingArgs args)
         {
             if (!string.IsNullOrEmpty(OrganizationCode) &&
                 string.IsNullOrEmpty(args.organizationCode))

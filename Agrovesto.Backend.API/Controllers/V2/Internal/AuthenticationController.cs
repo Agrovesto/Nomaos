@@ -136,7 +136,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("login")]
         [AllowAnonymous]
-        public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string? businessCode)
+        public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string businessCode)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();

@@ -714,14 +714,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
 
-        private void NormalizeOrganizationCode(OnBoardingArgs args)
-        {
-            if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
-            {
-                args.organizationCode = OrganizationCode;
-            }
-        }
+      
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
             if (args.Id != 0) return;
