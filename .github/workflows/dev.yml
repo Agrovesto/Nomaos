@@ -159,7 +159,7 @@ jobs:
           dotnet test ${{ env.TEST_PROJECT_PATH }} \
             --configuration Release \
             --logger "trx" \
-            --collect:"XPlat Code Coverage;Format=opencover" \            
+            --collect:"XPlat Code Coverage;Format=opencover" \      
             --results-directory TestResults
 
           echo "Generated files:"          
