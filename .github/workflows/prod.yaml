@@ -170,7 +170,7 @@ jobs:
       - name: Verify artifact on server
         run: |
           REMOTE_SHA=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/PROD/null || echo 'NOT_FOUND'")
+            "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo 'NOT_FOUND'")
           if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
             echo "✅ SHA verified on server: $REMOTE_SHA"
           else
