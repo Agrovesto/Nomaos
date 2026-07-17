@@ -130,43 +130,17 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmer-transaction")]
         public async Task<IActionResult> GetFarmerTransaction([FromQuery] TransactionQueryParams query)
         {
-            try
-            {
+            
                 if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
                 {
                     query.organizationCode = OrganizationCode;
                 }
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _farmerTransactionManager.GetTransactionByFarmer(query.FarmerId, query);
-                return Ok(new PagedListResponse<List<FarmerSalesTrackerModel>>()
-                {
-                    Data = result.Data,
-                    Message = result.Message,
-                    Succeeded = result.Succeeded,
-                    Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
-                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
+                return await ExecuteAsync(
+        () => _farmerTransactionManager.GetTransactionByFarmer(query.FarmerId, query),
+        result => Ok(BuildPagedResponse(result, query.PageNumber))
+    );
+            
 
         }
 

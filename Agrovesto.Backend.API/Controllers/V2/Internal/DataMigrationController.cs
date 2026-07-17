@@ -1,6 +1,5 @@
 ﻿using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal

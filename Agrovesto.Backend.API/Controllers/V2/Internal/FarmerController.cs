@@ -6,14 +6,10 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
-using Agrovesto.Backend.Core.Models.Payment;
-using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -42,179 +38,73 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-
-               
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _businessManager.GetFarmerDashboard(query);
-                return Ok(new Response<FarmerDashboardDto>()
-                {
-                    Data = result,
-                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = result != null ? true : false,
-
-                    Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+            return await ExecuteAsync(
+              () =>
+              {
+                  query.organizationCode = query.organizationCode ?? OrganizationCode;
+                  query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                  return _businessManager.GetFarmerDashboard(query);
+              },
+              result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
 
         [HttpGet("memberships")]
         public async Task<IActionResult> GetFarmerMemberships([FromQuery] ListQueryParams query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+            return await ExecuteAsync(
+                        () =>
                 {
-                    query.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-
-
-                var result = await _businessManager.GetMembershipsByFarmer(query);
-                return Ok(new PagedListResponse<List<FarmerMembershipSummaryDto>>()
-                {
-                    Data = result,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+                            query.organizationCode = query.organizationCode ?? OrganizationCode;
+                            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                            return _businessManager.GetMembershipsByFarmer(query);
+                },
+                result => Ok(new PagedListResponse<List<FarmerMembershipSummaryDto>>
+                        {
+                            Data = result,
+                            Message = ResponseMessages.Successful,
+                            Succeeded = true,
+                            Count = result.Count,
+                            PageNumber = query.PageNumber,
+                            PageSize = 10,
+                            Code = ResponseCodes.Success
+                        }));
         }
       
         [HttpGet("membership-detail")]
         public async Task<IActionResult> GetMembershipDetail([FromQuery] ListQueryParams query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-                if (string.IsNullOrEmpty(query.UserId))
-                {
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "Membership UserId is required.",
-                        Succeeded = false
-                    });
+            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            if (RequireField(query.UserId, "Membership UserId") is { } error) return error;
 
-                }
-
-
-                var result = await _businessManager.GetFarmerMembershipDetails(query);
-                return Ok(new Response<FarmerMembershipOverviewDto>()
+            return await ExecuteAsync(
+                () => _businessManager.GetFarmerMembershipDetails(query),
+                result => Ok(new Response<FarmerMembershipOverviewDto>
                 {
                     Data = result,
                     Message = ResponseMessages.Successful,
                     Succeeded = true,
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+                    Code = ResponseCodes.Success
+                }));
         }
 
         [HttpGet("wallets")]
         public async Task<IActionResult> GetWallets([FromQuery] UserWalletParams query)
         {
-            try
-            {
-
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-                var result = await _walletService.GetUserWallletsByUserId(query);
-                return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
-                {
-                    Data = result.Data,
-                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
-                    Succeeded = true,
-                    Count = result.Count,
-                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
+            return await ExecuteAsync(
+             () =>
+             {
+                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                 return _walletService.GetUserWallletsByUserId(query);
+             },
+             result => Ok(new PagedListResponse<List<UserWalletResponseModel>>
+             {
+                 Data = result.Data,
+                 Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
+                 Succeeded = true,
+                 Count = result.Count,
+                 Code = result.Count > 0 ? ResponseCodes.Success : ResponseCodes.Failed
+             }));
         }
 
         [HttpPost("create-wallet")]
@@ -233,57 +123,23 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             if (string.IsNullOrWhiteSpace(query.businessCode))
                 return BadRequest("BusinessCode is required");
-            if (string.IsNullOrEmpty(query.UserId))
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
+
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
                 {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = new Dictionary<string, string>
-                    {
-                            { "UserId", "UserId is required" }
-                    }
-
-                });
-            }
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-
-                var wallet = await _walletService.CreateWallet(request, query);
-
-                return Ok(new Response<(bool status, string message)>()
+                    if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
+                        query.organizationCode = OrganizationCode;
+                    return _walletService.CreateWallet(request, query);
+                },
+                wallet => Ok(new Response<(bool status, string message)>
                 {
                     Data = wallet,
-
-
                     Message = wallet.message,
                     Succeeded = wallet.status,
-
-                    Code = wallet.status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
+                    Code = wallet.status ? ResponseCodes.Success : ResponseCodes.Failed
+                }));
 
         }
 
@@ -291,208 +147,72 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("wallet-summary")]
         public async Task<IActionResult> GetUserFinancialSummary([FromQuery] UserWalletParams query)
         {
-            try
-            {
-
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                var result = await _walletService.GetUserFinancialSummary(query);
-                return Ok(new PagedListResponse<FarmerFinancialSummaryDto>()
-                {
-                    Data = result,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
+            return await ExecuteAsync(
+             () =>
+             {
+                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                 return _walletService.GetUserFinancialSummary(query);
+             },
+             result => Ok(new PagedListResponse<FarmerFinancialSummaryDto>
+             {
+                 Data = result,
+                 Message = ResponseMessages.Successful,
+                 Succeeded = true,
+                 Code = ResponseCodes.Success
+             }));
         }
 
         [HttpPost("wallet-topup")]
         public async Task<IActionResult> TopUpWallet([FromBody] TopUpWalletRequest request, [FromQuery] WalletQueryParams args)
         {
-            try
-            {
-                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                var response = await _walletService.TopUpWallet(request, args);
-                return Ok(new Response<ProviderResponse>()
-                {
-                    Data = response,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-           
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+            return await ExecuteAsync(
+                        () =>
+                        {
+                            args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                            return _walletService.TopUpWallet(request, args);
+                        },
+                        response => Ok(Success(response, ResponseMessages.Successful)));
         }
 
         [HttpPost("wallet-withdraw")]
         public async Task<IActionResult> WithdrawWallet([FromBody] WithdrawWalletRequest request, [FromQuery] WalletQueryParams args)
         {
-            try
-            {
-                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                var response = await _walletService.WithdrawWallet(request, args);
-                return Ok(new Response<ProviderResponse>()
-                {
-                    Data = response,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
-                });
-            }
-
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+            return await ExecuteAsync(
+             () =>
+             {
+                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                 return _walletService.WithdrawWallet(request, args);
+             },
+             response => Ok(Success(response, ResponseMessages.Successful)));
         }
       
         [HttpGet("farms")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
-                if (string.IsNullOrEmpty(query.userId))
-                {
 
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "User Id is required.",
-                        Succeeded = false
-                    });
-                }
+            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
+
+            if (RequireField(query.userId, "User Id") is { } error) return error;
+
+            return await ExecuteAsync(async () =>
+            {
                 await EnrichFarmerAsync(query);
-
-                var result = await _farmMappingManager.FetchFarmsByFarmer(query);
-                return Ok(new Response<List<FarmListRespopnseObject>>()
-                {
-                    Data = result,
-                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = result != null,
-                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
+                return await _farmMappingManager.FetchFarmsByFarmer(query);
+            },
+            result => Ok(Wrap(result)));
         }
         [HttpGet("farm-details")]
         public async Task<IActionResult> FetchFarmDetails([FromQuery] FarmMappingArgs query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-                if (query.farmId <= 0)
-                {
+            query.organizationCode = query.organizationCode ?? OrganizationCode;
 
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "Farm Id is required.",
-                        Succeeded = false
-                    });
-                }
+            if (query.farmId <= 0)
+                return BadRequest(new Response<string> { Message = "Farm Id is required.", Succeeded = false });
 
-
-
-                var result = await _farmMappingManager.FetchFarmDetails(query);
-                return Ok(new Response<FarmDetailsResponse>()
-                {
-                    Data = result,
-
-                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = result != null,
-                    Code = (result != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+            return await ExecuteAsync(
+                () => _farmMappingManager.FetchFarmDetails(query),
+                result => Ok(Wrap(result)));
         }
 
         [HttpPost("add-farm")]
@@ -502,189 +222,79 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
 
-            try
+            query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
+            if (RequireField(query.userId, "User Id") is { } error) return error;
+
+            return await ExecuteAsync(async () =>
             {
                 query.performedByUserId = CurrentUserId;
                 NormalizeOrganizationCode(query);
-                query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
-                if (string.IsNullOrEmpty(query.userId))
-                {
-
-                    return BadRequest(new Response<string>
-                    {
-                        Message = "User Id is required.",
-                        Succeeded = false
-                    });
-                }
                 await EnrichFarmerAsync(query);
-
-
-                var request = await _farmMappingManager.SubmitFarmAsync(model, query);
-
-
-                return Ok(new Response<long>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = request < 1 ? ResponseMessages.Successful : ResponseMessages.Failed,
-                    Data = request
-                });
-
-
-            }
-            catch (BaseException ex)
+                return await _farmMappingManager.SubmitFarmAsync(model, query);
+            },
+            request => Ok(new Response<long>
             {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
-
+                Code = ResponseCodes.Success,
+                Succeeded = true,
+                Message = request < 1 ? ResponseMessages.Successful : ResponseMessages.Failed,
+                Data = request
+            }));
         }
 
         [HttpGet("agents")]
         public async Task<IActionResult> GetAgentsByFarmer([FromQuery] ListQueryParams query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-
-
-                var result = await _businessManager.GetAgentsByFarmer(query);
-                return Ok(new PagedListResponse<List<AgentMembershipDto>>()
-                {
-                    Data = result.Data,
-                    Message = result.Message,
-                    Succeeded = result.Succeeded,
-                    Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
-                    Code = (result.Succeeded && result.Data != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+            return await ExecuteAsync(
+                        () =>
+                        {
+                            query.organizationCode = query.organizationCode ?? OrganizationCode;
+                            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                            return _businessManager.GetAgentsByFarmer(query);
+                        },
+                        result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
         }
       
         [HttpGet("user-wallet-transaction")]
         public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
         {
-            try
-            {
-
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-                var result = await _walletService.GetUserWalletTransaction(query);
-                return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
-                {
-                    Data = result.Data,
-                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = true,
-                    Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
-                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+            return await ExecuteAsync(
+                       () =>
+                       {
+                           query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                           return _walletService.GetUserWalletTransaction(query);
+                       },
+                       result => Ok(new PagedListResponse<List<FarmerTransactionDto>>
+                       {
+                           Data = result.Data,
+                           Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
+                           Succeeded = true,
+                           Count = result.Count,
+                           PageNumber = query.PageNumber,
+                           PageSize = 10,
+                           Code = result.Count > 0 ? ResponseCodes.Success : ResponseCodes.Failed
+                       }));
         }
 
         [HttpGet("input-obligations")]
         public async Task<IActionResult> GetFarmerInputObligations([FromQuery] ListQueryParams query)
         {
-            try
-            {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                var currentRole = CurrentUserRole;
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-
-
-
-                var result = await _farmerTransactionManager.GetFarmerInputObligations(query);
-                return Ok(new PagedListResponse<List<InputObligationDto>>()
-                {
-                    Data = result.Items,
-                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = true,
-                    Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
-                    Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-
-
+            return await ExecuteAsync(
+                       () =>
+                       {
+                           query.organizationCode = query.organizationCode ?? OrganizationCode;
+                           query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                           return _farmerTransactionManager.GetFarmerInputObligations(query);
+                       },
+                       result => Ok(new PagedListResponse<List<InputObligationDto>>
+                       {
+                           Data = result.Data,
+                           Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
+                           Succeeded = true,
+                           Count = result.Count,
+                           PageNumber = query.PageNumber,
+                           PageSize = 10,
+                           Code = result.Count > 0 ? ResponseCodes.Success : ResponseCodes.Failed
+                       }));
         }
 
         private void NormalizeOrganizationCode(FarmMappingArgs args)

@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
             {
                 Succeeded = true,
                 Message = message,
-                Data = (T)(object)paged.Items,
+                Data = (T)(object)paged.Data,
 
                 Count = paged.Count,
                 PageNumber = paged.PageNumber,
