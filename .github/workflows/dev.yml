@@ -155,16 +155,14 @@ jobs:
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
         run: |
-          dotnet-coverage collect --output coverage.xml --output-format xml -- \
-            "dotnet test ${{ env.TEST_PROJECT_PATH }} \
-             --configuration Release \
-             --no-build \
-             --verbosity normal" \
+          dotnet-coverage collect \
+            "dotnet test ${{ env.TEST_PROJECT_PATH }} --configuration Release --no-build --verbosity normal" \
+            --output coverage.xml \
+            --output-format xml
 
           ls -lh coverage.xml
 
           echo "✅ Coverage report generated"
-
       ###### ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
         env:
