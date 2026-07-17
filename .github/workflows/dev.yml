@@ -23,7 +23,7 @@ jobs:
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: 8.0.416
 
     steps:
       - name: Checkout
@@ -41,7 +41,7 @@ jobs:
           cat > global.json << 'EOF'
           {
             "sdk": {
-              "version": "8.0.100",
+              "version": "8.0.416",
               "rollForward": "latestFeature"
             }
           }
@@ -88,7 +88,7 @@ jobs:
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: 8.0.416
 
     steps:
       - name: Checkout
@@ -106,7 +106,7 @@ jobs:
           cat > global.json << 'EOF'
           {
             "sdk": {
-              "version": "8.0.100",
+              "version": "8.0.416",
               "rollForward": "latestFeature"
             }
           }
