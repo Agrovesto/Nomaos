@@ -155,7 +155,7 @@ jobs:
       - name: Create release directory on server
         run: |
           ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+            "sudo mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
 
       - name: Rsync artifact to EC2 (incoming staging area)
         run: |
