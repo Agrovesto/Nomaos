@@ -162,8 +162,7 @@ jobs:
             --collect:"XPlat Code Coverage;Format=opencover" \            
             --results-directory TestResults
 
-          echo "Generated files:"
-          
+          echo "Generated files:"          
           find TestResults -type f
         continue-on-error: true
 
