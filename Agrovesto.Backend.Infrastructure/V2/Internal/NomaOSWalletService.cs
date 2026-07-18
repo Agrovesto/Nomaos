@@ -168,8 +168,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     : WalletContextType.Organization;
 
                 var contextReferenceId = contextType == WalletContextType.Personal
-                    ? args.UserId
-                    : args.organizationCode;
+                    ? $"{args.UserId}-{request.WalletProviderCode}"
+                    : $"{args.organizationCode}-{request.WalletProviderCode}";
 
                 var providerParams = await RetrieveParams(request.WalletProviderCode, args.env, args.businessCode);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();

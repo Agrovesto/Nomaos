@@ -684,5 +684,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 _ => "Unknown status"
             };
         }
+
+        public Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiry(UserProfileResponse data, WalletProviderParameterModel[] parameters, string env)
+        {
+            throw new NotImplementedException();
+        }
     }
 }
