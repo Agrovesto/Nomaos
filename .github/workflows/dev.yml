@@ -23,7 +23,7 @@ jobs:
     env:
       PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
       TEST_PROJECT_PATH: Agrovesto.Backend.Tests/Agrovesto.Backend.Tests.csproj
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: 8.0.416
 
     steps:
       - name: Checkout
@@ -35,6 +35,18 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.416",
+              "rollForward": "latestFeature"
+            }
+          }
+          EOF
+          dotnet --version
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -61,7 +73,6 @@ jobs:
           name: Test Results
           path: '**/test-results.trx'
           reporter: dotnet-trx
-        continue-on-error: true
 
   # ============================================================
   # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
@@ -77,7 +88,7 @@ jobs:
       SONAR_PROJECT_KEY: Agrovesto.Backend.API
       PUBLISH_DIR: ${{ github.workspace }}/publish
       COMMIT_SHA: ${{ github.sha }}
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: 8.0.416
 
     steps:
       - name: Checkout
@@ -89,6 +100,18 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.416",
+              "rollForward": "latestFeature"
+            }
+          }
+          EOF
+          dotnet --version
 
       # ✅ OPTIMIZED CACHING
       - name: Cache NuGet packages
@@ -124,9 +147,15 @@ jobs:
 
       # ✅ GET VERSION
       - name: Get project version
+        shell: bash
         run: |
-          VERSION=$(grep -oP '<Version>\K[^<]+' ${{ env.PROJECT_PATH }} | head -1 || echo "1.0.0")
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ env.PROJECT_PATH }}" || true)
+
+          if [ -z "$VERSION" ]; then
+            VERSION="1.0.${{ github.run_number }}"
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "Project version: $VERSION"
 
       - name: Restore dependencies
@@ -143,7 +172,8 @@ jobs:
             /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
             /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}" \
             /v:"${{ env.VERSION }}" \
-            /d:sonar.cs.vscoveragexml.reportsPaths=coverage.xml \
+            /d:sonar.cs.vstest.reportsPaths="TestResults/*.trx" \
+            /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
@@ -154,21 +184,36 @@ jobs:
 
       # ✅ TEST WITH COVERAGE
       - name: Test & Coverage
-        run: |
-          dotnet test ${{ env.TEST_PROJECT_PATH }} \
-            --configuration Release \
-            --verbosity normal         
-          echo "✅ Tests completed with coverage"
-        continue-on-error: true
-        # Convert coverage to OpenCover format for SonarQube
+        run: >-
+          dotnet test ${{ env.TEST_PROJECT_PATH }}
+          --configuration Release
+          --logger "trx"
+          --collect:"XPlat Code Coverage;Format=opencover"
+          --results-directory ./TestResults
 
-      ###### ✅ END SONARQUBE ANALYSIS
+      # ✅ FIX #3: Debug step must never fail the job (this is what actually killed
+      #    your pipeline after the test step's continue-on-error let it through)
+      - name: Verify Coverage Files
+        if: always()
+        run: |
+          echo "===== ALL FILES ====="
+          find TestResults -type f 2>/dev/null || echo "⚠️ TestResults directory not found"
+
+          echo ""
+          echo "===== OpenCover ====="
+          find TestResults -name "*.opencover.xml" 2>/dev/null || true
+
+          echo ""
+          echo "===== TRX ====="
+          find TestResults -name "*.trx" 2>/dev/null || true
+
+      # ✅ END SONARQUBE ANALYSIS
       - name: End SonarQube
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN_DOTNET }}"
 
-      # 🔧 ALTERNATIVE: Manual Quality Gate Check using SonarQube API
+      # 🔧 Manual Quality Gate Check using SonarQube API
       - name: Check SonarQube Quality Gate (Manual)
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -176,22 +221,23 @@ jobs:
         run: |
           echo "Waiting for SonarQube analysis to complete..."
           sleep 10
-          
+
           # Get the analysis ID from the report task file
           if [ -f ".sonarqube/out/.sonar/report-task.txt" ]; then
             ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' .sonarqube/out/.sonar/report-task.txt)
             echo "Analysis ID: $ANALYSIS_ID"
-            
+
             # Poll for task completion
             MAX_ATTEMPTS=60
             ATTEMPT=0
+
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
               STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" | \
-                jq -r '.task.status')
-              
-              echo "Attempt $((ATTEMPT+1))/$MAX_ATTEMPTS - Status: $STATUS"
-              
+                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}" \
+                | jq -r '.task.status')
+
+              echo "Attempt $((ATTEMPT + 1))/$MAX_ATTEMPTS - Status: $STATUS"
+
               if [ "$STATUS" = "SUCCESS" ]; then
                 echo "✅ Analysis completed successfully"
                 break
@@ -199,31 +245,45 @@ jobs:
                 echo "❌ Analysis failed with status: $STATUS"
                 exit 1
               fi
-              
+
               sleep 5
-              ATTEMPT=$((ATTEMPT+1))
+              ATTEMPT=$((ATTEMPT + 1))
             done
-            
+
             if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
               echo "❌ Timeout waiting for analysis to complete"
               exit 1
             fi
-            
-            # Check Quality Gate status
-            QG_STATUS=$(curl -s -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" | \
-              jq -r '.projectStatus.status')
-            
+
+            echo "===== Quality Gate Response ====="
+
+            QG_RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" \
+              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+
+            echo "$QG_RESPONSE" | jq
+
+            QG_STATUS=$(echo "$QG_RESPONSE" | jq -r '.projectStatus.status')
+
             echo "Quality Gate Status: $QG_STATUS"
-            
+
             if [ "$QG_STATUS" != "OK" ]; then
-              echo "❌ Quality Gate failed with status: $QG_STATUS"
+              echo ""
+              echo "❌ Quality Gate FAILED"
+              echo ""
+              echo "Failed conditions:"
+
+              echo "$QG_RESPONSE" | jq -r '
+                .projectStatus.conditions[]
+                | select(.status == "ERROR")
+                | "- \(.metricKey): actual=\(.actualValue // "N/A"), required=\(.errorThreshold // "N/A")"
+              '
+
               exit 1
             fi
-            
+
             echo "✅ Quality Gate passed!"
           else
-            echo "❌ Report task file not found"
+            echo "❌ SonarQube report-task.txt not found"
             exit 1
           fi
 
@@ -282,13 +342,13 @@ jobs:
           echo "🔍 Verifying deployment artifact..."
           REMOTE_SHA=$(ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo 'NOT_FOUND'")
-          
           if [ "$REMOTE_SHA" = "${{ env.COMMIT_SHA }}" ]; then
             echo "✅ SHA verified on server: $REMOTE_SHA"
           else
             echo "❌ SHA mismatch! Expected: ${{ env.COMMIT_SHA }}, Got: $REMOTE_SHA"
             exit 1
           fi
+
       - name: Swap deployment slot
         run: |
           ssh ubuntu@${{ secrets.EC2_HOST_DEV }} \
@@ -296,11 +356,9 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 10
-          echo "✅ Deployment completed successfully"
-          # Uncomment when ready:
+          sleep 30
           curl -f https://dev-noma-api.nomaos.com/health || exit 1
-        continue-on-error: true
+          echo "✅ Deployment completed successfully"
 
       - name: Deployment Summary
         if: success()
