@@ -31,6 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         // Validate user account
         Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string Env);
         Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiry(UserProfileResponse data, WalletProviderParameterModel[] parameters, string env);
     }
 
 }
