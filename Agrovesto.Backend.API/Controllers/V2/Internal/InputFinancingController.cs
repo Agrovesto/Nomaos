@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -56,29 +57,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
             }
         }
-        //[HttpPost("package/generate-from-eop")]
-        //public async Task<IActionResult> GenerateInputPackageFromEopAsync([FromBody] GenerateInputPackageRequest model, [FromQuery] ListQueryParams args)
-        //{
-        //    if (!ModelState.IsValid)
-        //        return BadRequest(new Response<string> { Succeeded = false, Message = "Validation failed" });
-
-        //    try
-        //    {
-        //        args.organizationCode = args.organizationCode ?? OrganizationCode;
-        //        if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
-
-        //        var result = await _inputFinancingManager.GenerateInputPackageFromEopAsync(model, args);
-        //        return Ok(new Response<bool> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
-        //    }
-        //    catch (BaseException ex)
-        //    {
-        //        return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
-        //    }
-        //}
+     
         [HttpGet("eop")]
         public async Task<IActionResult> GetEopByIdAsync([FromQuery] ListQueryParams args)
         {
@@ -89,7 +68,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 if (args.Id <= 0) return BadRequest(new Response<string> { Message = "EOP Id is required", Succeeded = false });
 
                 var result = await _inputFinancingManager.GetEopByIdAsync(args);
-                return Ok(new Response<EopDto> { Succeeded = result != null, Data = result, Code = ResponseCodes.Success, Message = result != null ? "Successful" : "No record found" });
+                return Ok(new Response<EopDto> { 
+                    Succeeded = result != null, 
+                    Data = result, Code = ResponseCodes.Success,
+
+                    Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
+                });
             }
             catch (BaseException ex)
             {
@@ -313,8 +297,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
        
-        //add-package-input
-
+       
         [HttpDelete("deactivate-package")]
         public async Task<IActionResult> DeactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
@@ -645,6 +628,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 ));
         }
        
+    
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
@@ -902,8 +886,6 @@ HttpContext.TraceIdentifier
 
         //escalate default
         //repay financing
-
-
         //pay commitment fee
         [HttpPost("subscription/commitment/initiate-payment")]
         public async Task<IActionResult> SendCommitmentReminderAsync(
@@ -1103,11 +1085,139 @@ HttpContext.TraceIdentifier
                  HttpContext.TraceIdentifier
                  ));
         }
+        [HttpPost("subscription/record-repayment")]
+        public async Task<IActionResult> RecordRepaymentAsync(
+   [FromQuery] InputSubscriptionRequestArgs filter,
+   [FromBody] RecordRepaymentRequest request)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            await _inputFinancingManager
+                .RecordRepaymentAsync(request, filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processed",
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
+        [HttpPost("subscription/repayment-reminder")]
+        public async Task<IActionResult> SendRepaymentReminder(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            await _inputFinancingManager
+                .SendRepaymentReminderAsync(filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 ResponseMessages.Successful,
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
+        [HttpPost("subscription/repayment-schedule")]
+        public async Task<IActionResult> GetRepaymentScheduleAsync(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentScheduleAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentScheduleItemDto>>.Success(
+                result,
+                 ResponseMessages.Successful,
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+        [HttpGet("subscription/repayment-ledger")]
+
+        public async Task<IActionResult> GetRepaymentLedgerAsync(
+        [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentLedgerAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentLedgerEntryDto>>.SuccessPaged(
+    result,
+    "Successful",
+    ResponseCodes.Success,
+    HttpContext.TraceIdentifier
+));
+        }
+
+        private (bool flowControl, IActionResult value) ValidateAuthorization(SubscriptionQueryFilter filter)
+        {
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                                !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                )));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                )));
+            }
+
+            return (flowControl: true, value: null);
+        }
 
         private string GenerateExportFileName(SubscriptionQueryFilter filter, ExportFormat format)
         {
             var status = filter.ViewType.HasValue
-     ? EnumExtensions.GetDisplayName(filter.ViewType.Value).ToLower()
+     ? Infrastructure.Utilities.EnumExtensions.GetDisplayName(filter.ViewType.Value).ToLower()
      : "all";
 
             var date = DateTime.UtcNow.ToString("ddMMyyyy");
@@ -1116,26 +1226,7 @@ HttpContext.TraceIdentifier
 
             return $"{status}_subscriptions_{date}.{extension}";
         }
-        //subscriber details for
-        //pending commitment (1) endpoint
-
-        //active commitment (2) endpoint
-        //pending approval (3) endpoint // print commission letter
-        //confirm input release (4) endpoint // approve disbursement
-        //subscribe input detail to include subscriber information and package information
-        //send commitment reminder to subscriber (notify agent or membership leader, notification note
-        //escalete default reminder to subscriber (notify agent or membership leader, notification note
         #endregion
-        /**  /api/financing-packages
-/api/subscriptions
-/api/commitments
-/api/input-releases
-/api/repayments
-/api/risk
-/api/reports
-/api/eop
-/api/warehouse
-
-           **/
+      
     }
 }

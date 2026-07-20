@@ -80,6 +80,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, InputSubscriptionRequestArgs args);
         Task<decimal> GetAvailableBalanceAsync(long locationId);
         Task DeductAsync(long locationId, decimal amount, string referenceNumber, string agentUserId);
+        Task<decimal> GetTotalRepaymentPaidAsync(long subscriptionId);
+        Task AddCreditBalanceAsync(long subscriptionId, decimal amount, string reference);
+        Task<decimal> GetUnconsumedCreditBalanceAsync(long subscriptionId);
+        Task<RepaymentReminderDto?> GetRepaymentReminderAsync(long subscriptionId);
+        Task<List<OverdueRepaymentReminderDto>> GetOverdueSchedulesAcrossSubscriptionsAsync();
+        Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(long subscriptionId);
+        Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(long subscriptionId, int pageNumber, int pageSize);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -518,6 +525,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 .Include(x=>x.RepaymentPlan)
                 .Include(x=>x.CommitmentPlan)
                 .Include(x=>x.InputFinancingCategory)
+                .Include(x=>x.Subscriptions)
 
                 .Where(x => x.OrganizationId == request.OrganizationId);
 
@@ -538,13 +546,14 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     RepaymentMode = x.RepaymentPlan != null ? x.RepaymentPlan.RepaymentMode : (InputPackageRepaymentMode?)null,
                     RiskCategory = x.RepaymentPlan != null ? x.RepaymentPlan.RiskCategory : (RiskCategory?)null,
                     x.IsActive,
-                    x.SubScriptionType
+                    x.SubScriptionType,
+                    x.Subscriptions
                 })
                 .ToListAsync();
 
             return new PagedResult<InputPackageListModel>
             {
-                Items = data.Select(x => new InputPackageListModel
+                Data = data.Select(x => new InputPackageListModel
                 {
                     Id = x.Id,
                     Name = x.Name,
@@ -554,7 +563,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CommitmentValue = x.CommitmentValue,
                     RepaymentModel = x.RepaymentMode.HasValue ? EnumExtensions.GetDisplayName(x.RepaymentMode.Value) : null,
                     RiskCategory = x.RiskCategory.HasValue ? EnumExtensions.GetDisplayName(x.RiskCategory.Value) : null,
-                    Subscribers = 0,
+                    Subscribers = x.Subscriptions.Count(),
                     IsActive = x.IsActive,
                     SubscriberType = EnumExtensions.GetDisplayName(x.SubScriptionType)
                 }).ToList(),
@@ -699,7 +708,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<RepaymentBreakdownDto>
             {
-                Items = items,
+                Data = items,
                 PageNumber = pageNumber,
                 PageSize = pageSize,
                 Count = totalCount,
@@ -1062,6 +1071,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         RepaymentEndDate = repayment?.RepaymentEndDate,
                         RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
                         RepaymentMode = repayment?.RepaymentMode ?? default,
+                        RepaymentValue= repayment?.RepaymentValue ?? 0,
 
                         BusinessCode = args.BusinessCode
                     };
@@ -1223,7 +1233,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var payment = new InputPackageSubscriptionPayment
             {
                 SubscriptionId = request.SubscriptionId,
-                PaymentType = PaymentType.Commitment,
+                PaymentType = request.PaymentType,
                 AmountPaid = request.Amount,
                 PaymentChannel = request.PaymentChannel,
                 Status = TransactionStatus.Pending,
@@ -1271,9 +1281,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             await _context.SaveChangesAsync();
         }
+
         public async Task<bool> RecordSuccessfulPaymentAsync(
-      long paymentId,
-      PaymentConfirmationRequest request, string performedBy)
+    long paymentId,
+    PaymentConfirmationRequest request, string performedBy)
         {
             var payment = await _context.InputPackageSubscriptionPayments
                 .Include(x => x.Subscription)
@@ -1302,9 +1313,30 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             var subscription = payment.Subscription;
 
-            /*
-             * Recalculate total successful commitment payments
-             */
+            switch (payment.PaymentType)
+            {
+                case PaymentType.Commitment:
+                    await ApplyCommitmentPaymentEffectsAsync(subscription, payment, performedBy);
+                    break;
+
+                case PaymentType.Repayment:
+                    await ApplyRepaymentEffectsAsync(subscription, payment, performedBy);
+                    break;
+
+                default:
+                    throw new Exception($"Unhandled payment type '{payment.PaymentType}'");
+            }
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        private async Task ApplyCommitmentPaymentEffectsAsync(
+            InputPackageSubscription subscription,
+            InputPackageSubscriptionPayment payment,
+            string performedBy)
+        {
             var totalPaid = await _context.InputPackageSubscriptionPayments
                 .Where(x =>
                     x.SubscriptionId == subscription.Id &&
@@ -1312,21 +1344,14 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     x.Status == TransactionStatus.Successful)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            var fullyPaid =
-                totalPaid >= subscription.CommitmentValue;
+            var fullyPaid = totalPaid >= subscription.CommitmentValue;
 
-            /*
-             * Move subscription to next stage
-             */
-            if (fullyPaid &&
-                subscription.Status == SubscriptionStatus.PendingCommitment)
+            if (fullyPaid && subscription.Status == SubscriptionStatus.PendingCommitment)
             {
-                subscription.Status =
-                    SubscriptionStatus.PendingDisbursement;
+                subscription.Status = SubscriptionStatus.PendingDisbursement;
 
                 await RequestInputDisbursementApprovalAsync(subscription.Id,
-                    request.ExternalReference, performedBy, payment.Subscription.SubscriberUserId);
-
+                    payment.ExternalReference, performedBy, subscription.SubscriberUserId);
 
                 _context.OutboxMessages.Add(new OutboxMessage
                 {
@@ -1354,24 +1379,76 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     new CommitmentPaymentRecordedEvent
                     {
                         SubscriptionId = subscription.Id,
-                        SubscriberUserId =
-                            subscription.SubscriberUserId,
-
-                        OrganizationId =
-                            subscription.OrganizationId,
-
+                        SubscriberUserId = subscription.SubscriberUserId,
+                        OrganizationId = subscription.OrganizationId,
                         AmountPaid = payment.AmountPaid,
-
-                        OutstandingBalance =
-                            subscription.CommitmentValue - totalPaid,
-
+                        OutstandingBalance = subscription.CommitmentValue - totalPaid,
                         FullyPaid = fullyPaid
                     })
             });
+        }
 
-            await _context.SaveChangesAsync();
+        private async Task ApplyRepaymentEffectsAsync(
+            InputPackageSubscription subscription,
+            InputPackageSubscriptionPayment payment,
+            string performedBy)
+        {
+            var totalRepaid = await _context.InputPackageSubscriptionPayments
+                .Where(x =>
+                    x.SubscriptionId == subscription.Id &&
+                    x.PaymentType == PaymentType.Repayment &&
+                    x.Status == TransactionStatus.Successful)
+                .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            return true;
+            var fullyRepaid = totalRepaid >= subscription.RepaymentValue;
+
+            if (fullyRepaid && subscription.Status == SubscriptionStatus.PendingRepayment)
+            {
+                subscription.Status = SubscriptionStatus.Repaid;
+
+                _context.OutboxMessages.Add(new OutboxMessage
+                {
+                    Id = Guid.NewGuid(),
+                    EventType = nameof(RepaymentFullyPaidEvent),
+                    CreatedOn = DateTime.UtcNow,
+                    IsProcessed = false,
+                    Payload = JsonSerializer.Serialize(
+                        new RepaymentFullyPaidEvent
+                        {
+                            SubscriptionId = subscription.Id,
+                            PackageId = subscription.InputPackageId,
+                            TotalRepaid = totalRepaid
+                        })
+                });
+            }
+
+            _context.OutboxMessages.Add(new OutboxMessage
+            {
+                Id = Guid.NewGuid(),
+                EventType = nameof(RepaymentRecordedEvent),
+                CreatedOn = DateTime.UtcNow,
+                IsProcessed = false,
+                Payload = JsonSerializer.Serialize(
+                    new RepaymentRecordedEvent
+                    {
+                        SubscriptionId = subscription.Id,
+                        SubscriberUserId = subscription.SubscriberUserId,
+                        OrganizationId = subscription.OrganizationId,
+                        Amount = payment.AmountPaid,
+                        RemainingAmount = subscription.RepaymentValue - totalRepaid,
+                        IsCompleted = fullyRepaid
+                    })
+            });
+        }
+
+        public async Task<decimal> GetTotalRepaymentPaidAsync(long subscriptionId)
+        {
+            return await _context.InputPackageSubscriptionPayments
+                .Where(x =>
+                    x.SubscriptionId == subscriptionId &&
+                    x.PaymentType == PaymentType.Repayment &&
+                    x.Status == TransactionStatus.Successful)
+                .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
         }
 
         public async Task<bool> RecordCommitmentPaymentAsync(
@@ -1431,6 +1508,29 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return true;
         }
+
+        public async Task AddCreditBalanceAsync(long subscriptionId, decimal amount, string reference)
+        {
+            _context.SubscriptionCreditBalance.Add(new SubscriptionCreditBalance
+            {
+                SubscriptionId = subscriptionId,
+                Amount = amount,
+                Reference = reference,
+                CreatedOn = DateTimeOffset.UtcNow,
+                IsConsumed = false
+            });
+
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task<decimal> GetUnconsumedCreditBalanceAsync(long subscriptionId)
+        {
+            return await _context.SubscriptionCreditBalance
+                .Where(x => x.SubscriptionId == subscriptionId && !x.IsConsumed)
+                .SumAsync(x => (decimal?)x.Amount) ?? 0m;
+        }
+     
+
         /**
          public async Task<bool> RecordCommitmentPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args)
         {
@@ -1616,7 +1716,425 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 PhoneNumber = phone
             };
         }
+        public async Task<RepaymentReminderDto?> GetRepaymentReminderAsync(long subscriptionId)
+        {
+            var subscription = await _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
+                .Include(x => x.SubscriberUser)
+                .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
+            if (subscription == null)
+                throw new Exception("Subscription not found");
+
+            if (subscription.Status != SubscriptionStatus.PendingRepayment)
+            {
+                return new RepaymentReminderDto
+                {
+                    RequiresReminder = false
+                };
+            }
+
+            var totalPaid = await _context.InputPackageSubscriptionPayments
+                .Where(x =>
+                    x.SubscriptionId == subscription.Id &&
+                    x.PaymentType == PaymentType.Repayment &&
+                    x.Status == TransactionStatus.Successful)
+                .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
+
+            var creditBalance = await GetUnconsumedCreditBalanceAsync(subscription.Id);
+
+            var required = subscription.RepaymentValue;
+
+            // Outstanding is based on actual payments only — credit does NOT reduce this,
+            // it's tracked separately until formally reconciled.
+            var outstanding = required - totalPaid;
+
+            if (outstanding <= 0)
+            {
+                return new RepaymentReminderDto
+                {
+                    SubscriptionId = subscription.Id,
+                    SubscriberUserId = subscription.SubscriberUserId,
+                    TotalRepayment = required,
+                    AmountPaid = totalPaid,
+                    CreditBalance = creditBalance,
+                    OutstandingAmount = 0,
+                    RequiresReminder = false,
+                    RequiresReconciliation = false
+                };
+            }
+
+            var user = subscription.SubscriberUser;
+            var email = user?.Email;
+            var phone = user?.PhoneNumber;
+
+            // Credit fully covers what's left, but hasn't been consumed/reconciled yet.
+            var coveredByCredit = creditBalance >= outstanding;
+
+            string message;
+
+            if (coveredByCredit)
+            {
+                message =
+                    $"Your repayment of ₦{required:N0} for the {subscription.InputPackage.Name} package " +
+                    $"is covered by a credit balance of ₦{creditBalance:N0}. " +
+                    $"Please reach out to your organization to reconcile and close out your subscription.";
+            }
+            else if (totalPaid == 0 && creditBalance == 0)
+            {
+                message =
+                    $"You have an outstanding repayment of ₦{required:N0} " +
+                    $"for the {subscription.InputPackage.Name} package. " +
+                    $"Kindly make your repayment via cash or produce to clear your balance.";
+            }
+            else
+            {
+                message =
+                    $"You have an outstanding repayment balance of ₦{outstanding:N0} " +
+                    $"for the {subscription.InputPackage.Name} package. " +
+                    $"You have repaid ₦{totalPaid:N0}" +
+                    (creditBalance > 0 ? $" and have a credit of ₦{creditBalance:N0} that will reduce what you still need to pay. " : ". ") +
+                    $"Please complete repayment to close out your subscription.";
+            }
+
+            return new RepaymentReminderDto
+            {
+                SubscriptionId = subscription.Id,
+                SubscriberUserId = subscription.SubscriberUserId,
+
+                TotalRepayment = required,
+                AmountPaid = totalPaid,
+                CreditBalance = creditBalance,
+                OutstandingAmount = outstanding,
+
+                RequiresReminder = true,
+                RequiresReconciliation = coveredByCredit,
+
+                Message = message,
+
+                Email = email,
+                PhoneNumber = phone
+            };
+        }
+        public async Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(long subscriptionId)
+        {
+            var subscription = await _context.InputPackageSubscriptions
+                .FirstOrDefaultAsync(x => x.Id == subscriptionId);
+
+            if (subscription == null)
+                throw new Exception("Subscription not found");
+
+            var schedules = await _context.RepaymentSchedules
+                .Where(x => x.InputPackageSubscriptionId == subscriptionId)
+                .OrderBy(x => x.InstallmentNumber)
+                .ToListAsync();
+
+            if (!schedules.Any())
+                return new List<RepaymentScheduleItemDto>();
+
+            var today = DateTimeOffset.UtcNow;
+            var result = new List<RepaymentScheduleItemDto>();
+            var hasChanges = false;
+
+            foreach (var schedule in schedules)
+            {
+                var dto = EvaluateSchedule(schedule, today, out var changed);
+                if (changed) hasChanges = true;
+                result.Add(dto);
+            }
+
+            if (hasChanges)
+                await _context.SaveChangesAsync();
+
+            return result;
+        }
+        private RepaymentScheduleItemDto EvaluateSchedule(RepaymentSchedule schedule, DateTimeOffset today, out bool changed)
+        {
+            changed = false;
+
+            var isPastDue = schedule.DueDate < today;
+            var isFullySatisfied = schedule.IsPaid || schedule.AmountPaid >= schedule.Amount;
+
+            RepaymentScheduleStatus status;
+
+            if (isFullySatisfied)
+            {
+                status = RepaymentScheduleStatus.Paid;
+
+                if (schedule.IsOverdue)
+                {
+                    schedule.IsOverdue = false;
+                    changed = true;
+                }
+            }
+            else if (isPastDue)
+            {
+                if (schedule.IsWithinGracePeriod)
+                {
+                    // Late, but tolerated for now — visually distinct from a hard Overdue,
+                    // but still worth reminding about since money is still owed.
+                    status = RepaymentScheduleStatus.InGraceperiod;
+                }
+                else
+                {
+                    status = RepaymentScheduleStatus.Overdue;
+
+                    if (!schedule.IsOverdue)
+                    {
+                        schedule.IsOverdue = true;
+                        changed = true;
+                    }
+                }
+            }
+            else
+            {
+                status = schedule.AmountPaid > 0
+                    ? RepaymentScheduleStatus.PartiallyPaid
+                    : RepaymentScheduleStatus.Pending;
+
+                if (schedule.IsOverdue)
+                {
+                    schedule.IsOverdue = false;
+                    changed = true;
+                }
+            }
+
+            var outstanding = Math.Max(schedule.Amount - schedule.AmountPaid, 0);
+            var penaltyOutstanding = Math.Max(schedule.PenaltyAccrued - schedule.PenaltyPaid, 0);
+
+            var requiresReminder =
+                status == RepaymentScheduleStatus.Overdue ||
+                status == RepaymentScheduleStatus.InGraceperiod;
+
+            return new RepaymentScheduleItemDto
+            {
+                ScheduleId = schedule.Id,
+                InstallmentNumber = schedule.InstallmentNumber,
+                DueDate = schedule.DueDate,
+
+                ExpectedAmount = schedule.Amount,
+                AmountPaid = schedule.AmountPaid,
+                OutstandingAmount = outstanding,
+
+                PenaltyAccrued = schedule.PenaltyAccrued,
+                PenaltyPaid = schedule.PenaltyPaid,
+                PenaltyOutstanding = penaltyOutstanding,
+
+                IsWithinGracePeriod = schedule.IsWithinGracePeriod,
+
+                Status = status,
+                RequiresReminder = requiresReminder
+            };
+        }
+        public async Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(
+    long subscriptionId, int pageNumber, int pageSize)
+        {
+            if (pageNumber <= 0) pageNumber = 1;
+            if (pageSize <= 0) pageSize = 5;
+
+            var subscription = await _context.InputPackageSubscriptions
+                .FirstOrDefaultAsync(x => x.Id == subscriptionId);
+
+            if (subscription == null)
+                throw new Exception("Subscription not found");
+
+            var payments = await _context.InputPackageSubscriptionPayments
+                .Where(x =>
+                    x.SubscriptionId == subscriptionId &&
+                    x.PaymentType == PaymentType.Repayment &&
+                    x.Status == TransactionStatus.Successful)
+                .Select(x => new
+                {
+                    x.Reference,
+                    x.PaymentChannel,
+                    x.AmountPaid,
+                    x.PaidOn,
+                    x.WalletProviderId
+                })
+                .ToListAsync();
+
+            if (!payments.Any())
+            {
+                return new PagedResult<RepaymentLedgerEntryDto>
+                {
+                    Data = new List<RepaymentLedgerEntryDto>(),
+                    PageNumber = pageNumber,
+                    PageSize = pageSize,
+                    Count = 0
+                };
+            }
+
+            // ─── Batch-resolve wallet provider display names for cash entries ───
+            var walletProviderIds = payments
+                .Where(x => x.PaymentChannel == PaymentChannel.Wallet && x.WalletProviderId.HasValue)
+                .Select(x => x.WalletProviderId!.Value)
+                .Distinct()
+                .ToList();
+
+            var walletProviderNames = new Dictionary<long, string>();
+            if (walletProviderIds.Any())
+            {
+                var wallets = await _context.UserWallets
+                    .Include(x => x.WalletProvider)
+                    .Where(x => walletProviderIds.Contains(x.Id))
+                    .ToListAsync();
+
+                foreach (var wallet in wallets)
+                    walletProviderNames[wallet.Id] = wallet.WalletProvider?.Name ?? wallet.WalletProvider?.Code ?? "Wallet";
+            }
+
+            // ─── Batch-resolve produce names for produce entries via matching inventory transactions ───
+            var produceReferences = payments
+                .Where(x => x.PaymentChannel == PaymentChannel.Produce)
+                .Select(x => x.Reference)
+                .Distinct()
+                .ToList();
+
+            var produceNamesByReference = new Dictionary<string, string>();
+            if (produceReferences.Any())
+            {
+                var inventoryTransactions = await _context.InventoryTransactions
+                    .Include(x => x.OrganizationProduct)
+                    .Where(x =>
+                        x.SubscriptionId == subscriptionId &&
+                        produceReferences.Contains(x.ReferenceNumber))
+                    .ToListAsync();
+
+                foreach (var txn in inventoryTransactions)
+                    produceNamesByReference[txn.ReferenceNumber] = txn.OrganizationProduct?.ProductName ?? "Produce";
+            }
+
+            // ─── Group by reference — a single repayment "event" may in future span multiple
+            // channel rows sharing one reference (a hybrid cash+produce payment). Today's
+            // write path only ever produces one row per reference, so this collapses to
+            // single-row groups now, but stays forward-compatible without a shape change later. ───
+            var grouped = payments
+                .GroupBy(x => x.Reference)
+                .Select(g =>
+                {
+                    var channelsInGroup = g.Select(x => x.PaymentChannel).Distinct().ToList();
+                    var totalAmount = g.Sum(x => x.AmountPaid);
+                    var earliestDate = g.Min(x => x.PaidOn) ?? DateTimeOffset.UtcNow;
+
+                    string type;
+                    string channelDisplay;
+
+                    if (channelsInGroup.Count > 1)
+                    {
+                        type = "Hybrid";
+
+                        var parts = g.Select(row => row.PaymentChannel == PaymentChannel.Wallet
+                            ? (row.WalletProviderId.HasValue && walletProviderNames.TryGetValue(row.WalletProviderId.Value, out var wName)
+                                ? $"Wallet ({wName})"
+                                : "Wallet")
+                            : (produceNamesByReference.TryGetValue(row.Reference, out var pName) ? pName : "Produce"))
+                            .Distinct()
+                            .ToList();
+
+                        channelDisplay = string.Join(" + ", parts);
+                    }
+                    else if (channelsInGroup[0] == PaymentChannel.Wallet)
+                    {
+                        type = "Cash";
+                        var walletId = g.First().WalletProviderId;
+                        channelDisplay = walletId.HasValue && walletProviderNames.TryGetValue(walletId.Value, out var wName)
+                            ? $"Wallet ({wName})"
+                            : "Wallet";
+                    }
+                    else
+                    {
+                        type = "Produce";
+                        channelDisplay = produceNamesByReference.TryGetValue(g.Key, out var pName) ? pName : "Produce";
+                    }
+
+                    return new { Reference = g.Key, Type = type, Channel = channelDisplay, Amount = totalAmount, Date = earliestDate };
+                })
+                .OrderBy(x => x.Date)
+                .ToList();
+
+            // ─── Compute running balance across the FULL chronological history first —
+            // balance-after depends on true payment order, not on which page is requested. ───
+            decimal runningPaid = 0m;
+            var fullLedger = new List<RepaymentLedgerEntryDto>();
+
+            foreach (var entry in grouped)
+            {
+                runningPaid += entry.Amount;
+
+                fullLedger.Add(new RepaymentLedgerEntryDto
+                {
+                    Date = entry.Date,
+                    Type = entry.Type,
+                    Channel = entry.Channel,
+                    Amount = entry.Amount,
+                    BalanceAfter = Math.Max(subscription.RepaymentValue - runningPaid, 0),
+                    Reference = entry.Reference
+                });
+            }
+
+            var totalCount = fullLedger.Count;
+
+            // Ledger view reads most-recent-first; balances were computed chronologically above.
+            var pagedItems = fullLedger
+                .OrderByDescending(x => x.Date)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            return new PagedResult<RepaymentLedgerEntryDto>
+            {
+                Data = pagedItems,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Count = totalCount
+            };
+        }
+
+        public async Task<List<OverdueRepaymentReminderDto>> GetOverdueSchedulesAcrossSubscriptionsAsync()
+        {
+            var today = DateTimeOffset.UtcNow;
+
+            var subscriptions = await _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.RepaymentSchedules)
+                .Where(x => x.Status == SubscriptionStatus.PendingRepayment)
+                .ToListAsync();
+
+            var reminders = new List<OverdueRepaymentReminderDto>();
+            var hasChanges = false;
+
+            foreach (var subscription in subscriptions)
+            {
+                var schedules = subscription.RepaymentSchedules
+                    .OrderBy(x => x.InstallmentNumber)
+                    .ToList();
+
+                foreach (var schedule in schedules)
+                {
+                    var dto = EvaluateSchedule(schedule, today, out var changed);
+                    if (changed) hasChanges = true;
+
+                    if (!dto.RequiresReminder)
+                        continue;
+
+                    reminders.Add(new OverdueRepaymentReminderDto
+                    {
+                        SubscriptionId = subscription.Id,
+                        SubscriberUserId = subscription.SubscriberUserId,
+                        Email = subscription.SubscriberUser?.Email,
+                        PhoneNumber = subscription.SubscriberUser?.PhoneNumber,
+                        PackageName = subscription.InputPackage.Name,
+                        Schedule = dto
+                    });
+                }
+            }
+
+            if (hasChanges)
+                await _context.SaveChangesAsync();
+
+            return reminders;
+        }
         public async Task<long> RequestInputDisbursementApprovalAsync(
      long subscriptionId,
      string? reference,
@@ -2054,7 +2572,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     if (allPaid)
                     {
-                        subscription.Status = SubscriptionStatus.RepaymentCompleted;
+                        subscription.Status = SubscriptionStatus.Repaid;
                         subscription.CompletedOn = DateTimeOffset.UtcNow;
                     }
 
@@ -2073,7 +2591,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             SubscriptionId = subscription.Id,
                             Amount = request.Amount,
                             RemainingAmount = remaining,
-                            IsCompleted = subscription.Status == SubscriptionStatus.RepaymentCompleted
+                            IsCompleted = subscription.Status == SubscriptionStatus.Repaid
                         })
                     };
 
@@ -2271,7 +2789,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     case SubscriptionView.Completed:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.RepaymentCompleted);
+                            x.Status == SubscriptionStatus.Repaid);
                         break;
 
 
@@ -2484,7 +3002,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             {
                 return new PagedResult<SubscriptionDetailDto>
                 {
-                    Items = [],
+                    Data = [],
                     Count = 0,
                     PageNumber = pageNumber,
                     PageSize = pageSize
@@ -2580,7 +3098,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<SubscriptionDetailDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3129,7 +3647,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<InputObligationDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3279,7 +3797,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<FinancingBreakdownDto>
             {
-                Items = items,
+                Data = items,
                 Count = count,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3446,7 +3964,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<RepaymentBreakdownDto>
             {
-                Items = result,
+                Data = result,
                 Count = totalCount,
                 PageNumber = pageNumber,
                 PageSize = pageSize
@@ -3712,7 +4230,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         break;
 
                     case SubscriptionView.Completed:
-                        query = query.Where(x => x.Status == SubscriptionStatus.RepaymentCompleted);
+                        query = query.Where(x => x.Status == SubscriptionStatus.Repaid);
                         break;
 
                     case SubscriptionView.Defaulted:
@@ -4067,7 +4585,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
             return new PagedResult<EopDto>
             {
-                Items = items,
+                Data = items,
                 Count = totalCount,
                 PageNumber = request.Page,
                 PageSize = request.PageSize

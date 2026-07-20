@@ -61,9 +61,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
     }
     public class WalletTopUpProviderRequest
     {
+        public string CustomerMac { get; set; }
         public decimal Amount { get; set; }
 
         public string Currency { get; set; }
+        public string WalletName { get; set; }
 
         public string WalletNumber { get; set; }
 

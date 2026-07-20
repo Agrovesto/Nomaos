@@ -1,7 +1,11 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -10,6 +14,7 @@ using Microsoft.Net.Http.Headers;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -19,12 +24,255 @@ namespace Agrovesto.Backend.API.Controllers
     public class BaseController : ControllerBase
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
+        protected const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
 
+        protected static readonly IReadOnlySet<string> AllowedExtensions =
+     new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".xlsx", ".xls", ".csv" };
         public BaseController(IHttpContextAccessor httpContextAccessor)
         {
             _httpContextAccessor = httpContextAccessor;
         }
-        public string DomainHeader
+
+        protected string RequireOrganizationCode(string provided)
+        {
+            var code = !string.IsNullOrEmpty(provided) ? provided : OrganizationCode;
+            if (string.IsNullOrEmpty(code))
+                throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
+            return code;
+        }
+
+        protected IActionResult? RequireField(string value, string fieldName)
+        {
+            if (!string.IsNullOrEmpty(value)) return null;
+            return BadRequest(new Response<Dictionary<string, string>>
+            {
+                Message = "Validation failed.",
+                Succeeded = false,
+                Data = new Dictionary<string, string> { { fieldName, $"{fieldName} is required" } }
+            });
+        }
+
+        // For endpoints that always report Succeeded = true and derive Code from data presence
+        protected Response<T> Wrap<T>(T data, string? successMessage = null, string? notFoundMessage = null)
+        {
+            bool hasValue = !EqualityComparer<T>.Default.Equals(data, default);
+
+            return new Response<T>
+            {
+                Code = hasValue ? ResponseCodes.Success : ResponseCodes.Failed,
+                Succeeded = true,
+                Message = hasValue ? (successMessage ?? ResponseMessages.Successful) : (notFoundMessage ?? "No record found"),
+                Data = data
+            };
+        }
+
+        protected PagedListResponse<List<T>> WrapPaged<T>(PagedListResponse<List<T>> result, int pageNumber, int pageSize, string? message = null)
+        {
+            return new PagedListResponse<List<T>>
+            {
+                Code = ResponseCodes.Success,
+                Succeeded = true,
+                Message = message ?? (result.Count > 0 ? "Record Retrieved" : "No Records Found"),
+                Data = result.Data,
+                Count = result.Count,
+                PageSize = pageSize,
+                PageNumber = pageNumber
+            };
+        }
+
+        protected async Task<IActionResult> HandleBulkMembershipUploadAsync(
+            IFormFile file, OnBoardingArgs args,
+            IBulkMembershipExcelParser parser, IBulkMembershipValidator validator,
+            IBulkMembershipUploadService uploadService, ILogger logger)
+        {
+            if (ValidateUploadFile(file) is { } fileError) return fileError;
+
+            if (string.IsNullOrWhiteSpace(args.businessCode))
+                return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload memberships.");
+
+            var onboardedById = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+            if (string.IsNullOrWhiteSpace(onboardedById))
+                return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.", StatusCodes.Status401Unauthorized);
+
+            args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+
+            List<BulkMembershipRowDto> rows;
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                rows = parser.Parse(stream, file.FileName, args.businessCode, onboardedById, args.organizationCode, args.Id);
+            }
+            catch (NotSupportedException ex)
+            {
+                logger.LogWarning(ex, "Unsupported membership file type uploaded: {FileName}", file.FileName);
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to parse membership upload file: {FileName}", file.FileName);
+                return Error("FILE_PARSE_ERROR", "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
+            }
+
+            if (rows.Count == 0)
+                return Error("FILE_EMPTY", "This file doesn't contain any membership records to upload.");
+
+            var validationErrors = await validator.ValidateAllAsync(rows, args);
+            if (validationErrors.Count > 0)
+            {
+                return UnprocessableEntity(new ApiErrorResponse
+                {
+                    Code = "VALIDATION_FAILED",
+                    Message = "We found problems with some rows. No records were saved — please fix and re-upload.",
+                    Details = validationErrors.GroupBy(e => e.RowNumber)
+                        .ToDictionary(g => g.Key.ToString(), g => string.Join("; ", g.SelectMany(e => e.Messages)))
+                });
+            }
+
+            try
+            {
+                var result = await uploadService.ProcessBulkMembershipUploadAsync(rows, args);
+                return result.FailureCount == 0 ? Ok(result) : StatusCode(StatusCodes.Status207MultiStatus, result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Membership upload processing failed for business {BusinessCode}", args.businessCode);
+                return Error("UPLOAD_PROCESSING_FAILED", "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.", StatusCodes.Status500InternalServerError);
+            }
+        }
+        protected async Task<IActionResult> HandleBulkFarmerUploadAsync(
+    IFormFile file,
+    OnBoardingArgs args,
+    IBulkFarmerUploadService uploadService,
+    ILogger logger)
+        {
+            if (ValidateUploadFile(file) is { } fileError) return fileError;
+
+            List<BulkFarmerRowDto> rows;
+            try
+            {
+                await using var stream = file.OpenReadStream();
+                rows = BulkFarmerCsvParser.Parse(stream, file.FileName);
+            }
+            catch (NotSupportedException ex)
+            {
+                logger.LogWarning(ex, "Unsupported file type uploaded: {FileName}", file.FileName);
+                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to parse bulk upload file: {FileName}", file.FileName);
+                return Error("FILE_PARSE_ERROR",
+                    "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
+            }
+
+            if (rows.Count == 0)
+                return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
+
+            try
+            {
+                var result = await uploadService.ProcessAsync(rows, args);
+
+                int statusCode = result.Failed > 0
+                    ? StatusCodes.Status207MultiStatus
+                    : StatusCodes.Status200OK;
+
+                return StatusCode(statusCode, result);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Bulk farmer upload processing failed for business {BusinessCode}", args.businessCode);
+                return Error("UPLOAD_PROCESSING_FAILED",
+                    "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
+                    StatusCodes.Status500InternalServerError);
+            }
+        }
+        protected IActionResult? ValidateUploadFile(IFormFile file)
+        {
+            if (file is null || file.Length == 0)
+                return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
+
+            if (file.Length > MaxFileSizeBytes)
+                return Error("FILE_TOO_LARGE",
+                    $"That file is too large. Please upload a file smaller than {MaxFileSizeBytes / (1024 * 1024)} MB.");
+
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            if (!AllowedExtensions.Contains(extension))
+                return Error("FILE_TYPE_INVALID",
+                    "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
+
+            return null;
+        }
+        protected async Task<IActionResult> ExecuteAsync<T>(
+            Func<Task<T>> action,
+            Func<T, IActionResult> onSuccess)
+        {
+            try
+            {
+                var result = await action();
+                return onSuccess(result);
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.ExceptionMessage, Succeeded = false });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
+            }
+        }
+
+        protected Response<T> Success<T>(T data, string message = null, string code = ResponseCodes.Success)
+        {
+            return new Response<T>
+            {
+                Code = code,
+                Succeeded = true,
+                Message = message,
+                Data = data
+            };
+        }
+
+        protected PagedListResponse<List<T>> BuildPagedResponse<T>(
+            PagedListResponse<List<T>> result, int pageNumber, int pageSize = 10)
+        {
+            return new PagedListResponse<List<T>>
+            {
+                Data = result.Data,
+                Message = result.Message,
+                Succeeded = result.Succeeded,
+                Count = result.Count,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+                Code = (result.Succeeded && result.Data != null)
+                    ? Core.CoreUtils.Constants.ResponseCodes.Success
+                    : Core.CoreUtils.Constants.ResponseCodes.Failed
+            };
+        }
+        protected IActionResult ValidationProblemResponse()
+        {
+            return BadRequest(new Response<Dictionary<string, string>>()
+            {
+                Message = "Validation failed.",
+                Succeeded = false,
+                Data = ModelState
+                    .Where(ms => ms.Value?.Errors.Any() == true)
+                    .ToDictionary(
+                        ms => ms.Key,
+                        ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
+                    )
+            });
+
+
+        }
+        protected ObjectResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
+        {
+            return StatusCode(statusCode, new ApiErrorResponse
+            {
+                Code = code,
+                Message = message
+            });
+        }
+        public string? DomainHeader
         {
             get
             {
@@ -34,16 +282,6 @@ namespace Agrovesto.Backend.API.Controllers
                 return header;
             }
         }
-        //public string Token
-        //{
-        //    get
-        //    {
-        //        var token = _httpContextAccessor.HttpContext?.Request.Headers[HeaderNames.Authorization];
-        //        if (!AuthenticationHeaderValue.TryParse(token, out var headerValue))
-        //            return string.Empty;
-        //        return headerValue.Parameter;
-        //    }
-        //}
 
         protected JsonWebToken? TryReadJwt()
         {
@@ -74,10 +312,9 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
-        //    public string? CurrentUserRole =>
-        //TryReadJwt()?
-        //    .Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase))
-        //    ?.Value;
+     
+        
+        
         public string? CurrentUserRole
         {
             get
@@ -91,7 +328,6 @@ namespace Agrovesto.Backend.API.Controllers
 
                 if (roleClaim != null) return roleClaim.Value;
 
-                // fallback to "Roles" claim
                 roleClaim = jwt.Claims.FirstOrDefault(c => c.Type.Equals("Roles", StringComparison.OrdinalIgnoreCase));
                 return roleClaim?.Value;
             }
@@ -152,174 +388,29 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 if (_httpContextAccessor.HttpContext?.Request.Headers.TryGetValue(HeaderNames.Authorization, out var tokenValues) == true)
                 {
-                    var token = tokenValues.ToString().Trim(); // Trim to remove any unwanted spaces
+                    var token = tokenValues.ToString().Trim(); 
 
                     if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                     {
-                        return token.Substring("Bearer ".Length).Trim(); // Extract the token part
+                        return token.Substring("Bearer ".Length).Trim(); 
                     }
                 }
                 return string.Empty;
             }
         }
-       
-      
-        //public string CurrentUserRole
-        //{
-        //    get
-        //    {
-        //        if (string.IsNullOrEmpty(Token)) return null;
-        //        var handler = new JsonWebTokenHandler();
-        //        var jst = handler.ReadJsonWebToken(Token);
+        protected void NormalizeOrganizationCode(OnBoardingArgs args)
+        {
+            if (!string.IsNullOrEmpty(OrganizationCode) &&
+                string.IsNullOrEmpty(args.organizationCode))
+            {
+                args.organizationCode = OrganizationCode;
+            }
+        }
 
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("role", StringComparison.OrdinalIgnoreCase));
-        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
-        //    }
-        //}
-
-        //public string CurrentUserEmail
-        //{
-        //    get
-        //    {
-        //        var token = Token;
-        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
-
-        //        var handler = new JsonWebTokenHandler();
-
-        //        // Ensure the token is a well-formed JWT before reading it
-        //        if (!handler.CanReadToken(token))
-        //        {
-        //            throw new SecurityTokenException("Invalid JWT format");
-        //        }
-
-        //        var jst = handler.ReadJsonWebToken(token);
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase));
-
-        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
-        //    }
-        //}
-
-        //public string? CurrentUserId
-        //{
-        //    get
-        //    {
-        //        try
-        //        {
-        //            var token = Token;
-
-        //            if (string.IsNullOrWhiteSpace(token))
-        //                return null;
-
-
-        //            if (token.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        //                token = token.Substring("Bearer ".Length).Trim();
-
-        //            var handler = new JsonWebTokenHandler();
-
-        //            if (!handler.CanReadToken(token))
-        //                return null; 
-
-        //            var jwt = handler.ReadJsonWebToken(token);
-
-        //            return jwt.Claims
-        //                .FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase))
-        //                ?.Value;
-        //        }
-        //        catch
-        //        {
-        //            return null;
-        //        }
-        //    }
-        //}
-
-        //public string CurrentUserId
-        //{
-        //    get
-        //    {
-        //        var token = Token;
-        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
-
-        //        var handler = new JsonWebTokenHandler();
-
-        //        // Ensure the token is a well-formed JWT before reading it
-        //        if (!handler.CanReadToken(token))
-        //        {
-        //            throw new SecurityTokenException("Invalid JWT format");
-        //        }
-
-        //        var jst = handler.ReadJsonWebToken(token);
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("sub", StringComparison.OrdinalIgnoreCase));
-
-        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
-        //    }
-        //}
-        //public string OrganizationCode
-        //{
-        //    get
-        //    {
-        //        var token = Token;
-        //        if (string.IsNullOrEmpty(token)) return null; // Ensure a token exists
-
-        //        var handler = new JsonWebTokenHandler();
-
-        //        // Ensure the token is a well-formed JWT before reading it
-        //        if (!handler.CanReadToken(token))
-        //        {
-        //            throw new SecurityTokenException("Invalid JWT format");
-        //        }
-
-        //        var jst = handler.ReadJsonWebToken(token);
-        //        var claims = jst.Claims.FirstOrDefault(x => x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
-
-
-        //        //[{"OrganizationCode":"KIC115","OrganizationName":"Kickstart Abj"}]
-        //        return !string.IsNullOrEmpty(claims?.Value) ? claims?.Value : null;
-        //    }
-        //}
-
-        //public string OrganizationCode
-        //{
-        //    get
-        //    {
-        //        var token = Token;
-        //        if (string.IsNullOrEmpty(token))
-        //            return null;
-
-        //        var handler = new JsonWebTokenHandler();
-
-        //        if (!handler.CanReadToken(token))
-        //            throw new SecurityTokenException("Invalid JWT format");
-
-        //        var jst = handler.ReadJsonWebToken(token);
-        //        var claims = jst.Claims.FirstOrDefault(x =>
-        //            x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase));
-
-        //        if (string.IsNullOrEmpty(claims?.Value))
-        //            return null;
-
-        //        try
-        //        {
-        //            // Deserialize the JSON array
-        //            var organizations = System.Text.Json.JsonSerializer.Deserialize<List<OrganizationClaim>>(claims.Value);
-
-        //            // Return a comma-separated list if there are multiple organization codes
-        //            return organizations != null && organizations.Count > 0
-        //                ? string.Join(",", organizations.Select(o => o.OrganizationCode))
-        //                : null;
-        //        }
-        //        catch
-        //        {
-        //            // Handle invalid JSON or unexpected format
-        //            return null;
-        //        }
-        //    }
-        //}
-
-        // Helper class to match the claim structure
         public class OrganizationClaim
         {
-            public string OrganizationCode { get; set; }
-            public string OrganizationName { get; set; }
+            public string? OrganizationCode { get; set; }
+            public string? OrganizationName { get; set; }
         }
 
     }

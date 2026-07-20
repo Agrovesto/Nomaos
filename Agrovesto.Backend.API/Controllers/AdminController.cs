@@ -19,6 +19,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Utilities;
 
 namespace Agrovesto.Backend.API.Controllers
 {
@@ -128,7 +129,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -159,7 +160,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -185,7 +186,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -225,7 +226,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type.Data
                 });
             }
@@ -256,7 +257,7 @@ namespace Agrovesto.Backend.API.Controllers
 
         [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -282,7 +283,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = Core.CoreUtils.Constants.ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -322,7 +323,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = true
                 });
 
@@ -351,7 +352,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-storage-category")]
         public async Task<IActionResult> StorageCategory([FromBody] StorageCategory model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -380,7 +381,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -410,7 +411,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-temperature-control-type")]
         public async Task<IActionResult> TemperaturControlType([FromBody] TemperatureControlType model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -439,7 +440,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -469,7 +470,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-system-module")]
         public async Task<IActionResult> CreateSystemModules([FromBody] Module model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -498,7 +499,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = model
                 });
 
@@ -528,7 +529,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-location-type")]
         public async Task<IActionResult> LocationType([FromBody] LocationTypeModel model, [FromQuery] ListQueryParams args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -556,7 +557,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -586,7 +587,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-membership-type")]
         public async Task<IActionResult> MemberShipType([FromBody] MemberShipTypeModel model, [FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -615,7 +616,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = type
                 });
 
@@ -648,9 +649,8 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                var isAdmin = CurrentUserRole;
-                if (isAdmin == null || !isAdmin.Equals("Business")) throw new Exception("Forbidden");
-
+                
+               
                 var result = await _reportManager.GetCoreBusinessMetrics();
                 return Ok(new Response<AdminBusinessEntitiesMetrics>()
                 {
@@ -687,7 +687,7 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("input-subscription-settlement")]
         public async Task<IActionResult> SettleBusiness([FromQuery] BusinessRegistrationArgs args)
         {
-            var isAdmin = CurrentUserRole;
+            
             // if (isAdmin == null || (!isAdmin.Equals("Business"))) throw new Exception("Forbidden");
             if (!ModelState.IsValid)
             {
@@ -717,7 +717,7 @@ namespace Agrovesto.Backend.API.Controllers
 
 
                         Succeeded = true,
-                        Message = "Successful",
+                        Message = ResponseMessages.Successful,
                         Data = bundle
                     });
 
@@ -813,9 +813,8 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpPost("create-user")]
         public async Task<IActionResult> CreateAgrovestoUser([FromBody] UserModel model, [FromQuery] string roleName)
         {
-            var isAdmin = CurrentUserRole;
-            if (isAdmin == null || !isAdmin.Equals("Super Admin")) throw new BaseException(Core.Enums.ExceptionType.UNAUTHORIZED, $"Forbidden");
-
+            
+            
 
             if (!ModelState.IsValid)
             {
@@ -1383,7 +1382,7 @@ namespace Agrovesto.Backend.API.Controllers
                     Code = (overview != null) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed,
 
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = overview
                 });
             }
@@ -1419,7 +1418,7 @@ namespace Agrovesto.Backend.API.Controllers
                 return Ok(new PagedListResponse<List<OrganizationModel>>()
                 {
                     Data = result,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -1474,7 +1473,7 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 args.UserId = CurrentUserId;
-                var isAdmin = CurrentUserRole;
+                
 
                 var createMerchant = await _businessManager.CreateOrganization(model, args);
 
@@ -1482,7 +1481,7 @@ namespace Agrovesto.Backend.API.Controllers
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
-                    Message = "Successful",
+                    Message = ResponseMessages.Successful,
                     Data = $"{createMerchant.OrganizationName} Successfully Onboarded"
                 });
 

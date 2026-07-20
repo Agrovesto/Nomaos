@@ -165,8 +165,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Active")]
         Active = 7,
 
-        [Display(Name = "Completed Repayment")]
-        RepaymentCompleted = 8,
+        [Display(Name = "Repaid")]
+        Repaid = 8,
 
         [Display(Name = "Defaulted")]
         Defaulted = 9,
@@ -175,7 +175,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         Rejected = 10,
 
         [Display(Name = "Partially Disbursed")]
-        PartiallyDisbursed = 11
+        PartiallyDisbursed = 11,
+        [Display(Name = "Pending Repayment")]
+        PendingRepayment = 12
     }
 
     public enum DisbursementType
@@ -232,8 +234,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Payment Gateway")]
         PaymentGateway = 4,
 
-        [Display(Name = "Offtake")]
-        Offtake = 5,
+        [Display(Name = "Produce")]
+        Produce = 5,
 
         [Display(Name = "POS")]
         POS = 6,
@@ -341,5 +343,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         Weekly=3,
         Monthly=4,
         Compound=5,
+    }
+
+    public enum RepaymentScheduleStatus
+    {
+        Pending,
+        PartiallyPaid,
+        InGraceperiod,
+        Overdue,
+        Paid
     }
 }

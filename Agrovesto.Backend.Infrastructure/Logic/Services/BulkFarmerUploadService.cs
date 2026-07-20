@@ -6,6 +6,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
@@ -37,14 +38,355 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             _userManager = userManager;
             _logger = logger;
         }
+    //    public async Task<BulkFarmerUploadResultDto> ProcessAsync(
+    //IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
+    //    {
+    //        var result = new BulkFarmerUploadResultDto { TotalRows = rows.Count };
 
+    //        // 1. Validate everything up front — no DB calls involved.
+    //        var rowsToProcess = new List<BulkFarmerRowDto>();
+    //        for (int i = 0; i < rows.Count; i++)
+    //        {
+    //            var row = rows[i];
+    //            row.RowIndex = i + 1;
 
+    //            var validationErrors = BulkFarmerRowValidator.Validate(row);
+    //            if (validationErrors.Any())
+    //            {
+    //                Failure.RecordFailure(result, row, string.Join(" | ", validationErrors));
+    //                continue;
+    //            }
+    //            rowsToProcess.Add(row);
+    //        }
+
+    //        if (!rowsToProcess.Any())
+    //            return result;
+
+    //        // 2. ONE round trip each, instead of one round trip PER ROW.
+    //        var phoneSet = new HashSet<string>(
+    //            await _db.Users.Select(u => u.PhoneNumber).ToListAsync(),
+    //            StringComparer.OrdinalIgnoreCase);
+
+    //        var emailSet = new HashSet<string>(
+    //            await _db.Users.Where(u => u.Email != null).Select(u => u.Email!).ToListAsync(),
+    //            StringComparer.OrdinalIgnoreCase);
+
+    //        var bvnSet = new HashSet<string>(
+    //            await _db.Users.Where(u => u.BVN != null).Select(u => u.BVN!).ToListAsync());
+
+    //        var ninSet = new HashSet<string>(
+    //            await _db.Users.Where(u => u.NIN != null).Select(u => u.NIN!).ToListAsync());
+
+    //        // Farmer scope keys: (UserId, BusinessCode[, OrganizationCode]) already onboarded.
+    //        var existingFarmerScopes = (await _db.Farmers
+    //            .Select(f => new { f.UserId, f.BelongToBusinessCode })
+    //            .ToListAsync())
+    //            .Select(x => (x.UserId, x.BelongToBusinessCode))
+    //            .ToHashSet();
+
+    //        // Existing Farmer rows per (UserId, BusinessCode), to reuse instead of re-querying per row.
+    //        var existingFarmersByUserAndBusiness = (await _db.Farmers
+    //            .Select(f => new { f.Id, f.UserId, f.BelongToBusinessCode })
+    //            .ToListAsync())
+    //            .ToDictionary(x => (x.UserId, x.BelongToBusinessCode), x => x.Id);
+
+    //        // Skip EF's per-property change comparison while we bulk-add — big speed win.
+    //        _db.ChangeTracker.AutoDetectChangesEnabled = false;
+    //        _db.Database.SetCommandTimeout(180); // give large batches headroom; tune as needed
+
+    //        const int batchSize = 200; // commit in chunks instead of one giant transaction
+    //        for (int start = 0; start < rowsToProcess.Count; start += batchSize)
+    //        {
+    //            var batch = rowsToProcess.Skip(start).Take(batchSize).ToList();
+
+    //            await ProcessBatchAsync(
+    //                batch, args, result,
+    //                phoneSet, emailSet, bvnSet, ninSet,
+    //                existingFarmerScopes, existingFarmersByUserAndBusiness);
+    //        }
+
+    //        _db.ChangeTracker.AutoDetectChangesEnabled = true;
+
+    //        return result;
+    //    }
+
+        private async Task ProcessBatchAsync(
+            List<BulkFarmerRowDto> batch,
+            OnBoardingArgs args,
+            BulkFarmerUploadResultDto result,
+            HashSet<string> phoneSet,
+            HashSet<string> emailSet,
+            HashSet<string> bvnSet,
+            HashSet<string> ninSet,
+            HashSet<(string UserId, string BusinessCode)> existingFarmerScopes,
+            Dictionary<(string UserId, string BusinessCode), long> existingFarmersByUserAndBusiness)
+        {
+            var strategy = _db.Database.CreateExecutionStrategy();
+
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var tx = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    foreach (var row in batch)
+                    {
+                        var phone = row.PhoneNumber.Trim();
+                        var email = row.Email?.Trim();
+
+                        // --- In-memory duplicate checks: no DB round trip ---
+                        if (!string.IsNullOrWhiteSpace(email) && emailSet.Contains(email))
+                        {
+                            Failure.RecordFailure(result, row, $"Duplicate Email '{email}' for row {row.RowIndex}.");
+                            continue;
+                        }
+                        if (!string.IsNullOrWhiteSpace(row.BVN) && bvnSet.Contains(row.BVN))
+                        {
+                            Failure.RecordFailure(result, row, $"Duplicate BVN '{row.BVN}' for row {row.RowIndex}.");
+                            continue;
+                        }
+                        if (!string.IsNullOrWhiteSpace(row.NIN) && ninSet.Contains(row.NIN))
+                        {
+                            Failure.RecordFailure(result, row, $"Duplicate NIN '{row.NIN}' for row {row.RowIndex}.");
+                            continue;
+                        }
+
+                        var userExists = phoneSet.Contains(phone);
+                        User user;
+
+                        if (!userExists)
+                        {
+                            var (defaultPassword, salt) = GenerateDefaultCredentials();
+
+                            user = new User
+                            {
+                                UserName = phone,
+                                PhoneNumber = phone,
+                                Email = email,
+                                Name = row.Name.Trim(),
+                                NIN = row.NIN,
+                                BVN = row.BVN,
+                                Salt = salt,
+                                UserType = "Farmer",
+                                BusinessCode = args.businessCode,
+                                CreatedBy = args.UserId,
+                                CreatedOn = DateTimeOffset.UtcNow,
+                                IsActive = true,
+                                FarmerOnboardingStatus = FarmerOnboardingStatus.Pending,
+                                HasDefaultPassword = true,
+                                Pin = "1234"
+                            };
+
+                            var identityResult = await _userManager.CreateAsync(user, defaultPassword);
+                            if (!identityResult.Succeeded)
+                            {
+                                var msg = string.Join("; ", identityResult.Errors.Select(e => e.Description));
+                                Failure.RecordFailure(result, row, $"User creation failed: {msg}");
+                                continue;
+                            }
+
+                            // Mark as used immediately so later rows in this same batch see it too.
+                            phoneSet.Add(phone);
+                            if (!string.IsNullOrWhiteSpace(email)) emailSet.Add(email);
+                            if (!string.IsNullOrWhiteSpace(row.BVN)) bvnSet.Add(row.BVN);
+                            if (!string.IsNullOrWhiteSpace(row.NIN)) ninSet.Add(row.NIN);
+                        }
+                        else
+                        {
+                            user = await _db.Users.AsNoTracking()
+                                .FirstAsync(u => u.PhoneNumber == phone);
+                        }
+
+                        var scopeKey = (user.Id, args.businessCode);
+
+                        if (existingFarmerScopes.Contains(scopeKey))
+                        {
+                            Failure.RecordFailure(result, row, $"Duplicate phone '{phone}' for row {row.RowIndex}.");
+                            continue;
+                        }
+
+                        Farmer farmer;
+                        if (existingFarmersByUserAndBusiness.TryGetValue(scopeKey, out var farmerId))
+                        {
+                            farmer = await _db.Farmers.FirstAsync(f => f.Id == farmerId);
+                        }
+                        else
+                        {
+                            farmer = new Farmer
+                            {
+                                UserId = user.Id,
+                                BelongToBusinessCode = args.businessCode,
+                                Name = row.Name.Trim(),
+                                PhoneNumber = phone,
+                                Email = email,
+                                Gender = row.Gender,
+                                DateOfBirth = row.DateOfBirth,
+                                Location = row.Location,
+                                State = row.State,
+                                Lga = row.Lga,
+                                Ward = row.Ward,
+                                FarmerCategory = row.FarmerCategory,
+                                YearsInAgric = row.YearsInAgric,
+                                HighestLevelOfEducation = row.HighestLevelOfEducation,
+                                OnboardedByUserId = args.UserId,
+                                OnBoardedOn = DateTimeOffset.UtcNow,
+                                Level = FarmerLevel.Level1
+                            };
+
+                            _db.Farmers.Add(farmer);
+                            existingFarmersByUserAndBusiness[scopeKey] = 0; // placeholder until saved
+                        }
+
+                        if (row.SelectedItems.Any())
+                            await AddFarmerValueChainItemsAsync(farmer, row.SelectedItems);
+
+                        if (!string.IsNullOrWhiteSpace(args.organizationCode))
+                            await LinkToOrganizationAsync(user, farmer, args.organizationCode, args.UserId);
+
+                        if (args.CooperativeIds.Count > 0)
+                            await LinkToCooperativeAsync(farmer, args.CooperativeIds, args.organizationCode, args.UserId);
+
+                        if (args.AgentIds.Count > 0)
+                            await LinkToAgentAsync(farmer, args.AgentIds, args.organizationCode, args.UserId);
+
+                        result.Succeeded++;
+                    }
+
+                    // ONE SaveChanges + ONE commit per batch, instead of per row.
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    await tx.RollbackAsync();
+                    _logger.LogError(ex, "Batch failed — falling back to per-row processing.");
+
+                    // Fallback: something in this batch broke the whole SaveChanges (e.g. a race-condition
+                    // duplicate that slipped past the in-memory check). Retry the batch one row at a time
+                    // so we isolate exactly which row failed instead of losing the whole batch.
+                    await ProcessRowByRowFallbackAsync(batch, args, result);
+                }
+            });
+        }
+        private async Task AddFarmerValueChainItemsAsync(
+    Farmer farmer,
+    List<ValueChainSelectionDto> selections)
+        {
+            var incomingItems = selections
+                .Where(v => !string.IsNullOrWhiteSpace(v.ValueChainType) && v.Items != null)
+                .SelectMany(v => v.Items
+                    .Where(item => !string.IsNullOrWhiteSpace(item))
+                    .Select(item => new
+                    {
+                        ValueChainType = v.ValueChainType.Trim(),
+                        ItemName = item.Trim()
+                    }))
+                .Distinct()
+                .ToList();
+
+            if (!incomingItems.Any()) return;
+
+            HashSet<string> existingKeys;
+
+            if (farmer.Id != 0)
+            {
+                // Existing farmer already in the DB — check what's already there to avoid duplicate inserts.
+                existingKeys = (await _db.FarmerValueChainItems
+                    .Where(x => x.FarmerId == farmer.Id)
+                    .Select(x => x.ValueChainType + "|" + x.ItemName)
+                    .ToListAsync())
+                    .ToHashSet();
+            }
+            else
+            {
+                // Brand new farmer, not yet saved — nothing can exist for it yet, skip the query entirely.
+                existingKeys = new HashSet<string>();
+            }
+
+            var toAdd = incomingItems
+                .Where(i => !existingKeys.Contains($"{i.ValueChainType}|{i.ItemName}"))
+                .Select(i => new FarmerValueChainItem
+                {
+                    Farmer = farmer, // navigation property — EF resolves FarmerId at SaveChanges time,
+                                     // even before farmer.Id has been generated
+                    ValueChainType = i.ValueChainType,
+                    ItemName = i.ItemName
+                })
+                .ToList();
+
+            if (toAdd.Any())
+                _db.FarmerValueChainItems.AddRange(toAdd);
+        }
+        private async Task ProcessRowByRowFallbackAsync(
+    List<BulkFarmerRowDto> batch,
+    OnBoardingArgs args,
+    BulkFarmerUploadResultDto result)
+        {
+            // Whatever got added to the tracker during the failed batch attempt must be cleared,
+            // or retrying will try to re-insert entities that are still (invalidly) tracked.
+            _db.ChangeTracker.Clear();
+
+            var strategy = _db.Database.CreateExecutionStrategy();
+
+            foreach (var row in batch)
+            {
+                // Rows already flagged by the in-memory checks earlier never reached SaveChanges —
+                // no need to retry those.
+                if (result.Errors.Any(e => e.RowIndex == row.RowIndex))
+                    continue;
+
+                var rowSucceeded = false;
+
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var tx = await _db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        await OnboardSingleFarmerWithDbChecksAsync(row, args);
+                        await _db.SaveChangesAsync();
+                        await tx.CommitAsync();
+                        rowSucceeded = true;
+
+                        _logger.LogInformation(
+                            "Row {Row}: farmer {Phone} onboarded successfully (fallback path).",
+                            row.RowIndex, row.PhoneNumber);
+                    }
+                    catch (DuplicatePhoneException ex)
+                    {
+                        await tx.RollbackAsync();
+                        Failure.RecordFailure(result, row, ex.Message);
+                        _logger.LogWarning("Row {Row}: duplicate phone (fallback) – {Msg}", row.RowIndex, ex.Message);
+                    }
+                    catch (DuplicateFarmerFieldException ex)
+                    {
+                        await tx.RollbackAsync();
+                        Failure.RecordFailure(result, row, ex.Message);
+                        _logger.LogWarning("Row {Row}: duplicate {Field} (fallback) – {Msg}", row.RowIndex, ex.FieldName, ex.Message);
+                    }
+                    catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                    {
+                        await tx.RollbackAsync();
+                        var msg = ExtractDuplicateFieldMessage(ex);
+                        Failure.RecordFailure(result, row, msg);
+                        _logger.LogWarning("Row {Row}: unique constraint violation (fallback) – {Msg}", row.RowIndex, msg);
+                    }
+                    catch (Exception ex)
+                    {
+                        await tx.RollbackAsync();
+                        _logger.LogError(ex, "Row {Row}: unhandled exception (fallback).", row.RowIndex);
+                        Failure.RecordFailure(result, row, $"Unexpected error: {ex.Message}");
+                    }
+                });
+
+                if (rowSucceeded)
+                    result.Succeeded++;
+            }
+        }
         /// <param name="rows">Parsed rows from the uploaded file.</param>
         public async Task<BulkFarmerUploadResultDto> ProcessAsync(
     IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkFarmerUploadResultDto { TotalRows = rows.Count };
-            
+
             var strategy = _db.Database.CreateExecutionStrategy();
 
             for (int i = 0; i < rows.Count; i++)
@@ -68,7 +410,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     await using var tx = await _db.Database.BeginTransactionAsync();
                     try
                     {
-                        await OnboardSingleFarmerAsync(currentRow, args);
+                        await OnboardSingleFarmerWithDbChecksAsync(currentRow, args);
                         await _db.SaveChangesAsync();
                         await tx.CommitAsync();
                         rowSucceeded = true;
@@ -83,11 +425,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                         Failure.RecordFailure(result, currentRow, ex.Message); // ← already correct, nothing to change
                         _logger.LogWarning("Row {Row}: duplicate – {Msg}", currentRow.RowIndex, ex.Message);
                     }
+                    catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                    {
+                        await tx.RollbackAsync();
+                        var msg = ExtractDuplicateFieldMessage(ex); // pull the field/value out of ex.InnerException.Message
+                        Failure.RecordFailure(result, currentRow, msg);
+                        _logger.LogWarning("Row {Row}: unique constraint violation – {Msg}", currentRow.RowIndex, msg);
+                    }
+                    catch (DuplicateFarmerFieldException ex)
+                    {
+                        await tx.RollbackAsync();
+                        Failure.RecordFailure(result, currentRow, ex.Message);
+                        _logger.LogWarning("Row {Row}: duplicate {Field} – {Msg}", currentRow.RowIndex, ex.FieldName, ex.Message);
+                    }
                     catch (Exception ex)
                     {
                         await tx.RollbackAsync();
                         _logger.LogError(ex, "Row {Row}: unhandled exception.", currentRow.RowIndex);
-                      
+                        Failure.RecordFailure(result, currentRow, $"Unexpected error: {ex.Message}");
+
                         throw;
                     }
                 });
@@ -100,7 +456,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             return result;
         }
-        private async Task OnboardSingleFarmerAsync(BulkFarmerRowDto row, OnBoardingArgs args)
+
+
+        private async Task OnboardSingleFarmerWithDbChecksAsync(BulkFarmerRowDto row, OnBoardingArgs args)
         {
             var phone = row.PhoneNumber.Trim();
 
@@ -108,6 +466,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             if (user == null)
             {
+                if (!string.IsNullOrWhiteSpace(row.Email))
+                {
+                    var email = row.Email.Trim();
+                    var emailExists = await _db.Users.AnyAsync(u =>
+                        u.Email != null && u.Email.ToLower() == email.ToLower());
+
+                    if (emailExists)
+                        throw new DuplicateFarmerFieldException("Email", email, row.RowIndex);
+                }
+
+                if (!string.IsNullOrWhiteSpace(row.BVN))
+                {
+                    var bvnExists = await _db.Users.AnyAsync(u => u.BVN == row.BVN);
+                    if (bvnExists)
+                        throw new DuplicateFarmerFieldException("BVN", row.BVN, row.RowIndex);
+                }
+
+                if (!string.IsNullOrWhiteSpace(row.NIN))
+                {
+                    var ninExists = await _db.Users.AnyAsync(u => u.NIN == row.NIN);
+                    if (ninExists)
+                        throw new DuplicateFarmerFieldException("NIN", row.NIN, row.RowIndex);
+                }
                 var (defaultPassword, salt) = GenerateDefaultCredentials();
 
                 user = new User
@@ -137,15 +518,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 }
             }
 
-            // The real "duplicate" to guard against: same user already onboarded
-            // as a Farmer for THIS business — not merely "phone exists somewhere".
             var farmer = await FindExistingFarmerInScopeAsync(user.Id, args.businessCode, args.organizationCode);
 
             if (farmer == null)
             {
-                // Might still be an existing Farmer for this business, just not yet linked to this org.
-                // Reuse that Farmer row if present, instead of creating a second Farmer for the same
-                // user+business combination.
                 farmer = await _db.Farmers
                     .FirstOrDefaultAsync(f => f.UserId == user.Id && f.BelongToBusinessCode == args.businessCode);
 
@@ -178,7 +554,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             }
             else
             {
-                // Already onboarded as a Farmer in this exact business + organization — treat as duplicate.
                 throw new DuplicatePhoneException(phone, row.RowIndex);
             }
             if (row.SelectedItems.Any())
@@ -384,6 +759,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 new() { ValueChainType = row.PartOfAgriculture, Items = items }
             };
         }
+        private static bool IsUniqueConstraintViolation(DbUpdateException ex)
+        {
+            return ex.InnerException is SqlException sqlEx &&
+                   (sqlEx.Number == 2601 || sqlEx.Number == 2627);
+        }
+
+        private static string ExtractDuplicateFieldMessage(DbUpdateException ex)
+        {
+            return ex.InnerException?.Message ?? "A duplicate value violated a unique constraint.";
+        }
     }
-   
-}
+    public class DuplicateFarmerFieldException : Exception
+    {
+        public string FieldName { get; }
+        public string Value { get; }
+        public int RowIndex { get; }
+
+        public DuplicateFarmerFieldException(string fieldName, string value, int rowIndex)
+            : base($"Duplicate {fieldName} '{value}' for row {rowIndex}.")
+        {
+            FieldName = fieldName;
+            Value = value;
+            RowIndex = rowIndex;
+        }
+    }
+
+  }

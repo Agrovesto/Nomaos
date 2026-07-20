@@ -62,6 +62,9 @@ namespace Agrovesto.Backend.Core.Enums
 
 
         [Display(Name = "Additional Cost Disbursement")]
-        AdditionalCostDisbursement
+        AdditionalCostDisbursement,
+
+        [Display(Name = "Repayment Receipt")]
+        RepaymentReceipt
     }
 }
