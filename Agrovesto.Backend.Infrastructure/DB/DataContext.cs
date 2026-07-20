@@ -535,6 +535,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<PenaltyPolicy> PenaltyPolicies { get; set; }
         public DbSet<SubscriptionPaymentAllocation> SubscriptionPaymentAllocations { get; set; }
         public DbSet<InputPackageSubscriptionPayment> InputPackageSubscriptionPayments { get; set; }
+        public DbSet<SubscriptionCreditBalance> SubscriptionCreditBalance { get; set; }
         public DbSet<PaymentReconciliation> PaymentReconciliation { get; set; }
         public DbSet<InputSubscriptionDisbursement> InputSubscriptionDisbursements { get; set; }
         public DbSet<OutboxMessage> OutboxMessages { get; set; }

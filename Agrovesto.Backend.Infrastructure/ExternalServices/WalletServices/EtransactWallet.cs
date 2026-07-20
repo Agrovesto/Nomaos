@@ -63,6 +63,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.ClientId = _params["ClientId"].Value;
             response.SchemeId = _params["SchemeId"].Value;
             response.WalletShemeTierId = _params["WalletShemeTierId"].Value;
+            response.WalletFee = _params["Fee"].Value;
+            response.WalletStampDuty = _params["StampDuty"].Value;
 
 
             return response;
@@ -140,7 +142,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var walletResponse = new AccountValidationResponse
                 {
                     WalletNumber = etransactResponse.Result?.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName
+                    AccountName = etransactResponse.Result?.AccountName,
+                    macChecksum= etransactResponse.Result.MacCheckSum
                 };
 
                 return new WalletResponseService<AccountValidationResponse>
@@ -317,85 +320,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
         }
 
-
-      //  public async Task<WalletResponseService<AccountValidationResponse>> AddExistingWallet(
-      //UserProfileResponse data,
-      //WalletProviderParameterModel[] parameters,
-      //string env)
-      //  {
-      //      try
-      //      {
-      //          var @params = await RetrieveParams(parameters, env);
-
-      //          var request = new
-      //          {
-      //              Bvn = data.BVN,
-      //              walletNumber = data.WalletNumber,
-      //          };
-
-      //          var payloadJson = JsonSerializer.Serialize(request);
-
-      //          var hashKey = GenerateHashKey(
-      //              @params.ClientSecret,
-      //              payloadJson);
-
-      //          using var client = new HttpClient
-      //          {
-      //              BaseAddress = new Uri(@params.BaseUrl)
-      //          };
-
-      //          ExtractDefaultHeader(
-      //              hashKey,
-      //              @params.ClientId,
-      //              client);
-
-      //          var content = new StringContent(
-      //              payloadJson,
-      //              Encoding.UTF8,
-      //              "application/json");
-
-      //          var response = await client.PostAsync("/v1/new-customer/register", content);
-      //          var responseContent = await response.Content.ReadAsStringAsync();
-
-      //          var envelope = JsonSerializer.Deserialize<ProviderResponseEnvelope>(
-      //              responseContent,
-      //              new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-      //          if (!response.IsSuccessStatusCode || envelope == null || !envelope.Success)
-      //          {
-      //              return new WalletResponseService<AccountValidationResponse>
-      //              {
-      //                  IsSuccess = false,
-      //                  Message = envelope?.Message ??
-      //                  envelope?.ResponseDescription ?? responseContent
-      //              };
-      //          }
-
-      //          var walletResponse =
-      //              JsonSerializer.Deserialize<AccountValidationResponse>(
-      //                  responseContent,
-      //                  new JsonSerializerOptions
-      //                  {
-      //                      PropertyNameCaseInsensitive = true
-      //                  });
-
-      //          return new WalletResponseService<AccountValidationResponse>
-      //          {
-      //              IsSuccess = true,
-      //              Data = walletResponse,
-      //              Message = "Wallet created successfully."
-      //          };
-      //      }
-      //      catch (Exception ex)
-      //      {
-      //          return new WalletResponseService<AccountValidationResponse>
-      //          {
-      //              IsSuccess = false,
-      //              Message = ex.Message
-      //          };
-      //      }
-      //  }
-
         public async Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiry(
     UserProfileResponse data,
     WalletProviderParameterModel[] parameters,
@@ -477,22 +401,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
         }
 
-
-        public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
-        {
-            throw new NotImplementedException();
-        }
-
         public async Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(
        WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
@@ -503,20 +411,19 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var body = new
                 {
                     walletNumber = request.WalletNumber,
-                    //walletName = request.WalletName,
+                    walletName = request.WalletName,
                     transactionReference = request.TransactionReference,
                     amount = request.Amount.ToString("0.00"),
-                    //fee = request.Fee,
-                    //stampDutyFee = request.StampDutyFee,
+                    fee = long.Parse(@params.WalletFee),
+                    stampDutyFee =long.Parse(@params.WalletStampDuty),
                     narration = request.Message
                 };
 
                 var payloadJson = JsonSerializer.Serialize(body);
                 var hashKey = GenerateHashKey(
                              @params.ClientSecret,
-                             payloadJson
-                             //,
-                             //request.CustomerMac
+                             payloadJson,
+                             request.CustomerMac
                              );
 
                 using var client = new HttpClient
@@ -578,6 +485,22 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     ex.Message,
                     500);
             }
+        }
+
+
+        public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
+        {
+            throw new NotImplementedException();
         }
 
         private string GenerateHashKey(

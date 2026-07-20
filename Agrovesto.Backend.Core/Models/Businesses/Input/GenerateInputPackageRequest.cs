@@ -443,6 +443,66 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string? PaidByUserId { get; set; }
         public long WalletProviderId { get; set; }
     }
+    public class RepaymentReminderDto
+    {
+        public long SubscriptionId { get; set; }
+        public string SubscriberUserId { get; set; }
+
+        public decimal TotalRepayment { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal CreditBalance { get; set; }
+        public decimal OutstandingAmount { get; set; }
+
+        public bool RequiresReminder { get; set; }
+
+        // True when AmountPaid alone hasn't cleared the balance, but unconsumed
+        // credit is enough to cover what remains, the loan isn't formally closed
+        // until someone runs reconciliation to consume that credit.
+        public bool RequiresReconciliation { get; set; }
+
+        public string? Message { get; set; }
+
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+    public class RepaymentLedgerEntryDto
+    {
+        public DateTimeOffset Date { get; set; }
+        public string Type { get; set; }       // "Cash", "Produce", or "Hybrid"
+        public string Channel { get; set; }    // e.g. "Wallet (Momo)", "Maize", "Wallet (Momo) + Maize"
+        public decimal Amount { get; set; }
+        public decimal BalanceAfter { get; set; }
+        public string Reference { get; set; }
+    }
+    public class RepaymentScheduleItemDto
+    {
+        public long ScheduleId { get; set; }
+        public int InstallmentNumber { get; set; }
+        public DateTimeOffset DueDate { get; set; }
+
+        public decimal ExpectedAmount { get; set; }
+        public decimal AmountPaid { get; set; }
+        public decimal OutstandingAmount { get; set; }
+
+        public decimal PenaltyAccrued { get; set; }
+        public decimal PenaltyPaid { get; set; }
+        public decimal PenaltyOutstanding { get; set; }
+
+        public bool IsWithinGracePeriod { get; set; }
+
+        public RepaymentScheduleStatus Status { get; set; }
+        public bool RequiresReminder { get; set; }
+    }
+    public class OverdueRepaymentReminderDto
+    {
+        public long SubscriptionId { get; set; }
+        public string SubscriberUserId { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string PackageName { get; set; }
+
+        public RepaymentScheduleItemDto Schedule { get; set; }
+    }
     public class CommitmentReminderDto
     {
         public long SubscriptionId { get; set; }
@@ -455,7 +515,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string Email { get; set; }
         public string PhoneNumber { get; set; }
     }
-    
+
 
     public class RecordRepaymentRequest
     {
@@ -469,8 +529,38 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public PaymentChannel PaymentChannel { get; set; }
         public string? SubscriberUserId { get; set; }
+        public long? WalletProviderId { get; set; }
+
+        // Only populated/required when PaymentChannel == PaymentChannel.Produce
+        public ProduceRepaymentDetails? ProduceDetails { get; set; }
     }
 
+    public class ProduceRepaymentDetails
+    {
+        public long OrganizationProductId { get; set; }
+        public long LocationId { get; set; }
+        public decimal QuantityBrought { get; set; }
+        public string? Grade { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
+    }
+    public class RepaymentResponse
+    {
+        public bool IsSuccessful { get; set; }
+        public decimal AmountApplied { get; set; }
+        public decimal OutstandingBalance { get; set; }
+        public decimal OverpaymentCredited { get; set; }
+        public string ExternalReference { get; set; }
+    }
+
+    public class ProduceRepaymentResult
+    {
+        public bool IsSuccessful { get; set; }
+        public decimal EquivalentAmount { get; set; }
+        public decimal AppliedAmount { get; set; }
+        public decimal OverpaymentAmount { get; set; }
+        public string Reference { get; set; }
+    }
 
     public class SubscriptionQueryFilter
     {
@@ -715,6 +805,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class CreateCommitmentPaymentRequest
     {
+        public PaymentType PaymentType { get; set; }
         public long SubscriptionId { get; set; }
         public decimal Amount { get; set; }
         public PaymentChannel PaymentChannel { get; set; }

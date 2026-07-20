@@ -17,7 +17,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long Id { get; set; }
-
+        public string? Grade { get; set; }
+        public decimal UnitPriceUsed { get; set; }
         // Inventory affected
         public long LocationInventoryId { get; set; }
         public LocationInventory LocationInventory { get; set; }
@@ -307,6 +308,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public double MinimumOrderQuantity { get; set; }
         public double MaximumOrderQuantity { get; set; }
         public string? Description { get; set; }
+        public decimal PricePerUnit { get; set; }
 
     }
      public class  OrganizationProductCategory

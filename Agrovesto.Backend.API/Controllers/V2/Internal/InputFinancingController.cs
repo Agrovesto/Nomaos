@@ -628,6 +628,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 ));
         }
        
+    
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
@@ -1083,6 +1084,134 @@ HttpContext.TraceIdentifier
                  ResponseCodes.Success,
                  HttpContext.TraceIdentifier
                  ));
+        }
+        [HttpPost("subscription/record-repayment")]
+        public async Task<IActionResult> RecordRepaymentAsync(
+   [FromQuery] InputSubscriptionRequestArgs filter,
+   [FromBody] RecordRepaymentRequest request)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    HttpContext.TraceIdentifier
+                ));
+            }
+            await _inputFinancingManager
+                .RecordRepaymentAsync(request, filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processed",
+                 "Successful",
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
+        [HttpPost("subscription/repayment-reminder")]
+        public async Task<IActionResult> SendRepaymentReminder(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            await _inputFinancingManager
+                .SendRepaymentReminderAsync(filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 ResponseMessages.Successful,
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+
+        [HttpPost("subscription/repayment-schedule")]
+        public async Task<IActionResult> GetRepaymentScheduleAsync(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentScheduleAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentScheduleItemDto>>.Success(
+                result,
+                 ResponseMessages.Successful,
+                 ResponseCodes.Success,
+                 HttpContext.TraceIdentifier
+                 ));
+        }
+        [HttpGet("subscription/repayment-ledger")]
+
+        public async Task<IActionResult> GetRepaymentLedgerAsync(
+        [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.OrganizationCode ??= OrganizationCode;
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentLedgerAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentLedgerEntryDto>>.SuccessPaged(
+    result,
+    "Successful",
+    ResponseCodes.Success,
+    HttpContext.TraceIdentifier
+));
+        }
+
+        private (bool flowControl, IActionResult value) ValidateAuthorization(SubscriptionQueryFilter filter)
+        {
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                                !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            {
+                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                )));
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                )));
+            }
+
+            return (flowControl: true, value: null);
         }
 
         private string GenerateExportFileName(SubscriptionQueryFilter filter, ExportFormat format)
