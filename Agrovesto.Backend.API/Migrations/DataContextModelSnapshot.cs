@@ -4557,6 +4557,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("AmountPaid")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("Balance")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTimeOffset>("DueDate")
                         .HasColumnType("datetimeoffset");
 
@@ -4583,6 +4586,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<decimal>("PenaltyPaid")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
