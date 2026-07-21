@@ -2502,6 +2502,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("RepaymentStartDate")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<decimal>("RepaymentValue")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<int>("RiskCategory")
                         .HasColumnType("int");
 
@@ -2768,6 +2771,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long?>("FromLocationId")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("Grade")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<double>("Latitude")
                         .HasColumnType("float");
 
@@ -2824,6 +2830,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<int>("TransactionType")
                         .HasColumnType("int");
+
+                    b.Property<decimal>("UnitPriceUsed")
+                        .HasColumnType("decimal(18,2)");
 
                     b.HasKey("Id");
 
@@ -4088,6 +4097,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<long>("OrganizationProductCategoryId")
                         .HasColumnType("bigint");
 
+                    b.Property<decimal>("PricePerUnit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("ProductCode")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4545,6 +4557,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("AmountPaid")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("Balance")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTimeOffset>("DueDate")
                         .HasColumnType("datetimeoffset");
 
@@ -4571,6 +4586,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<decimal>("PenaltyPaid")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 
@@ -4703,6 +4721,38 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("SubscriptionConfig");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionCreditBalance", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset?>("ConsumedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("IsConsumed")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Reference")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("SubscriptionId")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("SubscriptionCreditBalance");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument", b =>

@@ -214,7 +214,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     ContextReferenceId = contextReferenceId,
                     SetAsDefaultForContext = request.IsDefault,
                     TransactionPin = request.TransactionPin,
-
+                    MaxCheckSum= validationResponse.Data?.macChecksum
                 };
 
                var wallet= await _userWalletRepository.CreateUserWallet(walletModel, new UserWalletParams

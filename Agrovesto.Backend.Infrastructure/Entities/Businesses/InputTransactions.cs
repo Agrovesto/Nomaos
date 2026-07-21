@@ -251,7 +251,8 @@ RepaymentTransaction
         public bool IsWithinGracePeriod { get; set; }
 
         public bool IsPaid { get; set; }
-
+        public RepaymentScheduleStatus Status { get; set; }
+        public decimal Balance { get; set; }// => Amount - AmountPaid;
         public bool IsOverdue { get; set; }
         public decimal PenaltyAccrued { get; set; }
         public decimal PenaltyPaid { get; set; }
@@ -292,6 +293,7 @@ RepaymentTransaction
         public decimal TotalFinancingValue { get; set; }
 
         public bool CommitmentRequired { get; set; }
+        public decimal RepaymentValue { get; set; }
 
         public decimal CommitmentValue { get; set; }
 
@@ -322,6 +324,21 @@ RepaymentTransaction
 
         public ICollection<InputPackageSubscriptionPayment> Payments { get; set; }
         =new List<InputPackageSubscriptionPayment>();
+    }
+    // for auditability — every overpayment event is recorded individually,
+    // not just netted into a running total, so you can see where credit came from.
+    public class SubscriptionCreditBalance
+    {
+        [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
+        public long Id { get; set; }
+        public long SubscriptionId { get; set; }
+        public decimal Amount { get; set; }
+        public string Reference { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        public bool IsConsumed { get; set; }
+        public DateTimeOffset? ConsumedOn { get; set; }
     }
     public class InputPackageSubscriptionPayment
     {

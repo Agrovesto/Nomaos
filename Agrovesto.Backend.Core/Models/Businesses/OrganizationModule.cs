@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -132,5 +133,29 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal UnitPrice { get; set; }
         public decimal TotalValue { get; set; }
         public string PaymentStatus { get; set; } //Pending, Paid, Cancelled
+    }
+
+    public class OrganizationFarmerProjection
+    {
+         public string UserId { get; set; }
+
+        public long FarmerId { get; set; }
+        public string Name { get; set; }
+        public string? Gender { get; set; }
+        public string State { get; set; }
+        public string Lga { get; set; }
+        public string Ward { get; set; }
+        public string Location { get; set; }
+        public string? FarmerCategory { get; set; }
+        public string Level { get; set; }
+
+        public string PhoneNumber { get; set; }
+        public string Email { get; set; }
+
+           public string OrganizationCode { get; set; }
+        public bool OrganizationIsActive { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
     }
 }

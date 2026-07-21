@@ -42,6 +42,10 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
     }
     public class PaymentResponse
     {
+        public bool Success { get; set; }
+        public string ResponseCode { get; set; }
+        public string ResponseDescription { get; set; }
+
         public string Reference { get; set; }
         public string ProviderReference { get; set; }
         public string Status { get; set; } // Pending, Successful, Failed
@@ -53,6 +57,10 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string TransactionId { get; set; }
         public string Status { get; set; }
         public string Message { get; set; }
+        public bool Success { get; set; }
+        public string ResponseCode { get; set; }
+        public string ResponseDescription { get; set; }
+
     }
     public class MomoPreApprovalResponse
     {
@@ -195,5 +203,7 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string ClientId { get; set; }
         public string SchemeId { get; set; }
         public string WalletShemeTierId { get; set; }
+        public string WalletFee { get; set; }
+        public string WalletStampDuty { get; set; }
     }
 }

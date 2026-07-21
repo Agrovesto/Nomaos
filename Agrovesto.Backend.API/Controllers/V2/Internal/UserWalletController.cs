@@ -220,6 +220,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(query.env))
                 return BadRequest("Environment is required");
@@ -282,6 +283,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            
 
         }
+      
         [HttpPost("{provider}/top-up")]
         public async Task<IActionResult> HandleWebhook(string provider)
         {

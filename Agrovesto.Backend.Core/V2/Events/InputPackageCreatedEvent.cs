@@ -96,6 +96,16 @@ namespace Agrovesto.Backend.Core.V2.Events
 
         public DateTime OccurredOn { get; set; } = DateTime.UtcNow;
     }
+    public class RepaymentFullyPaidEvent
+    {
+        public long SubscriptionId { get; set; }
+
+        public long PackageId { get; set; }
+
+        public decimal TotalRepaid { get; set; }
+
+        public DateTime OccurredOn { get; set; } = DateTime.UtcNow;
+    }
     public class SubscriptionDisbursedEvent
     {
         public long SubscriptionId { get; set; }
@@ -117,6 +127,8 @@ namespace Agrovesto.Backend.Core.V2.Events
         public decimal RemainingAmount { get; set; }
 
         public decimal Amount { get; set; }
+        public string SubscriberUserId { get; set; }
+        public long? OrganizationId { get; set; }
 
         public bool IsCompleted { get; set; }
     }

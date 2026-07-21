@@ -49,6 +49,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<WalletReconciliationLog?> GetReconciliationLog(string debitReference);
         Task<List<WalletReconciliationLog>> GetPendingReconciliations();
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
+        Task AdjustWalletBalanceAsync(long walletId, decimal delta);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -58,6 +59,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             _context = context;
             _notificationService = aWSService;
+        }
+        public async Task AdjustWalletBalanceAsync(long walletId, decimal delta)
+        {
+            var wallet = await _context.UserWallets.FirstOrDefaultAsync(x => x.Id == walletId);
+
+            if (wallet == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet not found");
+
+            wallet.WalletBalance += delta;
+
+            await _context.SaveChangesAsync();
         }
         public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
         {

@@ -1423,10 +1423,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
 
         }
-
-       
         
-
         [HttpGet("farmer/sales-overview")]
         public async Task<IActionResult> GetOrganizationFarmerSalesSummary([FromQuery] ListQueryParams query)
         {

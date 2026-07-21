@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
+using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.Extensions.Configuration;
@@ -33,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
     }
     public interface IEtransactWallet
     {
-
+        Task<WalletResponseService<PaymentResponse>> ReverseTransactionAsync(string transactionReference, WalletProviderParameterModel[] parameters, string env);
     }
     public class EtransactWallet : IGenericWalletService, IEtransactWallet
     {
@@ -52,6 +53,30 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
         public string ProviderKey => "Etransact";
         public bool RequiresPreDebit => true;
+        private string GenerateHashKey(
+           string clientSecret,
+           string payloadJson = "",
+           string customerMac = null)
+        {
+            payloadJson ??= string.Empty;
+
+            var stringToHash = string.IsNullOrWhiteSpace(customerMac)
+                ? $"{clientSecret}{payloadJson}"
+                : $"{customerMac}{clientSecret}{payloadJson}";
+
+            return HashingHelper.ComputeSha256Hash(stringToHash);
+        }
+
+        private static void ExtractDefaultHeader(string hashKey, string clientIdentifier, HttpClient client)
+        {
+            client.DefaultRequestHeaders.Clear();
+
+            client.DefaultRequestHeaders.Add("x-Client-Id", clientIdentifier);
+            client.DefaultRequestHeaders.Add("x-hash-key", hashKey);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        }
+
+
         public async Task<ProviderParams> RetrieveParams(WalletProviderParameterModel[] parameters, string Env)
         {
             var response = new ProviderParams();
@@ -63,6 +88,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.ClientId = _params["ClientId"].Value;
             response.SchemeId = _params["SchemeId"].Value;
             response.WalletShemeTierId = _params["WalletShemeTierId"].Value;
+            response.WalletFee = _params["Fee"].Value;
+            response.WalletStampDuty = _params["StampDuty"].Value;
 
 
             return response;
@@ -140,7 +167,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var walletResponse = new AccountValidationResponse
                 {
                     WalletNumber = etransactResponse.Result?.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName
+                    AccountName = etransactResponse.Result?.AccountName,
+                    macChecksum= etransactResponse.Result.MacCheckSum
                 };
 
                 return new WalletResponseService<AccountValidationResponse>
@@ -237,178 +265,164 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     500);
             }
         }
-        public async Task<WalletResponseService<AccountValidationResponse>> NameEnquiry(
- UserProfileResponse data,
- WalletProviderParameterModel[] parameters,
- string env)
+        public async Task<WalletResponseService<NameEnquiryResult>> NameEnquiryAsync(
+         string walletNumber,
+         WalletProviderParameterModel[] parameters,
+         string env)
         {
             try
             {
                 var @params = await RetrieveParams(parameters, env);
 
-                var request = new
+                var request = new { walletNumber };
+
+                var jsonOptions = new JsonSerializerOptions
                 {
-                    walletNumber = data.WalletNumber,
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 };
 
-                var payloadJson = JsonSerializer.Serialize(request);
+                var payloadJson = JsonSerializer.Serialize(request, jsonOptions);
+                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson);
 
-                var hashKey = GenerateHashKey(
-                    @params.ClientSecret,
-                    payloadJson);
+                System.Diagnostics.Debug.WriteLine($"[NameEnquiry] payloadJson={payloadJson} hashKey={hashKey}");
 
-                using var client = new HttpClient
-                {
-                    BaseAddress = new Uri(@params.BaseUrl)
-                };
+                using var client = new HttpClient { BaseAddress = new Uri(@params.BaseUrl) };
+                ExtractDefaultHeader(hashKey, @params.ClientId, client);
 
-                ExtractDefaultHeader(
-                    hashKey,
-                    @params.ClientId,
-                    client);
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync("/v1/wallets/name-enquiry", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                var content = new StringContent(
-                    payloadJson,
-                    Encoding.UTF8,
-                    "application/json");
+                System.Diagnostics.Debug.WriteLine(
+                    $"[NameEnquiry] status={(int)httpResponse.StatusCode} body={responseContent}");
 
-                var response = await client.PostAsync(
-                    "/v1/wallets/name-enquiry",
-                    content);
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                var etransactResponse = JsonSerializer.Deserialize<EtransactNameEnquiryResponse>(
+                var etransactResponse = JsonSerializer.Deserialize<NameEnquiryEtransactResponse>(
                     responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (!response.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
+                if (!httpResponse.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
                 {
                     var errorMessage = etransactResponse?.Message
                         ?? etransactResponse?.ResponseDescription
+                        ?? HttpStatusCodeHelper.Describe(httpResponse.StatusCode)
                         ?? responseContent;
 
-                    return WalletResponseService<AccountValidationResponse>.Failed(
-                        $"Provider error: {response.StatusCode} - {errorMessage}",
-                        (int)response.StatusCode);
+                    return WalletResponseService<NameEnquiryResult>.Failed(errorMessage, (int)httpResponse.StatusCode);
                 }
 
-                var walletResponse = new AccountValidationResponse
+                var result = new NameEnquiryResult
                 {
-                    WalletNumber = data.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName
+                    AccountName = etransactResponse.Result?.AccountName,
+                    PhoneNumber = etransactResponse.Result?.PhoneNumber,
+                    EmailAddress = etransactResponse.Result?.EmailAddress,
+                    EnquiryReference = etransactResponse.Result?.EnquiryReference
+                };
+
+                return WalletResponseService<NameEnquiryResult>.Success(
+                    result,
+                    etransactResponse.ResponseDescription ?? "Name enquiry completed successfully");
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<NameEnquiryResult>.Failed(
+                    "Unable to reach Etransact service: " + ex.Message, 503);
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<NameEnquiryResult>.Failed(ex.Message, 500);
+            }
+        }
+
+        public async Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiryAsync(
+            UserProfileResponse data,
+            WalletProviderParameterModel[] parameters,
+            string env)
+        {
+            try
+            {
+                var @params = await RetrieveParams(parameters, env);
+                var request = new { walletNumber = data.WalletNumber };
+
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var payloadJson = JsonSerializer.Serialize(request, jsonOptions);
+                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson);
+
+                System.Diagnostics.Debug.WriteLine($"[BalanceEnquiry] payloadJson={payloadJson} hashKey={hashKey}");
+
+                using var client = new HttpClient { BaseAddress = new Uri(@params.BaseUrl) };
+                ExtractDefaultHeader(hashKey, @params.ClientId, client);
+
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync("/v1/wallets/balance-enquiry", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[BalanceEnquiry] status={(int)httpResponse.StatusCode} body={responseContent}");
+
+                var etransactResponse = JsonSerializer.Deserialize<BalanceEnquiryEtransactResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (!httpResponse.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
+                {
+                    var errorMessage = etransactResponse?.Message
+                        ?? etransactResponse?.ResponseDescription
+                        ?? HttpStatusCodeHelper.Describe(httpResponse.StatusCode)
+                        ?? responseContent;
+
+                    return WalletResponseService<AccountValidationResponse>.Failed(errorMessage, (int)httpResponse.StatusCode);
+                }
+
+                var result = new AccountValidationResponse
+                {
+                    AccountName = etransactResponse.Result?.AccountName,
+                    balance = etransactResponse.Result?.Balance ?? 0,
+                    ledgerBalance = etransactResponse.Result?.LedgerBalance ?? 0
                 };
 
                 return WalletResponseService<AccountValidationResponse>.Success(
-                    walletResponse,
-                    etransactResponse.ResponseDescription ?? "Name enquiry successful");
+                    result,
+                    etransactResponse.ResponseDescription ?? "Balance enquiry completed successfully");
             }
             catch (HttpRequestException ex)
             {
                 return WalletResponseService<AccountValidationResponse>.Failed(
-                    "Unable to reach Etransact service: " + ex.Message,
-                    503);
+                    "Unable to reach Etransact service: " + ex.Message, 503);
             }
             catch (Exception ex)
             {
-                return WalletResponseService<AccountValidationResponse>.Failed(
-                    ex.Message,
-                    500);
+                return WalletResponseService<AccountValidationResponse>.Failed(ex.Message, 500);
             }
         }
 
-
-      //  public async Task<WalletResponseService<AccountValidationResponse>> AddExistingWallet(
-      //UserProfileResponse data,
-      //WalletProviderParameterModel[] parameters,
-      //string env)
-      //  {
-      //      try
-      //      {
-      //          var @params = await RetrieveParams(parameters, env);
-
-      //          var request = new
-      //          {
-      //              Bvn = data.BVN,
-      //              walletNumber = data.WalletNumber,
-      //          };
-
-      //          var payloadJson = JsonSerializer.Serialize(request);
-
-      //          var hashKey = GenerateHashKey(
-      //              @params.ClientSecret,
-      //              payloadJson);
-
-      //          using var client = new HttpClient
-      //          {
-      //              BaseAddress = new Uri(@params.BaseUrl)
-      //          };
-
-      //          ExtractDefaultHeader(
-      //              hashKey,
-      //              @params.ClientId,
-      //              client);
-
-      //          var content = new StringContent(
-      //              payloadJson,
-      //              Encoding.UTF8,
-      //              "application/json");
-
-      //          var response = await client.PostAsync("/v1/new-customer/register", content);
-      //          var responseContent = await response.Content.ReadAsStringAsync();
-
-      //          var envelope = JsonSerializer.Deserialize<ProviderResponseEnvelope>(
-      //              responseContent,
-      //              new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-      //          if (!response.IsSuccessStatusCode || envelope == null || !envelope.Success)
-      //          {
-      //              return new WalletResponseService<AccountValidationResponse>
-      //              {
-      //                  IsSuccess = false,
-      //                  Message = envelope?.Message ??
-      //                  envelope?.ResponseDescription ?? responseContent
-      //              };
-      //          }
-
-      //          var walletResponse =
-      //              JsonSerializer.Deserialize<AccountValidationResponse>(
-      //                  responseContent,
-      //                  new JsonSerializerOptions
-      //                  {
-      //                      PropertyNameCaseInsensitive = true
-      //                  });
-
-      //          return new WalletResponseService<AccountValidationResponse>
-      //          {
-      //              IsSuccess = true,
-      //              Data = walletResponse,
-      //              Message = "Wallet created successfully."
-      //          };
-      //      }
-      //      catch (Exception ex)
-      //      {
-      //          return new WalletResponseService<AccountValidationResponse>
-      //          {
-      //              IsSuccess = false,
-      //              Message = ex.Message
-      //          };
-      //      }
-      //  }
-
-        public async Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiry(
-    UserProfileResponse data,
-    WalletProviderParameterModel[] parameters,
-    string env)
+        public async Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(
+          WalletTopUpProviderRequest model,
+            WalletProviderParameterModel[] parameters,
+            string env)
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(model.CustomerMac))
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "customerMac (macChecksum) is required to sign a debit request.", 400);
+                }
+
                 var @params = await RetrieveParams(parameters, env);
-                System.Diagnostics.Debug.WriteLine(
-                    $"[BalanceEnquiry] env={env} clientId={@params.ClientId} schemeId={@params.SchemeId} baseUrl={@params.BaseUrl}");
+
                 var request = new
                 {
-                    walletNumber = data.WalletNumber,
+                    walletNumber = model.WalletNumber,
+                    walletName = model.WalletName,
+                    transactionReference = model.TransactionReference,
+                    amount =model.Amount,
+                    fee= @params.WalletFee,
+                    stampDutyFee= @params.WalletStampDuty,
+                    narration= model.Message
                 };
 
                 var jsonOptions = new JsonSerializerOptions
@@ -418,71 +432,190 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 var payloadJson = JsonSerializer.Serialize(request, jsonOptions);
 
-                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson);
+                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson, model.CustomerMac);
 
-                System.Diagnostics.Debug.WriteLine($"[BalanceEnquiry] payloadJson={payloadJson}");
-                System.Diagnostics.Debug.WriteLine($"[BalanceEnquiry] hashKey={hashKey}");
+                System.Diagnostics.Debug.WriteLine(
+                    $"[DebitWallet] transactionReference={model.TransactionReference} payloadJson={payloadJson} hashKey={hashKey}");
 
-                using var client = new HttpClient
+                using var client = new HttpClient { BaseAddress = new Uri(@params.BaseUrl) };
+                ExtractDefaultHeader(hashKey, @params.ClientId, client);
+
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync("/v1/wallets/debit-wallet", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[DebitWallet] status={(int)httpResponse.StatusCode} body={responseContent}");
+
+                var etransactResponse = JsonSerializer.Deserialize<TransactionOperationEtransactResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (!httpResponse.IsSuccessStatusCode || etransactResponse == null)
                 {
-                    BaseAddress = new Uri(@params.BaseUrl)
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        $"Debit outcome unknown ({HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}). " +
+                        $"Reconcile using transaction status before retrying. Raw: {responseContent}",
+                        (int)httpResponse.StatusCode);
+                }
+
+                var result = new PaymentResponse
+                {
+                    Success = etransactResponse.Success,
+                    ResponseCode = etransactResponse.ResponseCode,
+                    ResponseDescription = etransactResponse.ResponseDescription
                 };
 
+                return etransactResponse.Success
+                    ? WalletResponseService<PaymentResponse>.Success(
+                        result, etransactResponse.ResponseDescription ?? "Debit completed successfully")
+                    : WalletResponseService<PaymentResponse>.Failed(
+                        etransactResponse.ResponseDescription ?? "Debit failed", (int)httpResponse.StatusCode);
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Unable to reach Etransact service, debit outcome unknown - reconcile via transaction status: "
+                    + ex.Message, 503);
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
+            }
+        }
+
+        public async Task<WalletResponseService<PaymentStatusResponse>> TransactionStatusAsync(
+            string transactionReference,
+            WalletProviderParameterModel[] parameters,
+            string env)
+        {
+            try
+            {
+                var @params = await RetrieveParams(parameters, env);
+
+                var request = new { transactionReference };
+
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var payloadJson = JsonSerializer.Serialize(request, jsonOptions);
+                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[TransactionStatus] payloadJson={payloadJson} hashKey={hashKey}");
+
+                using var client = new HttpClient { BaseAddress = new Uri(@params.BaseUrl) };
+                ExtractDefaultHeader(hashKey, @params.ClientId, client);
+
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync("/v1/transactions/status", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[TransactionStatus] status={(int)httpResponse.StatusCode} body={responseContent}");
+
+                var etransactResponse = JsonSerializer.Deserialize<TransactionOperationEtransactResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (!httpResponse.IsSuccessStatusCode || etransactResponse == null)
+                {
+                    return WalletResponseService<PaymentStatusResponse>.Failed(
+                        $"{HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}: {responseContent}",
+                        (int)httpResponse.StatusCode);
+                }
+
+                var result = new PaymentStatusResponse
+                {
+
+                    Success = etransactResponse.Success,
+                    ResponseCode = etransactResponse.ResponseCode,
+                    ResponseDescription = etransactResponse.ResponseDescription
+                };
+
+                return WalletResponseService<PaymentStatusResponse>.Success(
+                    result, etransactResponse.ResponseDescription ?? "Transaction status retrieved successfully");
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<PaymentStatusResponse>.Failed(
+                    "Unable to reach Etransact service: " + ex.Message, 503);
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<PaymentStatusResponse>.Failed(ex.Message, 500);
+            }
+        }
+
+        public async Task<WalletResponseService<PaymentResponse>> ReverseTransactionAsync(
+            string transactionReference,
+            WalletProviderParameterModel[] parameters,
+            string env)
+        {
+            try
+            {
+                var @params = await RetrieveParams(parameters, env);
+
+                var request = new { transactionReference };
+
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var payloadJson = JsonSerializer.Serialize(request, jsonOptions);
+                var hashKey = GenerateHashKey(@params.ClientSecret, payloadJson);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ReverseTransaction] payloadJson={payloadJson} hashKey={hashKey}");
+
+                using var client = new HttpClient { BaseAddress = new Uri(@params.BaseUrl) };
                 ExtractDefaultHeader(hashKey, @params.ClientId, client);
 
                 var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
 
-                var response = await client.PostAsync(
-                    "/v1/wallets/balance-enquiry",
-                    content);
+                var httpResponse = await client.PostAsync("/v1/transactions/reverse", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
-                var responseContent = await response.Content.ReadAsStringAsync();
+                System.Diagnostics.Debug.WriteLine(
+                    $"[ReverseTransaction] status={(int)httpResponse.StatusCode} body={responseContent}");
 
-                var etransactResponse = JsonSerializer.Deserialize<EtransactBalanceEnquiryResponse>(
+                var etransactResponse = JsonSerializer.Deserialize<TransactionOperationEtransactResponse>(
                     responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (!response.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
+                if (!httpResponse.IsSuccessStatusCode || etransactResponse == null)
                 {
-                    var errorMessage = etransactResponse?.Message
-                        ?? etransactResponse?.ResponseDescription
-                        ?? responseContent;
-
-                    return WalletResponseService<AccountValidationResponse>.Failed(
-                        $"Provider error: {response.StatusCode} - {errorMessage}",
-                        (int)response.StatusCode);
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        $"{HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}: {responseContent}",
+                        (int)httpResponse.StatusCode);
                 }
 
-                var walletResponse = new AccountValidationResponse
+                var result = new PaymentResponse
                 {
-                    WalletNumber = data.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName
+                    Success = etransactResponse.Success,
+                    ResponseCode = etransactResponse.ResponseCode,
+                    ResponseDescription = etransactResponse.ResponseDescription
                 };
 
-                return WalletResponseService<AccountValidationResponse>.Success(
-                    walletResponse,
-                    etransactResponse.ResponseDescription ?? "Balance enquiry successful");
+                return etransactResponse.Success
+                    ? WalletResponseService<PaymentResponse>.Success(
+                        result, etransactResponse.ResponseDescription ?? "Reversal completed successfully")
+                    : WalletResponseService<PaymentResponse>.Failed(
+                        etransactResponse.ResponseDescription ?? "Reversal failed", (int)httpResponse.StatusCode);
             }
             catch (HttpRequestException ex)
             {
-                return WalletResponseService<AccountValidationResponse>.Failed(
-                    "Unable to reach Etransact service: " + ex.Message,
-                    503);
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Unable to reach Etransact service: " + ex.Message, 503);
             }
             catch (Exception ex)
             {
-                return WalletResponseService<AccountValidationResponse>.Failed(
-                    ex.Message,
-                    500);
+                return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
             }
         }
-
-
-        public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
-        {
-            throw new NotImplementedException();
-        }
-
         public Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             throw new NotImplementedException();
@@ -493,267 +626,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             throw new NotImplementedException();
         }
 
-        public async Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(
-       WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
-        {
-            try
-            {
-                var @params = await RetrieveParams(parameters, Env);
-
-                var body = new
-                {
-                    walletNumber = request.WalletNumber,
-                    //walletName = request.WalletName,
-                    transactionReference = request.TransactionReference,
-                    amount = request.Amount.ToString("0.00"),
-                    //fee = request.Fee,
-                    //stampDutyFee = request.StampDutyFee,
-                    narration = request.Message
-                };
-
-                var payloadJson = JsonSerializer.Serialize(body);
-                var hashKey = GenerateHashKey(
-                             @params.ClientSecret,
-                             payloadJson
-                             //,
-                             //request.CustomerMac
-                             );
-
-                using var client = new HttpClient
-                {
-                    BaseAddress = new Uri(@params.BaseUrl)
-                };
-
-                ExtractDefaultHeader(
-                    hashKey,
-                    @params.ClientId,
-                    client);
-
-                var content = new StringContent(
-                    payloadJson,
-                    Encoding.UTF8,
-                    "application/json");
-
-                var response = await client.PostAsync(
-                    "/v1/wallets/debit-wallet",
-                    content);
-
-                var responseContent = await response.Content.ReadAsStringAsync();
-
-                var etransactResponse = JsonSerializer.Deserialize<EtransactDebitWalletResponse>(
-                    responseContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                if (!response.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
-                {
-                    var errorMessage = etransactResponse?.Message
-                        ?? etransactResponse?.ResponseDescription
-                        ?? responseContent;
-
-                    return WalletResponseService<PaymentResponse>.Failed(
-                        $"Request failed with status {response.StatusCode}: {errorMessage}",
-                        (int)response.StatusCode);
-                }
-
-                var paymentResponse = new PaymentResponse
-                {
-                    Status = etransactResponse.ResponseDescription,
-                    Reference = request.TransactionReference,
-                    ProviderReference = request.TransactionReference
-                };
-
-                return WalletResponseService<PaymentResponse>.Success(
-                    paymentResponse,
-                    etransactResponse.ResponseDescription ?? "Debit successful");
-            }
-            catch (HttpRequestException ex)
-            {
-                return WalletResponseService<PaymentResponse>.Failed(
-                    "Unable to reach Etransact service: " + ex.Message,
-                    503);
-            }
-            catch (Exception ex)
-            {
-                return WalletResponseService<PaymentResponse>.Failed(
-                    ex.Message,
-                    500);
-            }
-        }
-
-        private string GenerateHashKey(
-            string clientSecret,
-            string payloadJson = "",
-            string customerMac = null)
-        {
-            payloadJson ??= string.Empty;
-
-            var stringToHash = string.IsNullOrWhiteSpace(customerMac)
-                ? $"{clientSecret}{payloadJson}"
-                : $"{customerMac}{clientSecret}{payloadJson}";
-
-            return HashingHelper.ComputeSha256Hash(stringToHash);
-        }
-
-        private static void ExtractDefaultHeader(string hashKey, string clientIdentifier, HttpClient client)
-        {
-            client.DefaultRequestHeaders.Clear();
-
-            client.DefaultRequestHeaders.Add("x-Client-Id", clientIdentifier);
-            client.DefaultRequestHeaders.Add("x-hash-key", hashKey);
-            client.DefaultRequestHeaders.Add("Accept", "application/json");
-        }
-
-
+      
 
 
     
-    }
-
-    public class FlexibleStringConverter : System.Text.Json.Serialization.JsonConverter<string>
-    {
-        public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            return reader.TokenType switch
-            {
-                JsonTokenType.String => reader.GetString(),
-                JsonTokenType.Number => reader.TryGetDecimal(out var dec) ? dec.ToString() : reader.GetDouble().ToString(),
-                JsonTokenType.Null => null,
-                JsonTokenType.True => "true",
-                JsonTokenType.False => "false",
-                _ => throw new JsonException($"Unexpected token {reader.TokenType} for string-like field.")
-            };
-        }
-
-        public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
-            => writer.WriteStringValue(value);
-    }
-    public class EtransactAccountCreationResponse
-    {
-        // Real response uses "status" for the success flag, not "success" -
-        // PropertyNameCaseInsensitive only fixes casing, not different names.
-        [System.Text.Json.Serialization.JsonPropertyName("status")]
-        public bool Success { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("responseDescription")]
-        public string ResponseDescription { get; set; }
-
-        public string Message { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("responseCode")]
-        public string ResponseCode { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("result")]
-        public EtransactWalletData Result { get; set; }
-    }
-
-    public class EtransactWalletData
-    {
-        [System.Text.Json.Serialization.JsonPropertyName("walletNumber")]
-        public string WalletNumber { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("walletName")]
-        public string AccountName { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("macChecksum")]
-        public string MacCheckSum { get; set; }
-
-        [System.Text.Json.Serialization.JsonPropertyName("walletTier")]
-        public string WalletTier { get; set; }
-
-        // Tolerant of the API returning this as a JSON number instead of a string.
-        [System.Text.Json.Serialization.JsonPropertyName("walletBalance")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleStringConverter))]
-        public string WalletBalance { get; set; }
-    }
-    public class EtransactDebitWalletResponse
-    {
-        public string ResponseCode { get; set; }
-        public string ResponseDescription { get; set; }
-        public string Message { get; set; }
-        public bool Success { get; set; }
-    }
-    public class EtransactBalanceEnquiryResponse
-    {
-        public EtransactBalanceEnquiryResult Result { get; set; }
-        public string ResponseCode { get; set; }
-        public string ResponseDescription { get; set; }
-        public string Message { get; set; }
-        public bool Success { get; set; }
-    }
-
-    public class EtransactBalanceEnquiryResult
-    {
-        public string AccountName { get; set; }
-        public decimal Balance { get; set; }
-        public decimal LedgerBalance { get; set; }
-    }
-    // Nested DTOs — matches Etransact's get-wallet-details response shape
-    public class EtransactWalletDetailsResponse
-    {
-        public EtransactWalletDetailsResult Result { get; set; }
-        public string ResponseCode { get; set; }
-        public string ResponseDescription { get; set; }
-        public string Message { get; set; }
-        public bool Success { get; set; }
-    }
-
-    public class EtransactWalletDetailsResult
-    {
-        public string Id { get; set; }
-        public string UserId { get; set; }
-        public string WalletNumber { get; set; }
-        public decimal Balance { get; set; }
-        public bool IsRisk { get; set; }
-        public bool IsPND { get; set; }
-        public string Status { get; set; }
-        public DateTime? DateCreated { get; set; }
-        public string CreatedBy { get; set; }
-        public EtransactCustomer Customer { get; set; }
-        public EtransactWalletTier WalletTier { get; set; }
-    }
-
-    public class EtransactCustomer
-    {
-        public string Id { get; set; }
-        public string Bvn { get; set; }
-        public string Nin { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
-        public string OtherNames { get; set; }
-        public string PhoneNumber { get; set; }
-        public string EmailAddress { get; set; }
-        public string Gender { get; set; }
-        public string Status { get; set; }
-        public string Address1 { get; set; }
-        public string Address2 { get; set; }
-        public string City { get; set; }
-        public string MacChecksum { get; set; }
-    }
-
-    public class EtransactWalletTier
-    {
-        public string Id { get; set; }
-        public string LimitConfigurationId { get; set; }
-        public string TierName { get; set; }
-        public int TierLevel { get; set; }
-        public string Name { get; set; }
-        public string WalletSchemeId { get; set; }
-    }
-    public class EtransactNameEnquiryResponse
-    {
-        public EtransactNameEnquiryResult Result { get; set; }
-        public string ResponseCode { get; set; }
-        public string ResponseDescription { get; set; }
-        public string Message { get; set; }
-        public bool Success { get; set; }
-    }
-
-    public class EtransactNameEnquiryResult
-    {
-        public string AccountName { get; set; }
-        public string PhoneNumber { get; set; }
-        public string EmailAddress { get; set; }
-        public string EnquiryReference { get; set; }
     }
 
 }

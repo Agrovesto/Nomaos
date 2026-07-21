@@ -24,6 +24,7 @@ namespace Agrovesto.Backend.Core.CoreUtils
             public const string FailedValidation = "Agrovesto-006";
             public const string BadRequest = "Agrovesto-007";
             public const string AlreadyExist = "Agrovesto-008";
+            public const string AccessDenied = "Agrovesto-403";
             public const string BadRequestParameter = "Agrovesto-009";
             public const string ModelValidation = "Agrovesto-010";
             public const string NotSuccessful = "Agrovesto-011";
