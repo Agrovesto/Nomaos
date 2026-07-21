@@ -95,6 +95,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<RepaymentResponse> RecordRepaymentAsync(RecordRepaymentRequest request, InputSubscriptionRequestArgs args);
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
+        Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -463,6 +464,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
 
             return await _inputFinancingRepository.GetSubscriptionsAsync(filter, pageNumber, pageSize);
+        }
+        public async Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+            SubscriptionQueryFilter filter)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+            if (hasOrg != null)
+            {
+                filter.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.GetAgentSubscriptionOverview(filter);
         }
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {
@@ -1855,7 +1866,7 @@ RepaymentFrequency frequency)
             {
                 filter.OrganizationId = hasOrg.OrganizaionId;
             }
-            return await _inputFinancingRepository.GetInputFinancingDashboardAsync(filter);
+            return await _inputFinancingRepository.GetInputFinancingOverviewAsync(filter);
         }
         public async Task<byte[]> ExportSubscriptionsAsync(SubscriptionQueryFilter filter, ExportFormat format)
         {

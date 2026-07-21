@@ -30,17 +30,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IAgentRepository _agentRepository;
         private readonly ILogger<AgentManager> _log;
         private readonly IAWSRekognitionManager _faceManager;
+        private readonly IBusinessRepository _businessRepository;
         public AgentManager(IFarmerRepository farmerRepository, IAgentRepository agentRepository,
             IAWSRekognitionManager faceManager,
             IMembershipRepository cooperativeRepository,
-            ILogger<AgentManager> log)
+            ILogger<AgentManager> log, IBusinessRepository businessRepository)
         {
             _agentRepository = agentRepository;
             _farmerRepository = farmerRepository;
             _faceManager = faceManager;
             _log = log;
             _cooperativeRepository = cooperativeRepository;
+            _businessRepository = businessRepository;
         }
+        private async Task FetchOrganizationDetails(ListQueryParams query)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
+            if (hasOrg != null)
+            {
+                query.Id = hasOrg.OrganizaionId;
+            }
+        }
+
         public async Task<PagedListResponse<List<MemberShipResponseModel>>> GetMembershipsByAgent(string userId,
        ListQueryParams query)
         {
@@ -85,7 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             try
             {
                 query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-               
+             
                 var farmers = await _farmerRepository.GetFarmersByAgent(userId, query);
                 if (farmers == null) return new PagedListResponse<List<FarmerAgentDto>>
                 {

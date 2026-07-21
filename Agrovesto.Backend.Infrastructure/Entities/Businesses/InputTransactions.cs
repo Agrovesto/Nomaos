@@ -251,14 +251,14 @@ RepaymentTransaction
         public bool IsWithinGracePeriod { get; set; }
 
         public bool IsPaid { get; set; }
-
+        public RepaymentScheduleStatus Status { get; set; }
+        public decimal Balance { get; set; }// => Amount - AmountPaid;
         public bool IsOverdue { get; set; }
         public decimal PenaltyAccrued { get; set; }
         public decimal PenaltyPaid { get; set; }
     }
 
-    public class 
-        InputPackageSubscription
+    public class InputPackageSubscription
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
