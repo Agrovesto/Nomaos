@@ -29,7 +29,20 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string destinationInstitutionCode { get; set; }
         public string accountNumber { get; set; }
         public string accountName { get; set; }
+    
+        [System.Text.Json.Serialization.JsonPropertyName("accountName")]
+        public string AccountName { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("phoneNumber")]
+        public string PhoneNumber { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("emailAddress")]
+        public string EmailAddress { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("enquiryReference")]
+        public string EnquiryReference { get; set; }
     }
+
     public class CafeOneBankData
     {
         public int id { get; set; }

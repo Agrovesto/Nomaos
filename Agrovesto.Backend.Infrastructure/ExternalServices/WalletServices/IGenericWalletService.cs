@@ -20,17 +20,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         // Create wallet/account with provider
         
         // Collect money from user (RequestToPay)
-        Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest model, WalletProviderParameterModel[] parameters, string Env);
 
         // Send money to user
         Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env);
 
         // Check transaction status
-        Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<PaymentStatusResponse>> TransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env);
 
         // Validate user account
         Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string Env);
         Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env);
+        Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiryAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string env);
     }
 
 }

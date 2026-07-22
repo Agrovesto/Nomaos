@@ -39,6 +39,7 @@ using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.IO.Packaging;
 using System.Linq;
 using System.Text;
@@ -91,6 +92,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(byte[] FileBytes, string FileName)> UploadCommissionLetterAsync(long subscriptionId, string userId, IFormFile file);
         Task<PaymentReceiptResponse> GetPaymentReceiptAsync(long subscriptionId, string currentloggedInrole);
         Task<List<Core.Models.Businesses.Input.SubscriptionDocument>> GetDocuments(long subscriptionId);
+        Task SendRepaymentReminderAsync(SubscriptionQueryFilter filter);
+        Task<RepaymentResponse> RecordRepaymentAsync(RecordRepaymentRequest request, InputSubscriptionRequestArgs args);
+        Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter);
+        Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
+        Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -409,11 +415,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid subscriber type");
             }
 
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
-            if (hasOrg != null)
-            {
-                query.OrganizationId = hasOrg.OrganizaionId;
-            }
+          
             var subscriberExists = await _onBoardingManager.GetUseridentity(request.SubscriberUserId);
 
             if (subscriberExists == null)
@@ -460,6 +462,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _inputFinancingRepository.GetSubscriptionsAsync(filter, pageNumber, pageSize);
         }
+        public async Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+            SubscriptionQueryFilter filter)
+        {
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+            if (hasOrg != null)
+            {
+                filter.OrganizationId = hasOrg.OrganizaionId;
+            }
+            return await _inputFinancingRepository.GetAgentSubscriptionOverview(filter);
+        }
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
@@ -472,11 +484,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
+           
             if (!filter.ViewType.HasValue)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
@@ -490,11 +498,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<CommitmentFormDto> DownloadCommitmentLetter(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
             if (!filter.ViewType.HasValue)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
@@ -815,6 +818,8 @@ RepaymentFrequency frequency)
                 if (subscription.Status == SubscriptionStatus.PendingDisbursement)
                     throw new Exception("Already completed commitment stage");
 
+                var org = subscription.Organization;
+
                 var outstanding =
                     subscription.CommitmentValue -
                     await _inputFinancingRepository
@@ -845,7 +850,8 @@ RepaymentFrequency frequency)
                             args,
                             subscription,
                             amountToPay,
-                            "Payment for Commitment on input subscription");
+                            "Payment for Commitment on input subscription",
+                            PaymentType.Commitment);
 
                         break;
 
@@ -862,15 +868,12 @@ RepaymentFrequency frequency)
                     default: throw new Exception("Channel Not supported");
                 }
 
-                //  await transaction.CommitAsync();
-                return true;
+                               return true;
             }
             catch
             {
-                //  await transaction.RollbackAsync();
-                throw;
+                     throw;
             }
-            //});
         }
 
 
@@ -887,7 +890,8 @@ RepaymentFrequency frequency)
     InputSubscriptionRequestArgs args,
     InputPackageSubscription subscription,
     decimal amountToPay,
-    string description)
+    string description,
+    PaymentType paymentType)
         {
             // ─── Step 1: Validate wallets ───
 
@@ -943,19 +947,13 @@ RepaymentFrequency frequency)
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
 
-
-
-            var providerType = provider.Code.ToEnum<WalletProviderType>();
-
             var providerParams = await RetrieveParams(provider.Code, args.Env, args.BusinessCode);
             var providerService = _factory.GetService(provider.Code);
-
 
             if (providerService == null)
                 throw new BaseException(
                     ExceptionType.OPERATION_FAILED,
                     $"Wallet service for {provider.Code} was not found");
-
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -971,21 +969,19 @@ RepaymentFrequency frequency)
                         {
                             SubscriptionId = subscription.Id,
                             Amount = amountToPay,
+                            PaymentType = paymentType,
                             PaymentChannel = request.PaymentChannel,
                             Reference = masterReference,
                             WalletProviderId = request.WalletProviderId,
                             RecordedByUserId = args.UserId
                         });
 
-                    // Initiate the debit record
-
-
                     await _walletTransactionRepository.InitiateWalletWithdrawal(
                         subscriberWallet.Id, amountToPay, description, $"{debitReference}-DB");
 
-                    bool debitSuccessful = false;
                     string? debitProviderReference = null;
                     string providerMessage = "";
+
                     try
                     {
                         var debitRequest = new WalletTopUpProviderRequest
@@ -993,55 +989,37 @@ RepaymentFrequency frequency)
                             WalletNumber = subscriberWallet.WalletNumber,
                             Amount = amountToPay,
                             Currency = subscriberWallet.Currency,
-                            Message = $"Approve withdrawal of {amountToPay:N0} for input commitment payment",
+                            Message = description,
                             TransactionReference = debitReference
                         };
 
-                        if (provider.Code == "Momo")
+                        switch (provider.Code)
                         {
-                            var debitResponse = await providerService.DebitWalletAsync(
-                                debitRequest, providerParams, args.Env);
+                            case  "Momo":
+                                {
+                                    ProcessMomoWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
+                                    break;
+                                }
 
-                            if (debitResponse == null)
-                            {
-                                await _walletTransactionRepository.CompleteWalletWithdrawal(
-                                    $"{debitReference}-DB", false, null, "Wallet debit request returned no response");
+                            case "Etransact":
+                                ProcessEtransactWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
+                                //debit on etransact
+                                break;
 
+                            default:
                                 throw new BaseException(
                                     ExceptionType.OPERATION_FAILED,
-                                    "Could not initiate wallet debit");
-                            }
-
-                            var debitStatus = await _mtnMomoService.GetRequesToWithdrawStatus(
-                              debitReference, providerParams, args.Env);
-
-                            if (debitStatus == null || !debitStatus.IsSuccess)
-                            {
-                                var debitFailMessage = debitStatus?.Message ?? "Wallet debit failed";
-
-                                await _walletTransactionRepository.CompleteWalletWithdrawal(
-                                      $"{debitReference}-DB", false, null, debitFailMessage);
-
-                                throw new BaseException(ExceptionType.OPERATION_FAILED, debitFailMessage);
-                            }
-                            providerMessage = debitResponse.Data.Status;
-                            debitProviderReference = debitResponse.Data.Reference;
+                                    $"Debit not implemented for provider {provider.Code}");
                         }
-                        else
-                        {
-                            throw new BaseException(
-                                ExceptionType.OPERATION_FAILED,
-                                $"Debit not implemented for provider {provider.Code}");
-                        }
-
-                        debitSuccessful = true;
 
                         await _walletTransactionRepository.CompleteWalletWithdrawal(
                             $"{debitReference}-DB", true, debitProviderReference, providerMessage);
+
+                        await _userWalletRepository.AdjustWalletBalanceAsync(
+                            subscriberWallet.Id, -amountToPay);
                     }
                     catch (BaseException)
                     {
-                        // Debit failed — roll back the entire DB transaction cleanly
                         await dbTransaction.RollbackAsync();
                         throw;
                     }
@@ -1057,7 +1035,6 @@ RepaymentFrequency frequency)
                             $"An unexpected error occurred during wallet debit: {ex.Message}");
                     }
 
-                   
                     await _walletTransactionRepository.CreateWalletFundinAsync(
                         organizationWallet.Id, amountToPay, description, $"{creditReference}-CR");
 
@@ -1068,7 +1045,7 @@ RepaymentFrequency frequency)
                             AccountNumber = organizationWallet.WalletNumber,
                             Amount = $"{amountToPay}",
                             Currency = organizationWallet.Currency,
-                            Message = $"Commitment payment for {subscription.InputPackage.Name} by {subscription.SubscriberUser.Name}",
+                            Message = description,
                             Reference = creditReference
                         };
 
@@ -1078,14 +1055,12 @@ RepaymentFrequency frequency)
                         if (transferResponse == null)
                         {
                             await _walletTransactionRepository.CompleteWalletFunding(
-                                 $"{creditReference}-CR", false, null, "Wallet transfer returned no response");
+                                $"{creditReference}-CR", false, null, "Wallet transfer returned no response");
 
-                            // Debit already succeeded externally — commit what we have so the
-                            // reconciliation flag is persisted, then throw.
                             await dbTransaction.CommitAsync();
 
                             await _walletTransactionRepository.FlagForReconciliation(
-                                 $"{debitReference}-DB", $"{creditReference}-CR",
+                                $"{debitReference}-DB", $"{creditReference}-CR",
                                 "Credit returned no response after successful debit");
 
                             throw new BaseException(
@@ -1093,44 +1068,34 @@ RepaymentFrequency frequency)
                                 "Wallet service did not return a response. Our team has been notified to reconcile your transaction.");
                         }
 
-                        if (provider.Code == "Momo")
+                        switch (provider.Code)
                         {
-                            var transferStatus = await _mtnMomoService.GetTransferStatus(
-                                 creditReference, providerParams, args.Env);
+                            case "Momo":
+                                {
+                                    ProcessMomoWalletTransfer(args, debitReference, creditReference, providerParams, dbTransaction);
 
-                            if (transferStatus == null || !transferStatus.IsSuccess)
-                            {
-                                var creditFailMessage = transferStatus?.Message ?? "Wallet transfer failed";
+                                    break;
+                                }
 
-                                await _walletTransactionRepository.CompleteWalletFunding(
-                                    $"{creditReference}-CR", false, null, creditFailMessage);
+                            case "Etransact":
+                                //credit on etransact
+                                break; 
 
-                                // Commit partial state so reconciliation flag persists
-                                await dbTransaction.CommitAsync();
-
-                                await _walletTransactionRepository.FlagForReconciliation(
-                                    $"{debitReference}-DB", $"{creditReference}-CR",
-                                    $"Credit failed after successful debit: {creditFailMessage}");
+                            default:
+                                await dbTransaction.RollbackAsync();
 
                                 throw new BaseException(
                                     ExceptionType.OPERATION_FAILED,
-                                    "Payment was debited but could not be credited to the organization. Our team has been notified to reconcile your transaction.");
-                            }
+                                    $"Credit not implemented for provider {provider.Code}");
                         }
-                        else
-                        {
-                            await dbTransaction.RollbackAsync();
-
-                            throw new BaseException(
-                                ExceptionType.OPERATION_FAILED,
-                                $"Credit not implemented for provider {provider.Code}");
-                        }
-
 
                         await _walletTransactionRepository.CompleteWalletFunding(
                             $"{creditReference}-CR", true,
                             transferResponse.Data.Reference,
                             transferResponse.Data.Status);
+
+                        await _userWalletRepository.AdjustWalletBalanceAsync(
+                            organizationWallet.Id, amountToPay);
 
                         await _inputFinancingRepository
                             .RecordSuccessfulPaymentAsync(paymentId, new PaymentConfirmationRequest
@@ -1139,9 +1104,6 @@ RepaymentFrequency frequency)
                                 Status = TransactionStatus.Successful
                             }, args.UserId);
 
-
-
-                        // Commit everything atomically
                         await dbTransaction.CommitAsync();
 
                         return new WalletTransferResponse
@@ -1154,7 +1116,6 @@ RepaymentFrequency frequency)
                     }
                     catch (BaseException)
                     {
-                        // Already handled (committed or rolled back) above — just rethrow
                         throw;
                     }
                     catch (Exception ex)
@@ -1162,7 +1123,6 @@ RepaymentFrequency frequency)
                         await _walletTransactionRepository.CompleteWalletFunding(
                             creditReference, false, null, ex.Message);
 
-                        // Commit the debit record so the reconciliation flag is durable
                         await dbTransaction.CommitAsync();
 
                         await _walletTransactionRepository.FlagForReconciliation(
@@ -1176,8 +1136,6 @@ RepaymentFrequency frequency)
                 }
                 catch (BaseException)
                 {
-                    // If the transaction is still open (wasn't committed/rolled back inside),
-                    // roll it back now before rethrowing.
                     if (_context.Database.CurrentTransaction != null)
                         await dbTransaction.RollbackAsync();
 
@@ -1195,13 +1153,645 @@ RepaymentFrequency frequency)
             });
         }
 
+        private async void ProcessMomoWalletTransfer(InputSubscriptionRequestArgs args, string debitReference, string creditReference, WalletProviderParameterModel[] providerParams, Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction dbTransaction)
+        {
+            var transferStatus = await _mtnMomoService.GetTransferStatus(
+                creditReference, providerParams, args.Env);
+
+            if (transferStatus == null || !transferStatus.IsSuccess)
+            {
+                var creditFailMessage = transferStatus?.Message ?? "Wallet transfer failed";
+
+                await _walletTransactionRepository.CompleteWalletFunding(
+                    $"{creditReference}-CR", false, null, creditFailMessage);
+
+                await dbTransaction.CommitAsync();
+
+                await _walletTransactionRepository.FlagForReconciliation(
+                    $"{debitReference}-DB", $"{creditReference}-CR",
+                    $"Credit failed after successful debit: {creditFailMessage}");
+
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Payment was debited but could not be credited to the organization. Our team has been notified to reconcile your transaction.");
+            }
+        }
+
+        private async void ProcessMomoWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
+            IGenericWalletService providerService,  string? debitProviderReference,  string providerMessage, WalletTopUpProviderRequest debitRequest)
+        {
+            var debitResponse = await providerService.DebitWalletAsync(
+                debitRequest, providerParams, args.Env);
+
+            if (debitResponse == null)
+            {
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, "Wallet debit request returned no response");
+
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Could not initiate wallet debit");
+            }
+
+            var debitStatus = await _mtnMomoService.GetRequesToWithdrawStatus(
+                debitReference, providerParams, args.Env);
+
+            if (debitStatus == null || !debitStatus.IsSuccess)
+            {
+                var debitFailMessage = debitStatus?.Message ?? "Wallet debit failed";
+
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, debitFailMessage);
+
+                throw new BaseException(ExceptionType.OPERATION_FAILED, debitFailMessage);
+            }
+
+            providerMessage = debitResponse.Data.Status;
+            debitProviderReference = debitResponse.Data.Reference;
+        }
+        private async void ProcessEtransactWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
+            IGenericWalletService providerService,  string? debitProviderReference,  string providerMessage, WalletTopUpProviderRequest debitRequest)
+        {
+            var balanceEnquiry = await providerService.BalanceEnquiryAsync(new UserProfileResponse
+            {
+                WalletNumber = debitRequest.WalletNumber,
+            }, providerParams, args.Env);
+
+            if (balanceEnquiry.IsSuccess &&
+                balanceEnquiry.Data != null &&
+                balanceEnquiry.Data.balance > 0)
+            {
+                var walletBalance = balanceEnquiry.Data.balance;
+
+                if (walletBalance < debitRequest.Amount)
+                {
+                    await _walletTransactionRepository.CompleteWalletWithdrawal(
+                        $"{debitReference}-DB", false, null, "Insufficient wallet balance");
+                    throw new BaseException(
+                        ExceptionType.OPERATION_FAILED,
+                        $"Insufficient wallet balance. Kindly top up at least ₦{debitRequest.Amount:N0}");
+                }
+            }
+            else
+            {
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, "Could not verify wallet balance");
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Could not verify wallet balance. Please try again later.");
+            }
+
+            var debitResponse = await providerService.DebitWalletAsync(
+                debitRequest, providerParams, args.Env);
+
+            if (debitResponse == null)
+            {
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, "Wallet debit request returned no response");
+
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Could not initiate wallet debit");
+            }
+            providerMessage = debitResponse.Data.Status;
+            debitProviderReference = debitResponse.Data.Reference;
+        }
+
+        public async Task<RepaymentResponse> RecordRepaymentAsync(
+    RecordRepaymentRequest request,
+    InputSubscriptionRequestArgs args)
+        {
+            if (request == null)
+                throw new Exception("Invalid request");
+
+            request.SubscriptionId = args.SubscriptionId;
+            request.SubscriberUserId = args.SubscriberUserId;
+
+            if (request.SubscriptionId <= 0) throw new Exception("Subscription Id required");
+            if (string.IsNullOrEmpty(request.SubscriberUserId)) throw new Exception("Subscriber User Id required");
+
+            var subscription = await _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
+                .ThenInclude(x => x.Organization)
+                .Include(x => x.SubscriberUser)
+                .FirstOrDefaultAsync(x =>
+                    x.Id == request.SubscriptionId &&
+                    x.SubscriberUserId == args.SubscriberUserId);
+
+            if (subscription == null)
+                throw new Exception("Subscription not found");
+
+            if (subscription.InputPackage == null)
+                throw new Exception("Cannot find input package");
+
+            // ─── Outstanding must aggregate across BOTH cash and produce repayments already made ───
+            var totalRepaid = await _inputFinancingRepository.GetTotalRepaymentPaidAsync(subscription.Id);
+            var outstanding = subscription.RepaymentValue - totalRepaid;
+
+            if (outstanding <= 0)
+                throw new Exception("Repayment already fully completed");
+
+            var reference = !string.IsNullOrWhiteSpace(request.Reference)
+                ? request.Reference
+                : $"{Guid.NewGuid():D}";
+
+            switch (request.PaymentChannel)
+            {
+                case PaymentChannel.Wallet:
+                    {
+                        var amountToPay = request.Amount > 0 ? request.Amount : outstanding;
+                        amountToPay = Math.Round(amountToPay, 2);
+
+                        if (amountToPay > outstanding)
+                            throw new Exception("Amount exceeds outstanding repayment balance");
+
+                        var walletRequest = new RecordCommitmentPaymentRequest
+                        {
+                            SubscriptionId = subscription.Id,
+                            SubscriberUserId = args.SubscriberUserId,
+                            WalletProviderId = request.WalletProviderId ?? throw new Exception("Wallet provider is required for wallet repayment"),
+                            PaymentChannel = request.PaymentChannel,
+                            Reference = reference
+                        };
+
+                        var walletResponse = await ProcessWalletTransferAsync(
+                            walletRequest, args, subscription, amountToPay,
+                            "Repayment on input subscription",
+                            PaymentType.Repayment);
+
+                        return new RepaymentResponse
+                        {
+                            IsSuccessful = walletResponse.IsSuccessful,
+                            AmountApplied = amountToPay,
+                            OutstandingBalance = outstanding - amountToPay,
+                            OverpaymentCredited = 0m,
+                            ExternalReference = walletResponse.ExternalReference
+                        };
+                    }
+                case PaymentChannel.Produce:
+                    {
+                        if (request.ProduceDetails == null)
+                            throw new Exception("Produce details are required for produce repayment");
+
+                        var produceResult = await ProcessProduceRepaymentAsync(
+                            subscription, request.ProduceDetails, args, outstanding, reference);
+
+                        return new RepaymentResponse
+                        {
+                            IsSuccessful = produceResult.IsSuccessful,
+                            AmountApplied = produceResult.AppliedAmount,
+                            OutstandingBalance = outstanding - produceResult.AppliedAmount,
+                            OverpaymentCredited = produceResult.OverpaymentAmount,
+                            ExternalReference = produceResult.Reference
+                        };
+                    }
+
+                default:
+                    throw new Exception("Channel not supported");
+            }
+        }
+
+        private async Task<ProduceRepaymentResult> ProcessProduceRepaymentAsync(
+    InputPackageSubscription subscription,
+    ProduceRepaymentDetails produceRequest,
+    InputSubscriptionRequestArgs args,
+    decimal outstandingBalance,
+    string reference)
+        {
+            // ─── Step 1: Validate the product is configured at this location ───
+
+            var inventory = await _context.LocationInventories
+                .Include(x => x.OrganizationProduct)
+                .FirstOrDefaultAsync(x =>
+                    x.OrganizationProductId == produceRequest.OrganizationProductId &&
+                    x.LocationId == produceRequest.LocationId &&
+                    x.LocationInventoryType == LocationInventoryType.Product &&
+                    x.IsActive == true &&
+                    x.DeletedOn == null);
+
+            if (inventory == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    $"Product '{produceRequest.OrganizationProductId}' is not configured at the selected location");
+
+            if (produceRequest.QuantityBrought <= 0)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Quantity brought must be greater than zero");
+
+            // ─── Step 2: Price — grade is descriptive only, price comes straight from the product ───
+
+            decimal pricePerUnit = inventory.OrganizationProduct.PricePerUnit;
+
+            if (pricePerUnit <= 0)
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    $"No valid market price configured for '{inventory.OrganizationProduct.ProductName}'");
+
+            decimal equivalentAmount = Math.Round(produceRequest.QuantityBrought * pricePerUnit, 2);
+
+            // ─── Step 3: Split into what applies to the balance vs what becomes a credit ───
+
+            decimal appliedAmount = Math.Min(equivalentAmount, outstandingBalance);
+            decimal overpaymentAmount = equivalentAmount - appliedAmount;
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    // ─── Receive the produce into inventory ───
+
+                    decimal quantityBefore = inventory.Quantity;
+                    inventory.Quantity += produceRequest.QuantityBrought;
+
+                    _context.InventoryTransactions.Add(new InventoryTransaction
+                    {
+                        OrganizationProductId = inventory.OrganizationProductId,
+                        ToLocationId = produceRequest.LocationId,
+                        Quantity = produceRequest.QuantityBrought,
+                        QuantityBefore = quantityBefore,
+                        QuantityAfter = inventory.Quantity,
+                        TransactionType = InventoryTransactionType.RepaymentReceipt,
+                        ReferenceNumber = reference,
+                        SubscriptionId = subscription.Id,
+                        Grade = produceRequest.Grade,
+                        UnitPriceUsed = pricePerUnit,
+                        TransactionDate = DateTimeOffset.UtcNow,
+                        Latitude = produceRequest.Latitude.Value,
+                        Longitude = produceRequest.Longitude.Value,
+                        PerformedByUserId = args.UserId,
+                    });
+
+                    await _context.SaveChangesAsync();
+
+                    // ─── Record the payment against the subscription ───
+                    // Produce settles immediately — no external provider call to wait on —
+                    // so the payment is created and confirmed inside the same transaction.
+
+                    var paymentId = await _inputFinancingRepository.CreatePendingPaymentAsync(
+                        new CreateCommitmentPaymentRequest
+                        {
+                            SubscriptionId = subscription.Id,
+                            Amount = appliedAmount,
+                            PaymentType = PaymentType.Repayment,
+                            PaymentChannel = PaymentChannel.Produce,
+                            Reference = reference,
+                            RecordedByUserId = args.UserId
+                        });
+
+                    await _inputFinancingRepository.RecordSuccessfulPaymentAsync(
+                        paymentId,
+                        new PaymentConfirmationRequest
+                        {
+                            ExternalReference = reference,
+                            Status = TransactionStatus.Successful
+                        }, args.UserId);
+
+                    // ─── Overpayment becomes a standing credit balance on the subscription ───
+
+                    if (overpaymentAmount > 0)
+                    {
+                        await _inputFinancingRepository.AddCreditBalanceAsync(
+                            subscription.Id, overpaymentAmount, reference);
+                    }
+
+                    await dbTransaction.CommitAsync();
+
+                    return new ProduceRepaymentResult
+                    {
+                        IsSuccessful = true,
+                        EquivalentAmount = equivalentAmount,
+                        AppliedAmount = appliedAmount,
+                        OverpaymentAmount = overpaymentAmount,
+                        Reference = reference
+                    };
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        //    private async Task<WalletTransferResponse> ProcessWalletTransferAsync(
+        //RecordCommitmentPaymentRequest request,
+        //InputSubscriptionRequestArgs args,
+        //InputPackageSubscription subscription,
+        //decimal amountToPay,
+        //string description,
+        //PaymentType paymentType)
+        //    {
+        //        // ─── Step 1: Validate wallets ───
+
+        //        var subscriberWallet = await _userWalletRepository.GetUserWalletByProviderId(
+        //            new UserWalletParams
+        //            {
+        //                Id = request.WalletProviderId,
+        //                UserId = request.SubscriberUserId,
+        //                businessCode = args.BusinessCode
+        //            });
+
+        //        if (subscriberWallet == null)
+        //            throw new BaseException(ExceptionType.NOTFOUND, "Subscriber wallet not found");
+
+        //        var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
+
+        //        if (!organizationWalletProviderId.HasValue)
+        //            throw new BaseException(
+        //                ExceptionType.OPERATION_FAILED,
+        //                "Payment operation cannot be performed. Contact your organization");
+
+        //        var organizationWallet = await _userWalletRepository.GetUserWalletByProviderId(
+        //            new UserWalletParams
+        //            {
+        //                Id = organizationWalletProviderId.Value,
+        //                UserId = subscription.InputPackage.Organization.UserId,
+        //                businessCode = args.BusinessCode
+        //            });
+
+        //        if (organizationWallet == null)
+        //            throw new BaseException(ExceptionType.NOTFOUND, "Organization wallet not found");
+
+        //        // ─── Step 2: Balance check ───
+
+        //        if (subscriberWallet.WalletBalance < amountToPay)
+        //            throw new BaseException(
+        //                ExceptionType.OPERATION_FAILED,
+        //                $"Insufficient wallet balance. Kindly top up at least ₦{amountToPay:N0}");
+
+        //        // ─── Step 3: Generate references ───
+
+        //        var masterReference = !string.IsNullOrWhiteSpace(request.Reference)
+        //            ? request.Reference
+        //            : $"{Guid.NewGuid():D}";
+
+        //        var debitReference = $"{masterReference}";
+        //        var creditReference = $"{Guid.NewGuid():D}";
+
+        //        // ─── Step 4: Resolve provider ───
+
+        //        var provider = await _providerRepo.Get(subscriberWallet.WalletProviderId);
+
+        //        if (provider == null)
+        //            throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
+
+
+
+        //        var providerType = provider.Code.ToEnum<WalletProviderType>();
+
+        //        var providerParams = await RetrieveParams(provider.Code, args.Env, args.BusinessCode);
+        //        var providerService = _factory.GetService(provider.Code);
+
+
+        //        if (providerService == null)
+        //            throw new BaseException(
+        //                ExceptionType.OPERATION_FAILED,
+        //                $"Wallet service for {provider.Code} was not found");
+
+
+        //        var strategy = _context.Database.CreateExecutionStrategy();
+
+        //        return await strategy.ExecuteAsync(async () =>
+        //        {
+        //            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+        //            try
+        //            {
+        //                // Create the pending payment record inside the ambient transaction
+        //                var paymentId = await _inputFinancingRepository
+        //                    .CreatePendingPaymentAsync(new CreateCommitmentPaymentRequest
+        //                    {
+        //                        SubscriptionId = subscription.Id,
+        //                        Amount = amountToPay,
+        //                        PaymentChannel = request.PaymentChannel,
+        //                        Reference = masterReference,
+        //                        WalletProviderId = request.WalletProviderId,
+        //                        RecordedByUserId = args.UserId
+        //                    });
+
+        //                // Initiate the debit record
+
+
+        //                await _walletTransactionRepository.InitiateWalletWithdrawal(
+        //                    subscriberWallet.Id, amountToPay, description, $"{debitReference}-DB");
+
+        //                bool debitSuccessful = false;
+        //                string? debitProviderReference = null;
+        //                string providerMessage = "";
+        //                try
+        //                {
+        //                    var debitRequest = new WalletTopUpProviderRequest
+        //                    {
+        //                        WalletNumber = subscriberWallet.WalletNumber,
+        //                        Amount = amountToPay,
+        //                        Currency = subscriberWallet.Currency,
+        //                        Message = description,//$"Approve withdrawal of {amountToPay:N0} for input commitment payment",
+        //                        TransactionReference = debitReference
+        //                    };
+
+        //                    if (provider.Code == "Momo")
+        //                    {
+        //                        var debitResponse = await providerService.DebitWalletAsync(
+        //                            debitRequest, providerParams, args.Env);
+
+        //                        if (debitResponse == null)
+        //                        {
+        //                            await _walletTransactionRepository.CompleteWalletWithdrawal(
+        //                                $"{debitReference}-DB", false, null, "Wallet debit request returned no response");
+
+        //                            throw new BaseException(
+        //                                ExceptionType.OPERATION_FAILED,
+        //                                "Could not initiate wallet debit");
+        //                        }
+
+        //                        var debitStatus = await _mtnMomoService.GetRequesToWithdrawStatus(
+        //                          debitReference, providerParams, args.Env);
+
+        //                        if (debitStatus == null || !debitStatus.IsSuccess)
+        //                        {
+        //                            var debitFailMessage = debitStatus?.Message ?? "Wallet debit failed";
+
+        //                            await _walletTransactionRepository.CompleteWalletWithdrawal(
+        //                                  $"{debitReference}-DB", false, null, debitFailMessage);
+
+        //                            throw new BaseException(ExceptionType.OPERATION_FAILED, debitFailMessage);
+        //                        }
+        //                        providerMessage = debitResponse.Data.Status;
+        //                        debitProviderReference = debitResponse.Data.Reference;
+        //                    }
+        //                    else
+        //                    {
+        //                        throw new BaseException(
+        //                            ExceptionType.OPERATION_FAILED,
+        //                            $"Debit not implemented for provider {provider.Code}");
+        //                    }
+
+        //                    debitSuccessful = true;
+
+        //                    await _walletTransactionRepository.CompleteWalletWithdrawal(
+        //                        $"{debitReference}-DB", true, debitProviderReference, providerMessage);
+        //                }
+        //                catch (BaseException)
+        //                {
+        //                    // Debit failed — roll back the entire DB transaction cleanly
+        //                    await dbTransaction.RollbackAsync();
+        //                    throw;
+        //                }
+        //                catch (Exception ex)
+        //                {
+        //                    await _walletTransactionRepository.CompleteWalletWithdrawal(
+        //                        $"{debitReference}-DB", false, null, ex.Message);
+
+        //                    await dbTransaction.RollbackAsync();
+
+        //                    throw new BaseException(
+        //                        ExceptionType.OPERATION_FAILED,
+        //                        $"An unexpected error occurred during wallet debit: {ex.Message}");
+        //                }
+
+
+        //                await _walletTransactionRepository.CreateWalletFundinAsync(
+        //                    organizationWallet.Id, amountToPay, description, $"{creditReference}-CR");
+
+        //                try
+        //                {
+        //                    var transferRequest = new TransferRequest
+        //                    {
+        //                        AccountNumber = organizationWallet.WalletNumber,
+        //                        Amount = $"{amountToPay}",
+        //                        Currency = organizationWallet.Currency,
+        //                        Message = $"Commitment payment for {subscription.InputPackage.Name} by {subscription.SubscriberUser.Name}",
+        //                        Reference = creditReference
+        //                    };
+
+        //                    var transferResponse = await providerService.InitiateWalletTransferAsync(
+        //                        transferRequest, providerParams, args.Env);
+
+        //                    if (transferResponse == null)
+        //                    {
+        //                        await _walletTransactionRepository.CompleteWalletFunding(
+        //                             $"{creditReference}-CR", false, null, "Wallet transfer returned no response");
+
+        //                        // Debit already succeeded externally — commit what we have so the
+        //                        // reconciliation flag is persisted, then throw.
+        //                        await dbTransaction.CommitAsync();
+
+        //                        await _walletTransactionRepository.FlagForReconciliation(
+        //                             $"{debitReference}-DB", $"{creditReference}-CR",
+        //                            "Credit returned no response after successful debit");
+
+        //                        throw new BaseException(
+        //                            ExceptionType.OPERATION_FAILED,
+        //                            "Wallet service did not return a response. Our team has been notified to reconcile your transaction.");
+        //                    }
+
+        //                    if (provider.Code == "Momo")
+        //                    {
+        //                        var transferStatus = await _mtnMomoService.GetTransferStatus(
+        //                             creditReference, providerParams, args.Env);
+
+        //                        if (transferStatus == null || !transferStatus.IsSuccess)
+        //                        {
+        //                            var creditFailMessage = transferStatus?.Message ?? "Wallet transfer failed";
+
+        //                            await _walletTransactionRepository.CompleteWalletFunding(
+        //                                $"{creditReference}-CR", false, null, creditFailMessage);
+
+        //                            // Commit partial state so reconciliation flag persists
+        //                            await dbTransaction.CommitAsync();
+
+        //                            await _walletTransactionRepository.FlagForReconciliation(
+        //                                $"{debitReference}-DB", $"{creditReference}-CR",
+        //                                $"Credit failed after successful debit: {creditFailMessage}");
+
+        //                            throw new BaseException(
+        //                                ExceptionType.OPERATION_FAILED,
+        //                                "Payment was debited but could not be credited to the organization. Our team has been notified to reconcile your transaction.");
+        //                        }
+        //                    }
+        //                    else
+        //                    {
+        //                        await dbTransaction.RollbackAsync();
+
+        //                        throw new BaseException(
+        //                            ExceptionType.OPERATION_FAILED,
+        //                            $"Credit not implemented for provider {provider.Code}");
+        //                    }
+
+
+        //                    await _walletTransactionRepository.CompleteWalletFunding(
+        //                        $"{creditReference}-CR", true,
+        //                        transferResponse.Data.Reference,
+        //                        transferResponse.Data.Status);
+
+        //                    await _inputFinancingRepository
+        //                        .RecordSuccessfulPaymentAsync(paymentId, new PaymentConfirmationRequest
+        //                        {
+        //                            ExternalReference = masterReference,
+        //                            Status = TransactionStatus.Successful
+        //                        }, args.UserId);
+
+
+
+        //                    // Commit everything atomically
+        //                    await dbTransaction.CommitAsync();
+
+        //                    return new WalletTransferResponse
+        //                    {
+        //                        IsSuccessful = true,
+        //                        Amount = amountToPay,
+        //                        ExternalReference = masterReference,
+        //                        ProviderTransactionId = $"{creditReference}-CR"
+        //                    };
+        //                }
+        //                catch (BaseException)
+        //                {
+        //                    // Already handled (committed or rolled back) above — just rethrow
+        //                    throw;
+        //                }
+        //                catch (Exception ex)
+        //                {
+        //                    await _walletTransactionRepository.CompleteWalletFunding(
+        //                        creditReference, false, null, ex.Message);
+
+        //                    // Commit the debit record so the reconciliation flag is durable
+        //                    await dbTransaction.CommitAsync();
+
+        //                    await _walletTransactionRepository.FlagForReconciliation(
+        //                        debitReference, creditReference,
+        //                        $"Unexpected error during credit after successful debit: {ex.Message}");
+
+        //                    throw new BaseException(
+        //                        ExceptionType.OPERATION_FAILED,
+        //                        "An unexpected error occurred while crediting the organization. Our team has been notified to reconcile your transaction.");
+        //                }
+        //            }
+        //            catch (BaseException)
+        //            {
+        //                // If the transaction is still open (wasn't committed/rolled back inside),
+        //                // roll it back now before rethrowing.
+        //                if (_context.Database.CurrentTransaction != null)
+        //                    await dbTransaction.RollbackAsync();
+
+        //                throw;
+        //            }
+        //            catch (Exception ex)
+        //            {
+        //                if (_context.Database.CurrentTransaction != null)
+        //                    await dbTransaction.RollbackAsync();
+
+        //                throw new BaseException(
+        //                    ExceptionType.OPERATION_FAILED,
+        //                    $"An unexpected error occurred: {ex.Message}");
+        //            }
+        //        });
+        //    }
         public async Task SendCommitmentReminderAsync(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
+            
             var reminder = await _inputFinancingRepository.GetCommitmentReminderAsync(filter.SubscriptionId);
 
             if (reminder == null || !reminder.RequiresReminder)
@@ -1237,9 +1827,65 @@ RepaymentFrequency frequency)
                    senderEmail,
                    "agrovesto@gmail.com",
                    "Commitment Payment Reminder",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'"
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'",
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'"
                    );
+
+
+        }
+        public async Task SendRepaymentReminderAsync(SubscriptionQueryFilter filter)
+        {
+            
+            var reminder = await _inputFinancingRepository.GetRepaymentReminderAsync(filter.SubscriptionId);
+
+            if (reminder == null || !reminder.RequiresReminder)
+                return;
+            var senderEmail = _configuration["Official:Email"];
+            var otpTarget = !string.IsNullOrWhiteSpace(reminder.Email)
+                ? OtpTarget.Email
+                : OtpTarget.Phone;
+
+            var destination = otpTarget == OtpTarget.Email
+                ? reminder.Email
+                : reminder.PhoneNumber;
+
+            if (otpTarget == OtpTarget.Email)
+            {
+                //use aws
+                await _awsService.SendEmailAsync(
+                    senderEmail,
+                    destination,
+                    "Outstanding Repayment Reminder",
+                   $"{reminder.Message}",
+                   $"{reminder.Message}"
+                    );
+
+            }
+            else
+            {
+                await _sMSService.SendSmsAsync(
+                        destination,
+                        $"{reminder.Message}", filter.BusinessCode);
+            }
+            await _awsService.SendEmailAsync(
+                   senderEmail,
+                   "agrovesto@gmail.com",
+                   "Outstanding Repayment Reminder",
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'",
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'"
+                   );
+
+
+        }
+        public async Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter)
+        {
+           return await _inputFinancingRepository.GetRepaymentScheduleAsync(filter.SubscriptionId);
+
+
+        }
+        public async Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter)
+        {
+           return await _inputFinancingRepository.GetRepaymentLedgerAsync(filter.SubscriptionId, filter.PageNumber, filter.PageSize);
 
 
         }
@@ -1252,7 +1898,7 @@ RepaymentFrequency frequency)
             {
                 filter.OrganizationId = hasOrg.OrganizaionId;
             }
-            return await _inputFinancingRepository.GetInputFinancingDashboardAsync(filter);
+            return await _inputFinancingRepository.GetInputFinancingOverviewAsync(filter);
         }
         public async Task<byte[]> ExportSubscriptionsAsync(SubscriptionQueryFilter filter, ExportFormat format)
         {
@@ -1384,11 +2030,6 @@ RepaymentFrequency frequency)
 
                 try
                 {
-                    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
-                    if (hasOrg != null)
-                    {
-                        args.OrganizationId = hasOrg.OrganizaionId;
-                    }
                     // ── 1. Validate args ──────────────────────────────────────────────
                     if (string.IsNullOrEmpty(args.SubscriberUserId))
                         throw new DisbursementException("Subscriber user is required.");
@@ -1411,6 +2052,8 @@ RepaymentFrequency frequency)
                             .ThenInclude(x => x.RepaymentPlan)
                         .Include(x => x.InputPackage)
                             .ThenInclude(x => x.AdditionalCosts)
+                        .Include(x => x.InputPackage)
+                            .ThenInclude(x => x.Organization)
                         .Include(x => x.SubscriberUser)
                         .Include(x => x.Organization)
                         .FirstOrDefaultAsync(x =>
@@ -1432,7 +2075,7 @@ RepaymentFrequency frequency)
 
                     if (subscription.InputPackage.RepaymentPlan == null)
                         throw new DisbursementException("Repayment plan is required before disbursement.");
-
+                    var org = subscription.InputPackage.Organization;
                     var user = await _onBoardingManager.GetUseridentity(subscription.SubscriberUser.Id);
                     if (user == null)
                         throw new DisbursementException("User details not found.");
@@ -1445,7 +2088,7 @@ RepaymentFrequency frequency)
                     var farmerImage = await _farmerRepository.GetFarmerImage(
                         subscription.SubscriberUser.Id,
                         args.BusinessCode,
-                        subscription.Organization.OrganizationCode);
+                        subscription.Organization?.OrganizationCode);
 
                     if (farmerImage == null)
                         throw new DisbursementException(
@@ -1472,7 +2115,7 @@ RepaymentFrequency frequency)
                     if (agent == null)
                         throw new DisbursementException("No agent profile found for the current user.");
 
-                    var organizationAgent = await ResolveAgentOrganizationAsync(agent.Id, args.OrganizationCode);
+                    var organizationAgent = await ResolveAgentOrganizationAsync(agent.Id, org.OrganizationCode);
 
                     if (organizationAgent == null)
                         throw new DisbursementException(
@@ -1652,8 +2295,7 @@ RepaymentFrequency frequency)
         }
 
 
-        // ── Private helpers ───────────────────────────────────────────────────────────
-
+       
         /// <summary>
         /// Validates the uploaded live image before any DB calls are made.
         /// Throws <see cref="DisbursementException"/> on any violation.
@@ -1790,10 +2432,6 @@ RepaymentFrequency frequency)
             decimal amountPending = subscribedAmount - amountToDisburse;
             if (amountPending > 0) isPartial = true;
 
-            // Move the real money first. Debit organization wallet, credit subscriber
-            // wallet. Nothing below this line runs unless this fully succeeds. it either
-            // returns a successful result or throws, in which case the location ledger is
-            // never touched and no MonetaryDisbursementTransaction is written.
             await ProcessWalletDisbursementTransferAsync(
                 subscription,
                 args,

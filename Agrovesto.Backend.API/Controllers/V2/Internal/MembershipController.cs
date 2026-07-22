@@ -69,8 +69,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
                     StatusCodes.Status401Unauthorized);
 
-            args.organizationCode = OrganizationCode;
-              await EnrichCooperativeAsync(args);
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            await EnrichCooperativeAsync(args);
             List<BulkFarmerRowDto> rows;
             try
             {
@@ -167,11 +169,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-              
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
                 {
@@ -234,9 +235,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
 
-                NormalizeOrganizationCode(args);
-               
-                    await EnrichCooperativeAsync(args);
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
+                await EnrichCooperativeAsync(args);
              
 
                 var request = await _membershipManager.CreateFarmerAsync(model, args);
@@ -277,10 +280,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
                 {
@@ -329,11 +331,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "MemberShip"))
@@ -511,7 +511,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "MemberShip"))
                 {
                     return StatusCode(400, new Response<string>
@@ -564,7 +566,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 args.OnboardedByUserId = CurrentUserId;
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
-                NormalizeOrganizationCode(args);
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "MemberShip"))
                 {
                     return StatusCode(400, new Response<string>
@@ -623,10 +627,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
 
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
                 {

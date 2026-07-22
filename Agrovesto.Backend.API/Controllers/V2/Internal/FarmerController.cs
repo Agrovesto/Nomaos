@@ -38,10 +38,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             return await ExecuteAsync(
               () =>
               {
-                  query.organizationCode = query.organizationCode ?? OrganizationCode;
                   query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                   return _businessManager.GetFarmerDashboard(query);
               },
@@ -52,10 +54,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("memberships")]
         public async Task<IActionResult> GetFarmerMemberships([FromQuery] ListQueryParams query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
+
             return await ExecuteAsync(
                         () =>
                 {
-                            query.organizationCode = query.organizationCode ?? OrganizationCode;
                             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                             return _businessManager.GetMembershipsByFarmer(query);
                 },
@@ -74,7 +79,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("membership-detail")]
         public async Task<IActionResult> GetMembershipDetail([FromQuery] ListQueryParams query)
         {
-            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             if (RequireField(query.UserId, "Membership UserId") is { } error) return error;
 
             return await ExecuteAsync(
@@ -125,12 +132,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return BadRequest("BusinessCode is required");
 
             if (RequireField(query.UserId, "UserId") is { } error) return error;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(
                 () =>
                 {
-                    if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                        query.organizationCode = OrganizationCode;
+                    
                     return _walletService.CreateWallet(request, query);
                 },
                 wallet => Ok(new Response<(bool status, string message)>
@@ -190,7 +199,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
 
-            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
 
             if (RequireField(query.userId, "User Id") is { } error) return error;
@@ -205,7 +216,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("farm-details")]
         public async Task<IActionResult> FetchFarmDetails([FromQuery] FarmMappingArgs query)
         {
-            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             if (query.farmId <= 0)
                 return BadRequest(new Response<string> { Message = "Farm Id is required.", Succeeded = false });
@@ -224,12 +237,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
             if (RequireField(query.userId, "User Id") is { } error) return error;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
                 query.performedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new Core.V2.Onboarding.OnBoardingArgs { organizationCode= query.organizationCode});
-                await EnrichFarmerAsync(query);
+                     await EnrichFarmerAsync(query);
                 return await _farmMappingManager.SubmitFarmAsync(model, query);
             },
             request => Ok(new Response<long>
@@ -244,11 +259,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("agents")]
         public async Task<IActionResult> GetAgentsByFarmer([FromQuery] ListQueryParams query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
+
             return await ExecuteAsync(
                         () =>
                         {
-                            query.organizationCode = query.organizationCode ?? OrganizationCode;
-                            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                               query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                             return _businessManager.GetAgentsByFarmer(query);
                         },
                         result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
@@ -278,11 +296,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("input-obligations")]
         public async Task<IActionResult> GetFarmerInputObligations([FromQuery] ListQueryParams query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
+
             return await ExecuteAsync(
                        () =>
                        {
-                           query.organizationCode = query.organizationCode ?? OrganizationCode;
-                           query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                            return _farmerTransactionManager.GetFarmerInputObligations(query);
                        },
                        result => Ok(new PagedListResponse<List<InputObligationDto>>

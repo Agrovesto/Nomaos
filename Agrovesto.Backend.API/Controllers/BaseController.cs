@@ -33,12 +33,21 @@ namespace Agrovesto.Backend.API.Controllers
             _httpContextAccessor = httpContextAccessor;
         }
 
-        protected string RequireOrganizationCode(string provided)
+        protected string RequireOrganizationCode(string? provided)
         {
-            var code = !string.IsNullOrEmpty(provided) ? provided : OrganizationCode;
-            if (string.IsNullOrEmpty(code))
+            if (!string.IsNullOrEmpty(provided))
+                return provided;
+
+            var userOrgs = CurrentUserOrganizations;
+
+            if (userOrgs.Count == 1)
+                return userOrgs[0].OrganizationCode;
+
+            if (userOrgs.Count == 0)
                 throw new BaseException(ExceptionType.UNAUTHORIZED, ResponseMessages.AccessDenied);
-            return code;
+
+            throw new BaseException(ExceptionType.UNAUTHORIZED,
+                "You belong to multiple organizations. Please specify an organizationCode.");
         }
 
         protected IActionResult? RequireField(string value, string fieldName)
@@ -94,7 +103,9 @@ namespace Agrovesto.Backend.API.Controllers
             if (string.IsNullOrWhiteSpace(onboardedById))
                 return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.", StatusCodes.Status401Unauthorized);
 
-            args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             List<BulkMembershipRowDto> rows;
             try
@@ -351,37 +362,30 @@ namespace Agrovesto.Backend.API.Controllers
                 return roles;
             }
         }
-        public string? OrganizationCode
+        public List<string> OrganizationCode
         {
             get
             {
                 var jwt = TryReadJwt();
-                if (jwt == null)
-                    return null;
+                if (jwt == null) return new List<string>();
 
                 var claimValue = jwt.Claims
                     .FirstOrDefault(x => x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase))
                     ?.Value;
 
-                if (string.IsNullOrWhiteSpace(claimValue))
-                    return null;
+                if (string.IsNullOrWhiteSpace(claimValue)) return new List<string>();
 
                 try
                 {
                     var organizations = JsonSerializer.Deserialize<List<OrganizationClaim>>(claimValue);
-
-                    return organizations?.Any() == true
-                        ? string.Join(",", organizations.Select(o => o.OrganizationCode))
-                        : null;
+                    return organizations?.Select(o => o.OrganizationCode).ToList() ?? new List<string>();
                 }
                 catch
                 {
-                    return null;
+                    return new List<string>();
                 }
             }
         }
-
-
         public string Token
         {
             get
@@ -398,15 +402,86 @@ namespace Agrovesto.Backend.API.Controllers
                 return string.Empty;
             }
         }
-        protected void NormalizeOrganizationCode(OnBoardingArgs args)
+        protected List<OrganizationClaim> CurrentUserOrganizations
         {
-            if (!string.IsNullOrEmpty(OrganizationCode) &&
-                string.IsNullOrEmpty(args.organizationCode))
+            get
             {
-                args.organizationCode = OrganizationCode;
+                var jwt = TryReadJwt();
+                if (jwt == null)
+                    return new List<OrganizationClaim>();
+
+                var raw = jwt.Claims
+                    .FirstOrDefault(x => x.Type.Equals("Organizations", StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
+
+                if (string.IsNullOrWhiteSpace(raw))
+                    return new List<OrganizationClaim>();
+
+                try
+                {
+                    return JsonSerializer.Deserialize<List<OrganizationClaim>>(raw)
+                           ?? new List<OrganizationClaim>();
+                }
+                catch (JsonException)
+                {
+                    return new List<OrganizationClaim>();
+                }
             }
         }
 
+        protected IActionResult? TryResolveOrganizationCode(string? suppliedCode, out string? resolvedCode)
+        {
+            var userOrgs = CurrentUserOrganizations;
+            resolvedCode = null;
+
+            // No organizations at all
+            if (userOrgs.Count == 0)
+                return null; // let caller decide — maybe this endpoint doesn't require an org
+
+            // Single organization — auto-resolve, no need to ask
+            if (userOrgs.Count == 1 && string.IsNullOrWhiteSpace(suppliedCode))
+            {
+                resolvedCode = userOrgs[0].OrganizationCode;
+                return null;
+            }
+
+            // Multiple organizations, none supplied — force explicit selection
+            if (userOrgs.Count > 1 && string.IsNullOrWhiteSpace(suppliedCode))
+            {
+                var response = ApiResponse<List<OrganizationClaim>>.Fail(
+                    "You belong to multiple organizations. Please select one to continue.",
+                    ResponseCodes.OrganizationSelectionRequired
+                );
+                response.Data = userOrgs; // set it directly if ApiResponse has a settable Data property
+                return Unauthorized(response);
+            }
+
+            // Supplied code must match one of the user's organizations
+            var match = userOrgs.FirstOrDefault(o =>
+                o.OrganizationCode.Equals(suppliedCode, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+
+            resolvedCode = match.OrganizationCode;
+            return null;
+        }
+        protected void NormalizeOrganizationCode(OnBoardingArgs args)
+        {
+            if (!string.IsNullOrEmpty(args.organizationCode))
+                return; 
+            var userOrgs = CurrentUserOrganizations; 
+            if (userOrgs.Count == 1)
+            {
+                args.organizationCode = userOrgs[0].OrganizationCode;
+            }
+
+                    }
         public class OrganizationClaim
         {
             public string? OrganizationCode { get; set; }

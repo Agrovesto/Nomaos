@@ -15,8 +15,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         public string walletName { get; set; }
         public string AccountName { get; set; } // optional
         public string walletBalance { get; set; } 
-        public string balance { get; set; } 
-        public string ledgerBalance { get; set; }
+        public decimal balance { get; set; } 
+        public decimal ledgerBalance { get; set; }
         public string ProviderReference { get; set; } // e.g. macChecksum for MTN, or whatever Etransact calls it
 
     }

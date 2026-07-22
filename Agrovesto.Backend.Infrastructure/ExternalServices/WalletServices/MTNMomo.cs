@@ -456,7 +456,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 };
         }
 
-        public async Task<WalletResponseService<PaymentStatusResponse>> GetTransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentStatusResponse>> TransactionStatusAsync(string reference, WalletProviderParameterModel[] parameters, string Env)
         {
             var @params = await RetrieveParams(parameters, Env);
             var basicAuth = BasicAuthHeader(@params.UserName, @params.SubscriptionApiKey);
@@ -683,6 +683,11 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 "FAILED" => "Transaction failed",
                 _ => "Unknown status"
             };
+        }
+
+        public Task<WalletResponseService<AccountValidationResponse>> BalanceEnquiryAsync(UserProfileResponse data, WalletProviderParameterModel[] parameters, string env)
+        {
+            throw new NotImplementedException();
         }
     }
 }

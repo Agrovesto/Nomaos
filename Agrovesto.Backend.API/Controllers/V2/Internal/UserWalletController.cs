@@ -220,6 +220,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(query.env))
                 return BadRequest("Environment is required");
@@ -244,11 +245,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-               
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var wallet = await _walletManager.CreateWallet(request, query);
 
                 return Ok(new Response<(bool status, string message)>()
@@ -282,6 +282,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            
 
         }
+      
         [HttpPost("{provider}/top-up")]
         public async Task<IActionResult> HandleWebhook(string provider)
         {

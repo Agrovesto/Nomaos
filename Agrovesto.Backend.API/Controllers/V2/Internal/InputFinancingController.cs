@@ -42,7 +42,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
 
                 var result = await _inputFinancingManager.CreateEopAsync(model, args);
@@ -63,8 +65,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
-                if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode; if (string.IsNullOrEmpty(args.organizationCode)) throw new BaseException(ExceptionType.UNAUTHORIZED, "Access Denied");
                 if (args.Id <= 0) return BadRequest(new Response<string> { Message = "EOP Id is required", Succeeded = false });
 
                 var result = await _inputFinancingManager.GetEopByIdAsync(args);
@@ -90,7 +93,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             try
             {
-                args.organizationCode = args.organizationCode ?? OrganizationCode;
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+                
                 var result = await _inputFinancingManager.GetEopsAsync(filter, args);
                 return Ok(new Response<PagedResult<EopDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
             }
@@ -110,30 +116,23 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromBody] CreateInputPackageRequest model,
             [FromQuery] ListQueryParams args)
         {
-            args.organizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
             args.UserId = CurrentUserId;
 
-            if (string.IsNullOrWhiteSpace(args.organizationCode))
+            if (string.IsNullOrWhiteSpace(args.organizationCode) || string.IsNullOrWhiteSpace(args.businessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(args.businessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
                 .CreateInputFinancingPackageConfig(model, args);
 
-            return Ok(ApiResponse<bool>.Success(
-                true,
-                "Created Successfully",
-                HttpContext.TraceIdentifier
+            return Ok(ApiResponse<string>.Success(
+                 ResponseMessages.Successful, ResponseCodes.Success
             ));
         }
         [HttpPatch("update-package")]
@@ -142,41 +141,66 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromQuery] ReplacePackageItemRequestArgs args,
             [FromQuery] InputPackageConfigArgs query)
         {
-            query.OrganizationCode ??= OrganizationCode;
-            query.createdByUserId = CurrentUserId;
+            var orgError = TryResolveOrganizationCode(query.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.OrganizationCode = resolvedOrgCode;
 
-            if (string.IsNullOrWhiteSpace(query.OrganizationCode))
+            query.createdByUserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(query.OrganizationCode) || string.IsNullOrWhiteSpace(query.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
-          
+
             var result = await _inputFinancingManager
                 .UpdateInputPackageConfig(args.PackageId, model, query);
 
-            return Ok(ApiResponse<bool>.Success(
-                true,
-                "Created Successfully",
-                HttpContext.TraceIdentifier
+            return Ok(ApiResponse<string>.Success(
+                ResponseMessages.Successful, ResponseCodes.Success
             ));
         }
+        [HttpGet("packages")]
+        public async Task<IActionResult> GetPackagesAsync(
+      [FromQuery] InputPackageFilterRequest filter,
+      [FromQuery] ListQueryParams args)
+        {
+            args.UserId = CurrentUserId;
 
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
+            if (string.IsNullOrWhiteSpace(args.organizationCode) || string.IsNullOrWhiteSpace(args.businessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
 
+            var result = await _inputFinancingManager.GetPackagesAsync(args);
+
+            return Ok(ApiResponse<List<InputPackageListModel>>.SuccessPaged(
+                result,
+                ResponseMessages.Successful,
+                ResponseCodes.Success
+            ));
+        }
         [HttpGet("package")]
         public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
         {
-            args.organizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
             args.UserId = CurrentUserId;
 
-            if (string.IsNullOrWhiteSpace(args.organizationCode) ||
-                string.IsNullOrWhiteSpace(args.businessCode))
+            if (string.IsNullOrWhiteSpace(args.organizationCode) || string.IsNullOrWhiteSpace(args.businessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
@@ -184,6 +208,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 return BadRequest(ApiResponse<object>.Fail(
                     "Package Id is required",
+                    ResponseCodes.BadRequest,
                     HttpContext.TraceIdentifier
                 ));
             }
@@ -193,107 +218,89 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (result == null)
             {
                 return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
+                    ResponseMessages.NotFound,
+                    ResponseCodes.NotFound,
                     HttpContext.TraceIdentifier
                 ));
             }
 
             return Ok(ApiResponse<InputPackageDto>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
 
         [HttpPatch("change-package-input")]
         public async Task<IActionResult> ReplacePackageItemAsync([FromBody] ReplacePackageItemRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
-          //  args.UserId = CurrentUserId;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
+            //  args.UserId = CurrentUserId;
 
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) )
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
             var result = await _inputFinancingManager.ReplacePackageItemAsync(request,args);
 
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
 
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+               ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
         [HttpPost("add-package-input")]
         public async Task<IActionResult> AddItemToPackageAsync([FromBody] AddPackageItemRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
-          //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) )
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
+            //  args.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
             var result = await _inputFinancingManager.AddItemToPackageAsync(request,args);
 
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
 
         [HttpDelete("remove-package-input")]
         public async Task<IActionResult> RemoveItemFromPackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
-
             var result = await _inputFinancingManager.RemoveItemFromPackage(args);
 
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
 
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
        
@@ -301,182 +308,113 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpDelete("deactivate-package")]
         public async Task<IActionResult> DeactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
             var result = await _inputFinancingManager.DeactivateInputPackage(args);
 
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
         [HttpPatch("reactivate-package")]
         public async Task<IActionResult> ReactivatePackage( [FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
-
             var result = await _inputFinancingManager.ReactivatePackageAsync(args);
-
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
-        [HttpGet("packages")]
-        public async Task<IActionResult> GetPackagesAsync([FromQuery] InputPackageFilterRequest filter, [FromQuery] ListQueryParams args)
-        {
-            args.organizationCode ??= OrganizationCode;
-            args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.organizationCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(args.businessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            var result = await _inputFinancingManager
-              .GetPackagesAsync(args);
-
-            return Ok(ApiResponse<List<InputPackageListModel>>.SuccessPaged(
-      result,
-      "Successful",
-      ResponseCodes.Success,
-      HttpContext.TraceIdentifier
-  ));
-        }
-
+     
         [HttpPost("package/add-additional-cost")]
         public async Task<IActionResult> AddAdditionalCostToPackageAsync([FromBody] AddAdditionalCostRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
             var result = await _inputFinancingManager.AddAdditionalCostToPackageAsync(request, args);
-
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
         [HttpPatch("package/update-additional-cost")]
         public async Task<IActionResult> UpdateAdditionalCostAsync([FromBody] UpdateAdditionalCostRequest request, [FromQuery] UpdateAdditionalCostArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
-
             var result = await _inputFinancingManager.UpdateAdditionalCostAsync(request, args);
-
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
 
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
         [HttpDelete("package/remove-additional-cost")]
         public async Task<IActionResult> RemoveAdditionalCostFromPackageAsync([FromQuery] ReplacePackageItemRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             //  args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
             var result = await _inputFinancingManager.RemoveAdditionalCostFromPackageAsync(args);
 
-            if (result == null)
-            {
-                return NotFound(ApiResponse<object>.Fail(
-                    "No record found",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-
             return Ok(ApiResponse<bool>.Success(
                 result,
-                "Successful",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
 
@@ -485,32 +423,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
          [FromQuery] WalletQueryParams filter,
          [FromBody] UserWalletModel request)
         {
-            filter.organizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(filter.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.organizationCode = resolvedOrgCode;
             filter.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(filter.organizationCode) || string.IsNullOrWhiteSpace(filter.businessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
 
-            if (string.IsNullOrWhiteSpace(filter.organizationCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.businessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
             await _nomaOSWalletService
                 .UpdateOrganizationInputPackage(filter, request.WalletProviderId, request);
 
 
             return Ok(ApiResponse<string>.Success(
-                 "Request Processing",
-                 "Successful",
-                 ResponseCodes.Success,
-                 HttpContext.TraceIdentifier
+                 ResponseMessages.Successful,                
+                 ResponseCodes.Success
                  ));
         }
 
@@ -525,21 +456,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [FromBody] AddSubscriberRequest model,
         [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
-            args.UserId = CurrentUserId;
 
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
+
+            args.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -547,34 +471,22 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Subscriber Added Successfully",
-                HttpContext.TraceIdentifier
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
             ));
-        }
-
-
-          
+        }         
 
         [HttpPost("approve-subscriber")]
         public async Task<IActionResult> ApproveSubscriptionAsync(
             [FromBody] ApproveSubscriptionRequest model,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(args.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -582,38 +494,36 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Subscriber Added Successfully",
-                HttpContext.TraceIdentifier
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
             ));
         }
           
         
         [HttpGet("get-subscribers")]
 
-        [Authorize(Roles = "Organization,Agent")]
+      [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
+         
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
                     !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -622,26 +532,29 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
           
             return Ok(ApiResponse<List<SubscriptionDetailDto>>.SuccessPaged(
     result,
-    "Successful",
     ResponseCodes.Success,
+    ResponseMessages.Successful,
     HttpContext.TraceIdentifier
 ));
         }
        
+    
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
             filter.UserId = CurrentUserId;
 
-
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -649,8 +562,36 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<InputFinancingDashboardDto>.Success(
                 result,
-                "Subscriber Added Successfully",
-                HttpContext.TraceIdentifier
+               ResponseCodes.Success,
+               ResponseMessages.Successful
+            ));
+        }
+
+        [HttpGet("agent-dashboard")]
+        public async Task<IActionResult> GetAgentSubscriptionOverview(
+            [FromQuery] SubscriptionQueryFilter filter)
+        {
+       
+            filter.UserId = CurrentUserId;
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+            var result = await _inputFinancingManager
+                .GetAgentSubscriptionOverview(filter);
+
+            return Ok(ApiResponse<AgentSubscriptionOverviewDto>.Success(
+                result,
+               ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
         
@@ -658,7 +599,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> ExportSubscriptions(
             [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -667,18 +607,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
 
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
 
@@ -703,21 +640,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> ReviewSubscription(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
             filter.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -726,9 +657,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<SubscriptionFullDetailDto>.Success(
                  result,
-                 "Successful",
                  ResponseCodes.Success,
-                 HttpContext.TraceIdentifier
+                 ResponseMessages.Successful
                  ));
         }
        
@@ -737,21 +667,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetSubscriptionDetail(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -760,9 +682,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<SubscriptionReviewResponseDto>.Success(
                  result,
-                 "Successful",
                  ResponseCodes.Success,
-                 HttpContext.TraceIdentifier
+                 ResponseMessages.Successful
                  ));
         }
 
@@ -771,7 +692,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetSubscriptionDocuments(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+            
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -779,30 +700,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
                 .GetDocuments(filter.SubscriptionId);
 
             return Ok(ApiResponse<List<Core.Models.Businesses.Input.SubscriptionDocument>>.Success(
-result,
-"Successful",
-ResponseCodes.Success,
-HttpContext.TraceIdentifier
-));
-    
+                    result,
+                    ResponseCodes.Success,
+                    ResponseMessages.Successful
+                    ));    
         }
 
 
@@ -836,11 +748,11 @@ HttpContext.TraceIdentifier
         [HttpGet("subscription/commitment-form")]
         public async Task<IActionResult> DownloadCommitmentLetter([FromQuery] SubscriptionQueryFilter query)
         {
-            if (string.IsNullOrWhiteSpace(query.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(query.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result =
@@ -855,30 +767,22 @@ HttpContext.TraceIdentifier
             IFormFile file,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
-            args.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
+ args.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
-             var result = await _inputFinancingManager
+            var result = await _inputFinancingManager
                 .UploadCommissionLetterAsync(args.SubscriptionId, args.UserId, file);
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Uploaded Successfully",
-                HttpContext.TraceIdentifier
+                ResponseCodes.Success,
+                ResponseMessages.Successful
+
             ));
         }
 
@@ -891,14 +795,12 @@ HttpContext.TraceIdentifier
            [FromQuery] InputSubscriptionRequestArgs filter,
            [FromBody] RecordCommitmentPaymentRequest request)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             if (string.IsNullOrWhiteSpace(filter.Env))
@@ -908,22 +810,14 @@ HttpContext.TraceIdentifier
                     HttpContext.TraceIdentifier
                 ));
             }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
             await _inputFinancingManager
                 .CommitmentPaymentAsync(request, filter);
 
 
             return Ok(ApiResponse<string>.Success(
-                 "Request Processed",
-                 "Successful",
+                 "Request Processing",
                  ResponseCodes.Success,
-                 HttpContext.TraceIdentifier
+                 ResponseMessages.Successful
                  ));
         }
 
@@ -932,7 +826,6 @@ HttpContext.TraceIdentifier
         public async Task<IActionResult> RequestInputDisbursementApprovalAsync(
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
             if (string.IsNullOrEmpty(args.SubscriberUserId))
             {
@@ -941,18 +834,11 @@ HttpContext.TraceIdentifier
                     HttpContext.TraceIdentifier
                 ));
             }
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(args.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -960,8 +846,8 @@ HttpContext.TraceIdentifier
 
             return Ok(ApiResponse<bool>.Success(
                 true,
-                "Request Sent Successfully",
-                HttpContext.TraceIdentifier
+               ResponseCodes.Success,
+               ResponseMessages.Successful
             ));
         }
 
@@ -971,7 +857,6 @@ HttpContext.TraceIdentifier
             [FromQuery] ApproveDisbursementRequestDto model,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
             if (string.IsNullOrEmpty(args.SubscriberUserId))
             {
@@ -980,28 +865,18 @@ HttpContext.TraceIdentifier
                     HttpContext.TraceIdentifier
                 ));
             }
-
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(args.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
                 .ApproveInputDisbursementRequestAsync(model, args);
 
             return Ok(ApiResponse<bool>.Success(
-                true,
-                "Request Approved Successfully",
-                HttpContext.TraceIdentifier
+                true,ResponseCodes.Success, ResponseMessages.Successful
             ));
         }
 
@@ -1014,7 +889,7 @@ HttpContext.TraceIdentifier
             [FromForm] DisburseSubscriptionRequest request,
             [FromQuery] InputSubscriptionRequestArgs filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+          
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -1022,18 +897,11 @@ HttpContext.TraceIdentifier
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             var result = await _inputFinancingManager
@@ -1041,13 +909,9 @@ HttpContext.TraceIdentifier
 
 
             return Ok(ApiResponse<DisburseSubscriptionResult>.Success(
-    result,
-    "Successful",
-    ResponseCodes.Success,
-    HttpContext.TraceIdentifier
-));
+                    result,ResponseCodes.Success, ResponseMessages.Successful
+                    ));
         }
-
 
         //update create wallet with background service such that if a wallet is created for an organization, update input subscription with the walletid of the provider selected
 
@@ -1056,21 +920,12 @@ HttpContext.TraceIdentifier
         public async Task<IActionResult> SendCommitmentReminderAsync(
            [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
-
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                ));
-            }
-            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
-            {
-                return Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
                 ));
             }
             await _inputFinancingManager
@@ -1079,10 +934,112 @@ HttpContext.TraceIdentifier
 
             return Ok(ApiResponse<string>.Success(
                  "Request Processing",
-                 "Successful",
-                 ResponseCodes.Success,
-                 HttpContext.TraceIdentifier
+             
+                 ResponseCodes.Success,ResponseMessages.Successful
                  ));
+        }
+        [HttpPost("subscription/record-repayment")]
+        public async Task<IActionResult> RecordRepaymentAsync(
+   [FromQuery] InputSubscriptionRequestArgs filter,
+   [FromBody] RecordRepaymentRequest request)
+        {
+                        filter.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+            await _inputFinancingManager
+                .RecordRepaymentAsync(request, filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processed",
+                 ResponseCodes.Success,ResponseMessages.Successful
+                 ));
+        }
+
+        [HttpPost("subscription/repayment-reminder")]
+        public async Task<IActionResult> SendRepaymentReminder(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.UserId = CurrentUserId;
+
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            await _inputFinancingManager
+                .SendRepaymentReminderAsync(filter);
+
+
+            return Ok(ApiResponse<string>.Success(
+                 "Request Processing",
+                 ResponseCodes.Success, ResponseMessages.Successful
+                 ));
+        }
+
+        [HttpGet("subscription/repayment-schedule")]
+        public async Task<IActionResult> GetRepaymentScheduleAsync(
+           [FromQuery] SubscriptionQueryFilter filter)
+        {
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentScheduleAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentScheduleItemDto>>.Success(
+                result,
+                 ResponseCodes.Success,
+                 ResponseMessages.Successful
+                 ));
+        }
+        [HttpGet("subscription/repayment-ledger")]
+
+        public async Task<IActionResult> GetRepaymentLedgerAsync(
+        [FromQuery] SubscriptionQueryFilter filter)
+        {
+
+            filter.UserId = CurrentUserId;
+            (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
+            if (!flowControl)
+            {
+                return value;
+            }
+            var result = await _inputFinancingManager
+                .GetRepaymentLedgerAsync(filter);
+
+
+            return Ok(ApiResponse<List<RepaymentLedgerEntryDto>>.SuccessPaged(
+                result,
+                ResponseCodes.Success,ResponseMessages.Successful
+             ));
+        }
+
+        private (bool flowControl, IActionResult value) ValidateAuthorization(SubscriptionQueryFilter filter)
+        {
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                                !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
+                    "Access Denied",
+                    HttpContext.TraceIdentifier
+                )));
+            }
+
+            return (flowControl: true, value: null);
         }
 
         private string GenerateExportFileName(SubscriptionQueryFilter filter, ExportFormat format)

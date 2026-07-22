@@ -453,6 +453,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return new MembershipDashboardDto
             {
                 Membership = membership,
+                
                 Summary = new MemberSummaryDto
                 {
                     TotalAgents = totalAgents,
@@ -464,7 +465,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     FarmsMapped = farmsMapped,
                     MappingProgressPercentage = totalFarms == 0
                         ? 0
-                        : (int)Math.Round((double)farmsMapped / totalFarms * 100)
+                        : (int)Math.Round((double)farmsMapped / totalFarms * 100),
+                    
                 }
             };
         }
@@ -693,24 +695,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 if (data.OrganizationId.HasValue)
                 {
-                    var exists = await _context.OrganizationMemberships
-                        .AnyAsync(x =>
-                            x.MembershipId == membershipId &&
-                            x.OrganizationId == data.OrganizationId.Value);
+                  if(data.OrganizationId.Value > 0) {
+                        var exists = await _context.OrganizationMemberships
+                            .AnyAsync(x =>
+                                x.MembershipId == membershipId &&
+                                x.OrganizationId == data.OrganizationId.Value);
 
-                    if (!exists)
-                    {
-                        await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+                        if (!exists)
                         {
-                            MembershipId = membershipId,
-                            OrganizationId = data.OrganizationId.Value,
-                            AssignedByUserId = data.OnboardedById,
-                            AssignedOn = DateTimeOffset.UtcNow,
-                            IsActive = true
-                        });
+                            await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+                            {
+                                MembershipId = membershipId,
+                                OrganizationId = data.OrganizationId.Value,
+                                AssignedByUserId = data.OnboardedById,
+                                AssignedOn = DateTimeOffset.UtcNow,
+                                IsActive = true
+                            });
 
-                        await _context.SaveChangesAsync();
+                            await _context.SaveChangesAsync();
+                        }
                     }
+                    
                 }
                 var isModified = false;
                 if (!string.IsNullOrWhiteSpace(data.NIN) || !string.IsNullOrWhiteSpace(data.BVN))
