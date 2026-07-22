@@ -398,8 +398,56 @@ namespace Agrovesto.Backend.API.Controllers
                 return string.Empty;
             }
         }
+        protected List<OrganizationClaim> CurrentUserOrganizations
+        {
+            get
+            {
+                var raw = User.FindFirst("Organizations")?.Value;
+                if (string.IsNullOrWhiteSpace(raw)) return new List<OrganizationClaim>();
+                return JsonSerializer.Deserialize<List<OrganizationClaim>>(raw) ?? new List<OrganizationClaim>();
+            }
+        }
+        
+        protected IActionResult? TryResolveOrganizationCode(string? suppliedCode, out string? resolvedCode)
+        {
+            var userOrgs = CurrentUserOrganizations;
+
+            if (string.IsNullOrWhiteSpace(suppliedCode))
+            {
+                if (userOrgs.Count == 1)
+                {
+                    resolvedCode = userOrgs[0].OrganizationCode;
+                    return null;
+                }
+
+                if (userOrgs.Count > 1)
+                {
+                    resolvedCode = null;
+                    return Unauthorized(ApiResponse<object>.Fail(
+                        "Multiple organizations found for this user. Please specify an organizationCode.",
+                        ResponseCodes.AccessDenied
+                    ));
+                }
+
+                resolvedCode = null;
+                return null;
+            }
+
+            if (userOrgs.All(o => !o.OrganizationCode.Equals(suppliedCode, StringComparison.OrdinalIgnoreCase)))
+            {
+                resolvedCode = null;
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+
+            resolvedCode = suppliedCode;
+            return null;
+        }
         protected void NormalizeOrganizationCode(OnBoardingArgs args)
         {
+
             if (!string.IsNullOrEmpty(OrganizationCode) &&
                 string.IsNullOrEmpty(args.organizationCode))
             {

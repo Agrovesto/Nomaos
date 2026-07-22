@@ -65,8 +65,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (string.IsNullOrWhiteSpace(args.UserId))
                 return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
                     StatusCodes.Status401Unauthorized);
-
-            args.organizationCode = OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
             await EnrichAgentAsync(args);
 
             return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
@@ -88,8 +89,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
                     StatusCodes.Status401Unauthorized);
 
-            args.organizationCode = !string.IsNullOrEmpty(args.organizationCode) ? args.organizationCode : OrganizationCode;
-            await EnrichAgentAsync(args);
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode; await EnrichAgentAsync(args);
             List<BulkMembershipRowDto> rows;
             try
             {
@@ -160,7 +162,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromQuery] OnBoardingArgs args)
         {
             args.UserId = CurrentUserId;
-            args.organizationCode = OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             await EnrichAgentAsync(args);
             var result = await _membershipManager.CreateMembershipAsync(dto, args);
@@ -171,9 +175,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetCooperativesByAgent([FromQuery] ListQueryParams query)
         {
             ResolveAgentQueryContext(query);
-
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             return await ExecuteAsync(async () =>
             {
+                
+
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "The supplied user is not a Agent.");
 
@@ -187,12 +195,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
 
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
-                args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
+                       args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
                 if (!await _onBoardingManager.IsUserInRoleAsync(args.UserId, "Agent"))
                     throw new BaseException(ExceptionType.BAD_REQUEST,"The supplied user is not a Agent.");
@@ -208,6 +218,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetFarmersByAgent([FromQuery] ListQueryParams query)
         {
             ResolveAgentQueryContext(query);
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
@@ -222,6 +235,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetAgentDashboardData([FromQuery] ListQueryParams query)
         {
             ResolveAgentQueryContext(query);
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
@@ -246,7 +262,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return ValidationProblemResponse();
 
             args.OnboardedByUserId = CurrentUserId;
-            args.organizationCode = args.organizationCode ?? OrganizationCode;
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(
                 () => _onBoardingManager.EditAgentUser(model, args),
@@ -254,8 +272,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private void ResolveAgentQueryContext(ListQueryParams query)
         {
-            if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                query.organizationCode = OrganizationCode;
 
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
         }

@@ -453,6 +453,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return new MembershipDashboardDto
             {
                 Membership = membership,
+                
                 Summary = new MemberSummaryDto
                 {
                     TotalAgents = totalAgents,
@@ -464,7 +465,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     FarmsMapped = farmsMapped,
                     MappingProgressPercentage = totalFarms == 0
                         ? 0
-                        : (int)Math.Round((double)farmsMapped / totalFarms * 100)
+                        : (int)Math.Round((double)farmsMapped / totalFarms * 100),
+                    
                 }
             };
         }

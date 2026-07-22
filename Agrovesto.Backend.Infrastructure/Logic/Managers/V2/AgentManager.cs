@@ -136,7 +136,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query)
         {
 
-            var request = await _farmerRepository.GetAgentDashboardData(query.UserId);
+            var request = await _farmerRepository.GetAgentDashboardData(query.UserId, query);
             
             return request;
         }

@@ -2305,7 +2305,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 throw new BaseException(
                     ExceptionType.INTERNAL_SERVER_ERROR,
-                    "Unable to complete onboarding at the moment.");
+                    "Unable to complete profile.");
             }
         }
         private string BuildFullName(ProfileRequestModel model)
