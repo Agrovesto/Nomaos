@@ -245,11 +245,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-               
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var wallet = await _walletManager.CreateWallet(request, query);
 
                 return Ok(new Response<(bool status, string message)>()

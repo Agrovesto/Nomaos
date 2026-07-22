@@ -54,11 +54,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+             
 
                 if (CurrentUserId != null && CurrentUserRole != args.userType)
                     await EnrichArgsByRoleAsync(args);
@@ -101,11 +104,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(args);
+           
 
                 if (string.IsNullOrWhiteSpace(args.UserId))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "UserId must be provided to create a profile for the farmer.");
@@ -174,12 +180,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [AllowAnonymous]
         public async Task<IActionResult> AssignFarmerToCooperatives([FromQuery] AssignmentArgs args)
         {
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+
             return await ExecuteAsync(() =>
             {
                 args.UserId ??= CurrentUserId;
                 args.OnboardedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new OnBoardingArgs { organizationCode = args.organizationCode });
-
+               
                 return _onBoardingManager.AssignFarmerToCooperatives(args);
             },
             request => Ok(Success(request, ResponseMessages.Successful)));

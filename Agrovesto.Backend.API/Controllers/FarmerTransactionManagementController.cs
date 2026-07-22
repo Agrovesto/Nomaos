@@ -130,12 +130,11 @@ namespace Agrovesto.Backend.API.Controllers
         [HttpGet("farmer-transaction")]
         public async Task<IActionResult> GetFarmerTransaction([FromQuery] TransactionQueryParams query)
         {
-            
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
-                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
+
+            query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 return await ExecuteAsync(
         () => _farmerTransactionManager.GetTransactionByFarmer(query.FarmerId, query),
         result => Ok(BuildPagedResponse(result, query.PageNumber))
@@ -268,10 +267,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmerTransactionManager.GetTransactionsByBusinessCode(query);
                 return Ok(new PagedListResponse<List<FarmerSalesTrackerModel>>()

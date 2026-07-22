@@ -26,10 +26,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 await _settingsManager.CreateOrUpdateOrgConfig(model, query);
                 return Ok(new Response<bool>()
@@ -65,10 +64,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _settingsManager.GetByCodeAsync(query);
                 return Ok(new Response<OrganizationConfigurationModel>()
@@ -101,10 +99,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _walletSetUpManager.GetUserWalletAsync(query);
                 if (!result.Status)
@@ -149,10 +146,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var wallet=await _walletSetUpManager.CreateWalletSingleAsync(query);
                 return Ok(new Response<(bool status, string message)>()
@@ -186,10 +182,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var wallet = await _walletSetUpManager.CreateWalletMultipleAsync(query);
                 return Ok(new Response<(bool status, string message)>()
