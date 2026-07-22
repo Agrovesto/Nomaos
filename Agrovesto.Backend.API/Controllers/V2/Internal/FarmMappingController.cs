@@ -30,9 +30,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("by-membership")]
         public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAMembership([FromQuery] FarmMappingArgs query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
+
             return await ExecuteAsync(async () =>
             {
-                query.organizationCode = query.organizationCode ?? OrganizationCode;
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
 
                 if (string.IsNullOrEmpty(query.userId))
@@ -48,9 +51,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("by-agent")]
         public async Task<IActionResult> FetchAllFarmsByFarmersBelongingToAnAgent([FromQuery] FarmMappingArgs query)
         {
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             return await ExecuteAsync(async () =>
             {
-                query.organizationCode = query.organizationCode ?? OrganizationCode;
+                
                 query.userId = !string.IsNullOrEmpty(query.userId) ? query.userId : CurrentUserId;
 
                 await EnsureRoleAsync(query.userId!, "Agent");
@@ -63,8 +69,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("by-farmer")]
         public async Task<IActionResult> FetchFarmsByFarmer([FromQuery] FarmMappingArgs query)
         {
-            query.organizationCode = query.organizationCode ?? OrganizationCode;
-
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
             return await ExecuteAsync(async () =>
             {
                 await ResolveOrValidateFarmerIdAsync(query);
@@ -76,7 +83,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("details")]
         public async Task<IActionResult> FetchFarmDetails([FromQuery] FarmMappingArgs query)
         {
-            query.organizationCode = query.organizationCode ?? OrganizationCode;
+            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.organizationCode = resolvedOrgCode;
 
             if (query.farmId <= 0)
                 return BadRequest(new Response<string> { Message = "Farm Id is required.", Succeeded = false });
