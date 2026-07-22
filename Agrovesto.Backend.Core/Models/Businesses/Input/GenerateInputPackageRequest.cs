@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models.Common;
 using Microsoft.AspNetCore.Http;
 using System;
 using System.Collections.Generic;
@@ -464,6 +465,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
+        public OrganizationDto Organization { get; set; }
     }
     public class RepaymentLedgerEntryDto
     {
@@ -514,6 +516,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public bool RequiresReminder { get; set; }
         public string Email { get; set; }
         public string PhoneNumber { get; set; }
+        public OrganizationDto Organization { get; set; }
     }
 
 

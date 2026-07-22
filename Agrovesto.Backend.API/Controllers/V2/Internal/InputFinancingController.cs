@@ -151,28 +151,32 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
         [HttpGet("packages")]
-        public async Task<IActionResult> GetPackagesAsync([FromQuery] InputPackageFilterRequest filter, [FromQuery] ListQueryParams args)
+        public async Task<IActionResult> GetPackagesAsync(
+      [FromQuery] InputPackageFilterRequest filter,
+      [FromQuery] ListQueryParams args)
         {
-            args.organizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
+
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             if (string.IsNullOrWhiteSpace(args.organizationCode) || string.IsNullOrWhiteSpace(args.businessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                      ResponseMessages.AccessDenied,
+                    ResponseMessages.AccessDenied,
                     ResponseCodes.AccessDenied
                 ));
             }
-            var result = await _inputFinancingManager
-              .GetPackagesAsync(args);
+
+            var result = await _inputFinancingManager.GetPackagesAsync(args);
 
             return Ok(ApiResponse<List<InputPackageListModel>>.SuccessPaged(
-                    result,
-                    ResponseMessages.Successful,
-                    ResponseCodes.Success
+                result,
+                ResponseMessages.Successful,
+                ResponseCodes.Success
             ));
         }
-
         [HttpGet("package")]
         public async Task<IActionResult> GetPackageByIdAsync([FromQuery] ListQueryParams args)
         {
@@ -421,9 +425,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [FromBody] AddSubscriberRequest model,
         [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
+
+
             args.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -445,9 +450,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromBody] ApproveSubscriptionRequest model,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -467,18 +471,23 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         
         [HttpGet("get-subscribers")]
 
-        [Authorize(Roles = "Organization,Agent")]
+      [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
+         
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
                     !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -504,7 +513,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
             filter.UserId = CurrentUserId;
 
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
@@ -528,8 +540,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetAgentSubscriptionOverview(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+       
             filter.UserId = CurrentUserId;
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
 
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
@@ -552,7 +568,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> ExportSubscriptions(
             [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -560,6 +575,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
+
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -614,9 +634,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetSubscriptionDetail(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -639,7 +659,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetSubscriptionDocuments(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+            
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -647,7 +667,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -695,7 +715,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpGet("subscription/commitment-form")]
         public async Task<IActionResult> DownloadCommitmentLetter([FromQuery] SubscriptionQueryFilter query)
         {
-            if (string.IsNullOrWhiteSpace(query.OrganizationCode) || string.IsNullOrWhiteSpace(query.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(query.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -714,9 +734,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IFormFile file,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
-            args.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
+ args.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -743,9 +762,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            [FromQuery] InputSubscriptionRequestArgs filter,
            [FromBody] RecordCommitmentPaymentRequest request)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -775,7 +793,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> RequestInputDisbursementApprovalAsync(
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
             if (string.IsNullOrEmpty(args.SubscriberUserId))
             {
@@ -784,7 +801,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -807,7 +824,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromQuery] ApproveDisbursementRequestDto model,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
-            args.OrganizationCode ??= OrganizationCode;
             args.UserId = CurrentUserId;
             if (string.IsNullOrEmpty(args.SubscriberUserId))
             {
@@ -816,7 +832,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
-            if (string.IsNullOrWhiteSpace(args.OrganizationCode) || string.IsNullOrWhiteSpace(args.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -840,7 +856,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromForm] DisburseSubscriptionRequest request,
             [FromQuery] InputSubscriptionRequestArgs filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+          
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -848,7 +864,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -871,7 +887,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> SendCommitmentReminderAsync(
            [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
@@ -895,9 +910,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
    [FromQuery] InputSubscriptionRequestArgs filter,
    [FromBody] RecordRepaymentRequest request)
         {
-            filter.OrganizationCode ??= OrganizationCode;
-            filter.UserId = CurrentUserId;
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+                        filter.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -918,7 +932,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> SendRepaymentReminder(
            [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
 
             (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
@@ -936,11 +949,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ));
         }
 
-        [HttpPost("subscription/repayment-schedule")]
+        [HttpGet("subscription/repayment-schedule")]
         public async Task<IActionResult> GetRepaymentScheduleAsync(
            [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
             filter.UserId = CurrentUserId;
             (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
             if (!flowControl)
@@ -962,7 +974,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetRepaymentLedgerAsync(
         [FromQuery] SubscriptionQueryFilter filter)
         {
-            filter.OrganizationCode ??= OrganizationCode;
+
             filter.UserId = CurrentUserId;
             (bool flowControl, IActionResult value) = ValidateAuthorization(filter);
             if (!flowControl)
@@ -985,13 +997,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                                 !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
-            }
-            if (string.IsNullOrWhiteSpace(filter.OrganizationCode))
-            {
-                return (flowControl: false, value: Unauthorized(ApiResponse<object>.Fail(
-                    "Access Denied",
-                    HttpContext.TraceIdentifier
-                )));
             }
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
