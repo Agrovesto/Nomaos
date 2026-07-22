@@ -46,10 +46,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : query.UserId;
 
 
@@ -100,10 +99,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
            
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var datasets = await _datasetManager.GetDatasetOverviewAsync(query);
                 return Ok(new Response<DatasetOverviewDto>()
@@ -139,10 +137,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var datasets = await _datasetManager.GetDatasetsAsync(query);
                 return Ok(new PagedListResponse<IEnumerable<MandEDatasetListDto>>()
@@ -201,10 +198,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : query.UserId;
 
                 var field = await _datasetManager.CreateDataSetFieldAsync(
@@ -321,10 +317,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : query.UserId;
 
                 var record = await _datasetManager.CreateDataSetRecordAsync(query.Id, dto, query);
@@ -382,10 +377,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : query.UserId;
 
                  await _datasetManager.UpdateDataSetRecordAsync(recordId, dto, query);
@@ -441,10 +435,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Public
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : query.UserId;
 
                 var records = await _datasetManager.GetDataSetRecordsAsync(query.Id, query);
