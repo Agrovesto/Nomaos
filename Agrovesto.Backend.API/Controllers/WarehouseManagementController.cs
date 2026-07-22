@@ -87,10 +87,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
                 args.UserId ??= CurrentUserId;
                 var bundle = await _warehouseManagementManager.CreateBundleAsync(model, args);
@@ -131,10 +130,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
                 var result = await _warehouseManagementManager.GetBundleByWarehouseManager(query.UserId, query);
@@ -176,10 +174,9 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 //query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId //: CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
 
                 var result = await _warehouseManagementManager.GetBundlesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<BundleModel>>()
@@ -277,10 +274,9 @@ namespace Agrovesto.Backend.API.Controllers
             }
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 args.UserId ??= CurrentUserId;
                 var createWarehouse = await _warehouseManagementManager.CreateWarehouse(model, args);
                 return Ok(new Response<WarehouseModel>()
@@ -362,10 +358,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehousesByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseModel>>()
@@ -404,10 +399,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _warehouseManagementManager.GetWarehousesByAgent(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseModel>>()
@@ -608,10 +602,9 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
 
                 var result = await _warehouseManagementManager.GetWarehousesManagerByBusiness(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseUserModel>>()
@@ -669,10 +662,9 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId ??= CurrentUserId;
                 args.WarehouseId = args.WarehouseId;
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
                 var result = await _warehouseManagementManager.StockUpInput(model, args);
                 return Ok(new Response<WarehouseInputInventoryModel>()
@@ -726,10 +718,9 @@ namespace Agrovesto.Backend.API.Controllers
             {
                 args.UserId ??= CurrentUserId;
                 args.WarehouseId = args.WarehouseId;
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 var result = await _warehouseManagementManager.ConfirmInputShipment(model, args);
                 return Ok(new Response<InputDeliveryTrackerModel>()
                 {
@@ -932,10 +923,9 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
 
                 var result = await _warehouseManagementManager.GetInputByWarehouse(query.UserId, query);
                 return Ok(new PagedListResponse<List<WarehouseInputInventoryModel>>()

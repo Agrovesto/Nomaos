@@ -49,10 +49,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
@@ -96,10 +96,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 if (query.CooperativeId == 0 && currentRole == "MemberShip")
@@ -149,10 +149,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                
@@ -268,11 +268,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
                 var currentRole = CurrentUserRole;
                // args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
@@ -336,10 +335,10 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 // args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
@@ -386,10 +385,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
@@ -439,10 +438,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
@@ -493,10 +492,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 var currentRole = CurrentUserRole;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
@@ -598,10 +597,10 @@ namespace Agrovesto.Backend.API.Controllers
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
                 var updateDetail = await _farmPlotDetailsManager.CreateActivityType(model, args);
 
 
@@ -641,10 +640,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetActivityTypes(query);
                 return Ok(new PagedListResponse<List<FarmActivityTypeModel>>()
@@ -743,10 +742,10 @@ namespace Agrovesto.Backend.API.Controllers
             try
             {
 
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
@@ -788,10 +787,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByBusiness(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()
@@ -874,10 +873,10 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _farmPlotDetailsManager.GetVisitationLogsByOfficerInCharge(query);
                 return Ok(new PagedListResponse<List<FarmVisitationActivityModel>>()

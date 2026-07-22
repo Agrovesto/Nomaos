@@ -64,13 +64,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                             Succeeded = false
                         });
                     }
-                
-
-                if (!string.IsNullOrWhiteSpace(OrganizationCode) &&
-                    string.IsNullOrWhiteSpace(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
                 var saveFarmerFace = await _onBoardingManager
                     .SaveFarmerImage(model, args);
@@ -109,10 +105,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
                 //if user to be created is a farmer, args.userId has to be cooperative user Id
                 args.UserId = args.UserId ?? CurrentUserId;
@@ -174,10 +169,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
 
                 args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
              

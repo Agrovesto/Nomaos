@@ -45,10 +45,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
 
@@ -103,10 +102,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
 
@@ -163,10 +161,10 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
+
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
                 var created = await _svc.CreateFieldAsync(model, args);
                 return Ok(new { success = true, data = created });
@@ -217,10 +215,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
                 
@@ -253,10 +250,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _svc.GetActivityTypesAsync(query.UserId, query);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityTypeModel>>()
@@ -402,10 +398,9 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(args.organizationCode))
-                {
-                    args.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                args.organizationCode = resolvedOrgCode;
                 args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
 
 
@@ -445,10 +440,9 @@ var log = await _svc.SubmitEntryAsync(dto, args);
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _svc.GetMandELogsAsync(query);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
@@ -489,10 +483,9 @@ var log = await _svc.SubmitEntryAsync(dto, args);
         {
             try
             {
-                if (!string.IsNullOrEmpty(OrganizationCode) && string.IsNullOrEmpty(query.organizationCode))
-                {
-                    query.organizationCode = OrganizationCode;
-                }
+                var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
+                if (orgError != null) return orgError;
+                query.organizationCode = resolvedOrgCode;
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _svc.GetMandELogsAsync(subActivityId,query);
                 return Ok(new PagedListResponse<IEnumerable<MandEActivityLogModel>>()
