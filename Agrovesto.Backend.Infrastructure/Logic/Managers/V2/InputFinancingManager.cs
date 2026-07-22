@@ -39,6 +39,7 @@ using StackExchange.Redis;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Globalization;
 using System.IO.Packaging;
 using System.Linq;
 using System.Text;
@@ -414,11 +415,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid subscriber type");
             }
 
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
-            if (hasOrg != null)
-            {
-                query.OrganizationId = hasOrg.OrganizaionId;
-            }
+          
             var subscriberExists = await _onBoardingManager.GetUseridentity(request.SubscriberUserId);
 
             if (subscriberExists == null)
@@ -487,11 +484,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
+           
             if (!filter.ViewType.HasValue)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
@@ -505,11 +498,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<CommitmentFormDto> DownloadCommitmentLetter(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
             if (!filter.ViewType.HasValue)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
@@ -830,6 +818,8 @@ RepaymentFrequency frequency)
                 if (subscription.Status == SubscriptionStatus.PendingDisbursement)
                     throw new Exception("Already completed commitment stage");
 
+                var org = subscription.Organization;
+
                 var outstanding =
                     subscription.CommitmentValue -
                     await _inputFinancingRepository
@@ -1012,6 +1002,8 @@ RepaymentFrequency frequency)
                                 }
 
                             case "Etransact":
+                                ProcessEtransactWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
+                                //debit on etransact
                                 break;
 
                             default:
@@ -1086,6 +1078,7 @@ RepaymentFrequency frequency)
                                 }
 
                             case "Etransact":
+                                //credit on etransact
                                 break; 
 
                             default:
@@ -1213,6 +1206,53 @@ RepaymentFrequency frequency)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, debitFailMessage);
             }
 
+            providerMessage = debitResponse.Data.Status;
+            debitProviderReference = debitResponse.Data.Reference;
+        }
+        private async void ProcessEtransactWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
+            IGenericWalletService providerService,  string? debitProviderReference,  string providerMessage, WalletTopUpProviderRequest debitRequest)
+        {
+            var balanceEnquiry = await providerService.BalanceEnquiryAsync(new UserProfileResponse
+            {
+                WalletNumber = debitRequest.WalletNumber,
+            }, providerParams, args.Env);
+
+            if (balanceEnquiry.IsSuccess &&
+                balanceEnquiry.Data != null &&
+                balanceEnquiry.Data.balance > 0)
+            {
+                var walletBalance = balanceEnquiry.Data.balance;
+
+                if (walletBalance < debitRequest.Amount)
+                {
+                    await _walletTransactionRepository.CompleteWalletWithdrawal(
+                        $"{debitReference}-DB", false, null, "Insufficient wallet balance");
+                    throw new BaseException(
+                        ExceptionType.OPERATION_FAILED,
+                        $"Insufficient wallet balance. Kindly top up at least ₦{debitRequest.Amount:N0}");
+                }
+            }
+            else
+            {
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, "Could not verify wallet balance");
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Could not verify wallet balance. Please try again later.");
+            }
+
+            var debitResponse = await providerService.DebitWalletAsync(
+                debitRequest, providerParams, args.Env);
+
+            if (debitResponse == null)
+            {
+                await _walletTransactionRepository.CompleteWalletWithdrawal(
+                    $"{debitReference}-DB", false, null, "Wallet debit request returned no response");
+
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "Could not initiate wallet debit");
+            }
             providerMessage = debitResponse.Data.Status;
             debitProviderReference = debitResponse.Data.Reference;
         }
@@ -1751,11 +1791,7 @@ RepaymentFrequency frequency)
         //    }
         public async Task SendCommitmentReminderAsync(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
+            
             var reminder = await _inputFinancingRepository.GetCommitmentReminderAsync(filter.SubscriptionId);
 
             if (reminder == null || !reminder.RequiresReminder)
@@ -1791,19 +1827,15 @@ RepaymentFrequency frequency)
                    senderEmail,
                    "agrovesto@gmail.com",
                    "Commitment Payment Reminder",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'"
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'",
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'"
                    );
 
 
         }
         public async Task SendRepaymentReminderAsync(SubscriptionQueryFilter filter)
         {
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-            if (hasOrg != null)
-            {
-                filter.OrganizationId = hasOrg.OrganizaionId;
-            }
+            
             var reminder = await _inputFinancingRepository.GetRepaymentReminderAsync(filter.SubscriptionId);
 
             if (reminder == null || !reminder.RequiresReminder)
@@ -1839,8 +1871,8 @@ RepaymentFrequency frequency)
                    senderEmail,
                    "agrovesto@gmail.com",
                    "Outstanding Repayment Reminder",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'",
-                   $"You've been copied on the details below for Organization Input Financing of '{hasOrg.OrganizationName}' '{reminder.Message}'"
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'",
+                   $"You've been copied on the details below for Organization Input Financing of '{reminder.Organization.OrganizationName}' '{reminder.Message}'"
                    );
 
 
@@ -1998,11 +2030,6 @@ RepaymentFrequency frequency)
 
                 try
                 {
-                    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.OrganizationCode);
-                    if (hasOrg != null)
-                    {
-                        args.OrganizationId = hasOrg.OrganizaionId;
-                    }
                     // ── 1. Validate args ──────────────────────────────────────────────
                     if (string.IsNullOrEmpty(args.SubscriberUserId))
                         throw new DisbursementException("Subscriber user is required.");
@@ -2025,6 +2052,8 @@ RepaymentFrequency frequency)
                             .ThenInclude(x => x.RepaymentPlan)
                         .Include(x => x.InputPackage)
                             .ThenInclude(x => x.AdditionalCosts)
+                        .Include(x => x.InputPackage)
+                            .ThenInclude(x => x.Organization)
                         .Include(x => x.SubscriberUser)
                         .Include(x => x.Organization)
                         .FirstOrDefaultAsync(x =>
@@ -2046,7 +2075,7 @@ RepaymentFrequency frequency)
 
                     if (subscription.InputPackage.RepaymentPlan == null)
                         throw new DisbursementException("Repayment plan is required before disbursement.");
-
+                    var org = subscription.InputPackage.Organization;
                     var user = await _onBoardingManager.GetUseridentity(subscription.SubscriberUser.Id);
                     if (user == null)
                         throw new DisbursementException("User details not found.");
@@ -2059,7 +2088,7 @@ RepaymentFrequency frequency)
                     var farmerImage = await _farmerRepository.GetFarmerImage(
                         subscription.SubscriberUser.Id,
                         args.BusinessCode,
-                        subscription.Organization.OrganizationCode);
+                        subscription.Organization?.OrganizationCode);
 
                     if (farmerImage == null)
                         throw new DisbursementException(
@@ -2086,7 +2115,7 @@ RepaymentFrequency frequency)
                     if (agent == null)
                         throw new DisbursementException("No agent profile found for the current user.");
 
-                    var organizationAgent = await ResolveAgentOrganizationAsync(agent.Id, args.OrganizationCode);
+                    var organizationAgent = await ResolveAgentOrganizationAsync(agent.Id, org.OrganizationCode);
 
                     if (organizationAgent == null)
                         throw new DisbursementException(
@@ -2266,8 +2295,7 @@ RepaymentFrequency frequency)
         }
 
 
-        // ── Private helpers ───────────────────────────────────────────────────────────
-
+       
         /// <summary>
         /// Validates the uploaded live image before any DB calls are made.
         /// Throws <see cref="DisbursementException"/> on any violation.

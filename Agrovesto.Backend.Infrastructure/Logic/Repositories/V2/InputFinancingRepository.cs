@@ -1003,9 +1003,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 try
                 {
                     var package = await _context.InputPackages
-                        .Include(x => x.CommitmentPlan)
-                        .Include(x => x.RepaymentPlan)
-                        .FirstOrDefaultAsync(x => x.Id == request.PackageId);
+             .Include(x => x.Organization)
+             .Include(x => x.CommitmentPlan)
+             .Include(x => x.RepaymentPlan)
+             .FirstOrDefaultAsync(x => x.Id == request.PackageId);
 
                     if (package == null)
                         throw new Exception("Package not found");
@@ -1024,6 +1025,40 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         var isFarmer = await _context.Farmers.FirstOrDefaultAsync(x => x.UserId == request.SubscriberUserId);
                         if (isFarmer == null)
                             throw new Exception("This package does not allow group subscriptions, Subscriber not a farmer");
+
+                        if (package.Organization != null)
+                        {
+                            var farmerBelongsToOrg = await _context.FarmerOrganizations
+                                .AnyAsync(fo =>
+                                    fo.FarmerId == isFarmer.Id &&
+                                    fo.OrganizationCode == package.Organization.OrganizationCode);
+
+                            if (!farmerBelongsToOrg)
+                                throw new BaseException(
+                                    Core.Enums.ExceptionType.ACCESS_DENIED,
+                                    "Subscriber does not belong to the organization this package belongs to");
+                        }
+                    }
+                    else if (request.SubscriberType == InputSubScriptionType.MemberShip)
+                    {
+                        var membership = await _context.MemberShips
+                            .FirstOrDefaultAsync(x => x.UserId == request.SubscriberUserId);
+
+                        if (membership == null)
+                            throw new Exception("Subscriber is not a valid membership/cooperative");
+
+                        if (package.Organization != null)
+                        {
+                            var membershipBelongsToOrg = await _context.OrganizationMemberships
+                                .AnyAsync(mo =>
+                                    mo.MembershipId == membership.Id &&
+                                    mo.OrganizationId == package.Organization.OrganizationId);
+
+                            if (!membershipBelongsToOrg)
+                                throw new BaseException(
+                                    Core.Enums.ExceptionType.ACCESS_DENIED,
+                                    "Membership does not belong to the organization this package belongs to");
+                        }
                     }
 
                     var alreadySubscribed = await _context.InputPackageSubscriptions
@@ -1769,6 +1804,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             var subscription = await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
+                .ThenInclude(x=>x.Organization)
                 .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
@@ -1803,7 +1839,11 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     TotalCommitment = required,
                     AmountPaid = totalPaid,
                     OutstandingAmount = 0,
-                    RequiresReminder = false
+                    RequiresReminder = false,
+                    Organization= new OrganizationDto
+                    {
+                        OrganizationName= subscription.InputPackage.Organization.CompanyName
+                    }
                 };
             }
 
@@ -1854,6 +1894,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             var subscription = await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
+                .ThenInclude(x=>x.Organization)
                 .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId);
 
@@ -1894,7 +1935,11 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     CreditBalance = creditBalance,
                     OutstandingAmount = 0,
                     RequiresReminder = false,
-                    RequiresReconciliation = false
+                    RequiresReconciliation = false,
+                    Organization= new OrganizationDto
+                    {
+                        OrganizationName=subscription.InputPackage.Organization.CompanyName
+                    }
                 };
             }
 
@@ -3346,6 +3391,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     .ThenInclude(p => p.CommitmentPlan)
                 .Include(x => x.InputPackage)
                     .ThenInclude(p => p.RepaymentPlan)
+                .Include(x=>x.InputPackage)
+                    .ThenInclude(x=>x.Organization)
                 .FirstOrDefaultAsync(x => x.Id == filter.SubscriptionId);
 
             if (subscription == null)
@@ -3354,7 +3401,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
             var package = subscription.InputPackage
                 ?? throw new Exception("Package not found for subscription");
 
-            var orgId = subscription.OrganizationId;
+           var org = package.Organization;
 
          
             var packageItems = await _context.InputPackageItems
@@ -3385,7 +3432,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var farmerOrg = await _context.FarmerOrganizations
                         .FirstOrDefaultAsync(x =>
                             x.FarmerId == farmer.Id &&
-                            x.OrganizationCode == filter.OrganizationCode);
+                            x.OrganizationCode == org.OrganizationCode);
 
                     verificationStatus = farmerOrg == null
                         ? "Not Enrolled"
@@ -3406,7 +3453,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var memberOrg = await _context.OrganizationMemberships
                         .FirstOrDefaultAsync(x =>
                             x.MembershipId == member.Id &&
-                            x.OrganizationId == orgId);
+                            x.OrganizationId == org.OrganizationId);
 
                     verificationStatus = memberOrg == null
                         ? "Not Enrolled"
@@ -3426,7 +3473,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     join a in _context.Agents on fa.AgentId equals a.Id
                     join u in _context.Users on a.UserId equals u.Id
                     join oa in _context.OrganizationAgents
-     on new { AgentId = a.Id, OrganizationId = orgId ?? 0L }
+     on new { AgentId = a.Id, OrganizationId = org.OrganizationId }
      equals new { AgentId = oa.AgentId, OrganizationId = oa.OrganizationId }
      into oaJoin
                     from oa in oaJoin.DefaultIfEmpty()
@@ -3453,7 +3500,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     join a in _context.Agents on ma.AgentId equals a.Id
                     join u in _context.Users on a.UserId equals u.Id
                     join oa in _context.OrganizationAgents
-  on new { AgentId = a.Id, OrganizationId = orgId ?? 0L }
+  on new { AgentId = a.Id, OrganizationId = org.OrganizationId}
   equals new { AgentId = oa.AgentId, OrganizationId = oa.OrganizationId }
   into oaJoin
                     from oa in oaJoin.DefaultIfEmpty()
@@ -3540,7 +3587,6 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
           package.RepaymentPlan.RepaymentFrequency,
           package.RepaymentPlan.RepaymentDuration)
       : null;
-            // Wrap in try/catch if GetRepaymentPeriod is not guaranteed safe
 
             var commitmentRequired = package.CommitmentPlan?.CommitmentValue ?? 0m;
             var commitmentOutstanding = commitmentRequired - commitmentPaid;

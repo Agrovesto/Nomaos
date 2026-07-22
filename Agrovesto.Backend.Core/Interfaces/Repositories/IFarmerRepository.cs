@@ -51,7 +51,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<(bool status, string message)> OnFarmerLevelUpdate(string userId, FarmerLevel level);
         Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(long cooperativeId, ListQueryParams query);
         Task<(int totalFarms, double totalSize)> GetAgentFarmStats(string agentUserId);
-        Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId);
+        Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId, ListQueryParams? query = null);
         Task<FarmerDashboardDto> GetFarmerDashboard(string farmerUserId);
         Task<List<FarmerMembershipSummaryDto>> GetMembershipsByFarmer(ListQueryParams args);
         Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string membershipId);
