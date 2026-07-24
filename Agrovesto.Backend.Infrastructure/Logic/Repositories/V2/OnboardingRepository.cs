@@ -781,10 +781,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
              var memberShip = await _context.MemberShips
                 .AsNoTracking()
-                .Include(m => m.MemberShipType)
-                .Include(m => m.Lga)
-                .Include(m => m.State)
-                .Include(m => m.Ward)
+                ////.Include(m => m.MemberShipType)
+                ////.Include(m => m.Lga)
+                ////.Include(m => m.State)
+                ////.Include(m => m.Ward)
                 .FirstOrDefaultAsync(f => f.UserId == userId);
 
             if (memberShip == null)

@@ -741,39 +741,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             if (!hasEmail && !hasPhone)
             {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                     "Either email or phone number must be provided.");
             }
+
+            if (hasEmail && hasPhone)
+            {
+                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Provide either email/password or phone/pin, not both.");
+            }
+
             if (hasEmail)
             {
                 var emailValidator = new EmailAddressAttribute();
                 if (!emailValidator.IsValid(model.Email))
                 {
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "Invalid email address format.");
                 }
+
+                if (string.IsNullOrWhiteSpace(model.Password))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                        "Password is required when signing up with email.");
+                }
             }
+
             if (hasPhone)
             {
                 if (!Regex.IsMatch(model.PhoneNumber!, @"^\d{11}$"))
                 {
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "Phone number must be exactly 11 digits and numeric only.");
                 }
 
-                if (!string.IsNullOrWhiteSpace(model.Pin) && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                if (string.IsNullOrWhiteSpace(model.Pin))
                 {
-                    throw new BaseException(
-                        ExceptionType.BAD_REQUEST,
-                        "PIN must be exactly 4 digits."
-                    );
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                        "PIN is required when signing up with phone number.");
+                }
+
+                if (!Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                {
+                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                        "PIN must be exactly 4 digits.");
                 }
             }
         }
-
         public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
         {
             try

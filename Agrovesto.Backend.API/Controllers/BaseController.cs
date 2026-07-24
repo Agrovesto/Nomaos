@@ -32,7 +32,9 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _httpContextAccessor = httpContextAccessor;
         }
+        protected static readonly string[] RolePriority = { "Agent", "MemberShip" };
 
+        
         protected string RequireOrganizationCode(string? provided)
         {
             if (!string.IsNullOrEmpty(provided))
@@ -272,9 +274,8 @@ namespace Agrovesto.Backend.API.Controllers
                         ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                     )
             });
-
-
         }
+
         protected ObjectResult Error(string code, string message, int statusCode = StatusCodes.Status400BadRequest)
         {
             return StatusCode(statusCode, new ApiErrorResponse

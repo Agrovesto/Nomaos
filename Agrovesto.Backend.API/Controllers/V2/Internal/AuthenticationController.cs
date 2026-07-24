@@ -33,6 +33,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _bulkFarmerUploadService = bulkFarmerUploadService;
             _logger = logger;
         }
+
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkOnboard(IFormFile file, [FromQuery] OnBoardingArgs args)
@@ -196,22 +197,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
         {
-            var currentRole = CurrentUserRole;
-
-            switch (currentRole)
+            var roleHandlers = new Dictionary<string, Func<OnBoardingArgs, Task>>(StringComparer.OrdinalIgnoreCase)
             {
-                case "MemberShip":
-                    await EnrichCooperativeAsync(args);
-                    break;
+                ["Agent"] = EnrichAgentAsync,
+                ["MemberShip"] = EnrichCooperativeAsync,              
+                // ["Organization"] = EnrichOrganizationAsync,
+            };
 
-                case "Agent":
-                    await EnrichAgentAsync(args);
-                    break;
+            foreach (var role in RolePriority)
+            {
+                if (CurrentUserRoles.Contains(role, StringComparer.OrdinalIgnoreCase)
+                    && roleHandlers.TryGetValue(role, out var handler))
+                {
+                    await handler(args);
+                    return; // highest-priority match wins
+                }
             }
         }
+
         private async Task EnrichCooperativeAsync(OnBoardingArgs args)
         {
-            //  if (CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
 
             var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
@@ -230,9 +235,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         private async Task EnrichAgentAsync(OnBoardingArgs args)
         {
-            //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
-            //   args.UserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
             var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
 
             if (agent == null)
@@ -248,8 +251,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.AgentIds.Add(agent.Id);
         }
 
-       
-       
-      
+
+
+
     }
 }
