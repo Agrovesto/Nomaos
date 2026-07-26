@@ -73,7 +73,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 return new PagedListResponse<List<MemberShipResponseModel>>
                 {
                     Succeeded = true,
-                    Data = cooperative,
+                    Data = cooperative.Data,
                     Count = cooperative.Count,
                     Message = "Retrieved Successfully"
                 };

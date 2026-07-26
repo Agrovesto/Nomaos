@@ -187,6 +187,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.Configure<RateLimitSettingsUtil>(configuration.GetSection("RateLimiting"));
             services.AddSingleton<IRateLimitService, RateLimitServiceUtil>();
             services.AddScoped<ISMSProviderRepository, SMSProviderRepository>();
+            services.AddScoped<IUserRoleReconciliationService, UserRoleReconciliationService>();
 
 
         }
