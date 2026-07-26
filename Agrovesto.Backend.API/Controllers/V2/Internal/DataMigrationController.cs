@@ -9,8 +9,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     public class DataMigrationController : BaseController
     {
         private readonly IMigrationService _migrationService;
-        public DataMigrationController(IHttpContextAccessor httpContextAccessor, IMigrationService migrationService) : base(httpContextAccessor)
+        private readonly IUserRoleReconciliationService reconciliationService;
+        public DataMigrationController(IHttpContextAccessor httpContextAccessor, IMigrationService migrationService,
+            IUserRoleReconciliationService userRoleReconciliationService) : base(httpContextAccessor)
         {
+            reconciliationService= userRoleReconciliationService;
             _migrationService = migrationService;
         }
 
@@ -19,6 +22,23 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {            
             await _migrationService.RunUserTableMigrationAsync();
             return Ok("result");
+        }
+        [HttpPost("reconcile-user-data")]
+        public async Task<IActionResult> RunUserReconciliation()
+        {
+            // Preview only — nothing written to DB
+            var preview = await reconciliationService.ReconcileAsync(dryRun: true);
+            Console.WriteLine($"Would create {preview.FarmersCreated} farmers, {preview.AgentsCreated} agents, " +
+                               $"{preview.MembershipsCreated} memberships, {preview.OrganizationsCreated} organizations.");
+
+            // Actually run it
+            var actual = await reconciliationService.ReconcileAsync(dryRun: false);
+
+            return Ok(new
+            {
+                Preview = preview,
+                Actual = actual
+            });
         }
         [HttpPost("run-organization")]
         public async Task<IActionResult> RunOrganizationTableMigrationAsync()

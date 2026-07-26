@@ -178,6 +178,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
             query.organizationCode = resolvedOrgCode;
+            query.PageSize = 10;
             return await ExecuteAsync(async () =>
             {
                 
@@ -221,7 +222,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
             query.organizationCode = resolvedOrgCode;
-
+            query.PageSize = 10;
             return await ExecuteAsync(async () =>
             {
                 if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))

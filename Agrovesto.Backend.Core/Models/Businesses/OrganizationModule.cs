@@ -138,7 +138,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class OrganizationFarmerProjection
     {
          public string UserId { get; set; }
-
+        public FarmerLevel LevelRaw { get; set; }
         public long FarmerId { get; set; }
         public string Name { get; set; }
         public string? Gender { get; set; }

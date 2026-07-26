@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.CoreUtils;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -158,6 +159,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string Currency { get; set; }
         public bool IsActive { get; set; }
         public string? BelongToBusinessCode { get; set; }
+        public decimal ReservedForInputObligations { get; set; }
+        public DateTimeOffset DateAdded { get; set; }
 
         public List<UserWalletContextModel> Contexts { get; set; } = new();
     }
@@ -167,4 +170,5 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? ContextReferenceId { get; set; }
         public bool IsDefault { get; set; }
     }
+
 }

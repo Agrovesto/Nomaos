@@ -2271,7 +2271,7 @@ DateTimeOffset dateTime)
                 return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
                 {
                     Succeeded = true,
-                    Data = cooperative,
+                    Data = cooperative.Data,
                     Count = cooperative.Count,
                     Message = "Retrieved Successfully"
                 };
