@@ -55,7 +55,50 @@ namespace Agrovesto.Backend.Infrastructure.DB
             return new DataContext(optionsBuilder.Options);
         }
     }
+    public class FarmConfiguration : IEntityTypeConfiguration<Farm>
+    {
+        public void Configure(EntityTypeBuilder<Farm> builder)
+        {
+            builder.HasIndex(f => f.FarmerId)
+                .HasDatabaseName("IX_Farms_FarmerId");
+        }
+    }
 
+    public class FarmerCooperativeConfiguration : IEntityTypeConfiguration<FarmerCooperative>
+    {
+        public void Configure(EntityTypeBuilder<FarmerCooperative> builder)
+        {
+            builder.HasIndex(fc => fc.FarmerId)
+                .HasDatabaseName("IX_FarmerCooperatives_FarmerId");
+        }
+    }
+
+    public class MemberShipAgentConfiguration : IEntityTypeConfiguration<MemberShipAgent>
+    {
+        public void Configure(EntityTypeBuilder<MemberShipAgent> builder)
+        {
+            builder.HasIndex(ma => ma.AgentId)
+                .HasDatabaseName("IX_MemberShipAgents_AgentId");
+        }
+    }
+
+    public class FarmerAgentConfiguration : IEntityTypeConfiguration<FarmerAgent>
+    {
+        public void Configure(EntityTypeBuilder<FarmerAgent> builder)
+        {
+            builder.HasIndex(fa => new { fa.AgentId, fa.FarmerId })
+                .HasDatabaseName("IX_FarmerAgents_AgentId_FarmerId");
+        }
+    }
+
+    public class FarmerConfiguration : IEntityTypeConfiguration<Farmer>
+    {
+        public void Configure(EntityTypeBuilder<Farmer> builder)
+        {
+            builder.HasIndex(f => f.OnBoardedOn)
+                .HasDatabaseName("IX_Farmers_OnBoardedOn");
+        }
+    }
 
     public class DataContext :IdentityDbContext<User,Role, string>
     {
@@ -68,6 +111,13 @@ namespace Agrovesto.Backend.Infrastructure.DB
         {
             
             base.OnModelCreating(modelBuilder);
+
+            modelBuilder.ApplyConfiguration(new FarmConfiguration());
+            modelBuilder.ApplyConfiguration(new FarmerCooperativeConfiguration());
+            modelBuilder.ApplyConfiguration(new MemberShipAgentConfiguration());
+            modelBuilder.ApplyConfiguration(new FarmerAgentConfiguration());
+            modelBuilder.ApplyConfiguration(new FarmerConfiguration());
+
 
             modelBuilder.Entity<BusinessWalletProvider>()
      .HasIndex(x => new { x.BusinessCode, x.ProviderId })
