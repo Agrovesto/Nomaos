@@ -253,6 +253,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Currency = uw.Currency,
                     IsActive = uw.IsActive,
                     BelongToBusinessCode = uw.BelongToBusinessCode,
+                    DateAdded = uw.AddedOn,
 
                     Contexts = uw.WalletContexts
                         .Select(c => new UserWalletContextModel
