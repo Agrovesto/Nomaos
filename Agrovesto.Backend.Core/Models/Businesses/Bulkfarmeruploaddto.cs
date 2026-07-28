@@ -90,6 +90,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public int TotalRows { get; set; }
         public int Succeeded { get; set; }
         public int Failed { get; set; }
+        public int AlreadyExisted { get; set; }
         public List<FarmerRowErrorDto> Errors { get; set; } = new();
     }
 
