@@ -988,15 +988,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var phone = model.PhoneNumber?.Trim();
             var email = model.Email?.Trim();
+            var normalizedEmail = email?.ToUpperInvariant();
+
+            var normalizedUserNameCandidate = (email ?? phone)?.Trim().ToUpperInvariant();
 
             if (string.IsNullOrWhiteSpace(phone) && string.IsNullOrWhiteSpace(email))
                 return null;
 
             return await _context.Users.FirstOrDefaultAsync(u =>
                 (!string.IsNullOrWhiteSpace(phone) && u.PhoneNumber == phone) ||
-                (!string.IsNullOrWhiteSpace(email) && u.Email == email));
+                (!string.IsNullOrWhiteSpace(email) && u.Email == email) ||
+                (!string.IsNullOrWhiteSpace(normalizedEmail) && u.NormalizedEmail == normalizedEmail) ||
+                (!string.IsNullOrWhiteSpace(normalizedUserNameCandidate) && u.NormalizedUserName == normalizedUserNameCandidate));
         }
-
         public async Task UpdateUserDetails(
          OnboardingRequestModel model,
          OnBoardingArgs args)
@@ -1252,9 +1256,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
         private async Task<CreateUserResult> CreateNewUser(
-    OnboardingRequestModel model,
-    OnBoardingArgs args,
-    IdentityRole role)
+     OnboardingRequestModel model,
+     OnBoardingArgs args,
+     IdentityRole role)
         {
             var salt = EncryptionUtil.GetSalt();
 
@@ -1292,25 +1296,37 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
             {
-                // Someone else won the race and inserted this phone/email first.
-                // Re-run the existing-user lookup and hand off to that path.
-                var raceWinner = await FindExistingUserAsync(model);
+                _log.LogInformation(
+                    "Duplicate {ConflictField} on user creation for phone {Phone}/email {Email} — " +
+                    "likely a concurrent onboarding request for the same person. Treating as existing user, not a failure.",
+                    conflictField, model.PhoneNumber, model.Email);
 
-                if (raceWinner != null)
+                // Reuse the exact same lookup used earlier in RegisterUser, so behavior
+                // is consistent - this just re-runs it because the earlier result is
+                // now stale (the other concurrent request committed in the meantime).
+                var conflictingUser = await FindExistingUserAsync(model);
+
+                if (conflictingUser != null)
                 {
-                    return await HandleExistingUser(raceWinner, model, args, role);
+                    return await HandleExistingUser(conflictingUser, model, args, role);
                 }
 
-                // Fallback if we still can't find them for some reason
+                // Genuine anomaly: the unique index fired, but even a fresh lookup
+                // can't find the owning row (e.g. deleted between insert and lookup,
+                // or normalized column mismatch - see note below). Worth alerting on.
+                _log.LogError(
+                    "Duplicate {ConflictField} detected on user creation but no matching user could be " +
+                    "found via FindExistingUserAsync for phone {Phone}/email {Email}. Data inconsistency.",
+                    conflictField, model.PhoneNumber, model.Email);
+
                 return new CreateUserResult
                 {
                     model = model,
                     status = false,
-                    message = $"An account with this {conflictField} already exists. Please sign in to continue.",
-                    IsExisting = true
+                    IsExisting = true,
+                    message = $"An account with this {conflictField} already exists, but we couldn't retrieve it. Please contact support."
                 };
             }
-
             if (!createUser.Succeeded)
             {
                 var errors = string.Join(", ", createUser.Errors.Select(e => e.Description));
@@ -1364,13 +1380,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }
                 catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
                 {
-                    return new CreateUserResult
-                    {
-                        model = model,
-                        status = false,
-                        message = $"This account already has membership for this business ({conflictField}).",
-                        IsExisting = true
-                    };
+                    // Same reasoning as above: a duplicate UserBusiness membership
+                    // isn't a failure, it's a signal someone already has this role
+                    // in this business. Look it up and treat it as existing.
+                    _log.LogInformation(
+                        "Duplicate UserBusiness membership detected for user {UserId} in business {BusinessId} - " +
+                        "treating as existing membership, not a failure.",
+                        user.Id, business.BusinessId);
+
+                    return await HandleExistingUser(user, model, args, role);
                 }
             }
 
@@ -1390,6 +1408,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 IsExisting = false
             };
         }
+
         private static bool IsDuplicateKeyViolation(DbUpdateException ex, out string conflictField)
         {
             conflictField = "details";
@@ -1433,7 +1452,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
                 CreatedBy = args.UserId,
-                Name = model.FullName,
+                Name = !string.IsNullOrWhiteSpace(model.FullName)
+       ? model.FullName
+       : (string.IsNullOrWhiteSpace(model.FirstName) && string.IsNullOrWhiteSpace(model.LastName)
+           ? null
+           : string.Join(" ", new[] { model.FirstName, model.MiddleName, model.LastName }
+               .Where(x => !string.IsNullOrWhiteSpace(x))))
             };
         }
         private string GenerateUserId(OnBoardingArgs args)

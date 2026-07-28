@@ -898,17 +898,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         }
 
-       private async Task CreateOrganization(ProfileRequestModel model, OnBoardingArgs args)
+        private async Task CreateOrganization(ProfileRequestModel model, OnBoardingArgs args)
         {
-           var newOrganization =
-                        await _businessRepository.CreateOrUpdateOrganization(new OrganizationOnboardingModel
-                        {
-                            PhoneNumber= model.PhoneNumber,
-                            CompanyEmail= model.Email,
-                            ContactEmail=model.Email                            
-                        }, args);
-        }
+            var fullName = !string.IsNullOrWhiteSpace(model.FullName)
+                ? model.FullName
+                : string.Join(" ",
+                    new[] { model.FirstName, model.MiddleName, model.LastName }
+                        .Where(x => !string.IsNullOrWhiteSpace(x)));
 
+            var newOrganization = await _businessRepository.CreateOrUpdateOrganization(new OrganizationOnboardingModel
+            {
+                PhoneNumber = model.PhoneNumber,
+                CompanyEmail = model.Email,
+                ContactEmail = model.Email,
+                FirstName = model.FirstName,
+                LastName = model.LastName,
+                OrganizationCode = args.organizationCode,
+            }, args);
+        }
         private async Task CreateAgentProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
             
@@ -1113,6 +1120,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
             }
         }
+
         public async Task<OnboardingResponseModel> CreateBusinessUser(
     OnboardingRequestModel model,
     OnBoardingArgs args)
@@ -1120,26 +1128,46 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             try
             {
                 ValidateRequest(model, args);
-
                 var env = ResolveEnvironment(args);
-
                 var business = await GetBusinessOrThrow(args.businessCode);
 
-                var createUserResult = await RegisterUser(model, args);
+                CreateUserResult createUserResult = null;
 
-                if (!createUserResult.status)
+                // Use an execution strategy so this plays nicely with EnableRetryOnFailure
+                // (manually-created transactions + automatic retries don't mix otherwise).
+                var strategy = _context.Database.CreateExecutionStrategy();
+
+                await strategy.ExecuteAsync(async () =>
                 {
-                    throw new BaseException(
-                        Core.Enums.ExceptionType.BAD_REQUEST,
-                        createUserResult.message);
-                }
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
 
-                await ExecutePostCreationStepsAsync(
-                    model,
-                    args,
-                    createUserResult,
-                    business,
-                    env);
+                    try
+                    {
+                        createUserResult = await RegisterUser(model, args);
+
+                        if (!createUserResult.status)
+                        {
+                            throw new BaseException(
+                                Core.Enums.ExceptionType.BAD_REQUEST,
+                                createUserResult.message);
+                        }
+
+                        // This now throws instead of swallowing critical failures - see below.
+                        await ExecutePostCreationStepsAsync(
+                            model,
+                            args,
+                            createUserResult,
+                            business,
+                            env);
+
+                        await transaction.CommitAsync();
+                    }
+                    catch
+                    {
+                        await transaction.RollbackAsync();
+                        throw;
+                    }
+                });
 
                 return BuildResponse(model, createUserResult);
             }
@@ -1150,12 +1178,57 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             catch (Exception ex)
             {
                 _log.LogError(ex, "User Registration failed unexpectedly");
-
                 throw new BaseException(
                     Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
                     "An unexpected error occurred. Please try again.");
             }
         }
+        //    public async Task<OnboardingResponseModel> CreateBusinessUser(
+        //OnboardingRequestModel model,
+        //OnBoardingArgs args)
+        //    {
+        //        try
+        //        {
+        //            ValidateRequest(model, args);
+
+        //            var env = ResolveEnvironment(args);
+
+        //            var business = await GetBusinessOrThrow(args.businessCode);
+
+        //            CreateUserResult createUserResult = null;
+        //             createUserResult = await RegisterUser(model, args);
+
+        //            if (!createUserResult.status)
+        //            {
+        //                throw new BaseException(
+        //                    Core.Enums.ExceptionType.BAD_REQUEST,
+        //                    createUserResult.message);
+        //            }
+
+        //            await ExecutePostCreationStepsAsync(
+        //                model,
+        //                args,
+        //                createUserResult,
+        //                business,
+        //                env);
+
+        //            return BuildResponse(model, createUserResult);
+        //        }
+        //        catch (BaseException)
+        //        {
+        //            throw;
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            _log.LogError(ex, "User Registration failed unexpectedly");
+
+        //            throw new BaseException(
+        //                Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
+        //                "An unexpected error occurred. Please try again.");
+        //        }
+        //    }
+
+
         private void ValidateRequest(OnboardingRequestModel model, OnBoardingArgs args)
         {
             ValidateUserType(args);
@@ -1193,6 +1266,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             return _onboardingRepository.RegisterUser(model, args);
         }
+
         private async Task ExecutePostCreationStepsAsync(
     OnboardingRequestModel model,
     OnBoardingArgs args,
@@ -1200,10 +1274,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     BusinessModel business,
     string env)
         {
+            // --- CRITICAL: these define whether the user is actually usable. ---
+            // If either of these fails, we let the exception propagate so the
+            // outer transaction rolls back the user/role creation too.
             try
             {
-                await EnsureWalletExists(createUser.model, business);
-
                 await CreateUserProfile(new ProfileRequestModel
                 {
                     Email = model.Email,
@@ -1218,23 +1293,100 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await _onboardingRepository.TrackUserRoleAssignment(
                     createUser.model.Id,
                     args.userType);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(
+                    ex,
+                    "Critical onboarding step failed for user {UserId}, role {UserType}. Rolling back.",
+                    createUser.model.Id,
+                    args.userType);
 
-                createUser.model.Env = env;
+                // Re-throw as BaseException so CreateBusinessUser's catch block
+                // returns a meaningful message instead of a generic 500,
+                // and so the transaction wrapping this call rolls back.
+                throw new BaseException(
+                    Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
+                    $"Failed to complete profile setup for role '{args.userType}'. Please try again or contact support.");
+            }
 
-                if (createUser.IsExisting)
-                    return;
+            createUser.model.Env = env;
 
-                await HandleUserNotificationsAsync(createUser.model, env,args.businessCode);
+            // --- NON-CRITICAL: safe to log-and-continue. ---
+            // These don't affect whether the user's core role record exists,
+            // so we don't want a wallet/notification hiccup to roll back
+            // an otherwise-successful onboarding.
+            //try
+            //{
+            //    await EnsureWalletExists(createUser.model, business);
+            //}
+            //catch (Exception ex)
+            //{
+            //    _log.LogWarning(
+            //        ex,
+            //        "Wallet creation failed for user {UserId}. User was still onboarded successfully.",
+            //        createUser.model.Id);
+            //}
+
+            if (createUser.IsExisting)
+                return;
+
+            try
+            {
+                await HandleUserNotificationsAsync(createUser.model, env, args.businessCode);
             }
             catch (Exception ex)
             {
                 _log.LogWarning(
                     ex,
-                    "Non-critical onboarding step failed for user {UserId}",
+                    "Onboarding notification failed for user {UserId}. User was still onboarded successfully.",
                     createUser.model.Id);
             }
         }
-     private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env, string businessCode)
+        //    private async Task ExecutePostCreationStepsAsync(
+        //OnboardingRequestModel model,
+        //OnBoardingArgs args,
+        //CreateUserResult createUser,
+        //BusinessModel business,
+        //string env)
+        //    {
+        //        try
+        //        {
+        //            await EnsureWalletExists(createUser.model, business);
+
+        //            await CreateUserProfile(new ProfileRequestModel
+        //            {
+        //                Email = model.Email,
+        //                FirstName = model.FirstName,
+        //                LastName = model.LastName,
+        //                MiddleName = model.MiddleName,
+        //                Id = createUser.model.Id,
+        //                PhoneNumber = model.PhoneNumber,
+        //                OnboardedByUserId = args.OnboardedByUserId
+        //            }, args);
+
+        //            await _onboardingRepository.TrackUserRoleAssignment(
+        //                createUser.model.Id,
+        //                args.userType);
+
+        //            createUser.model.Env = env;
+
+        //            if (createUser.IsExisting)
+        //                return;
+
+        //            await HandleUserNotificationsAsync(createUser.model, env,args.businessCode);
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            _log.LogWarning(
+        //                ex,
+        //                "Non-critical onboarding step failed for user {UserId}",
+        //                createUser.model.Id);
+        //        }
+        //    }
+
+
+        private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env, string businessCode)
         {
             if (user.HasDefaultPassword)
             {
