@@ -685,11 +685,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         private async Task<bool> AssignAgentToMembership(MemberShipModel data, MemberShip existingCooperative, bool isModified)
         {
-            if (data.AgentIds.Any())
+            if (data.AgentIds != null && data.AgentIds.Any())
             {
                 var existingAgents = _context.MemberShipAgents
                     .Where(fa => fa.MemberShipId == existingCooperative.Id);
+
                 _context.MemberShipAgents.RemoveRange(existingAgents);
+
                 foreach (var agentId in data.AgentIds.Distinct())
                 {
                     await _context.MemberShipAgents.AddAsync(new MemberShipAgent
@@ -697,17 +699,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         MemberShipId = existingCooperative.Id,
                         AgentId = agentId,
                         AssignedOn = DateTimeOffset.Now,
-                        IsActive=true,
-
+                        IsActive = true,
                     });
                 }
+
                 isModified = true;
                 existingCooperative.HasbeenAssignedAgent = true;
             }
 
             return isModified;
         }
-
         public async Task<(bool status, MemberShipModel data)> CreateCooperative(MemberShipModel data)
         {
             var existingCooperative = await _context.MemberShips
