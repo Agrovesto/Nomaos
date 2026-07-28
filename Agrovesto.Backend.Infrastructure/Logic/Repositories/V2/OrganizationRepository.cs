@@ -91,12 +91,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     {
         private readonly DataContext _context;
 
-        private readonly IDistributedCache _cache;
-        public OrganizationRepository(DataContext context, IDistributedCache cache)
+        public OrganizationRepository(DataContext context)
         {
             _context = context;
-
-            _cache = cache;
         }
         #region agentviews
         //Rework this view to wire real data
@@ -954,15 +951,16 @@ SELECT
         }
         public async Task<bool> ReassignAgentToLocation(OrganizationAgentArgs data)
         {
+            if (!data.OrganizationId.HasValue)
+                throw new Exception("OrganizationId is required");
+
             var existingAgent = await _context.Agents
                 .FirstOrDefaultAsync(x => x.UserId == data.UserId);
 
             if (existingAgent == null)
                 throw new Exception("Agent not found");
 
-            if (!data.OrganizationId.HasValue)
-                throw new Exception("OrganizationId is required");
-
+            
             var existingAssignment = await _context.OrganizationAgents
                 .FirstOrDefaultAsync(x =>
                     x.AgentId == existingAgent.Id &&
@@ -987,7 +985,7 @@ SELECT
                 existingAssignment.AssignedOn = DateTimeOffset.Now;
                 existingAssignment.AssignedByUserId = data.OnboardedById;
 
-                _context.OrganizationAgents.Update(existingAssignment);
+               
             }
 
             await _context.SaveChangesAsync();
@@ -1461,146 +1459,6 @@ SELECT
                         .ToList(),
             };
         }
-        //public async Task<OrganizationLocationModel> UpdateLocationAsync(long locationId, OrganizationLocationModel model)
-        //{
-        //    var existingLocation = await _context.OrganizationLocations
-        //        .FirstOrDefaultAsync(x => x.Id == locationId);
-
-        //    if (existingLocation == null)
-        //        throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, "Location not found");
-
-        //    var duplicate = await _context.OrganizationLocations
-        //        .AnyAsync(x => x.LocationName == model.LocationName
-        //        && x.OrganizationId==model.OrganizationId
-        //        && x.StateId == model.StateId
-        //        && x.LgaId == model.LgaId
-        //        && x.Address == model.Address
-        //        && x.Id != locationId);
-
-        //    if (duplicate)
-        //        throw new ValidationException("A location with this name already exists");
-        //    if (model.LocationTypeId > 0)
-        //        existingLocation.LocationTypeId = model.LocationTypeId;
-
-        //    if (model.StateId > 0)
-        //        existingLocation.StateId = model.StateId;
-
-        //    if (model.LgaId > 0)
-        //        existingLocation.LgaId = model.LgaId;
-
-        //    if (!string.IsNullOrWhiteSpace(model.Address))
-        //        existingLocation.Address = model.Address;
-
-        //    if (model.Capacity > 0)
-        //        existingLocation.Capacity = model.Capacity;
-
-        //    if (!string.IsNullOrWhiteSpace(model.CapacityType))
-        //        existingLocation.CapacityType = model.CapacityType;
-
-        //    if (!string.IsNullOrWhiteSpace(model.LocationName))
-        //        existingLocation.LocationName = model.LocationName;
-
-
-        //    existingLocation.IsActive = model.IsActive;
-
-        //    _context.OrganizationLocations.Update(existingLocation);
-        //    await _context.SaveChangesAsync();
-
-        //    return existingLocation.ViewMap();
-        //}
-        //public async Task<OrganizationLocationModel> CreateLocationAsync(OrganizationLocationModel model)
-        //{
-        //    var orgExist = await _context.OrganizationLocations
-        //      .FirstOrDefaultAsync(x => x.LocationName == model.LocationName && x.OrganizationId == model.OrganizationId);
-
-        //    if (orgExist != null)
-        //    {
-        //        return orgExist.ViewMap();
-        //    }
-        //    OrganizationLocation org = model.Map();
-        //    org.IsActive = true;
-        //    _context.Set<OrganizationLocation>().Add(org);
-        //    await _context.SaveChangesAsync();
-        //    var response = org.ViewMap();
-        //    return response;
-        //}
-        //public async Task<List<OrganizationLocationResponseModel>> GetLocationAsync(ListQueryParams query)
-        //{
-        //    var locations = await _context.Set<OrganizationLocation>()
-        //        .Where(x => x.BusinessCode == query.businessCode && x.OrganizationId == query.Id)
-        //        .Include(x => x.LocationType)
-        //        .Include(x => x.State)
-        //        .Include(x => x.LGA)
-        //        .ToListAsync();
-
-        //    var locationIds = locations.Select(l => l.Id).ToList();
-
-        //    var agentCounts = await _context.Set<OrganizationAgent>()
-        //        .Where(a => locationIds.Contains(a.LocationId))
-        //        .GroupBy(a => a.LocationId)
-        //        .Select(g => new { LocationId = g.Key, Count = g.Count() })
-        //        .ToListAsync();
-
-        //    var result = locations.Select(loc =>
-        //    {
-        //        var assignedCount = agentCounts.FirstOrDefault(ac => ac.LocationId == loc.Id)?.Count ?? 0;
-
-        //        return new OrganizationLocationResponseModel
-        //        {
-        //            Id = loc.Id,
-        //            StateId = loc.StateId,
-        //            LgaId = loc.LgaId,
-        //            BusinessCode = loc.BusinessCode,
-        //            OrganizationId = loc.OrganizationId,
-        //            LocationName = loc.LocationName,
-        //            LocationTypeId = loc.LocationTypeId,
-        //            State = loc.State?.State,
-        //            Lga = loc.LGA?.Name,
-        //            LocationType = loc.LocationType?.Type,
-        //            Address = loc.Address,
-        //            IsActive = loc.IsActive,
-        //            Capacity = loc.Capacity,
-        //            TotalStock = loc.StockLevel,
-        //            CurrentUsage = loc.Capacity - loc.StockLevel,
-        //            CapacityType = loc.CapacityType,
-        //            AssignedAgentCount = assignedCount.ToString()
-        //        };
-        //    }).ToList();
-
-        //    return result;
-        //}
-        //public async Task<OrganizationLocationModel> GetLocationByIAsync(long Id)
-        //{
-        //    var loc = await _context.Set<OrganizationLocation>()
-        //         .Include(x => x.LocationType)
-        //        .Include(x => x.State)
-        //        .Include(x => x.LGA)
-        //        .FirstOrDefaultAsync(x => x.Id == Id);
-        //    if (loc == null)
-        //    {
-        //        return null;
-        //    }
-        //    return new OrganizationLocationModel
-        //    {
-        //        Id = loc.Id,
-        //        StateId = loc.StateId,
-        //        LgaId = loc.LgaId,
-        //        BusinessCode = loc.BusinessCode,
-        //        OrganizationId = loc.OrganizationId,
-        //        LocationName = loc.LocationName,
-        //        LocationTypeId = loc.LocationTypeId,
-        //        StateName = loc.State?.State,
-        //        LgaName = loc.LGA?.Name,
-        //        LocationTypeName = loc.LocationType?.Type,
-        //        Address = loc.Address,
-        //        IsActive = loc.IsActive,
-        //        Capacity = loc.Capacity,
-        //        Used = loc.StockLevel,
-        //        Available = loc.Capacity - loc.StockLevel,
-        //        CapacityType = loc.CapacityType
-        //    };
-        //}
-
 
         public async Task<OrganizationLocation> EditLocationAsync(EditLocationDto dto)
         {

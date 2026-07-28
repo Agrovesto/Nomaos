@@ -20,7 +20,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         Task<BulkFarmerUploadResultDto> ProcessAsync(
            IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args);
     }
-
+    public enum FarmerRowOutcome { Created, AlreadyExisted }
     public class BulkFarmerUploadService : IBulkFarmerUploadService
     {
         private readonly DataContext _db;
@@ -38,79 +38,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             _userManager = userManager;
             _logger = logger;
         }
-    //    public async Task<BulkFarmerUploadResultDto> ProcessAsync(
-    //IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
-    //    {
-    //        var result = new BulkFarmerUploadResultDto { TotalRows = rows.Count };
-
-    //        // 1. Validate everything up front — no DB calls involved.
-    //        var rowsToProcess = new List<BulkFarmerRowDto>();
-    //        for (int i = 0; i < rows.Count; i++)
-    //        {
-    //            var row = rows[i];
-    //            row.RowIndex = i + 1;
-
-    //            var validationErrors = BulkFarmerRowValidator.Validate(row);
-    //            if (validationErrors.Any())
-    //            {
-    //                Failure.RecordFailure(result, row, string.Join(" | ", validationErrors));
-    //                continue;
-    //            }
-    //            rowsToProcess.Add(row);
-    //        }
-
-    //        if (!rowsToProcess.Any())
-    //            return result;
-
-    //        // 2. ONE round trip each, instead of one round trip PER ROW.
-    //        var phoneSet = new HashSet<string>(
-    //            await _db.Users.Select(u => u.PhoneNumber).ToListAsync(),
-    //            StringComparer.OrdinalIgnoreCase);
-
-    //        var emailSet = new HashSet<string>(
-    //            await _db.Users.Where(u => u.Email != null).Select(u => u.Email!).ToListAsync(),
-    //            StringComparer.OrdinalIgnoreCase);
-
-    //        var bvnSet = new HashSet<string>(
-    //            await _db.Users.Where(u => u.BVN != null).Select(u => u.BVN!).ToListAsync());
-
-    //        var ninSet = new HashSet<string>(
-    //            await _db.Users.Where(u => u.NIN != null).Select(u => u.NIN!).ToListAsync());
-
-    //        // Farmer scope keys: (UserId, BusinessCode[, OrganizationCode]) already onboarded.
-    //        var existingFarmerScopes = (await _db.Farmers
-    //            .Select(f => new { f.UserId, f.BelongToBusinessCode })
-    //            .ToListAsync())
-    //            .Select(x => (x.UserId, x.BelongToBusinessCode))
-    //            .ToHashSet();
-
-    //        // Existing Farmer rows per (UserId, BusinessCode), to reuse instead of re-querying per row.
-    //        var existingFarmersByUserAndBusiness = (await _db.Farmers
-    //            .Select(f => new { f.Id, f.UserId, f.BelongToBusinessCode })
-    //            .ToListAsync())
-    //            .ToDictionary(x => (x.UserId, x.BelongToBusinessCode), x => x.Id);
-
-    //        // Skip EF's per-property change comparison while we bulk-add — big speed win.
-    //        _db.ChangeTracker.AutoDetectChangesEnabled = false;
-    //        _db.Database.SetCommandTimeout(180); // give large batches headroom; tune as needed
-
-    //        const int batchSize = 200; // commit in chunks instead of one giant transaction
-    //        for (int start = 0; start < rowsToProcess.Count; start += batchSize)
-    //        {
-    //            var batch = rowsToProcess.Skip(start).Take(batchSize).ToList();
-
-    //            await ProcessBatchAsync(
-    //                batch, args, result,
-    //                phoneSet, emailSet, bvnSet, ninSet,
-    //                existingFarmerScopes, existingFarmersByUserAndBusiness);
-    //        }
-
-    //        _db.ChangeTracker.AutoDetectChangesEnabled = true;
-
-    //        return result;
-    //    }
-
-        private async Task ProcessBatchAsync(
+    
+       /** private async Task ProcessBatchAsync(
             List<BulkFarmerRowDto> batch,
             OnBoardingArgs args,
             BulkFarmerUploadResultDto result,
@@ -267,7 +196,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 }
             });
         }
-        private async Task AddFarmerValueChainItemsAsync(
+        **/
+        
+        /**private async Task AddFarmerValueChainItemsAsync(
     Farmer farmer,
     List<ValueChainSelectionDto> selections)
         {
@@ -381,6 +312,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     result.Succeeded++;
             }
         }
+       **/
+        
         /// <param name="rows">Parsed rows from the uploaded file.</param>
         public async Task<BulkFarmerUploadResultDto> ProcessAsync(
     IReadOnlyList<BulkFarmerRowDto> rows, OnBoardingArgs args)
@@ -404,13 +337,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 var currentRow = row;
 
                 var rowSucceeded = false;
+                FarmerRowOutcome? outcome = null;
 
                 await strategy.ExecuteAsync(async () =>
                 {
                     await using var tx = await _db.Database.BeginTransactionAsync();
                     try
                     {
-                        await OnboardSingleFarmerWithDbChecksAsync(currentRow, args);
+                        outcome = await OnboardSingleFarmerWithDbChecksAsync(currentRow, args);
                         await _db.SaveChangesAsync();
                         await tx.CommitAsync();
                         rowSucceeded = true;
@@ -449,7 +383,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 });
 
                 if (rowSucceeded)
-                    result.Succeeded++;
+                {
+                    if (outcome == FarmerRowOutcome.AlreadyExisted)
+                        result.AlreadyExisted++;
+                    else
+                        result.Succeeded++;
+                }
                 else if (!result.Errors.Any(e => e.RowIndex == currentRow.RowIndex))
                     Failure.RecordFailure(result, currentRow, "Unexpected error after retries exhausted.");
             }
@@ -458,7 +397,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
 
-        private async Task OnboardSingleFarmerWithDbChecksAsync(BulkFarmerRowDto row, OnBoardingArgs args)
+        private async Task<FarmerRowOutcome> OnboardSingleFarmerWithDbChecksAsync(BulkFarmerRowDto row, OnBoardingArgs args)
         {
             var phone = row.PhoneNumber.Trim();
 
@@ -489,6 +428,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     if (ninExists)
                         throw new DuplicateFarmerFieldException("NIN", row.NIN, row.RowIndex);
                 }
+
                 var (defaultPassword, salt) = GenerateDefaultCredentials();
 
                 user = new User
@@ -518,44 +458,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 }
             }
 
-            var farmer = await FindExistingFarmerInScopeAsync(user.Id, args.businessCode, args.organizationCode);
+               var farmer = await FindExistingFarmerInScopeAsync(user.Id, args.businessCode, args.organizationCode);
+            var isNewFarmer = farmer == null;
 
-            if (farmer == null)
+            if (isNewFarmer)
             {
-                farmer = await _db.Farmers
-                    .FirstOrDefaultAsync(f => f.UserId == user.Id && f.BelongToBusinessCode == args.businessCode);
-
-                if (farmer == null)
+                farmer = new Farmer
                 {
-                    farmer = new Farmer
-                    {
-                        UserId = user.Id,
-                        BelongToBusinessCode = args.businessCode,
-                        Name = row.Name.Trim(),
-                        PhoneNumber = phone,
-                        Email = row.Email?.Trim(),
-                        Gender = row.Gender,
-                        DateOfBirth = row.DateOfBirth,
-                        Location = row.Location,
-                        State = row.State,
-                        Lga = row.Lga,
-                        Ward = row.Ward,
-                        FarmerCategory = row.FarmerCategory,
-                        YearsInAgric = row.YearsInAgric,
-                        HighestLevelOfEducation = row.HighestLevelOfEducation,
-                        OnboardedByUserId = args.UserId,
-                        OnBoardedOn = DateTimeOffset.UtcNow,
-                        Level = FarmerLevel.Level1
-                    };
+                    UserId = user.Id,
+                    BelongToBusinessCode = args.businessCode,
+                    Name = row.Name.Trim(),
+                    PhoneNumber = phone,
+                    Email = row.Email?.Trim(),
+                    Gender = row.Gender,
+                    DateOfBirth = row.DateOfBirth,
+                    Location = row.Location,
+                    State = row.State,
+                    Lga = row.Lga,
+                    Ward = row.Ward,
+                    FarmerCategory = row.FarmerCategory,
+                    YearsInAgric = row.YearsInAgric,
+                    HighestLevelOfEducation = row.HighestLevelOfEducation,
+                    OnboardedByUserId = args.UserId,
+                    OnBoardedOn = DateTimeOffset.UtcNow,
+                    Level = FarmerLevel.Level1
+                };
 
-                    _db.Farmers.Add(farmer);
-                    await _db.SaveChangesAsync();
-                }
+                _db.Farmers.Add(farmer);
+                await _db.SaveChangesAsync();
             }
-            else
-            {
-                throw new DuplicatePhoneException(phone, row.RowIndex);
-            }
+            
             if (row.SelectedItems.Any())
                 await AddFarmerValueChainItemsAsync(farmer.Id, row.SelectedItems, args.UserId);
 
@@ -567,22 +499,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             if (args.AgentIds.Count > 0)
                 await LinkToAgentAsync(farmer, args.AgentIds, args.organizationCode, args.UserId);
+
+            return isNewFarmer ? FarmerRowOutcome.Created : FarmerRowOutcome.AlreadyExisted;
+
         }
         private async Task<Farmer?> FindExistingFarmerInScopeAsync(
     string userId, string businessCode, string? organizationCode)
         {
-            // Base: same user, same business, same role (Farmer)
             var farmerQuery = _db.Farmers
                 .Where(f => f.UserId == userId && f.BelongToBusinessCode == businessCode);
 
             if (string.IsNullOrWhiteSpace(organizationCode))
             {
-                // No org context on this upload — duplicate means "already a farmer for this business" only.
                 return await farmerQuery.FirstOrDefaultAsync();
             }
 
-            // Org context provided — duplicate means "already a farmer for this business AND
-            // already linked to this specific organization".
             return await farmerQuery
                 .Where(f => _db.FarmerOrganizations.Any(fo =>
                     fo.FarmerId == f.Id &&
