@@ -268,24 +268,30 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 return result;
             }
             // 3. Persist everything in one transaction.
-            await using var tx = await _db.Database.BeginTransactionAsync(ct);
-            try
-            {
-                if (farmersToAdd.Count > 0) await _db.Farmers.AddRangeAsync(farmersToAdd, ct);
-                if (agentsToAdd.Count > 0) await _db.Agents.AddRangeAsync(agentsToAdd, ct);
-                if (membershipsToAdd.Count > 0) await _db.MemberShips.AddRangeAsync(membershipsToAdd, ct);
-                if (organizationsToAdd.Count > 0) await _db.Organizations.AddRangeAsync(organizationsToAdd, ct);
+            // 3. Persist everything in one transaction (wrapped for retry-on-failure compatibility).
+            var strategy = _db.Database.CreateExecutionStrategy();
 
-                await _db.SaveChangesAsync(ct);
-                await tx.CommitAsync(ct);
-            }
-            catch
+            await strategy.ExecuteAsync(async () =>
             {
-                await tx.RollbackAsync(ct);
-                throw;
-            }
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
+                try
+                {
+                    if (farmersToAdd.Count > 0) await _db.Farmers.AddRangeAsync(farmersToAdd, ct);
+                    if (agentsToAdd.Count > 0) await _db.Agents.AddRangeAsync(agentsToAdd, ct);
+                    if (membershipsToAdd.Count > 0) await _db.MemberShips.AddRangeAsync(membershipsToAdd, ct);
+                    if (organizationsToAdd.Count > 0) await _db.Organizations.AddRangeAsync(organizationsToAdd, ct);
 
-            
+                    await _db.SaveChangesAsync(ct);
+                    await tx.CommitAsync(ct);
+                }
+                catch
+                {
+                    await tx.RollbackAsync(ct);
+                    throw;
+                }
+            });
+
+
             _logger.LogInformation(
                 "Reconciliation complete. Farmers: {F}, Agents: {A}, Memberships: {M}, Organizations: {O}. Issues: {I}",
                 result.FarmersCreated, result.AgentsCreated, result.MembershipsCreated, result.OrganizationsCreated,

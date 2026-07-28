@@ -29,6 +29,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class BulkUploadResult
     {
+        public int AlreadyExisted { get; set; }
         public int TotalRows { get; set; }
         public int SuccessCount { get; set; }
         public int FailureCount { get; set; }
@@ -41,6 +42,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string MembershipName { get; set; }
         public string PhoneNumber { get; set; }
         public List<string> Messages { get; set; } = new();
+    }
+    public enum MembershipRowOutcome
+    {
+        Created,
+        AlreadyExisted
     }
 
     /// Represents a single farmer row from the bulk upload file.
