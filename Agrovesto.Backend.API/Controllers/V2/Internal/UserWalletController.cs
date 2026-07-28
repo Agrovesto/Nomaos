@@ -27,18 +27,19 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _router = router;
             _walletManager = walletManager;
         }
+
         [HttpGet("user-wallet")]
         public async Task<IActionResult> GetUserWallet([FromQuery] UserWalletParams query)
         {
             try
             {
-               
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
                 var result = await _walletManager.GetUserWallletsByUserId(query);
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count> 0? "Successful": "No Record",
+                    Message = result.Count > 0 ? "Successful" : "No Record",
                     Succeeded = true,
                     Count = result.Count,
 
@@ -63,19 +64,20 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+
         [HttpGet("user-wallet-transaction")]
         public async Task<IActionResult> GetUserWallet([FromQuery] ListQueryParams query)
         {
             try
             {
-               
+
                 query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
 
                 var result = await _walletManager.GetUserWalletTransaction(query);
                 return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
                 {
                     Data = result.Data,
-                    Message = result.Count> 0? "Successful": "Failed",
+                    Message = result.Count > 0 ? "Successful" : "Failed",
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
@@ -175,15 +177,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("complete-payment")]
-        public async Task<IActionResult> CompletePayment([FromQuery] string  reference,
-            [FromQuery] string walletProviderCode, [FromQuery]string env, [FromQuery] string businessCode)
+        public async Task<IActionResult> CompletePayment([FromQuery] string reference,
+            [FromQuery] string walletProviderCode, [FromQuery] string env, [FromQuery] string businessCode)
         {
             try
             {
-               
-               
 
-                 var request= await _walletManager.GetRequestToPayStatus(walletProviderCode,reference,env, businessCode);
+
+
+                var request = await _walletManager.GetRequestToPayStatus(walletProviderCode, reference, env, businessCode);
                 return Ok(ApiResponse<bool>.Success(
                     request,
                 ResponseCodes.Success,
@@ -216,7 +218,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// Create a wallet for a user (Personal or Organization context)
         /// </summary>
         [HttpPost("create")]
-        public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request,[FromQuery] WalletQueryParams query)
+        public async Task<IActionResult> CreateWallet([FromBody] CreateWalletRequest request, [FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -257,9 +259,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
                     Message = wallet.message,
-                    Succeeded = wallet.status ,
+                    Succeeded = wallet.status,
 
-                    Code = wallet.status  ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                    Code = wallet.status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
             catch (BaseException ex)
@@ -279,10 +281,47 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = false,
                 });
             }
-           
+
 
         }
-      
+
+        [HttpGet("wallet-summary")]
+        public async Task<IActionResult> GetUserFinancialSummary([FromQuery] UserWalletParams query)
+        {
+            try
+            {
+
+                query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
+                var userFinancialSummary = await _walletManager.GetUserFinancialSummary(query);
+
+                WalletDashboardResponseModel dashboardResponse = new WalletDashboardResponseModel()
+                {
+                    OutStandingInputDebt = userFinancialSummary.OutstandingInputDebt,
+                    NextDuePaymentAmount = userFinancialSummary.NextRepaymentAmount,
+                    NextDuePaymentDate = (DateTimeOffset)userFinancialSummary.NextRepaymentDate,
+                    TotalWalletBalance = userFinancialSummary.TotalWalletBalance
+                };
+                return Ok(dashboardResponse);
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
         [HttpPost("{provider}/top-up")]
         public async Task<IActionResult> HandleWebhook(string provider)
         {
@@ -301,6 +340,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(); // still return 200 to avoid retries storm
             }
         }
-       
+
     }
 }

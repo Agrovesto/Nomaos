@@ -1150,6 +1150,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("FarmerId")
+                        .HasDatabaseName("IX_Farms_FarmerId");
+
                     b.ToTable("Farms");
                 });
 
@@ -1642,6 +1645,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("OnBoardedOn")
+                        .HasDatabaseName("IX_Farmers_OnBoardedOn");
+
                     b.ToTable("Farmers");
                 });
 
@@ -1682,7 +1688,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgentId");
+                    b.HasIndex("AgentId", "FarmerId")
+                        .HasDatabaseName("IX_FarmerAgents_AgentId_FarmerId");
 
                     b.HasIndex("FarmerId", "AgentId");
 
@@ -1725,6 +1732,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("FarmerId")
+                        .HasDatabaseName("IX_FarmerCooperatives_FarmerId");
 
                     b.HasIndex("FarmerId", "CooperativeId");
 
@@ -3504,7 +3514,8 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgentId");
+                    b.HasIndex("AgentId")
+                        .HasDatabaseName("IX_MemberShipAgents_AgentId");
 
                     b.HasIndex("MemberShipId");
 

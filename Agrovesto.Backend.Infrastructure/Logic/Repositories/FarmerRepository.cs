@@ -1244,7 +1244,7 @@ WHERE f.UserId = @userId
      .FirstOrDefaultAsync();
             return result ?? new FarmerDashboardDto();
         }
-        public async Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId, ListQueryParams? query=null)
+        public async Task<AgentDashboardDto> GetAgentDashboardData(string agentUserId, ListQueryParams? query = null)
         {
             if (string.IsNullOrWhiteSpace(agentUserId))
                 return new AgentDashboardDto();
@@ -1253,16 +1253,18 @@ WHERE f.UserId = @userId
             if (agentId == 0)
                 return new AgentDashboardDto();
 
-            var farmersQueryable = BuildAgentFarmersQueryable(agentId, query);
-            var farmerIds = await farmersQueryable.Select(f => f.Id).ToListAsync();
+            var farmersQueryable = BuildAgentFarmersQueryable(agentId, query).AsNoTracking();
 
-            var totalFarmers = farmerIds.Count;
-
+            // Don't materialize IDs — count directly, and keep an IQueryable for reuse as a subquery
+            var totalFarmers = await farmersQueryable.CountAsync();
             if (totalFarmers == 0)
                 return new AgentDashboardDto();
 
+            var farmerIdsQuery = farmersQueryable.Select(f => f.Id);
+
             var farmStats = await _context.Farms
-                .Where(f => farmerIds.Contains(f.FarmerId))
+                .AsNoTracking()
+                .Where(f => farmerIdsQuery.Contains(f.FarmerId))
                 .GroupBy(f => 1)
                 .Select(g => new
                 {
@@ -1273,12 +1275,14 @@ WHERE f.UserId = @userId
                 .FirstOrDefaultAsync();
 
             var farmersLinkedToCooperatives = await _context.FarmerCooperatives
-                .Where(fc => farmerIds.Contains(fc.FarmerId))
+                .AsNoTracking()
+                .Where(fc => farmerIdsQuery.Contains(fc.FarmerId))
                 .Select(fc => fc.FarmerId)
                 .Distinct()
                 .CountAsync();
 
             var totalCooperatives = await _context.MemberShipAgents
+                .AsNoTracking()
                 .Where(ma => ma.AgentId == agentId)
                 .Select(ma => ma.MemberShipId)
                 .Distinct()
@@ -1434,15 +1438,14 @@ WHERE f.UserId = @userId
         }
 
         public async Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(
-     string agentUserId,
-     ListQueryParams query)
+    string agentUserId,
+    ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
             if (query.PageSize <= 0) query.PageSize = 10;
 
             var agentId = await ResolveAgentIdAsync(agentUserId);
-
             if (agentId == 0)
             {
                 return new PagedListResponse<List<FarmerAgentDto>>
@@ -1458,7 +1461,6 @@ WHERE f.UserId = @userId
             var queryable = BuildAgentFarmersQueryable(agentId, query);
 
             var totalCount = await queryable.CountAsync();
-
             if (totalCount == 0)
             {
                 return new PagedListResponse<List<FarmerAgentDto>>
@@ -1471,7 +1473,6 @@ WHERE f.UserId = @userId
             }
 
             var skip = (query.PageNumber - 1) * query.PageSize;
-
             var farmers = await queryable
                 .OrderByDescending(f => f.OnBoardedOn)
                 .Skip(skip)
@@ -1480,38 +1481,24 @@ WHERE f.UserId = @userId
 
             var farmerIds = farmers.Select(x => x.Id).ToList();
 
-            var coopLookup = await _context.FarmerCooperatives
-                .Where(fc => farmerIds.Contains(fc.FarmerId))
-                .GroupBy(fc => fc.FarmerId)
-                .ToDictionaryAsync(g => g.Key, g => g.Any());
-
-            var mappedLookup = await _context.Farms
-                .Where(p => farmerIds.Contains(p.FarmerId))
-                .GroupBy(p => p.FarmerId)
-                .ToDictionaryAsync(g => g.Key, g => g.Any());
-
+            // one query instead of three (mappedLookup + farmStatsLookup + implicit totalMapped derivation)
             var farmStatsLookup = await _context.Farms
+                .AsNoTracking()
                 .Where(p => farmerIds.Contains(p.FarmerId))
                 .GroupBy(p => p.FarmerId)
                 .ToDictionaryAsync(
                     g => g.Key,
-                    g => new
-                    {
-                        Count = g.Count(),
-                        TotalSize = g.Sum(x => (decimal?)x.FarmSize) ?? 0m
-                    });
+                    g => new { Count = g.Count(), TotalSize = g.Sum(x => (decimal?)x.FarmSize) ?? 0m });
 
-            var totalLinked = await _context.FarmerCooperatives
+            // one query instead of two (coopLookup + totalLinked derivation)
+            var coopLookup = await _context.FarmerCooperatives
+                .AsNoTracking()
                 .Where(fc => farmerIds.Contains(fc.FarmerId))
-                .Select(fc => fc.FarmerId)
-                .Distinct()
-                .CountAsync();
+                .GroupBy(fc => fc.FarmerId)
+                .ToDictionaryAsync(g => g.Key, g => true);
 
-            var totalMapped = await _context.Farms
-                .Where(p => farmerIds.Contains(p.FarmerId))
-                .Select(p => p.FarmerId)
-                .Distinct()
-                .CountAsync();
+            var totalLinked = coopLookup.Count;
+            var totalMapped = farmStatsLookup.Count(kv => kv.Value.Count > 0);
 
             var result = farmers.Select(f => new FarmerAgentDto
             {
@@ -1520,8 +1507,8 @@ WHERE f.UserId = @userId
                 FullName = f.Name,
                 State = f.State,
                 Lga = f.Lga,
-                CooperativeStatus = coopLookup.GetValueOrDefault(f.Id) ? "Linked" : "Not Linked",
-                MappingStatus = mappedLookup.GetValueOrDefault(f.Id) ? "Mapped" : "Unmapped",
+                CooperativeStatus = coopLookup.ContainsKey(f.Id) ? "Linked" : "Not Linked",
+                MappingStatus = farmStatsLookup.GetValueOrDefault(f.Id)?.Count > 0 ? "Mapped" : "Unmapped",
                 DateAdded = f.OnBoardedOn,
                 TotalLinkedFarmers = totalLinked,
                 TotalMappedFarms = totalMapped,
@@ -1537,8 +1524,6 @@ WHERE f.UserId = @userId
                 PageSize = query.PageSize
             };
         }
-
-
         public async Task<FarmerMembershipOverviewDto> GetFarmerMembershipDetails(string userId)
         {
             var membership = await _context.MemberShips
@@ -1684,53 +1669,14 @@ WHERE f.UserId = @userId
             return query.Distinct();
         }
 
-        /**private IQueryable<Farmer> BuildFarmerQuery(FarmerFilter filter)
-        {
-            var query =
-                from fc in _context.FarmerCooperatives.AsNoTracking()
-                join f in _context.Farmers.AsNoTracking()
-                    on fc.FarmerId equals f.Id
-                where fc.CooperativeId == filter.CooperativeId
-                select f;
 
-            if (!string.IsNullOrWhiteSpace(filter.BusinessCode))
-                query = query.Where(x => x.BelongToBusinessCode == filter.BusinessCode);
 
-            if (!string.IsNullOrWhiteSpace(filter.State))
-                query = query.Where(x => x.State == filter.State);
 
-            if (filter.Id.HasValue && filter.Id > 0)
-                query = query.Where(x => x.Id == filter.Id);
-
-            if (filter.StartDate.HasValue || filter.EndDate.HasValue)
-            {
-                var start = filter.StartDate?.Date ?? DateTime.MinValue.Date;
-                var end = filter.EndDate?.Date ?? DateTime.UtcNow.Date;
-
-                query = query.Where(x =>
-                    x.OnBoardedOn.Date >= start &&
-                    x.OnBoardedOn.Date <= end);
-            }
-
-            if (!string.IsNullOrWhiteSpace(filter.OrganizationCode))
-            {
-                query =
-                    from f in query
-                    join fo in _context.FarmerOrganizations.AsNoTracking()
-                        on f.Id equals fo.FarmerId
-                    where fo.OrganizationCode == filter.OrganizationCode
-                    select f;
-            }
-
-            return query.Distinct();
-        }
-        **/
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(
     long cooperativeId,
     ListQueryParams query)
         {
             query ??= new ListQueryParams();
-
             if (query.PageNumber <= 0) query.PageNumber = 1;
             if (query.PageSize <= 0) query.PageSize = 10;
 
@@ -1746,14 +1692,52 @@ WHERE f.UserId = @userId
             };
 
             var baseQuery = BuildFarmerQuery(filter);
-
             var totalCount = await baseQuery.CountAsync();
 
-            var result = await baseQuery
+            if (totalCount == 0)
+            {
+                return new PagedListResponse<List<FarmerMembershipDto>>
+                {
+                    Data = new List<FarmerMembershipDto>(),
+                    Count = 0,
+                    PageNumber = query.PageNumber,
+                    PageSize = query.PageSize
+                };
+            }
+
+            var pagedFarmers = await baseQuery
                 .OrderByDescending(x => x.OnBoardedOn)
                 .Skip((query.PageNumber - 1) * query.PageSize)
                 .Take(query.PageSize)
-                .Select(f => new FarmerMembershipDto
+                .Select(f => new
+                {
+                    f.Id,
+                    f.UserId,
+                    f.Name,
+                    f.OnBoardedOn,
+                    f.State,
+                    f.Lga,
+                    f.Level
+                })
+                .ToListAsync();
+
+            var farmerIds = pagedFarmers.Select(f => f.Id).ToList();
+
+            var farmStats = await _context.Farms
+                .Where(p => farmerIds.Contains(p.FarmerId))
+                .GroupBy(p => p.FarmerId)
+                .Select(g => new
+                {
+                    FarmerId = g.Key,
+                    Count = g.Count(),
+                    TotalSize = g.Sum(x => (double?)x.FarmSize) ?? 0
+                })
+                .ToDictionaryAsync(x => x.FarmerId, x => x);
+
+            var result = pagedFarmers.Select(f =>
+            {
+                var stats = farmStats.GetValueOrDefault(f.Id);
+                return new FarmerMembershipDto
                 {
                     Id = f.Id,
                     FarmerUserId = f.UserId,
@@ -1762,17 +1746,11 @@ WHERE f.UserId = @userId
                     State = f.State,
                     Lga = f.Lga,
                     Level = EnumExtensions.GetDisplayName(f.Level),
-
-                    TotalFarms = _context.Farms.Count(p => p.FarmerId == f.Id),
-                    LandSize = _context.Farms
-                        .Where(p => p.FarmerId == f.Id)
-                        .Sum(x => (double?)x.FarmSize) ?? 0,
-
-                    MappingStatus = _context.Farms.Any(p => p.FarmerId == f.Id)
-                        ? "Mapped"
-                        : "Unmapped"
-                })
-                .ToListAsync();
+                    TotalFarms = stats?.Count ?? 0,
+                    LandSize = stats?.TotalSize ?? 0,
+                    MappingStatus = (stats?.Count ?? 0) > 0 ? "Mapped" : "Unmapped"
+                };
+            }).ToList();
 
             return new PagedListResponse<List<FarmerMembershipDto>>
             {
@@ -1782,78 +1760,7 @@ WHERE f.UserId = @userId
                 PageSize = query.PageSize
             };
         }
-        /** public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetFarmersByMembership(
-     long cooperativeId,
-     ListQueryParams query)
-         {
-             query ??= new ListQueryParams();
 
-             if (query.PageNumber <= 0) query.PageNumber = 1;
-             if (query.PageSize <= 0) query.PageSize = 10;
-
-             var filter = new FarmerFilter
-             {
-                 CooperativeId = cooperativeId,
-                 BusinessCode = query.businessCode,
-                 OrganizationCode = query.organizationCode,
-                 State = query.State,
-                 Id = query.Id,
-                 StartDate = query.startDate,
-                 EndDate = query.endDate
-             };
-
-             var baseQuery = BuildFarmerQuery(filter);
-
-             var totalCount = await baseQuery.CountAsync();
-
-             var farmerIds = await baseQuery
-                 .Select(x => x.Id)
-                 .Skip((query.PageNumber - 1) * query.PageSize)
-                 .Take(query.PageSize)
-                 .ToListAsync();
-
-             var farmers = await _context.Farmers
-                 .Where(f => farmerIds.Contains(f.Id))
-                 .ToListAsync();
-
-             var farmsLookup = await _context.Farms
-                 .Where(p => farmerIds.Contains(p.FarmerId))
-                 .GroupBy(p => p.FarmerId)
-                 .ToDictionaryAsync(g => g.Key, g => new
-                 {
-                     TotalFarms = g.Count(),
-                     LandSize = g.Sum(x => x.FarmSize)
-                 });
-
-             var result = farmers.Select(f =>
-             {
-                 farmsLookup.TryGetValue(f.Id, out var farmData);
-
-                 return new FarmerMembershipDto
-                 {
-                     Id = f.Id,
-                     FarmerUserId = f.UserId,
-                     FullName = f.Name,
-                     DateAdded = f.OnBoardedOn,
-                     State = f.State,
-                     Lga = f.Lga,
-                     Level = EnumExtensions.GetDisplayName(f.Level),
-
-                     TotalFarms = farmData?.TotalFarms ?? 0,
-                     LandSize = farmData?.LandSize ?? 0,
-                     MappingStatus = (farmData?.TotalFarms ?? 0) > 0 ? "Mapped" : "Unmapped"
-                 };
-             }).ToList();
-
-             return new PagedListResponse<List<FarmerMembershipDto>>
-             {
-                 Data = result,
-                 Count = totalCount,
-                 PageNumber = query.PageNumber,
-                 PageSize = query.PageSize
-             };
-         }
-       **/
         public async Task<List<FarmerModel>> GetFarmersByCooperativeId(
             long? cooperativeId,
             ListQueryParams query)

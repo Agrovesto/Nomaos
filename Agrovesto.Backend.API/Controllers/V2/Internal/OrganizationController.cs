@@ -951,19 +951,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 var response = await _organizationManager.GetAgentActivityLogs(args);
                
-                if (response == null || response.Data == null || !response.Data.Any())
-                {
-                    return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = false,
-                        Message = "No record found",
-                        Data = new List<OrganizationAgentActivityLog>(),
-                        Count = 0,
-                        PageSize = args.PageSize,
-                        PageNumber = args.PageNumber
-                    });
-                }
 
                 return Ok(new PagedListResponse<List<OrganizationAgentActivityLog>>
                 {
@@ -1024,19 +1011,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 var response = await _organizationManager.GetAgentTransactionHistory(args);
               
-                if (response == null || response.Data == null || !response.Data.Any())
-                {
-                    return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = false,
-                        Message = "No record found",
-                        Data = new List<OrganizationAgentTransactionHistory>(),
-                        Count = 0,
-                        PageSize = args.PageSize,
-                        PageNumber = args.PageNumber
-                    });
-                }
 
                 return Ok(new PagedListResponse<List<OrganizationAgentTransactionHistory>>
                 {
@@ -1099,17 +1073,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 var response = await _organizationManager.GetOrganizationAgentPerformanceSummary(args);
 
-               
-                if (response == null)
-                {
-                    return Ok(new Response<OrganizationAgentPerformanceSummary>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = false,
-                        Message = "No record found",
-                        Data = null
-                    });
-                }
 
                 return Ok(new Response<OrganizationAgentPerformanceSummary>
                 {
@@ -1164,19 +1127,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 var response = await _organizationManager.GetAgentSubscribers(args);
               
-                if (response == null || response.Data == null || !response.Data.Any())
-                {
-                    return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = false,
-                        Message = "No record found",
-                        Data = new List<OrganizationAgentSubscriberModel>(),
-                        Count = 0,
-                        PageSize = args.PageSize,
-                        PageNumber = args.PageNumber
-                    });
-                }
 
                 return Ok(new PagedListResponse<List<OrganizationAgentSubscriberModel>>
                 {
@@ -1239,19 +1189,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 var response = await _organizationManager.GetAgentInputAllocations(args);
 
-                if (response == null || response.Data == null || !response.Data.Any())
-                {
-                    return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
-                    {
-                        Code = ResponseCodes.Success,
-                        Succeeded = false,
-                        Message = "No record found",
-                        Data = new List<OrganizationAgentInputAllocationModel>(),
-                        Count = 0,
-                        PageSize = args.PageSize,
-                        PageNumber = args.PageNumber
-                    });
-                }
 
                 return Ok(new PagedListResponse<List<OrganizationAgentInputAllocationModel>>
                 {
