@@ -88,6 +88,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(long subscriptionId);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(long subscriptionId, int pageNumber, int pageSize);
         Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs args, CancellationToken cancellationToken = default);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -1108,7 +1109,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         RepaymentGracePeriod = repayment?.RepaymentGracePeriod,
                         RepaymentMode = repayment?.RepaymentMode ?? default,
                         RepaymentValue= repayment?.RepaymentValue ?? 0,
-
+                        
                         BusinessCode = args.BusinessCode
                     };
 
@@ -1162,6 +1163,30 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     throw;
                 }
             });
+        }
+
+        public async Task<bool> RemoveSubscriptionAsync(
+    InputSubscriptionRequestArgs args,
+    CancellationToken cancellationToken = default)
+        {
+            var subscription = await _context.InputPackageSubscriptions
+                .FirstOrDefaultAsync(x =>
+                    x.InputPackageId == args.PackageId &&
+                    x.Id == args.SubscriptionId &&
+                    x.IsActive,
+                    cancellationToken);
+
+            if (subscription == null)
+            {
+                throw new BaseException(
+                    Core.Enums.ExceptionType.NOTFOUND,
+                    "Subscription not found or already removed");
+            }
+
+            subscription.IsActive = false;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return true;
         }
         private static List<RepaymentSchedule> GenerateRepaymentSchedules(
             long subscriptionId,
@@ -1315,7 +1340,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         subscription.RejectedByUserId = args.UserId;
                         subscription.RejectedOn = DateTimeOffset.UtcNow;
                         subscription.RejectionReason = request.RejectionReason;
-
+                       // subscription.IsActive = false;
                         _context.InputPackageSubscriptions.Update(subscription);
 
                         await _context.SaveChangesAsync();
@@ -1569,9 +1594,11 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     x.Status == TransactionStatus.Successful)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            var fullyRepaid = totalRepaid >= subscription.RepaymentValue;
-
-            if (fullyRepaid && subscription.Status == SubscriptionStatus.PendingRepayment)
+            var fullyRepaid = !subscription.InputPackage.RepaymentRequired
+         || subscription.RepaymentValue <= 0
+         || totalRepaid >= subscription.RepaymentValue;
+            if (fullyRepaid && (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
+                SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active))
             {
                 subscription.Status = SubscriptionStatus.Repaid;
 
@@ -2954,31 +2981,40 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         break;
 
 
+                    case SubscriptionView.CommitmentPaid:
+                          filter.HasPaidCommitment ??= true;
+                        break;
+
                     case SubscriptionView.PendingDisbursement:
                         query = query.Where(x =>
                             x.Status == SubscriptionStatus.PendingDisbursement);
                         break;
 
-
                     case SubscriptionView.Active:
+                    case SubscriptionView.InputReleased:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.Active);
+                           x.Status == SubscriptionStatus.Disbursed ||
+                            x.Status == SubscriptionStatus.PartiallyDisbursed ||
+                             x.Status == SubscriptionStatus.Active
+                            );
                         break;
-
 
                     case SubscriptionView.Completed:
                         query = query.Where(x =>
                             x.Status == SubscriptionStatus.Repaid);
                         break;
 
-
                     case SubscriptionView.Defaulted:
                         query = query.Where(x =>
                             x.Status == SubscriptionStatus.Defaulted);
                         break;
+
+                    case SubscriptionView.Rejected:
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.Rejected);
+                        break;
                 }
             }
-
 
 
             if (filter.HasPaidCommitment.HasValue)
@@ -2986,9 +3022,11 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 if (filter.HasPaidCommitment.Value)
                 {
                     query = query.Where(x =>
+                    x.CommitmentValue > 0 &&
                         _context.InputPackageSubscriptionPayments
                         .Where(p =>
                             p.SubscriptionId == x.Id &&
+                            
                             p.PaymentType == PaymentType.Commitment &&
                             p.Status == TransactionStatus.Successful)
                         .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
@@ -2996,6 +3034,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 else
                 {
                     query = query.Where(x =>
+                    x.CommitmentValue > 0 &&
                         _context.InputPackageSubscriptionPayments
                         .Where(p =>
                             p.SubscriptionId == x.Id &&
@@ -3199,9 +3238,25 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 })
                 .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
 
+            var repaymentTotals = await _context.InputPackageSubscriptionPayments
+                .Where(p =>
+                    subscriptionIds.Contains(p.SubscriptionId) &&
+                    p.PaymentType == PaymentType.Repayment &&
+                    p.Status == TransactionStatus.Successful)
+                .GroupBy(p => p.SubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
+
             var rawItems = await _context.InputPackageSubscriptions
                 .Where(x => subscriptionIds.Contains(x.Id))
                 .Include(x => x.InputPackage)
+                    .ThenInclude(x=>x.CommitmentPlan)
+                .Include(x=>x.InputPackage)
+                    .ThenInclude(x=>x.RepaymentPlan)
                 .Include(x => x.SubscriberUser)
                 .Include(x => x.AddedByUser)
                 .Include(x => x.Organization)
@@ -3233,17 +3288,42 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                                 : x.AddedByUser.Email,
                     Location = x.Organization != null ? x.Organization.CompanyName : null,
                     PackageName = x.InputPackage.Name,
+                    RejectedOn = x.RejectedOn,
+                    TotalRepaid = x.InputPackage.RepaymentPlan != null
+                        ? repaymentTotals.GetValueOrDefault(x.Id, 0m)
+                        : 0m,
+                    RepaymentMethod = x.InputPackage.RepaymentPlan != null
+                        ? EnumExtensions.GetDisplayName(x.InputPackage.RepaymentPlan.RepaymentMode)
+                        : null,
+                        Duration = x.InputPackage.RepaymentPlan != null ,
+                        x.RiskLevel,
+
+                    TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
+    ? x.TotalFinancingValue
+    : 0m,
+    RepaymentRequired= x.InputPackage.RepaymentRequired
+
                 })
                 .ToListAsync();
 
             var items = rawItems.Select(x =>
             {
                 var commitmentPaid = commitmentTotals.GetValueOrDefault(x.Id, 0m);
+                var repaymentPaid = repaymentTotals.GetValueOrDefault(x.Id, 0m);
                 var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
                     ? "Not Required"
                     : commitmentPaid >= x.CommitmentValue
                         ? "Paid"
                         : "Pending";
+                var commitmentBalance = !x.CommitmentRequired || x.CommitmentValue <= 0
+        ? 0m
+        : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
+                var repaymentBalance = x.TotalRepaymentValue <= 0
+     ? 0m
+     : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
+                var roi = !x.RepaymentRequired || x.TotalRepaymentValue <= 0
+    ? 0m
+    : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
 
                 return new SubscriptionDetailDto
                 {
@@ -3260,7 +3340,15 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     SubscribedOn = x.SubscribedOn,
                     SubscriptionStatus = x.Status,
                     SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
-                    CommitmentStatus = commitmentStatus
+                    CommitmentStatus = commitmentStatus,
+                    RejectedOn=x.RejectedOn,
+                    SubscriptionTypeName = EnumExtensions.GetDisplayName(x.SubscriberType),
+                    CommitmentPaid = commitmentPaid,
+                    CommitmentBalance = commitmentBalance,
+                    RiskLevel= EnumExtensions.GetDisplayName(x.RiskLevel),
+                    RepaymentBalance = repaymentBalance,
+                    RepaymentMethod = x.RepaymentMethod,
+                    ROI= roi
                 };
             }).ToList();
 

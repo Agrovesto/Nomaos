@@ -412,6 +412,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string? CurrentLoggedInUserRole { get; set; }
         public string BusinessCode { get; set; }
         public long SubscriptionId { get; set; }
+        public long PackageId { get; set; }
         public string? SubscriberUserId { get; set; }
         public string? Env { get; set; }
     }
@@ -526,7 +527,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public decimal Amount { get; set; }
 
-        public string Reference { get; set; }
+        public string? Reference { get; set; }
 
         public string? ExternalReference { get; set; }
 
@@ -622,11 +623,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class SubscriptionDetailDto
     {
+        public decimal ROI { get; set; }
+        public decimal TotalRepaymentValue { get; set; }
+        public decimal RepaymentBalance { get; set; }
+        public string RepaymentMethod { get; set; }
+        public decimal CommitmentBalance { get; set; }
         public long SubscriptionId { get; set; }
         public long PackageId { get; set; }
         public string SubscriberName { get; set; }
+        public string RiskLevel { get; set; }
         public string SubscriberUserId { get; set; }
         public InputSubScriptionType SubscriptionType { get; set; }
+        public string SubscriptionTypeName { get; set; }
         public string CreatedBy { get; set; }
         public string Location { get; set; }
         public string PackageName { get; set; }
@@ -634,11 +642,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal CommitmentValue { get; set; }
         public decimal TotalFinancingValue { get; set; }
         public DateTimeOffset? SubscribedOn { get; set; }
+        public DateTimeOffset? RejectedOn { get; set; }
 
         public string CommitmentStatus { get; set; }
         public SubscriptionStatus SubscriptionStatus { get; set; }
         public string SubscriptionStatusName { get; set; }
-
+        public decimal CommitmentPaid { get; set; }
         // optional sections
         public CommitmentInfo Commitment { get; set; }
         public RepaymentInfo Repayment { get; set; }
