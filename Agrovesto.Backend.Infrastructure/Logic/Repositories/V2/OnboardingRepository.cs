@@ -439,7 +439,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 phone_number = user.PhoneNumber,
                 TokenType =TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                Businesses = userBusinesses.Select(b => new BusinessModel
+                Businesses = userBusinesses.Select(b => new BusinessClaimModel
                 {
                   BusinessId=  b.BusinessId,
                    BusinessCode= b.Business.BusinessCode,
