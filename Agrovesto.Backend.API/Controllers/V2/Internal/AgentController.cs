@@ -278,26 +278,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             query.UserId = !string.IsNullOrEmpty(query.UserId) ? query.UserId : CurrentUserId;
         }
 
-        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
-        {
-            //  if (CurrentUserRole != args.userType) return;
-            if (args.Id != 0) return;
-
-            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-            if (coop == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Cooperative not found for the specified user.");
-
-            args.Id = coop.Id;
-
-            args.CooperativeIds ??= new List<long?>();
-
-            if (!args.CooperativeIds.Contains(coop.Id))
-                args.CooperativeIds.Add(coop.Id);
-        }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
+         private async Task EnrichAgentAsync(OnBoardingArgs args)
         {
             //  if(CurrentUserRole != args.userType) return;
             if (args.Id != 0) return;
