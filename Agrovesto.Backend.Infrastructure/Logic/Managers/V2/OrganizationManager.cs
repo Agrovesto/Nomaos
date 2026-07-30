@@ -2247,8 +2247,7 @@ DateTimeOffset dateTime)
         {
             try
             {
-                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-
+               
                 var cooperative = await _organizationRepository.GetCooperativesByOrganization(query.organizationCode, query);
                 if (cooperative == null) return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
                 {

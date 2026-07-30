@@ -327,7 +327,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
 
         [Display(Name = "Defaulted")]
-        Defaulted =7
+        Defaulted =7,
+
+        [Display(Name = "Rejected")]
+        Rejected =8,
+
+        [Display(Name = "CommitmentPaid")]
+        CommitmentPaid = 9,
+
+        [Display(Name = "Input Released")]
+        InputReleased = 10,
     }
 
     public enum ExportFormat

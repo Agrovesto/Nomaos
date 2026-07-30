@@ -1269,7 +1269,7 @@ WHERE f.UserId = @userId
                 .Select(g => new
                 {
                     TotalFarms = g.Count(),
-                    TotalFarmSizeHectares = g.Sum(x => (decimal?)x.SizeInHectares) ?? 0m,
+                    TotalFarmSizeHectares = (g.Sum(x => (double?)x.FarmSize) ?? 0d) / 10000d,
                     MappedFarms = g.Select(x => x.FarmerId).Distinct().Count()
                 })
                 .FirstOrDefaultAsync();
@@ -1292,7 +1292,7 @@ WHERE f.UserId = @userId
             {
                 TotalFarmers = totalFarmers,
                 TotalFarms = farmStats?.TotalFarms ?? 0,
-                TotalFarmSizeHectares = (double)(farmStats?.TotalFarmSizeHectares ?? 0m),
+                TotalFarmSizeHectares = farmStats?.TotalFarmSizeHectares ?? 0d,
                 MappedFarms = farmStats?.MappedFarms ?? 0,
                 UnmappedFarms = totalFarmers - (farmStats?.MappedFarms ?? 0),
                 FarmersLinkedToCooperatives = farmersLinkedToCooperatives,
@@ -1766,6 +1766,9 @@ WHERE f.UserId = @userId
             ListQueryParams query)
         {
             query ??= new ListQueryParams();
+            if (query.PageNumber <= 0) query.PageNumber = 1;
+            if (query.PageSize <= 0) query.PageSize = 10;
+
 
             // Base farmers query
             var farmersQuery = _context.Farmers
