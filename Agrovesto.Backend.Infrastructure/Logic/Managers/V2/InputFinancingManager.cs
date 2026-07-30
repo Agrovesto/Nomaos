@@ -97,6 +97,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
         Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs query, CancellationToken cancellationToken = default);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -423,6 +424,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.NOTFOUND, "Subscriber does not exist");
             }
             return await _inputFinancingRepository.AddSubscriberAsync(request, query);
+        }
+        public async Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs query,
+    CancellationToken cancellationToken = default)
+        {
+            if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
+
+            if (query.SubscriptionId <= 0) throw new ArgumentException("Invalid Id provided", nameof(query.SubscriptionId));
+           
+            return await _inputFinancingRepository.RemoveSubscriptionAsync(query, cancellationToken);
         }
         public async Task<bool> ApproveSubscriptionAsync(ApproveSubscriptionRequest request, InputSubscriptionRequestArgs query)
         {
@@ -1284,6 +1294,43 @@ RepaymentFrequency frequency)
             if (subscription.InputPackage == null)
                 throw new Exception("Cannot find input package");
 
+            var reference = !string.IsNullOrWhiteSpace(request.Reference)
+                          ? request.Reference
+                          : $"{Guid.NewGuid():D}";
+            if (!subscription.InputPackage.RepaymentRequired)
+            {
+                var paymentId = await _inputFinancingRepository.CreatePendingPaymentAsync(
+                   new CreateCommitmentPaymentRequest
+                   {
+                       SubscriptionId = subscription.Id,
+                       Amount = 0,
+                       PaymentType = PaymentType.Repayment,
+                       PaymentChannel = PaymentChannel.Wallet,
+                       Reference = reference,
+                       ExternalReference=reference,
+                       WalletProviderId= request.WalletProviderId.Value,
+                       RecordedByUserId = args.UserId
+                   });
+
+                await _inputFinancingRepository.RecordSuccessfulPaymentAsync(
+                    paymentId,
+                    new PaymentConfirmationRequest
+                    {
+                        ExternalReference = reference,
+                        Status = TransactionStatus.Successful
+                    }, args.UserId);
+
+                return new RepaymentResponse
+                {
+                    IsSuccessful = true,
+                    AmountApplied =0,
+                    OutstandingBalance = 0,
+                    OverpaymentCredited = 0,
+                    ExternalReference =reference
+                };
+
+            }
+
             // ─── Outstanding must aggregate across BOTH cash and produce repayments already made ───
             var totalRepaid = await _inputFinancingRepository.GetTotalRepaymentPaidAsync(subscription.Id);
             var outstanding = subscription.RepaymentValue - totalRepaid;
@@ -1291,9 +1338,6 @@ RepaymentFrequency frequency)
             if (outstanding <= 0)
                 throw new Exception("Repayment already fully completed");
 
-            var reference = !string.IsNullOrWhiteSpace(request.Reference)
-                ? request.Reference
-                : $"{Guid.NewGuid():D}";
 
             switch (request.PaymentChannel)
             {
@@ -1438,6 +1482,7 @@ RepaymentFrequency frequency)
                             PaymentType = PaymentType.Repayment,
                             PaymentChannel = PaymentChannel.Produce,
                             Reference = reference,
+                            ExternalReference = reference,
                             RecordedByUserId = args.UserId
                         });
 

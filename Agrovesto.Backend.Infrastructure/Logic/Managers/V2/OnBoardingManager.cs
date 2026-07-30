@@ -734,22 +734,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
-        private static void ValidateQuickOnboarding(OnboardingRequestModel model)
+        private static void ValidateQuickOnboarding(OnboardingRequestModel model, string onboardedByUserid)
         {
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
             var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
 
-            if (!hasEmail && !hasPhone)
-            {
-                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Either email or phone number must be provided.");
-            }
+            //if (!hasEmail && !hasPhone)
+            //{
+            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Either email or phone number must be provided.");
+            //}
 
-            if (hasEmail && hasPhone)
-            {
-                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Provide either email/password or phone/pin, not both.");
-            }
+            //if (hasEmail && hasPhone)
+            //{
+            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Provide either email/password or phone/pin, not both.");
+            //}
 
             if (hasEmail)
             {
@@ -760,7 +760,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "Invalid email address format.");
                 }
 
-                if (string.IsNullOrWhiteSpace(model.Password))
+                if (string.IsNullOrWhiteSpace(model.Password) && string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "Password is required when signing up with email.");
@@ -775,7 +775,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "Phone number must be exactly 11 digits and numeric only.");
                 }
 
-                if (string.IsNullOrWhiteSpace(model.Pin))
+                if (string.IsNullOrWhiteSpace(model.Pin) && string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "PIN is required when signing up with phone number.");
@@ -1232,7 +1232,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private void ValidateRequest(OnboardingRequestModel model, OnBoardingArgs args)
         {
             ValidateUserType(args);
-            ValidateQuickOnboarding(model);
+            ValidateQuickOnboarding(model, args.OnboardedByUserId);
 
             if (string.IsNullOrEmpty(args.businessCode))
             {
@@ -2195,7 +2195,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber
-            });
+            }, args.OnboardedByUserId);
 
             if (string.IsNullOrEmpty(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
@@ -2338,7 +2338,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 {
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber
-                });
+                }, args.OnboardedByUserId);
                 if (string.IsNullOrEmpty(args.businessCode))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
 
@@ -2500,7 +2500,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber
-            });
+            }, args.OnboardedByUserId);
 
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
