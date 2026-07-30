@@ -252,7 +252,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 Data = result,
                 Message = result != null ? ResponseMessages.Successful : "Could not retrieve data",
-                Succeeded = result != null,
+                Succeeded = true,
                 Code = result != null ? ResponseCodes.Success : ResponseCodes.Failed
             }));
         }
