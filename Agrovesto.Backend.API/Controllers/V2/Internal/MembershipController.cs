@@ -94,7 +94,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<MemberShipUpdateResultDto>()
                 {
                     Code = ResponseCodes.Success,
-                    Succeeded = result.Success,
+                    Succeeded = true,
                     Message = result.Message,
                     Data = result
                 });
@@ -143,7 +143,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result,
 
                     Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = result != null ? true : false,
+                    Succeeded = true,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -252,7 +252,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -304,7 +304,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -598,7 +598,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,

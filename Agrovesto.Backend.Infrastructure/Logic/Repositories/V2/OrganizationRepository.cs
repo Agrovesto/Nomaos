@@ -3241,9 +3241,7 @@ SELECT
                         _context.FarmerCooperatives.RemoveRange(toRemove);
                     }
 
-                    // ===========================
-                    // AGENTS (BULK SAFE)
-                    // ===========================
+                    
                     if (data.AgentIds != null)
                     {
                         var existing = await _context.FarmerAgents
