@@ -832,10 +832,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<CreateUserResult> RegisterUser(
     OnboardingRequestModel model, OnBoardingArgs args)
         {
-            ValidateUserType(args.userType);
-
-            ValidateUserInput(model);
-
+            
             var role = await GetRoleAsync(args.userType);
 
             var existingUser = await FindExistingUserAsync(model);
@@ -862,16 +859,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         "Invalid user type");
             }
         }
-        private void ValidateUserInput(OnboardingRequestModel model)
-        {
-            if (string.IsNullOrWhiteSpace(model.Email) &&
-                string.IsNullOrWhiteSpace(model.PhoneNumber))
-            {
-                throw new BaseException(
-                    ExceptionType.BAD_REQUEST,
-                    "Either email or phone number must be provided.");
-            }
-        }
+      
         private async Task<IdentityRole> GetRoleAsync(string roleName)
         {
             var role = await _roleManager.FindByNameAsync(roleName);
@@ -967,6 +955,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.PhoneNumber = model.PhoneNumber;
             }
+            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
 
             if (!string.IsNullOrWhiteSpace(model.Email)
                 && !string.Equals(model.Email, user.Email, StringComparison.OrdinalIgnoreCase))
@@ -1136,8 +1125,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 };
             }
 
-            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-
+           
             bool isNewBusinessMembership = !businessMemberships.Any();
 
             return new CreateUserResult
@@ -1160,7 +1148,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var salt = EncryptionUtil.GetSalt();
 
             string defaultPin = "1234";
-            string defaultPassword = model.PhoneNumber;
+            string defaultPassword =model.PhoneNumber;
 
             var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
                 ? defaultPassword
@@ -1189,6 +1177,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             try
             {
+                if (!string.IsNullOrEmpty(passwordToUse))
+                {
+
+                    createUser = await _userManager.CreateAsync(user);
+                }
+
                 createUser = await _userManager.CreateAsync(user, passwordToUse);
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))

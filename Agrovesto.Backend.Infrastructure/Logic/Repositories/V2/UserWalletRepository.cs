@@ -938,6 +938,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.TransactionDate.Date == date);
             }
 
+            if (args.TransactionType.HasValue)
+            {
+                var txnType = (WalletTransactionType)args.TransactionType;
+
+                query = query.Where(x =>
+                    x.WalletTransactionType == txnType);
+            }
+
             var totalCount = await query.CountAsync();
 
             if (totalCount == 0)
