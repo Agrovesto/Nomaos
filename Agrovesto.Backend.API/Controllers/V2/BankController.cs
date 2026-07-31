@@ -63,7 +63,7 @@ namespace Agrovesto.Backend.API.Controllers.V2
             {
                 Code = request == null ? ResponseCodes.NotSuccessful : ResponseCodes.Success,
                 Succeeded = request != null,
-                Message = request == null ? "Failed" : "Success",
+                Message = request == null ? ResponseCodes.Failed : ResponseCodes.Success,
                 Data = request != null ? request : null
             });
         }
