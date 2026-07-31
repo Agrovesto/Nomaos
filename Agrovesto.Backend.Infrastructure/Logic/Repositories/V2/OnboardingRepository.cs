@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<string>> GetOrganizationsForUser(string userId);
         Task<List<User>> GetUsersInOrganization(string organizationCode);
         Task<(UserModel model, bool status, string message)> GetUserById(string userId);
-        Task<(bool Status, string Message)> ForgotPassword(string username);
+        Task<(bool Status, string Message, string token)> ForgotPassword(string username);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
         Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model);
         Task<UserModel> FindByPhoneNumberAsync(string phoneNumber);
@@ -112,35 +112,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
 
-        //public async Task<TokenModel> RefreshAsync(string refreshToken, string deviceId)
-        //{
-        //    var stored = await _context.RefreshTokens
-        //        .FirstOrDefaultAsync(x =>
-        //            x.Token == refreshToken &&
-        //            !x.IsRevoked &&
-        //            x.ExpiresAt > DateTime.UtcNow &&
-        //            x.DeviceId == deviceId);
-
-        //    if (stored == null)
-        //        throw new BaseException(ExceptionType.UNAUTHORIZED, "Invalid refresh token");
-
-        //    var user = await _userManager.FindByIdAsync(stored.UserId);
-
-        //    stored.IsRevoked = true;
-        //    var newRefreshToken = CreateRefreshToken(user.Id, deviceId);
-
-        //    _context.RefreshTokens.Add(newRefreshToken);
-        //    await _context.SaveChangesAsync();
-
-        //    var claims = BuildClaims(user, ...);
-
-        //    return new TokenModel
-        //    {
-        //        Token = GenerateJwtToken(claims),
-        //        RefreshToken = newRefreshToken.Token
-        //    };
-        //}
-        private RefreshToken CreateRefreshToken(string userId, string deviceId)
+         private RefreshToken CreateRefreshToken(string userId, string deviceId)
         {
             return new RefreshToken
             {
@@ -171,14 +143,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     user = await _userManager.Users
                         .FirstOrDefaultAsync(x =>
                             x.PhoneNumber == model.Phonenumber 
-                            //&&
-                            //x.BusinessCode == businessCode
+                            
                             );
                     break;
             }
 
-            //if (user == null || user.BusinessCode != businessCode)
-            //    return null;
 
             return user;
         }
@@ -244,15 +213,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     claims.Add(new Claim("Roles", role));
                 }
             }
-            //if (roles?.Any() == true)
-            //{
-            //    foreach (var role in roles)
-            //    {
-            //        claims.Add(new Claim(ClaimTypes.Role, role));
-            //    }
-
-            //    claims.Add(new Claim("Roles", string.Join(",", roles)));
-            //}
 
             if (!string.IsNullOrWhiteSpace(user.UserType))
                 claims.Add(new Claim("UserType", user.UserType));
@@ -416,8 +376,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 return (false, "User is not assigned to any business", null);
 
             UserBusiness activeBusiness;
-            // var activeBusiness = userBusinesses.FirstOrDefault(x => x.IsDefault)
-            //                    ?? userBusinesses.First();
 
 
             if (!string.IsNullOrWhiteSpace(model.BusinessCode))
@@ -481,7 +439,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 phone_number = user.PhoneNumber,
                 TokenType =TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                Businesses = userBusinesses.Select(b => new BusinessModel
+                Businesses = userBusinesses.Select(b => new BusinessClaimModel
                 {
                   BusinessId=  b.BusinessId,
                    BusinessCode= b.Business.BusinessCode,
@@ -522,14 +480,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (!ValidateUserPin(user, model.Pin))
                         return (false, "Invalid phone number or PIN");
                     break;
-                //case LoginType.Otp:
-
-                //    var otpValid = await _otpService.ValidateOtp(user.Id, model.Otp);
-
-                //    if (!otpValid)
-                //        return (false, "Invalid or expired OTP");
-
-                //    break;
 
                 default:
                     return (false, "Invalid login method");
@@ -580,7 +530,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
-            // Fetch roles via UserRoles → Roles join
             var roles = await (
                 from ur in _context.UserRoles
                 join r in _context.Roles on ur.RoleId equals r.Id
@@ -613,12 +562,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
-            // Any extra roles this user has been granted beyond their default UserType
-            var additionalRoles = await (
+               var additionalRoles = await (
                 from ur in _context.UserRoles
                 join r in _context.Roles on ur.RoleId equals r.Id
                 where ur.UserId == userId
-                select r.Name // adjust to actual column name, e.g. r.RoleName
+                select r.Name 
             ).ToListAsync();
 
             var response = new UsersProfileResponse
@@ -632,7 +580,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
 
-            // Default role + any additional roles, deduped so we don't fetch the same profile twice
             var allRoleTypes = new List<string> { user.UserType };
             allRoleTypes.AddRange(additionalRoles);
             allRoleTypes = allRoleTypes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -781,10 +728,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
              var memberShip = await _context.MemberShips
                 .AsNoTracking()
-                ////.Include(m => m.MemberShipType)
-                ////.Include(m => m.Lga)
-                ////.Include(m => m.State)
-                ////.Include(m => m.Ward)
                 .FirstOrDefaultAsync(f => f.UserId == userId);
 
             if (memberShip == null)
@@ -851,14 +794,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
-                //&& string.IsNullOrEmpty(user.PhoneNumber))
-            {
+               {
                     user.PhoneNumber = model.PhoneNumber;
             }
        
 
             if (!string.IsNullOrWhiteSpace(model.Email))
-                //&& string.IsNullOrEmpty( user.Email))
                 user.Email = model.Email;
 
 
@@ -888,49 +829,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return user.Map();
         }
-        private async Task HandlePasswordAndPin(User existingUser, OnboardingRequestModel model)
-        {
-            bool updated = false;
-
-         
-            if (!string.IsNullOrWhiteSpace(model.Pin))
-            {
-                var salt = EncryptionUtil.GetSalt();
-
-                existingUser.PinEncrypt = model.Pin.EncryptTransactionPin(salt);
-                existingUser.Salt = Convert.ToBase64String(salt);
-
-                existingUser.HasDefaultPin = false;
-
-                updated = true;
-            }
-
-            if (!string.IsNullOrWhiteSpace(model.Password))
-            {
-                var removeResult = await _userManager.RemovePasswordAsync(existingUser);
-
-                if (!removeResult.Succeeded)
-                {
-                    throw new Exception("Failed to remove old password");
-                }
-
-                var addResult = await _userManager.AddPasswordAsync(existingUser, model.Password);
-
-                if (!addResult.Succeeded)
-                {
-                    throw new Exception("Failed to set new password");
-                }
-
-                existingUser.HasDefaultPassword = false;
-
-                updated = true;
-            }
-
-            if (updated)
-            {
-                await _context.SaveChangesAsync();
-            }
-        }
         public async Task<CreateUserResult> RegisterUser(
     OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -944,7 +842,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (existingUser != null)
             {
-              //  await HandlePasswordAndPin(existingUser, model);
                 return await HandleExistingUser(existingUser, model, args, role);
             }
             return await CreateNewUser(model, args, role);
@@ -1301,9 +1198,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     "likely a concurrent onboarding request for the same person. Treating as existing user, not a failure.",
                     conflictField, model.PhoneNumber, model.Email);
 
-                // Reuse the exact same lookup used earlier in RegisterUser, so behavior
-                // is consistent - this just re-runs it because the earlier result is
-                // now stale (the other concurrent request committed in the meantime).
                 var conflictingUser = await FindExistingUserAsync(model);
 
                 if (conflictingUser != null)
@@ -1311,9 +1205,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     return await HandleExistingUser(conflictingUser, model, args, role);
                 }
 
-                // Genuine anomaly: the unique index fired, but even a fresh lookup
-                // can't find the owning row (e.g. deleted between insert and lookup,
-                // or normalized column mismatch - see note below). Worth alerting on.
                 _log.LogError(
                     "Duplicate {ConflictField} detected on user creation but no matching user could be " +
                     "found via FindExistingUserAsync for phone {Phone}/email {Email}. Data inconsistency.",
@@ -1380,9 +1271,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }
                 catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
                 {
-                    // Same reasoning as above: a duplicate UserBusiness membership
-                    // isn't a failure, it's a signal someone already has this role
-                    // in this business. Look it up and treat it as existing.
                     _log.LogInformation(
                         "Duplicate UserBusiness membership detected for user {UserId} in business {BusinessId} - " +
                         "treating as existing membership, not a failure.",
@@ -1413,7 +1301,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             conflictField = "details";
 
-            // SqlException is usually the innermost exception under DbUpdateException
             var sqlEx = ex.InnerException as SqlException ?? ex.GetBaseException() as SqlException;
 
             if (sqlEx == null)
@@ -1518,7 +1405,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 throw new BaseException(Core.Enums.ExceptionType.CONFLICT,
                     $"A user with phone number {phoneNumber} already exists in this organization.");
 
-            // Check if already tracked locally to avoid duplicates
             if (!_context.UserOrganizations.Local.Any(x => x.UserId == user.Id && x.OrganizationCode == organizationCode))
             {
                 _context.UserOrganizations.Add(new UserOrganization
@@ -1528,7 +1414,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 });
 
                 _log.LogInformation($"User {phoneNumber} added to organization {organizationCode}.");
-              //  await NotifyUserOfOrganizationAddition(phoneNumber, organizationCode);
             }
         }
         public async Task<UserModel> FindByPhoneNumberAsync(string phoneNumber)
@@ -1608,35 +1493,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null) return (null, false, "No record found");
             return (user.Map(), true, "Retrieved Successfully");
         }
-        public async Task<(bool Status, string Message)> ForgotPassword(string username)
+        public async Task<(bool Status, string Message, string token)> ForgotPassword(string username)
         {
             var user = await _userManager.FindByEmailAsync(username);
             if (user != null)
             {
                 var generatedToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-                var tokenGeneratedByte = Encoding.UTF8.GetBytes(generatedToken);
-
-                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
-                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?email={user.Email}&token={encodedToken}";
-
-
-                var message = $"Please have your password reset by <a href='{callbackUrl}'>clicking here</a>.";
-
-                //send mail to user
-                var mailRequest = new MailBody
-                {
-                    To = user.Email,
-                    ToName = user.UserName,
-                    Subject = "Password Reset",
-                    Body = callbackUrl,
-                    Token = callbackUrl,
-                };
-
-                var mailUtil = SendGridService.SendDynamicForgotPasswordMail(mailRequest);
-
-                return (true, "An Email has been sent to your registered email");
+                
+                return (true, "User Found", generatedToken);
             }
-            return (false, "Invalid username");
+            return (false, "User Not found", null);
         }
         public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
         {
@@ -1660,7 +1526,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
-            var userExist = await _userManager.FindByEmailAsync(model.UserName);
+            var userExist = await _userManager.FindByEmailAsync(model.Email);
             if (userExist != null)
             {
                 //TODO: rework such that if user is using pin, it should just go ahead and change pin instead of password
@@ -1841,7 +1707,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             
         }
-       
 
+       
+           
     }
 }

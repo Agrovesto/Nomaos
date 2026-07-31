@@ -732,7 +732,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
-            var userExist = await _userManager.FindByEmailAsync(model.UserName);
+            var userExist = await _userManager.FindByEmailAsync(model.Email);
             if (userExist != null)
             {
                 //TODO: rework such that if user is using pin, it should just go ahead and change pin instead of password

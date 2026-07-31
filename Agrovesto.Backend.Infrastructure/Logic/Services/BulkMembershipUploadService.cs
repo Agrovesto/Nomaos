@@ -35,7 +35,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         }
 
         public async Task<BulkUploadResult> ProcessBulkMembershipUploadAsync(
-       List<BulkMembershipRowDto> rows, OnBoardingArgs args)
+     List<BulkMembershipRowDto> rows, OnBoardingArgs args)
         {
             var result = new BulkUploadResult { TotalRows = rows.Count };
 
@@ -62,80 +62,36 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 .ToListAsync())
                 .ToDictionary(u => u.PhoneNumber, u => u, StringComparer.OrdinalIgnoreCase);
 
-            // ── Real duplicate check: user already a Membership leader for THIS business (+ org) ──
-            var existingUserIds = existingUsersByPhone.Values.Select(u => u.Id).ToList();
-
-            var existingMembershipUserIds = (await _db.MemberShips
-                .Where(m => existingUserIds.Contains(m.UserId) && m.BelongToBusinessCode == args.businessCode)
-                .Select(m => m.UserId)
-                .ToListAsync())
-                .ToHashSet();
-
-            HashSet<string> existingMembershipUserIdsInOrg = new();
-            if (!string.IsNullOrWhiteSpace(args.organizationCode)
-                && orgMap.TryGetValue(args.organizationCode, out var currentOrg))
-            {
-                existingMembershipUserIdsInOrg = (await _db.OrganizationMemberships
-                    .Where(om => om.OrganizationId == currentOrg.OrganizationId
-                              && existingMembershipUserIds.Contains(om.MemberShip.UserId))
-                    .Select(om => om.MemberShip.UserId)
-                    .ToListAsync())
-                    .ToHashSet();
-            }
+            // ── Pre-fetch existing MemberShips by name (to REUSE, not reject) ──
             var incomingNames = rows.Select(r => r.MembershipName).ToList();
-
-            // Fetch existing MemberShips in this business by name, so we can REUSE them
             var existingMembershipsByName = (await _db.MemberShips
                 .Where(m => incomingNames.Contains(m.Name) && m.BelongToBusinessCode == args.businessCode)
                 .ToListAsync())
                 .ToDictionary(m => m.Name, m => m, StringComparer.OrdinalIgnoreCase);
 
-            // Of those, which are ALREADY linked to the current organization? — that's the real duplicate.
-            HashSet<long> alreadyLinkedMembershipIds = new();
-            if (!string.IsNullOrWhiteSpace(args.organizationCode)
-                && orgMap.TryGetValue(args.organizationCode, out var currentOrgForNameCheck))
-            {
-                var candidateMembershipIds = existingMembershipsByName.Values.Select(m => m.Id).ToList();
-
-                alreadyLinkedMembershipIds = (await _db.OrganizationMemberships
-                    .Where(om => candidateMembershipIds.Contains(om.MemberShip.Id)
-                              && om.OrganizationId == currentOrgForNameCheck.OrganizationId)
-                    .Select(om => om.MemberShip.Id)
-                    .ToListAsync())
-                    .ToHashSet();
-            }
-
+            // ── The ONLY real pre-check: a membership name collision with a
+            // DIFFERENT leader than what's in this row. Everything else -
+            // same leader re-uploading, same membership already linked to this
+            // org, etc. - is treated as idempotent reuse, not a failure.
+            // This is intentionally narrow: it's the one case where we genuinely
+            // can't tell if this is a duplicate name for a different group, or a
+            // leadership change, so it needs a human to confirm rather than us
+            // silently merging or silently rejecting.
             foreach (var row in rows)
             {
-                // Phone/leader check (unchanged from before)
-                if (existingUsersByPhone.TryGetValue(row.LeaderPhoneNumber, out var existingUser))
-                {
-                    bool alreadyMemberOfBusiness = existingMembershipUserIds.Contains(existingUser.Id);
-                    bool alreadyMemberOfOrg = string.IsNullOrWhiteSpace(args.organizationCode)
-                        || existingMembershipUserIdsInOrg.Contains(existingUser.Id);
-
-                    if (alreadyMemberOfBusiness && alreadyMemberOfOrg)
-                    {
-                        result.Errors.Add(new MembershipRowError
-                        {
-                            RowNumber = row.RowNumber,
-                            PhoneNumber = row.LeaderPhoneNumber,
-                            Messages = new List<string>
-                { $"Row {row.RowNumber}: this leader is already onboarded as a membership for this organization." }
-                        });
-                    }
-                }
-
-                // Membership name check — only a duplicate if ALREADY LINKED TO THIS ORG
                 if (existingMembershipsByName.TryGetValue(row.MembershipName, out var existingMembership)
-                    && alreadyLinkedMembershipIds.Contains(existingMembership.Id))
+                    && !string.Equals(existingMembership.PhoneNumber, row.LeaderPhoneNumber, StringComparison.OrdinalIgnoreCase))
                 {
                     result.Errors.Add(new MembershipRowError
                     {
                         RowNumber = row.RowNumber,
                         MembershipName = row.MembershipName,
                         Messages = new List<string>
-            { $"Row {row.RowNumber}: membership '{row.MembershipName}' is already onboarded in this organization." }
+                {
+                    $"Row {row.RowNumber}: membership '{row.MembershipName}' already exists in this business " +
+                    $"under a different leader (phone {existingMembership.PhoneNumber}). " +
+                    "If this is a leadership change, please update it directly rather than through bulk upload."
+                }
                     });
                 }
             }
@@ -154,6 +110,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             foreach (var chunk in validChunks)
             {
                 var currentChunk = chunk;
+                var rowOutcomes = new Dictionary<int, MembershipRowOutcome>();
 
                 await strategy.ExecuteAsync(async () =>
                 {
@@ -163,14 +120,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     {
                         foreach (var row in currentChunk)
                         {
-                            await ProcessSingleRowAsync(
-      row, membershipTypeMap, businessMap, orgMap,
-      existingUsersByPhone, existingMembershipsByName, args);
+                            var outcome = await ProcessSingleRowAsync(
+                                row, membershipTypeMap, businessMap, orgMap,
+                                existingUsersByPhone, existingMembershipsByName, args);
+
+                            rowOutcomes[row.RowNumber] = outcome;
                         }
 
                         await _db.SaveChangesAsync();
                         await transaction.CommitAsync();
-                        result.SuccessCount += currentChunk.Count;
+
+                        foreach (var outcome in rowOutcomes.Values)
+                        {
+                            if (outcome == MembershipRowOutcome.AlreadyExisted)
+                                result.AlreadyExisted++;
+                            else
+                                result.SuccessCount++;
+                        }
                     }
                     catch (DuplicateMembershipException ex)
                     {
@@ -209,14 +175,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             return result;
         }
-        private async Task ProcessSingleRowAsync(
-           BulkMembershipRowDto row,
-           Dictionary<string, MemberShipType> typeMap,
-           Dictionary<string, Business> businessMap,
-           Dictionary<string, Organization> orgMap,
-           Dictionary<string, User> existingUsersByPhone,
-           Dictionary<string, MemberShip> existingMembershipsByName,
-           OnBoardingArgs args)
+
+        private async Task<MembershipRowOutcome> ProcessSingleRowAsync(
+            BulkMembershipRowDto row,
+            Dictionary<string, MemberShipType> typeMap,
+            Dictionary<string, Business> businessMap,
+            Dictionary<string, Organization> orgMap,
+            Dictionary<string, User> existingUsersByPhone,
+            Dictionary<string, MemberShip> existingMembershipsByName,
+            OnBoardingArgs args)
         {
             var nameParts = (row.LeaderName ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var firstName = nameParts.ElementAtOrDefault(0);
@@ -250,6 +217,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             }
 
             // ── 2. Reuse existing MemberShip by name+business, or create one ──
+            // (Genuine name/leader conflicts were already filtered out before
+            // this chunk started, so any match here is a safe, same-leader reuse.)
             MemberShip membership;
             bool isNewMembership = !existingMembershipsByName.TryGetValue(row.MembershipName, out membership!);
 
@@ -349,6 +318,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     membership.HasbeenAssignedAgent = true;
                 }
             }
+
+            return isNewMembership ? MembershipRowOutcome.Created : MembershipRowOutcome.AlreadyExisted;
         }
     }
 }

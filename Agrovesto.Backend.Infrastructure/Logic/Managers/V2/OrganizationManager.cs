@@ -116,26 +116,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IAgentRepository _agentRepository;
         private readonly IActivityLogRepository _activityLogRepository;
         private readonly INotificationService _sMSService;
-        private readonly IOtpService _otpService;
         private readonly ILogger<OrganizationManager> _log;
         private readonly IFarmerRepository _farmerRepository;
         private readonly IMembershipRepository _membershipRepository;
         private readonly UserManager<User> _userManager;
-        private readonly IExcelConverterService _excelConverterService;
         private readonly ISalesRepository _salesRepository;
-        private readonly RoleManager<Role> _roleManager;
         private readonly DataContext _context;
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IBackgroundTaskQueue _taskQueue;
         private readonly IAWSService _awsService;
         private readonly IFarmerTransactionRepository _farmerTransactionRepository;
         private readonly IConfiguration _configuration;
-        private readonly IInputFinancingManagementRepository _inputFinancingManagementRepository;
         private readonly IAWSRekognitionManager _faceManager;
         public OrganizationManager(IAWSRekognitionManager faceManager,
-            IInputFinancingManagementRepository inputFinancingManagementRepository,
             IFarmerTransactionRepository farmerTransactionRepository,
-            IExcelConverterService excelConverterService,
             IWalletManager walletManager,
             IBusinessRepository businessRepository,
               IOnboardingRepository onboardingRepository,
@@ -143,11 +137,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             IFarmerRepository farmerRepository,
             IAgentRepository agentRepository,
              IActivityLogRepository activityLogRepository,
-              IOtpService otpService,
             INotificationService notificationService,
             IMembershipRepository membershipRepository,
             UserManager<User> userManager,
-            RoleManager<Role> roleManager,
             ISalesRepository salesRepository,
             DataContext context,
               ILogger<OrganizationManager> log,
@@ -157,10 +149,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                IConfiguration configuration)
         {
             _faceManager = faceManager;
-            _inputFinancingManagementRepository = inputFinancingManagementRepository;
             _farmerTransactionRepository =farmerTransactionRepository;
             _context=context;
-            _excelConverterService = excelConverterService;
             _walletManager = walletManager;
             _businessRepository = businessRepository;
             _onboardingRepository = onboardingRepository;
@@ -169,12 +159,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _agentRepository= agentRepository;
             _userManager = userManager;
             _log = log;
-            _otpService = otpService;
             _sMSService = notificationService;
             _activityLogRepository = activityLogRepository;
             _membershipRepository = membershipRepository;
             _salesRepository = salesRepository;
-            _roleManager = roleManager;
             _taskQueue = taskQueue;
             _scopeFactory=scopeFactory;
             _awsService = awsService;
@@ -1362,6 +1350,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return new Response<OrganizationAgentDetailResponse>
             {
+                Succeeded=true,
                 Data = agent,
                 Message = "Agent detail retrieved successfully"
             };
@@ -2258,8 +2247,7 @@ DateTimeOffset dateTime)
         {
             try
             {
-                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
-
+               
                 var cooperative = await _organizationRepository.GetCooperativesByOrganization(query.organizationCode, query);
                 if (cooperative == null) return new PagedListResponse<List<OrganizationMemberShipResponseModel>>
                 {
