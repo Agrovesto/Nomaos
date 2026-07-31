@@ -472,17 +472,7 @@ namespace Agrovesto.Backend.API.Controllers
             resolvedCode = match.OrganizationCode;
             return null;
         }
-        protected void NormalizeOrganizationCode(OnBoardingArgs args)
-        {
-            if (!string.IsNullOrEmpty(args.organizationCode))
-                return; 
-            var userOrgs = CurrentUserOrganizations; 
-            if (userOrgs.Count == 1)
-            {
-                args.organizationCode = userOrgs[0].OrganizationCode;
-            }
-
-                    }
+    
         public class OrganizationClaim
         {
             public string? OrganizationCode { get; set; }

@@ -100,12 +100,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await ExecuteAsync(async () =>
             {
                 args.performedByUserId = CurrentUserId;
-                NormalizeOrganizationCode(new Core.V2.Onboarding.OnBoardingArgs { organizationCode=args.organizationCode});
-
+              
                 await ResolveOrValidateFarmerIdAsync(args);
 
                 return await _farmMappingManager.SubmitFarmAsync(model, args);
@@ -114,7 +116,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 Code = ResponseCodes.Success,
                 Succeeded = true,
-                Message = request < 1 ? ResponseMessages.Successful : ResponseMessages.Failed,
+                Message = ResponseMessages.Successful,
                 Data = request
             }));
         }

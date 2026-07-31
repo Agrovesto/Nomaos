@@ -28,7 +28,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return ValidationProblemResponse();
 
             args.OnboardedByUserId = CurrentUserId;
-            NormalizeOrganizationCode(args); 
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
         }
