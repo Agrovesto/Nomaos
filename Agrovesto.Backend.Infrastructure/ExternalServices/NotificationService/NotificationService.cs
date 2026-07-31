@@ -217,8 +217,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
         public async Task SendSmsAsync(string destination, string message, string businessCode)
         {
-            var formattedDestination = FormatPhoneNumberToInternational(destination);
             var parameters = await RetrieveParams(businessCode);
+
             var _params = parameters.ToDictionary(x => x.Key);
 
             var url = $"{_params["BaseUrl"].Value}/api/sms/send";
@@ -226,7 +226,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             var channel = _params["channel"].Value;
             var type = _params["type"].Value;
             var apikey = _params["livekey"].Value;
+            var countryCode = _params["CountryCode"].Value;
 
+            var formattedDestination = FormatPhoneNumberToInternational(destination, countryCode);
 
             _log.LogWarning(
     "Termii config check → key:{HasKey}, url:{Url}",
@@ -273,14 +275,13 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 _log.LogError($"Failed to send SMS to {formattedDestination}. Error: {ex.Message}");
             }
         }
-        private string FormatPhoneNumberToInternational(string phoneNumber)
+        private string FormatPhoneNumberToInternational(string phoneNumber, string countryCode)
         {
             if (string.IsNullOrWhiteSpace(phoneNumber))
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     "Phone number is required.");
 
-            // Ensure numeric
             phoneNumber = phoneNumber.Trim();
 
             if (!phoneNumber.All(char.IsDigit))
@@ -296,7 +297,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             // Remove leading zero → last 10 digits
             var localNumber = phoneNumber.Substring(1);
 
-            var countryCode = _config["TermiSMS:CountryCode"]; // "+234"
 
             if (string.IsNullOrWhiteSpace(countryCode))
                 throw new BaseException(
