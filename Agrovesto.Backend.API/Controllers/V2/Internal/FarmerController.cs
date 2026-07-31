@@ -146,7 +146,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = wallet,
                     Message = wallet.message,
-                    Succeeded = wallet.status,
+                    Succeeded = true,
                     Code = wallet.status ? ResponseCodes.Success : ResponseCodes.Failed
                 }));
 
