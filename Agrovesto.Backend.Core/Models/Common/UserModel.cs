@@ -83,7 +83,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
         public class ChnagePasswordModel
     {
-        public string? UserName { get; set; }
+        public string? Email { get; set; }
         public string OldPassword { get; set; }
         public string NewPassword { get; set; }
         public string ConfirmPassword { get; set; }
@@ -241,7 +241,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Name { get; set; }
         public string Email { get; set; }
         public List<OrganizationDto> Organizations { get; set; }
-        public List<BusinessModel> Businesses { get; set; }
+        public List<BusinessClaimModel> Businesses { get; set; }
         public bool TwoFactorEnabled { get; set; }
         public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }

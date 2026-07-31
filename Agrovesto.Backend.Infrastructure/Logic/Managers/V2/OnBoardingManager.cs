@@ -25,6 +25,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Hangfire;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -57,7 +58,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OnboardingResponseModel> CreateBusinessUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args);
         Task<FarmerProfileDto> GetFarmerProfileAsync(string userId);
-        // Backwards-compatible wrapper
+       
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
         Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
         Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
@@ -66,8 +67,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
-        //Task<BulkOnboardingResult> BulkOnboardBusinessUsers(Stream excelStream, OnBoardingArgs args);
-        Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
+          Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
@@ -84,6 +84,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<MemberShipUpdateResultDto> UpdateMembershipProfile(string userId, MemberShipModel update);
         Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUseridentity(string userId);
+        Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model);
+        Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
+        Task<(bool Status, string Message)> ForgotPassword(string username);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -191,35 +194,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         args,
         job.Id,
         CancellationToken.None));
-            //_taskQueue.QueueTask(async cancellationToken =>
-            //{
-            //    try
-            //    {
-            //        using var scope = _scopeFactory.CreateScope();
-
-            //        var processor = scope.ServiceProvider
-            //            .GetRequiredService<BulkOnboardingProcessor>();
-
-            //        await processor.ProcessAsync(
-            //            filePath,
-            //            args,
-            //            job.Id,
-            //            cancellationToken);
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        using var scope = _scopeFactory.CreateScope();
-
-            //        var logger = scope.ServiceProvider
-            //            .GetRequiredService<ILogger<OrganizationManager>>();
-
-            //        logger.LogError(
-            //            ex,
-            //            "Queued bulk onboarding failed for JobId {jobId}",
-            //            job.Id);
-            //    }
-            //});
-
+           
             return new BulkOnboardingQueueResponse
             {
                 JobId = job.Id,
@@ -227,81 +202,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Message = "Bulk onboarding queued successfully."
             };
         }
-        /**  public async Task<BulkOnboardingResult> BulkOnboardFarmersBatchAsync(
-         Stream excelStream,
-         OnBoardingArgs args)
-          {
-              if (excelStream == null)
-                  throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file is required.");
-              using var ms = new MemoryStream();
-              await excelStream.CopyToAsync(ms);
-              ms.Position = 0;
-
-              var rows = _excelConverterService.BulkParseExcel(ms);
-
-              if (!rows.Any())
-                  throw new BaseException(ExceptionType.BAD_REQUEST, "Excel file contains no records.");
-
-              var result = new BulkOnboardingResult
-              {
-                  Total = rows.Count,
-                  Errors = new List<BulkOnboardingError>(),
-                  Successful = 0
-              };
-
-              var tempDir = Path.Combine(Path.GetTempPath(), "Agrovesto", "bulk");
-              Directory.CreateDirectory(tempDir);
-              var tmpFile = Path.Combine(tempDir, $"bulk_{Guid.NewGuid()}.xlsx");
-              ms.Position = 0;
-              await using (var fs = File.Create(tmpFile))
-              {
-                  ms.Position = 0;
-                  await ms.CopyToAsync(fs);
-                  await fs.FlushAsync();
-              }
-
-              if (_taskQueue == null || _scopeFactory == null)
-              {
-                  throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "Background processing is not configured. IBackgroundTaskQueue or IServiceScopeFactory is missing.");
-              }
-
-              _taskQueue.QueueTask(async cancellationToken =>
-              {
-                  try
-                  {
-                      if (_scopeFactory == null)
-                      {
-                          return;
-                      }
-
-                      using var scope = _scopeFactory.CreateScope();
-                      var processor = scope.ServiceProvider.GetRequiredService<BulkOnboardingProcessor>();
-                      var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                      logger.LogInformation("Queued bulk onboarding job invoking processor for file {file}", tmpFile);
-
-
-                      await processor.ProcessAsync(tmpFile, args, cancellationToken);
-                  }
-                  catch (Exception ex)
-                  {
-                      try
-                      {
-                          if (_scopeFactory != null)
-                          {
-                              using var scope = _scopeFactory.CreateScope();
-                              var logger = scope.ServiceProvider.GetRequiredService<ILogger<OrganizationManager>>();
-                              logger.LogError(ex, "Background bulk onboarding failed to start processor");
-                          }
-                      }
-                      catch { }
-                  }
-              });
-              result.Message = "File has been queued for upload and is being processed in the background. You will receive a notification once processing is complete.";
-
-              return result;
-          }
-          **/
-
         public async Task<OrganizationResponseModel> CreateOrganization(
      OrganizationOnboardingModel model,
      OrganizationOnboardingArgs args)
@@ -505,19 +405,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         LastName = row.LastName,
                         Email = row.Email,
                         PhoneNumber = row.PhoneNumber,
-                        Password =row.PhoneNumber, //"Admin123",
+                        Password =row.PhoneNumber, 
                         Pin = "1234",
 
                     };
 
-                    // Prepare onboarding args for farmer
                     var farmerArgs = new OnBoardingArgs
                     {
                         businessCode = args.businessCode,
                         organizationCode = args.organizationCode,
                         userType = "Farmer",
                         OnboardedByUserId = args.OnboardedByUserId,
-                        AgentIds = args.AgentIds,// agentId.HasValue ? new List<long?> { agentId.Value } : null,
+                        AgentIds = args.AgentIds,
                         CooperativeIds = args.CooperativeIds
                     };
 
@@ -578,8 +477,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (string.IsNullOrWhiteSpace(userId) || update == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
 
-            // validate identifiers if present
-            if (!string.IsNullOrWhiteSpace(update.NIN))
+             if (!string.IsNullOrWhiteSpace(update.NIN))
                 ValidateIdentifier(update.NIN, "NIN");
 
             if (!string.IsNullOrWhiteSpace(update.BVN))
@@ -600,8 +498,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var val = prop.GetValue(update);
                 if (val != null)
                 {
-                    // treat empty strings as not-updated
-                    if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
+                        if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
                     updatedFields.Add(prop.Name);
                 }
             }
@@ -622,7 +519,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (string.IsNullOrWhiteSpace(userId) || update == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
 
-            // validate identifiers if present
             if (!string.IsNullOrWhiteSpace(update.NIN))
                 ValidateIdentifier(update.NIN, "NIN");
 
@@ -639,15 +535,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 };
             }
 
-            // Build updated fields list from the update model
             var updatedFields = new List<string>();
             foreach (var prop in typeof(Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel).GetProperties())
             {
                 var val = prop.GetValue(update);
                 if (val != null)
                 {
-                    // treat empty strings as not-updated
-                    if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
+                      if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
                     updatedFields.Add(prop.Name);
                 }
             }
@@ -706,7 +600,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             ValidateLoginModel(model);
             model.BusinessCode = businessCode;
-           // var login= await _onboardingRepository.Login(model, businessCode);
             var login= await _onboardingRepository.Login(model);
 
             return login;
@@ -734,22 +627,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
         }
 
-        private static void ValidateQuickOnboarding(OnboardingRequestModel model)
+        private static void ValidateQuickOnboarding(OnboardingRequestModel model, string onboardedByUserid)
         {
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
             var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
 
-            if (!hasEmail && !hasPhone)
-            {
-                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Either email or phone number must be provided.");
-            }
+            //if (!hasEmail && !hasPhone)
+            //{
+            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Either email or phone number must be provided.");
+            //}
 
-            if (hasEmail && hasPhone)
-            {
-                throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Provide either email/password or phone/pin, not both.");
-            }
+            //if (hasEmail && hasPhone)
+            //{
+            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+            //        "Provide either email/password or phone/pin, not both.");
+            //}
 
             if (hasEmail)
             {
@@ -760,7 +653,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "Invalid email address format.");
                 }
 
-                if (string.IsNullOrWhiteSpace(model.Password))
+                if (string.IsNullOrWhiteSpace(model.Password) && string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "Password is required when signing up with email.");
@@ -775,17 +668,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "Phone number must be exactly 11 digits and numeric only.");
                 }
 
-                if (string.IsNullOrWhiteSpace(model.Pin))
+                if (string.IsNullOrWhiteSpace(model.Pin) && string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "PIN is required when signing up with phone number.");
+                  
                 }
-
-                if (!Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                if (!Regex.IsMatch(model.Pin, @"^\d{4}$") && string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "PIN must be exactly 4 digits.");
                 }
+
             }
         }
         public async Task<(bool status, string message)> CreateUserProfile(ProfileRequestModel model, OnBoardingArgs args)
@@ -816,7 +710,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 }
                 var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, model);
                 model.CreatedOn = updateUser.CreatedOn;
-                model.Id = updateUser.Id;//args.UserId;
+                model.Id = updateUser.Id;
                 model.Email = !string.IsNullOrEmpty(model.Email) ? model.Email : updateUser.Email;
                 model.PhoneNumber = !string.IsNullOrEmpty(model.PhoneNumber) ? model.PhoneNumber : updateUser.PhoneNumber;
 
@@ -868,15 +762,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             switch (accountType)
             {
                 case UserType.Trader:
-                    //model.Name = $"{model.FirstName} {model.MiddleName} {model.LastName}";
-                    //    await CreateTraderProfile(model, args);
                     break;
                 case UserType.Agent:
                     await CreateAgentProfileAsync(model, args);
                     break;
 
                 case UserType.MemberShip:
-                    //create first as cooperative
                     await CreateCooperativeProfileAsync(model, args);
                     break;
 
@@ -949,19 +840,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 model.OrganizationId = hasOrg.OrganizaionId;
             }
-            //if (string.IsNullOrEmpty(model.CooperativeName))
-            //{
-            //    throw new BaseException(
-            //        Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Cooperative Name is required.");
-            //}
             var isAssignedagent = false;
             if (args.OnboardedByUserId != null)
             {
                 isAssignedagent = true;
             }
-     //       if (!model.MembershipTypeId.HasValue)
-              //  throw new BaseException(ExceptionType.BAD_REQUEST, "Membership type is required");
+    
 
             await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
             {
@@ -989,7 +873,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 IsAssignedToAgentId = args.OnboardedByUserId,
                 HasbeenAssignedAgent = isAssignedagent,
                 Ward = model.Ward,
-                //OrganizationId = args.organizationCode
 
             });
 
@@ -1133,8 +1016,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 CreateUserResult createUserResult = null;
 
-                // Use an execution strategy so this plays nicely with EnableRetryOnFailure
-                // (manually-created transactions + automatic retries don't mix otherwise).
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -1152,7 +1033,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                                 createUserResult.message);
                         }
 
-                        // This now throws instead of swallowing critical failures - see below.
                         await ExecutePostCreationStepsAsync(
                             model,
                             args,
@@ -1183,56 +1063,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "An unexpected error occurred. Please try again.");
             }
         }
-        //    public async Task<OnboardingResponseModel> CreateBusinessUser(
-        //OnboardingRequestModel model,
-        //OnBoardingArgs args)
-        //    {
-        //        try
-        //        {
-        //            ValidateRequest(model, args);
-
-        //            var env = ResolveEnvironment(args);
-
-        //            var business = await GetBusinessOrThrow(args.businessCode);
-
-        //            CreateUserResult createUserResult = null;
-        //             createUserResult = await RegisterUser(model, args);
-
-        //            if (!createUserResult.status)
-        //            {
-        //                throw new BaseException(
-        //                    Core.Enums.ExceptionType.BAD_REQUEST,
-        //                    createUserResult.message);
-        //            }
-
-        //            await ExecutePostCreationStepsAsync(
-        //                model,
-        //                args,
-        //                createUserResult,
-        //                business,
-        //                env);
-
-        //            return BuildResponse(model, createUserResult);
-        //        }
-        //        catch (BaseException)
-        //        {
-        //            throw;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            _log.LogError(ex, "User Registration failed unexpectedly");
-
-        //            throw new BaseException(
-        //                Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
-        //                "An unexpected error occurred. Please try again.");
-        //        }
-        //    }
-
-
         private void ValidateRequest(OnboardingRequestModel model, OnBoardingArgs args)
         {
             ValidateUserType(args);
-            ValidateQuickOnboarding(model);
+            ValidateQuickOnboarding(model, args.OnboardedByUserId);
 
             if (string.IsNullOrEmpty(args.businessCode))
             {
@@ -1274,9 +1108,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     BusinessModel business,
     string env)
         {
-            // --- CRITICAL: these define whether the user is actually usable. ---
-            // If either of these fails, we let the exception propagate so the
-            // outer transaction rolls back the user/role creation too.
             try
             {
                 await CreateUserProfile(new ProfileRequestModel
@@ -1301,33 +1132,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Critical onboarding step failed for user {UserId}, role {UserType}. Rolling back.",
                     createUser.model.Id,
                     args.userType);
-
-                // Re-throw as BaseException so CreateBusinessUser's catch block
-                // returns a meaningful message instead of a generic 500,
-                // and so the transaction wrapping this call rolls back.
                 throw new BaseException(
                     Core.Enums.ExceptionType.INTERNAL_SERVER_ERROR,
                     $"Failed to complete profile setup for role '{args.userType}'. Please try again or contact support.");
             }
 
             createUser.model.Env = env;
-
-            // --- NON-CRITICAL: safe to log-and-continue. ---
-            // These don't affect whether the user's core role record exists,
-            // so we don't want a wallet/notification hiccup to roll back
-            // an otherwise-successful onboarding.
-            //try
-            //{
-            //    await EnsureWalletExists(createUser.model, business);
-            //}
-            //catch (Exception ex)
-            //{
-            //    _log.LogWarning(
-            //        ex,
-            //        "Wallet creation failed for user {UserId}. User was still onboarded successfully.",
-            //        createUser.model.Id);
-            //}
-
             if (createUser.IsExisting)
                 return;
 
@@ -1343,48 +1153,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     createUser.model.Id);
             }
         }
-        //    private async Task ExecutePostCreationStepsAsync(
-        //OnboardingRequestModel model,
-        //OnBoardingArgs args,
-        //CreateUserResult createUser,
-        //BusinessModel business,
-        //string env)
-        //    {
-        //        try
-        //        {
-        //            await EnsureWalletExists(createUser.model, business);
-
-        //            await CreateUserProfile(new ProfileRequestModel
-        //            {
-        //                Email = model.Email,
-        //                FirstName = model.FirstName,
-        //                LastName = model.LastName,
-        //                MiddleName = model.MiddleName,
-        //                Id = createUser.model.Id,
-        //                PhoneNumber = model.PhoneNumber,
-        //                OnboardedByUserId = args.OnboardedByUserId
-        //            }, args);
-
-        //            await _onboardingRepository.TrackUserRoleAssignment(
-        //                createUser.model.Id,
-        //                args.userType);
-
-        //            createUser.model.Env = env;
-
-        //            if (createUser.IsExisting)
-        //                return;
-
-        //            await HandleUserNotificationsAsync(createUser.model, env,args.businessCode);
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            _log.LogWarning(
-        //                ex,
-        //                "Non-critical onboarding step failed for user {UserId}",
-        //                createUser.model.Id);
-        //        }
-        //    }
-
+       
 
         private async Task HandleUserNotificationsAsync(OnboardingRequestModel user, string env, string businessCode)
         {
@@ -1444,7 +1213,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             if (otpTarget == OtpTarget.Email)
             {
-                // Send email using SES template
                 await _awsService.SendTemplatedEmailAsync(
                     senderEmail,
                     destination,
@@ -1491,7 +1259,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ExpiryMinutes = 5
             });
 
-            // ------------------ Send OTP ------------------
             if (otpTarget == OtpTarget.Email)
             {
                 //use aws
@@ -1503,11 +1270,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     $"Your verification code is {otp.Code}. It expires in 5 minutes."
                     );
                 
-                //await _sMSService.SendEmailAsync(
-                //    destination,
-                //    "Confirm your account",
-                //    $"Your verification code is {otp.Code}. It expires in 5 minutes.");
-            }
+                          }
             else
             {
                 await _sMSService.SendSmsAsync(
@@ -2018,8 +1781,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             "MM/dd/yyyy", "MMM dd, yyyy", "yyyy/MM/dd"
         };
 
-            string dateOfBirth = date; // Example input, change to test other formats
-
+            string dateOfBirth = date; 
             if (DateTime.TryParseExact(dateOfBirth, dateFormats,
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
             {
@@ -2159,13 +1921,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 await RunNonCriticalSteps(
                     model, args, business, user.model, dateTime);
 
-                //return new CreateMembershipResponseModel
-                //{
-                //    UserId = user.model.Id,
-                //    MembershipId = membership.data.Id,
-                //    RequiresProfileCompletion = true,
-                //    Message= user.message,
-                //};
                 return new CreateMembershipResponseModel
                 {
                     UserId = user.model.Id,
@@ -2195,7 +1950,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber
-            });
+            }, args.OnboardedByUserId);
 
             if (string.IsNullOrEmpty(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
@@ -2338,7 +2093,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 {
                     Email = model.Email,
                     PhoneNumber = model.PhoneNumber
-                });
+                }, args.OnboardedByUserId);
                 if (string.IsNullOrEmpty(args.businessCode))
                     throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
 
@@ -2390,17 +2145,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
 
-             //   await GenerateAndSendOtp(registerUser.model);
-              
-
-                //return new CreateAgentResponseModel
-                //{
-                //    UserId = args.UserId,
-                //    AgentId = agent.data.Id,
-                //    AgentUserId= registerUser.model.Id,
-                //    RequiresProfileCompletion = true,
-                //    Message= registerUser.message
-                //};
                 return new CreateAgentResponseModel
                 {
                     UserId = args.UserId,
@@ -2500,13 +2244,48 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber
-            });
+            }, args.OnboardedByUserId);
 
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
 
         }
-       
+
+        public async Task<(bool Status, string Message)> ForgotPassword(string username)
+        {
+            var fgPwd = await _onboardingRepository.ForgotPassword(username);
+            if (fgPwd.Status && !string.IsNullOrEmpty(fgPwd.token))
+            {
+                var tokenGeneratedByte = Encoding.UTF8.GetBytes(fgPwd.token);
+
+                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
+                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?email={username}&token={encodedToken}";
+
+                var message = $"Please have your password reset by <a href='{callbackUrl}'>clicking here</a>.";
+
+
+                await _awsService.SendEmailAsync(
+                          _configuration["Official:Email"],
+                          username,
+                          "Password Reset Request",
+                          message,
+                         message );
+
+                return (true, "An Email has been sent to your registered email");
+            }
+            return (false, "Invalid username");
+        }
+
+        public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
+        {
+            var resetPwd = await _onboardingRepository.ResetPassword(model);
+            return resetPwd;
+        }
+        public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
+        {
+            var changePwd = await _onboardingRepository.ChangePassword(model);
+            return changePwd;
+        }
 
     }
 

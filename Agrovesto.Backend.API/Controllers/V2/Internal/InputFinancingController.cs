@@ -29,7 +29,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             _inputFinancingManager = inputFinancingManager;
-            _nomaOSWalletService= nomaOSWalletService;
+            _nomaOSWalletService = nomaOSWalletService;
         }
 
         #region InputFinancing
@@ -59,7 +59,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return StatusCode(400, new Response<string> { Message = ex.Message, Succeeded = false });
             }
         }
-     
+
         [HttpGet("eop")]
         public async Task<IActionResult> GetEopByIdAsync([FromQuery] ListQueryParams args)
         {
@@ -71,9 +71,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 if (args.Id <= 0) return BadRequest(new Response<string> { Message = "EOP Id is required", Succeeded = false });
 
                 var result = await _inputFinancingManager.GetEopByIdAsync(args);
-                return Ok(new Response<EopDto> { 
-                    Succeeded = result != null, 
-                    Data = result, Code = ResponseCodes.Success,
+                return Ok(new Response<EopDto>
+                {
+                    Succeeded = result != null,
+                    Data = result,
+                    Code = ResponseCodes.Success,
 
                     Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
                 });
@@ -96,7 +98,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
                 if (orgError != null) return orgError;
                 args.organizationCode = resolvedOrgCode;
-                
+
                 var result = await _inputFinancingManager.GetEopsAsync(filter, args);
                 return Ok(new Response<PagedResult<EopDto>> { Succeeded = true, Data = result, Code = ResponseCodes.Success, Message = "Successful" });
             }
@@ -110,7 +112,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-       
+
         [HttpPost("create-package")]
         public async Task<IActionResult> CreateManualInputPackageAsync(
             [FromBody] CreateInputPackageRequest model,
@@ -247,7 +249,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ));
             }
 
-            var result = await _inputFinancingManager.ReplacePackageItemAsync(request,args);
+            var result = await _inputFinancingManager.ReplacePackageItemAsync(request, args);
 
 
             return Ok(ApiResponse<bool>.Success(
@@ -271,7 +273,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ));
             }
 
-            var result = await _inputFinancingManager.AddItemToPackageAsync(request,args);
+            var result = await _inputFinancingManager.AddItemToPackageAsync(request, args);
 
             return Ok(ApiResponse<bool>.Success(
                 result,
@@ -303,8 +305,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                ResponseMessages.Successful
             ));
         }
-       
-       
+
+
         [HttpDelete("deactivate-package")]
         public async Task<IActionResult> DeactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
@@ -329,7 +331,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
         [HttpPatch("reactivate-package")]
-        public async Task<IActionResult> ReactivatePackage( [FromQuery] ReplacePackageItemRequestArgs args)
+        public async Task<IActionResult> ReactivatePackage([FromQuery] ReplacePackageItemRequestArgs args)
         {
             var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
@@ -349,7 +351,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                ResponseMessages.Successful
             ));
         }
-     
+
         [HttpPost("package/add-additional-cost")]
         public async Task<IActionResult> AddAdditionalCostToPackageAsync([FromBody] AddAdditionalCostRequest request, [FromQuery] ReplacePackageItemRequestArgs args)
         {
@@ -440,13 +442,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
             return Ok(ApiResponse<string>.Success(
-                 ResponseMessages.Successful,                
+                 ResponseMessages.Successful,
                  ResponseCodes.Success
                  ));
         }
 
 
         #endregion InputFinancing
+
+
 
 
         #region subscriptions
@@ -474,7 +478,32 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                ResponseMessages.Successful,
                  ResponseCodes.Success
             ));
-        }         
+        }
+
+        [HttpPost("remove-subscription")]
+        [Authorize(Roles = "Organization")]
+        public async Task<IActionResult> RemoveSubscriptionAsync(
+        [FromQuery] InputSubscriptionRequestArgs args, CancellationToken cancellationToken)
+        {
+
+
+            args.UserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+            var result = await _inputFinancingManager
+                .RemoveSubscriptionAsync(args, cancellationToken);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
 
         [HttpPost("approve-subscriber")]
         public async Task<IActionResult> ApproveSubscriptionAsync(
@@ -482,7 +511,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromQuery] InputSubscriptionRequestArgs args)
         {
             args.UserId = CurrentUserId;
-            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -498,17 +527,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ResponseCodes.Success
             ));
         }
-          
-        
+
+
         [HttpGet("get-subscribers")]
 
-      [Authorize(Roles = "Organization,Agent")]
+        [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
 
-         
+
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
                     !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
             {
@@ -529,7 +558,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             var result = await _inputFinancingManager
                 .GetSubscriptionsAsync(filter, filter.PageNumber, filter.PageSize);
 
-          
+
             return Ok(ApiResponse<List<SubscriptionDetailDto>>.SuccessPaged(
     result,
     ResponseCodes.Success,
@@ -537,8 +566,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     HttpContext.TraceIdentifier
 ));
         }
-       
-    
+
+
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
@@ -571,7 +600,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetAgentSubscriptionOverview(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-       
+
             filter.UserId = CurrentUserId;
 
             var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
@@ -594,7 +623,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                ResponseMessages.Successful
             ));
         }
-        
+
         [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(
             [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)
@@ -635,7 +664,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return File(fileBytes, contentType);
         }
-        
+
         [HttpGet("review-subscription")]
         public async Task<IActionResult> ReviewSubscription(
             [FromQuery] SubscriptionQueryFilter filter)
@@ -661,7 +690,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ResponseMessages.Successful
                  ));
         }
-       
+
         [HttpGet("subscription-detail")]
         [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionDetail(
@@ -669,7 +698,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             filter.UserId = CurrentUserId;
 
-            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -692,7 +721,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         public async Task<IActionResult> GetSubscriptionDocuments(
             [FromQuery] SubscriptionQueryFilter filter)
         {
-            
+
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -714,25 +743,25 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     result,
                     ResponseCodes.Success,
                     ResponseMessages.Successful
-                    ));    
+                    ));
         }
 
 
         [HttpGet("subscription/commission-letter")]
-        public async Task<IActionResult> DownloadCommissionLetter([FromQuery]long subscriptionId)
+        public async Task<IActionResult> DownloadCommissionLetter([FromQuery] long subscriptionId)
         {
-            
+
             var result =
                 await _inputFinancingManager.DownloadCommissionLetterAsync(subscriptionId);
 
             return File(result.FileBytes, "application/pdf", result.FileName);
         }
-       
+
         [HttpGet("subscription/commitment/payment-receipt")]
-        public async Task<IActionResult> DownloadPaymentReceipt([FromQuery]long subscriptionId)
+        public async Task<IActionResult> DownloadPaymentReceipt([FromQuery] long subscriptionId)
         {
-           
-            string role="";
+
+            string role = "";
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
             {
@@ -744,11 +773,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return File(result.FileContent, "application/pdf", result.FileName);
         }
-       
+
         [HttpGet("subscription/commitment-form")]
         public async Task<IActionResult> DownloadCommitmentLetter([FromQuery] SubscriptionQueryFilter query)
         {
-            if ( string.IsNullOrWhiteSpace(query.BusinessCode))
+            if (string.IsNullOrWhiteSpace(query.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -767,7 +796,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             IFormFile file,
             [FromQuery] InputSubscriptionRequestArgs args)
         {
- args.UserId = CurrentUserId;
+            args.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -796,7 +825,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            [FromBody] RecordCommitmentPaymentRequest request)
         {
             filter.UserId = CurrentUserId;
-            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -834,7 +863,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
-            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -865,7 +894,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     HttpContext.TraceIdentifier
                 ));
             }
-            if ( string.IsNullOrWhiteSpace(args.BusinessCode))
+            if (string.IsNullOrWhiteSpace(args.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -876,7 +905,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 .ApproveInputDisbursementRequestAsync(model, args);
 
             return Ok(ApiResponse<bool>.Success(
-                true,ResponseCodes.Success, ResponseMessages.Successful
+                true, ResponseCodes.Success, ResponseMessages.Successful
             ));
         }
 
@@ -889,7 +918,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromForm] DisburseSubscriptionRequest request,
             [FromQuery] InputSubscriptionRequestArgs filter)
         {
-          
+
             filter.UserId = CurrentUserId;
 
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
@@ -897,7 +926,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
             }
-            if ( string.IsNullOrWhiteSpace(filter.BusinessCode))
+            if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
@@ -909,7 +938,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
             return Ok(ApiResponse<DisburseSubscriptionResult>.Success(
-                    result,ResponseCodes.Success, ResponseMessages.Successful
+                    result, ResponseCodes.Success, ResponseMessages.Successful
                     ));
         }
 
@@ -934,8 +963,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<string>.Success(
                  "Request Processing",
-             
-                 ResponseCodes.Success,ResponseMessages.Successful
+
+                 ResponseCodes.Success, ResponseMessages.Successful
                  ));
         }
         [HttpPost("subscription/record-repayment")]
@@ -943,7 +972,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
    [FromQuery] InputSubscriptionRequestArgs filter,
    [FromBody] RecordRepaymentRequest request)
         {
-                        filter.UserId = CurrentUserId;
+            filter.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -957,7 +986,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<string>.Success(
                  "Request Processed",
-                 ResponseCodes.Success,ResponseMessages.Successful
+                 ResponseCodes.Success, ResponseMessages.Successful
                  ));
         }
 
@@ -1020,7 +1049,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(ApiResponse<List<RepaymentLedgerEntryDto>>.SuccessPaged(
                 result,
-                ResponseCodes.Success,ResponseMessages.Successful
+                ResponseCodes.Success, ResponseMessages.Successful
              ));
         }
 
@@ -1054,7 +1083,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return $"{status}_subscriptions_{date}.{extension}";
         }
-        #endregion
-      
+        #endregion subscriptions
+
     }
 }

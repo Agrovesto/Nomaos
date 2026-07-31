@@ -48,18 +48,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     IFormFile file,
     [FromQuery] OnBoardingArgs args)
         {
-            if (file is null || file.Length == 0)
-                return Error("FILE_MISSING", "Please choose a file to upload before submitting.");
-
-            if (file.Length > MaxFileSizeBytes)
-                return Error("FILE_TOO_LARGE",
-                    $"That file is too large. Please upload a file smaller than {MaxFileSizeBytes / (1024 * 1024)} MB.");
-
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!AllowedExtensions.Contains(extension))
-                return Error("FILE_TYPE_INVALID",
-                    "We couldn't read that file. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
-
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 return Error("BUSINESS_CODE_REQUIRED", "A business code is required to upload farmers.");
 
@@ -69,48 +57,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Error("UNAUTHORIZED", "Your session has expired. Please sign in again and retry.",
                     StatusCodes.Status401Unauthorized);
 
+
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
             args.organizationCode = resolvedOrgCode;
             await EnrichCooperativeAsync(args);
-            List<BulkFarmerRowDto> rows;
-            try
-            {
-                await using var stream = file.OpenReadStream();
-                rows = BulkFarmerCsvParser.Parse(stream, file.FileName);
-            }
-            catch (NotSupportedException ex)
-            {
-                _logger.LogWarning(ex, "Unsupported file type uploaded: {FileName}", file.FileName);
-                return Error("FILE_TYPE_INVALID", "We couldn't read that file format. Please upload a CSV or Excel file.");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to parse bulk upload file: {FileName}", file.FileName);
-                return Error("FILE_PARSE_ERROR",
-                    "We couldn't read this file. Please check that it's a valid CSV/Excel export and try again.");
-            }
+            return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
 
-            if (rows.Count == 0)
-                return Error("FILE_EMPTY", "This file doesn't contain any farmer records to upload.");
-
-            try
-            {
-                var result = await _bulkFarmerUploadService.ProcessAsync(rows, args);
-
-                int statusCode = result.Failed > 0
-                    ? StatusCodes.Status207MultiStatus
-                    : StatusCodes.Status200OK;
-
-                return StatusCode(statusCode, result);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Bulk farmer upload processing failed for business {BusinessCode}", args.businessCode);
-                return Error("UPLOAD_PROCESSING_FAILED",
-                    "Something went wrong while processing your upload. Please try again, and contact support if the problem continues.",
-                    StatusCodes.Status500InternalServerError);
-            }
+           
         }
        
         
@@ -140,7 +94,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new Response<MemberShipUpdateResultDto>()
                 {
                     Code = ResponseCodes.Success,
-                    Succeeded = result.Success,
+                    Succeeded = true,
                     Message = result.Message,
                     Data = result
                 });
@@ -189,7 +143,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = result,
 
                     Message = result != null ? ResponseMessages.Successful : ResponseMessages.NotFound,
-                    Succeeded = result != null ? true : false,
+                    Succeeded = true,
 
                     Code = result != null ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
@@ -298,7 +252,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -350,7 +304,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,
@@ -644,7 +598,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     Data = result.Data,
                     Message = result.Message,
-                    Succeeded = result.Succeeded,
+                    Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,
                     PageSize = 10,

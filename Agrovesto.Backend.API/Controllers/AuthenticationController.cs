@@ -262,7 +262,7 @@ namespace Agrovesto.Backend.API.Controllers
 
             try
             {
-                model.UserName = CurrentUserEmail;
+                model.Email = CurrentUserEmail;
                 var resetPasswordRequest = await _authenticationRepository.ChangePassword(model);
                 if (resetPasswordRequest.Status)
                 {

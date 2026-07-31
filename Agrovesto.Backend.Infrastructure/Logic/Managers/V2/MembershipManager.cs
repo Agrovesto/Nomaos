@@ -399,7 +399,6 @@ OnboardingRequestModel user,
             var profile = await _membershipRepository.GetMembershipDetailByUserId(query.UserId);
             if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
 
-            if (profile == null) { throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Membership Record not found"); }
             // Agents linked to this membership
             return await _membershipRepository.GetAgentsByMembership(profile.Id, query);
 
@@ -418,7 +417,6 @@ OnboardingRequestModel user,
         {
             try
             {
-                query.PageNumber = (query.PageNumber - 1) * query.PageSize;
                 var agent = await _agentRepository.GetAgentDetailByUserId(userId);
 
                 if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
