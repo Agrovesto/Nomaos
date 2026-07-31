@@ -3,10 +3,10 @@ name: CI - PR Quality + Deploy
 on:
   pull_request:
     branches:
-      - staging
+      - dev
   push:
     branches:
-      - staging
+      - dev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -80,14 +80,21 @@ jobs:
       # ✅ Run tests with coverage (for PR feedback)
       - name: Run tests
         run: |
-          dotnet test ${{ env.SOLUTION_PATH }} \
+          dotnet test "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
             --no-build \
             --verbosity normal \
-            --logger \"trx;LogFileName=test-results.trx\" \
-            --collect:"XPlat Code Coverage;Format=opencover" \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect "XPlat Code Coverage;Format=opencover" \
             --results-directory ./TestResults
-        continue-on-error: true
+        continue-on-error: false
+
+      # ✅ Debug: confirm files exist before reporter runs
+      - name: List TestResults
+        if: always()
+        run: |
+          echo "=== TestResults directory ==="
+          find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
 
       # ✅ Publish test results
       - name: Publish test results
@@ -97,6 +104,7 @@ jobs:
           name: Test Results
           path: '**/test-results.trx'
           reporter: dotnet-trx
+          fail-on-empty: true
 
       # ✅ Upload coverage report as artifact (optional, for debugging)
       - name: Upload coverage report
@@ -105,15 +113,15 @@ jobs:
         with:
           name: coverage-report
           path: TestResults/**/coverage.opencover.xml
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   # ============================================================
-  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
+  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO Dev)
   # ============================================================
   sonar-and-deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    environment: staging
+    environment: dev
 
     steps:
       - name: Checkout
@@ -250,11 +258,11 @@ jobs:
       # ============================================================
       - name: Test with Coverage
         run: |
-          dotnet test ${{ env.SOLUTION_PATH }} \
+          dotnet test "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
             --no-build \
-            --logger "trx" \
-            --collect:"XPlat Code Coverage;Format=opencover" \
+            --logger "trx;LogFileName=test-results.trx" \
+            --collect "XPlat Code Coverage;Format=opencover" \
             --results-directory ./TestResults
 
       - name: Verify Coverage Files
@@ -420,5 +428,5 @@ jobs:
           echo "📦 Version: ${{ env.VERSION }}"
           echo "🔖 Commit: ${{ env.COMMIT_SHA }}"
           echo "🕐 Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "🌍 Environment: Staging"
+          echo "🌍 Environment: Dev"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

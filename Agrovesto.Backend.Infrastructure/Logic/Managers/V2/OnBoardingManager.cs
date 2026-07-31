@@ -652,11 +652,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
                         "Invalid email address format.");
                 }
-
-                if (string.IsNullOrWhiteSpace(model.Password) && string.IsNullOrWhiteSpace(onboardedByUserid))
+                if (string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
-                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                        "Password is required when signing up with email.");
+                    if (string.IsNullOrWhiteSpace(model.Password))
+                    {
+                        throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
+                            "Password is required when signing up with email.");
+                    }
                 }
             }
 
@@ -674,10 +676,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         "PIN is required when signing up with phone number.");
                   
                 }
-                if (!Regex.IsMatch(model.Pin, @"^\d{4}$") && string.IsNullOrWhiteSpace(onboardedByUserid))
+                if (string.IsNullOrWhiteSpace(onboardedByUserid))
                 {
-                    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-                        "PIN must be exactly 4 digits.");
+                    if (!string.IsNullOrEmpty(model.Pin) && !Regex.IsMatch(model.Pin, @"^\d{4}$"))
+                    {
+                        throw new BaseException(
+                            Core.Enums.ExceptionType.BAD_REQUEST,
+                            "PIN must be exactly 4 digits.");
+                    }
                 }
 
             }

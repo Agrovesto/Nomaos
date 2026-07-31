@@ -171,10 +171,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -268,10 +268,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -363,10 +363,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -422,10 +422,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -481,10 +481,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -540,10 +540,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -598,10 +598,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -698,10 +698,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -771,10 +771,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -825,10 +825,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -921,10 +921,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -982,10 +982,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1014,10 +1014,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1043,10 +1043,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1072,10 +1072,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1100,10 +1100,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1154,10 +1154,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1206,10 +1206,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1257,10 +1257,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
@@ -1588,10 +1588,10 @@ namespace Agrovesto.Backend.API.Controllers
                     Message = "Validation failed.",
                     Succeeded = false,
                     Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
+                        .Where(ms => ms.Value!.Errors.Any())
                         .ToDictionary(
                             ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
                         )
                 });
             }
