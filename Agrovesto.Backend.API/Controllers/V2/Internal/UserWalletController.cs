@@ -1,15 +1,11 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
-using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Payment;
-using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
-using Microsoft.AspNetCore.Components.Routing;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -39,7 +35,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<UserWalletResponseModel>>()
                 {
                     Data = result.Data,
-                    Message = result.Count > 0 ? "Successful" : "No Record",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
 
@@ -77,7 +73,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return Ok(new PagedListResponse<List<FarmerTransactionDto>>()
                 {
                     Data = result.Data,
-                    Message = result.Count > 0 ? "Successful" : "Failed",
+                    Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Succeeded = true,
                     Count = result.Count,
                     PageNumber = query.PageNumber,

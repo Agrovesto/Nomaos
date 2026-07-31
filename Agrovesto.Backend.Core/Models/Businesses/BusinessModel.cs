@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.Models.Common.Constants;
+using Agrovesto.Backend.Core.Enums.Wallet;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
@@ -80,6 +81,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? LocationStatus { get; set; }
         public string? TransactionReference { get; set; }
         public DateTimeOffset? TransactionDate { get; set; }
+        public WalletTransactionType? TransactionType { get; set; }
     }
     public class BusinessRegistrationArgs
     {
