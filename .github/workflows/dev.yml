@@ -3,10 +3,10 @@ name: CI - PR Quality + Deploy
 on:
   pull_request:
     branches:
-      - staging
+      - dev
   push:
     branches:
-      - staging
+      - dev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -87,7 +87,7 @@ jobs:
             --logger \"trx;LogFileName=test-results.trx\" \
             --collect:"XPlat Code Coverage;Format=opencover" \
             --results-directory ./TestResults
-        continue-on-error: true
+        continue-on-error: false
 
       # ✅ Publish test results
       - name: Publish test results
@@ -108,12 +108,12 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================================
-  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
+  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO Dev)
   # ============================================================
   sonar-and-deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/staging'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    environment: staging
+    environment: dev
 
     steps:
       - name: Checkout
@@ -420,5 +420,5 @@ jobs:
           echo "📦 Version: ${{ env.VERSION }}"
           echo "🔖 Commit: ${{ env.COMMIT_SHA }}"
           echo "🕐 Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "🌍 Environment: Staging"
+          echo "🌍 Environment: Dev"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

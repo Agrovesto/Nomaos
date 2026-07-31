@@ -2,7 +2,7 @@
 # on:
 #   push:
 #     branches:
-#       # - devops
+#       # - dev
 # env:
 #   AWS_REGION: eu-west-1
 #   ECR_REPOSITORY: nomaos

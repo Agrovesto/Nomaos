@@ -3,12 +3,12 @@
 
 # on:
 #   # pull_request:
-#     # branches: [master, staging]
+#     # branches: [master, staging, dev]
 #     types: [opened, synchronize, reopened, ready_for_review]
 #     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
 #  # push:
-#     # branches: [master, staging]
+#     # branches: [master, staging, dev]
 #     paths-ignore: ["**.md", "docs/**", ".gitignore", "LICENSE", ".editorconfig"]
 
 #   schedule:
