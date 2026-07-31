@@ -275,7 +275,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 _log.LogError($"Failed to send SMS to {formattedDestination}. Error: {ex.Message}");
             }
         }
-        private string FormatPhoneNumberToInternational(string phoneNumber, string countryCode)
+        private static string FormatPhoneNumberToInternational(string phoneNumber, string countryCode)
         {
             if (string.IsNullOrWhiteSpace(phoneNumber))
                 throw new BaseException(
