@@ -192,4 +192,15 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         Not_Live, Beginner, Consolidated
     }
+
+    public class BusinessClaimModel : Model
+    {
+        public long BusinessId { get; set; }
+        
+        public string? BusinessCode { get; set; }
+
+        public string BusinessName { get; set; }
+
+    }
+
 }

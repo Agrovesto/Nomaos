@@ -42,7 +42,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return ValidationProblemResponse();
 
             args.OnboardedByUserId = CurrentUserId;
-            NormalizeOrganizationCode(args);
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
 
             if (CurrentUserId != null && CurrentUserRole != args.userType)
                 await EnrichArgsByRoleAsync(args);
@@ -155,7 +157,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     var response = new Response<TokenModel>
                     {
                         Code = ResponseCodes.Success,
-                        Succeeded = createUser.Status,
+                        Succeeded = true,
                         Message = createUser.Message,
                         Data = createUser.Response
                     };
@@ -251,6 +253,87 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 args.AgentIds.Add(agent.Id);
         }
 
+   
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+                var request = await _onBoardingManager.ForgotPassword(model.Username);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(PasswordResetModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+        var resetPasswordRequest = await _onBoardingManager.ResetPassword(model);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
+        [HttpPost("change-password")]
+        public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+                model.Email = CurrentUserEmail;
+                var resetPasswordRequest = await _onBoardingManager.ChangePassword(model);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
 
 
 

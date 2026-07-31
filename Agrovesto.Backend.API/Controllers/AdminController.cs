@@ -1,31 +1,32 @@
-﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
-using Agrovesto.Backend.Core.Models.Businesses;
-using Agrovesto.Backend.Infrastructure.Entities.Businesses;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using static Agrovesto.Backend.Core.Models.Common.Constants;
-using System.ComponentModel.DataAnnotations;
-using Agrovesto.Backend.Core.Models.Common;
-using Agrovesto.Backend.Core.CoreUtils;
-using static Agrovesto.Backend.Core.CoreUtils.Constants;
-using Microsoft.AspNetCore.Http.HttpResults;
-using Agrovesto.Backend.Infrastructure.Entities.Common;
-using Agrovesto.Backend.Core.Interfaces.Managers;
+﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
-using Agrovesto.Backend.Infrastructure.Logic.Managers;
+using Agrovesto.Backend.Core.Interfaces.Managers;
+using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
-using Microsoft.AspNetCore.Authorization;
+using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
-using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
+using static Agrovesto.Backend.Core.Models.Common.Constants;
 
 namespace Agrovesto.Backend.API.Controllers
 {
     [Route("api/admin")]
     //[ApiController]
-    //[ApiExplorerSettings(IgnoreApi = true)]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class AdminController : BaseController
     {
         private readonly IAuthenticationRepository _authenticationRepository;
@@ -970,21 +971,27 @@ namespace Agrovesto.Backend.API.Controllers
             });
 
         }
-
         [HttpGet("wallets/{id}")]
-        [ProducesResponseType(typeof(Response<WalletProviderModel>), 200)]
-        [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
-        [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
-
-        public async Task<IActionResult> GetById(long id)
+        public async Task<IActionResult> GetById(
+            [FromRoute][Range(1, long.MaxValue, ErrorMessage = "id must be a positive number.")] long id)
         {
-            var result = await _walletProvider.Get(id);
-            return Ok(new Response<WalletProviderModel>()
+            if (!ModelState.IsValid)
             {
-                Succeeded = true,
-                Data = result
-            });
+                return BadRequest(new Response<Dictionary<string, string>>
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
 
+            var result = await _walletProvider.Get(id);
+            return Ok(new Response<WalletProviderModel> { Succeeded = true, Data = result });
         }
 
         /// <summary>
@@ -998,8 +1005,22 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<object>), 400)]
         [ProducesResponseType(typeof(Response<object>), 422)]
         [ProducesResponseType(typeof(Response<object>), 500)]
-        public async Task<IActionResult> DisableWalletProvider(long id)
+        public async Task<IActionResult> DisableWalletProvider([FromRoute][Range(1, long.MaxValue, ErrorMessage = "id must be a positive number.")] long id)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             bool result = await _walletProvider.DisableProvider(id);
             return Ok(new Response<object>()
             {
@@ -1013,8 +1034,22 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<object>), 400)]
         [ProducesResponseType(typeof(Response<object>), 422)]
         [ProducesResponseType(typeof(Response<object>), 500)]
-        public async Task<IActionResult> EnableWalletProvider(long id)
+        public async Task<IActionResult> EnableWalletProvider([FromRoute][Range(1, long.MaxValue, ErrorMessage = "id must be a positive number.")] long id)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             bool result = await _walletProvider.EnableProvider(id);
             return Ok(new Response<object>()
             {
@@ -1027,9 +1062,23 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<object>), 400)]
         [ProducesResponseType(typeof(Response<object>), 422)]
         [ProducesResponseType(typeof(Response<object>), 500)]
-        public async Task<IActionResult> EnableWalletProvider(string businessCode, [FromQuery]long id,
+        public async Task<IActionResult> EnableWalletProvider([FromRoute][Required(ErrorMessage = "business code is required.")] string businessCode, [FromQuery]long id,
             [FromBody] WalletProviderParameterModel[]? model, [FromQuery] bool isDefault =false)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
             var result = await _walletProvider.EnableProviderForBusiness(businessCode, id, model, isDefault);
             return Ok(new Response<BusinessWalletProviderModel>()
             {
@@ -1042,8 +1091,23 @@ namespace Agrovesto.Backend.API.Controllers
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 400)]
         [ProducesResponseType(typeof(Response<WalletProviderModel>), 500)]
 
-        public async Task<IActionResult> GetWalletParameters(long id, string Env)
+        public async Task<IActionResult> GetWalletParameters([FromRoute][Range(1, long.MaxValue, ErrorMessage = "id must be a positive number.")] long id, [FromRoute][Required(ErrorMessage = "Environment is required.")] string Env)
         {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new Response<Dictionary<string, string>>
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
             var result = await _walletProvider.GetParametersByProvider(id, Env);
             return Ok(new Response<WalletProviderParameterModel[]>()
             {

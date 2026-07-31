@@ -736,7 +736,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return cooperative.Map();
         }
-        public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(
+        public async Task<PagedListResponse<List<AgentMembershipDto>>> 
+            GetAgentsByMembership(
      long membershipId,
      ListQueryParams query)
         {

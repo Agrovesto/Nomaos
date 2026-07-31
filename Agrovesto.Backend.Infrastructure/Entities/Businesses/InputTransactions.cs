@@ -311,12 +311,12 @@ RepaymentTransaction
 
         public DateTimeOffset? DisbursedOn { get; set; }
         public DateTimeOffset? CompletedOn { get; set; } //payment completed on
-        public RiskCategory RiskCategory { get; set; }
+        public RiskCategory RiskCategory { get; set; } = RiskCategory.Low;
         public DateTimeOffset? LastOverdueDetectedOn { get; set; }
 
         public int OverdueCount { get; set; }
 
-        public RiskCategory RiskLevel { get; set; }
+        public RiskCategory RiskLevel { get; set; } = RiskCategory.Low;
 
         public string BusinessCode { get; set; }
         public ICollection<RepaymentSchedule> RepaymentSchedules { get; set; }
