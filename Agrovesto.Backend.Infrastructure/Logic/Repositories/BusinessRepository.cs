@@ -85,7 +85,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                   //  x.OrganizationCode == orgModel.OrganizationCode ||
                     //x.CompanyName == orgModel.CompanyName
                     );
-
+            if (string.IsNullOrEmpty(orgExist.OrganizationCode))
+            {
+               orgExist.OrganizationCode= await GenerateOrganizationCodeAsync(orgModel.CompanyName);
+            }
             if (orgExist != null)
             {
                 UpdateOrganizationFields(orgExist, orgModel);
