@@ -68,9 +68,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-          # ✅ Built-in NuGet caching via setup-dotnet (faster than manual cache)
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
 
       - name: ⚙️ Validate SDK
         id: sdk-info
