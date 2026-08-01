@@ -104,21 +104,13 @@ jobs:
       # ─────────────────────────────────────────────
       # 🏗️ BUILD (incremental, parallel MSBuild)
       # ─────────────────────────────────────────────
-      - name: 🏗️ Build solution
-        id: build
+      - name: Build
         run: |
-          START=$(date +%s)
-
           dotnet build "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
-            --no-restore \
-            --verbosity quiet \
-            -p:ContinuousIntegrationBuild=true \
-            -p:TreatWarningsAsErrors=true \
-            -p:Deterministic=true \
-            -maxcpucount \
-            2>&1 | tee build.log
-
+            --no-restore
+            
+          START=$(date +%s)
           EXIT_CODE=${PIPESTATUS[0]}
           END=$(date +%s)
           ELAPSED=$((END - START))
