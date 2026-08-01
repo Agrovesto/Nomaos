@@ -2,11 +2,9 @@ name: CI - PR Quality + Deploy
 
 on:
   pull_request:
-    branches:
-      - dev
+    branches: [dev]
   push:
-    branches:
-      - dev
+    branches: [dev]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -74,28 +72,23 @@ jobs:
           cache: true
           cache-dependency-path: '**/packages.lock.json'
 
-      - name: Configure .NET SDK
+      - name: ⚙️ Validate SDK
+        id: sdk-info
         run: |
-          cat > global.json << 'EOF'
-          {
-            "sdk": {
-              "version": "${{ env.DOTNET_VERSION }}",
-              "rollForward": "latestFeature"
-            }
-          }
-          EOF
-          dotnet --version
+          SDK=$(dotnet --version)
+          echo "sdk_version=$SDK" >> "$GITHUB_OUTPUT"
+          echo "### ⚙️ SDK Info" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SDK Version | \`$SDK\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Runner OS | \`${{ runner.os }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit SHA | \`${{ env.COMMIT_SHA }}\` |" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-${{ hashFiles('**/*.sln') }}
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
+      # ─────────────────────────────────────────────
+      # 📦 RESTORE (deduplicated, parallelized by MSBuild)
+      # ─────────────────────────────────────────────
+      - name: 📦 Restore dependencies
+        id: restore
         run: |
           START=$(date +%s)
 
@@ -103,50 +96,172 @@ jobs:
             --verbosity quiet \
             /p:ContinuousIntegrationBuild=true
 
-      - name: Build
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+
+          echo "### 📦 Restore" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Result | Duration |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|----------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Success | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ─────────────────────────────────────────────
+      # 🏗️ BUILD (incremental, parallel MSBuild)
+      # ─────────────────────────────────────────────
+      - name: 🏗️ Build solution
+        id: build
         run: |
+          START=$(date +%s)
+
           dotnet build "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
-            --no-restore
+            --no-restore \
+            --verbosity quiet \
+            -p:ContinuousIntegrationBuild=true \
+            -p:TreatWarningsAsErrors=true \
+            -p:Deterministic=true \
+            -maxcpucount \
+            2>&1 | tee build.log
 
-      - name: Run tests
+          EXIT_CODE=${PIPESTATUS[0]}
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+
+          # ── Summarise build warnings/errors ──
+          WARNINGS=$(grep -c ": warning " build.log || true)
+          ERRORS=$(grep -c ": error " build.log || true)
+
+          echo "### 🏗️ Build" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | $([ $EXIT_CODE -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Warnings | ⚠️ ${WARNINGS} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Errors | ❌ ${ERRORS} |" >> "$GITHUB_STEP_SUMMARY"
+
+          exit $EXIT_CODE
+
+      # ─────────────────────────────────────────────
+      # 🧪 TEST + COVERAGE (parallel test execution)
+      # ─────────────────────────────────────────────
+      - name: 🧪 Run tests with coverage
+        id: test
         run: |
+          START=$(date +%s)
+
           dotnet test "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
             --no-build \
             --verbosity normal \
             --logger "trx;LogFileName=test-results.trx" \
-            --collect "XPlat Code Coverage;Format=opencover" \
-            --results-directory ./TestResults
+            --logger "console;verbosity=detailed" \
+            --collect "XPlat Code Coverage;Format=opencover;ExcludeByAttribute=GeneratedCodeAttribute,ExcludeFromCodeCoverageAttribute" \
+            --results-directory ./TestResults \
+            -p:ParallelizeTestCollections=true \
+            -p:MaxCpuCount=-1 \
+            2>&1 | tee test.log
 
-      - name: List TestResults
+          EXIT_CODE=${PIPESTATUS[0]}
+          END=$(date +%s)
+          ELAPSED=$((END - START))
+
+          # ── Parse test counts from log ──
+          PASSED=$(grep -oP 'Passed:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+          FAILED=$(grep -oP 'Failed:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+          SKIPPED=$(grep -oP 'Skipped:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+          TOTAL=$(grep -oP 'Total:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+
+          echo "### 🧪 Test Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Passed | $PASSED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ❌ Failed | $FAILED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏭️ Skipped | $SKIPPED |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📊 Total | $TOTAL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏱️ Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
+
+          exit $EXIT_CODE
+
+      # ─────────────────────────────────────────────
+      # 📊 COVERAGE SUMMARY
+      # ─────────────────────────────────────────────
+      - name: 📊 Parse coverage summary
+        id: coverage-summary
         if: always()
         run: |
-          echo "=== TestResults directory ==="
-          find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
+          COVERAGE_FILE=$(find ./TestResults -name "coverage.opencover.xml" | head -1)
 
-      - name: Publish test results
+          if [ -z "$COVERAGE_FILE" ]; then
+            echo "⚠️ No coverage file found"
+            echo "line_coverage=N/A" >> "$GITHUB_OUTPUT"
+          else
+            # ── Extract line coverage from opencover XML ──
+            LINE_RATE=$(grep -oP 'sequenceCoverage="\K[0-9.]+' "$COVERAGE_FILE" | head -1 || echo "0")
+            BRANCH_RATE=$(grep -oP 'branchCoverage="\K[0-9.]+' "$COVERAGE_FILE" | head -1 || echo "0")
+
+            echo "line_coverage=${LINE_RATE}" >> "$GITHUB_OUTPUT"
+
+            echo "### 📊 Code Coverage" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Type | Coverage |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|------|----------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| 📝 Line/Sequence | ${LINE_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| 🌿 Branch | ${BRANCH_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ─────────────────────────────────────────────
+      # 📋 PUBLISH TEST RESULTS
+      # ─────────────────────────────────────────────
+      - name: 📋 Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Test Results
-          # ✅ Match the exact filename we set in --logger
+          name: 🧪 Unit Test Report
           path: '**/test-results.trx'
           reporter: dotnet-trx
           fail-on-empty: true
+          fail-on-error: true
 
-      - name: Upload coverage report
+      # ─────────────────────────────────────────────
+      # 📤 ARTIFACTS
+      # ─────────────────────────────────────────────
+      - name: 📤 Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: TestResults/**/coverage.opencover.xml
+          name: coverage-report-pr-${{ github.event.pull_request.number }}
+          path: |
+            TestResults/**/coverage.opencover.xml
+            build.log
+            test.log
+          retention-days: 7
           if-no-files-found: warn
+
+      # ─────────────────────────────────────────────
+      # ✅ FINAL GATE SUMMARY
+      # ─────────────────────────────────────────────
+      - name: ✅ PR Quality Gate Summary
+        if: always()
+        run: |
+          BUILD_STATUS="${{ steps.build.outcome }}"
+          TEST_STATUS="${{ steps.test.outcome }}"
+          COVERAGE="${{ steps.coverage-summary.outputs.line_coverage }}"
+
+          STATUS_ICON() { [ "$1" = "success" ] && echo "✅" || echo "❌"; }
+
+          echo "## 🎯 PR Quality Gate Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🏗️ Build | $(STATUS_ICON $BUILD_STATUS) ${BUILD_STATUS^} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🧪 Tests | $(STATUS_ICON $TEST_STATUS) ${TEST_STATUS^} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📊 Coverage | ${COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> PR #${{ github.event.pull_request.number }} · \`${{ env.COMMIT_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================
   # ✅ JOB 2A — SONARQUBE ANALYSIS (parallel with build-for-deploy)
   # ============================================================
-  sonar-and-deploy:
+  sonar-analysis:
+    name: 🔍 SonarQube Analysis
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -231,21 +346,15 @@ jobs:
           dotnet test "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
             --no-build \
+            --verbosity normal \
             --logger "trx;LogFileName=test-results.trx" \
             --collect "XPlat Code Coverage;Format=opencover" \
-            --results-directory ./TestResults
+            --results-directory ./TestResults \
+            -p:ParallelizeTestCollections=true \
+            -p:MaxCpuCount=-1
 
-      - name: Verify Coverage Files
-        if: always()
-        run: |
-          echo "===== Coverage Files ====="
-          find TestResults -name "*.opencover.xml" 2>/dev/null || echo "⚠️ No coverage files found"
-          find TestResults -name "*.trx" 2>/dev/null || echo "⚠️ No TRX files found"
-
-      # ============================================================
-      # 🔍 SONAR END
-      # ============================================================
-      - name: End SonarQube Analysis
+      # ── Sonar END ──
+      - name: 🔍 SonarQube — End
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: |
