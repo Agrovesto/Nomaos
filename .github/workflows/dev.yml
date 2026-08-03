@@ -85,6 +85,14 @@ jobs:
             --logger "trx;LogFileName=test-results.trx" \
             --collect "XPlat Code Coverage;Format=opencover" \
             --results-directory ./TestResults
+        continue-on-error: false
+
+      # ✅ Debug: confirm files exist before reporter runs
+      - name: List TestResults
+        if: always()
+        run: |
+          echo "=== TestResults directory ==="
+          find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
 
       - name: List TestResults
         if: always()
@@ -111,12 +119,12 @@ jobs:
           if-no-files-found: warn
 
   # ============================================================
-  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO STAGING)
+  # ✅ JOB 2 — SONARQUBE ANALYSIS + DEPLOY (ONLY ON PUSH TO Dev)
   # ============================================================
   sonar-and-deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
-    environment: staging
+    environment: dev
 
     steps:
       - name: Checkout
@@ -423,5 +431,5 @@ jobs:
           echo "📦 Version: ${{ env.VERSION }}"
           echo "🔖 Commit: ${{ env.COMMIT_SHA }}"
           echo "🕐 Deployed: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-          echo "🌍 Environment: Staging"
+          echo "🌍 Environment: Dev"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
