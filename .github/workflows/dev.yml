@@ -43,7 +43,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # ✅ Create global.json once (cached by setup-dotnet)
       - name: Configure .NET SDK
         run: |
           cat > global.json << 'EOF'
@@ -56,7 +55,6 @@ jobs:
           EOF
           dotnet --version
 
-      # ✅ Optimized NuGet caching with solution-level hash
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
@@ -66,18 +64,18 @@ jobs:
             nuget-${{ runner.os }}-${{ hashFiles('**/*.sln') }}
             nuget-${{ runner.os }}-
 
-      # ✅ Solution-level restore (faster than per-project)
       - name: Restore dependencies
         run: |
           dotnet restore ${{ env.SOLUTION_PATH }} \
             --verbosity normal \
             /warnaserror:NU1603  # ✅ Fail CI if NuGet has to resolve a different version
 
-      # ✅ Build entire solution
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: |
+          dotnet build "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-restore
 
-      # ✅ Run tests with coverage (for PR feedback)
       - name: Run tests
         run: |
           dotnet test "${{ env.SOLUTION_PATH }}" \
@@ -96,17 +94,22 @@ jobs:
           echo "=== TestResults directory ==="
           find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
 
-      # ✅ Publish test results
+      - name: List TestResults
+        if: always()
+        run: |
+          echo "=== TestResults directory ==="
+          find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
+
       - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Test Results
+          # ✅ Match the exact filename we set in --logger
           path: '**/test-results.trx'
           reporter: dotnet-trx
           fail-on-empty: true
 
-      # ✅ Upload coverage report as artifact (optional, for debugging)
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
