@@ -10,9 +10,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# ============================================================
-# 🌍 GLOBAL ENVIRONMENT
-# ============================================================
 env:
   DOTNET_VERSION: 8.0.x
   SOLUTION_PATH: Agrovesto.Backend.sln
@@ -20,23 +17,18 @@ env:
   SONAR_PROJECT_KEY: Agrovesto.Backend.API
   PUBLISH_DIR: ${{ github.workspace }}/publish
   COMMIT_SHA: ${{ github.sha }}
-  # ✅ Disable .NET telemetry & logo for faster startup
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  # ✅ Deterministic builds
   DOTNET_DETERMINISTIC: true
 
-# ============================================================
-# 📋 REUSABLE DEFAULTS
-# ============================================================
 defaults:
   run:
     shell: bash
 
 jobs:
   # ============================================================
-  # ✅ JOB 1 — PR QUALITY GATE (parallel: lint + build + test)
+  # ✅ JOB 1 — PR QUALITY GATE
   # ============================================================
   pr-quality-check:
     name: 🔍 PR Quality Gate
@@ -44,90 +36,99 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    strategy:
-      fail-fast: true
-
     outputs:
       test-outcome: ${{ steps.test.outcome }}
       build-outcome: ${{ steps.build.outcome }}
       coverage-pct: ${{ steps.coverage-summary.outputs.line_coverage }}
 
     steps:
-      # ─────────────────────────────────────────────
-      # 📥 CHECKOUT
-      # ─────────────────────────────────────────────
       - name: 📥 Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ─────────────────────────────────────────────
-      # ⚙️ SETUP
-      # ─────────────────────────────────────────────
+      # ── Pin the SDK version BEFORE setup-dotnet so the runner
+      #    honours it instead of defaulting to the pre-installed SDK ──
+      - name: 📌 Pin .NET SDK version
+        run: |
+          # Resolve the exact latest 8.x patch already installed, or let
+          # setup-dotnet install it. Using "latestPatch" avoids SDK 10 takeover.
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.0",
+              "rollForward": "latestPatch"
+            }
+          }
+          EOF
+
       - name: ⚙️ Setup .NET ${{ env.DOTNET_VERSION }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+          # Do NOT use built-in cache here; we manage it manually below
+          # so we can key on all lock files across the solution.
 
-      - name: Configure .NET SDK
+      - name: 🔍 Verify SDK version
         run: |
-          cat > global.json << 'EOF'
-          {
-            "sdk": {
-              "version": "${{ env.DOTNET_VERSION }}",
-              "rollForward": "latestFeature"
-            }
-          }
-          EOF
-          dotnet --version
+          SDK=$(dotnet --version)
+          echo "Active SDK: $SDK"
+          if [[ "$SDK" == 10.* ]]; then
+            echo "❌ SDK 10 is active — global.json pin failed."
+            exit 1
+          fi
 
-      - name: Cache NuGet packages
+      # ── NuGet cache: key on every .csproj + .sln so a single changed
+      #    project doesn't share stale packages ──
+      - name: 💾 Cache NuGet packages
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
+          key: >-
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            ${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
           restore-keys: |
-            nuget-${{ runner.os }}-${{ hashFiles('**/*.sln') }}
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
             nuget-${{ runner.os }}-
 
-      - name: Restore dependencies
+      # ── Restore MUST run (and succeed) before any --no-restore step ──
+      - name: 📦 Restore dependencies
+        run: |
+          dotnet restore "${{ env.SOLUTION_PATH }}" \
+            --verbosity quiet \
+            /p:ContinuousIntegrationBuild=true
+
+      # ── Build and capture log for warning/error counts ──
+      - name: 🏗️ Build
+        id: build
         run: |
           START=$(date +%s)
 
-      - name: Build
-        run: |
           dotnet build "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
-            --no-restore
+            --no-restore \
+            --verbosity quiet \
+            2>&1 | tee build.log
 
-      - name: Run tests
-        run: |
-          dotnet build "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-restore
-            
-          START=$(date +%s)
           EXIT_CODE=${PIPESTATUS[0]}
           END=$(date +%s)
           ELAPSED=$((END - START))
 
-          # ── Summarise build warnings/errors ──
           WARNINGS=$(grep -c ": warning " build.log || true)
-          ERRORS=$(grep -c ": error " build.log || true)
+          ERRORS=$(grep -c ": error "   build.log || true)
 
           echo "### 🏗️ Build" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Status | $([ $EXIT_CODE -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Warnings | ⚠️ ${WARNINGS} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Errors | ❌ ${ERRORS} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |"   >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|"   >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | $([ $EXIT_CODE -eq 0 ] && echo '✅ Success' || echo '❌ Failed') |" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "| Duration | ${ELAPSED}s |"       >> "$GITHUB_STEP_SUMMARY"
+          echo "| Warnings | ⚠️ ${WARNINGS} |"    >> "$GITHUB_STEP_SUMMARY"
+          echo "| Errors   | ❌ ${ERRORS} |"      >> "$GITHUB_STEP_SUMMARY"
 
           exit $EXIT_CODE
 
-      # ─────────────────────────────────────────────
-      # 🧪 TEST + COVERAGE (parallel test execution)
-      # ─────────────────────────────────────────────
+      # ── Tests: --no-build because we already built above ──
       - name: 🧪 Run tests with coverage
         id: test
         run: |
@@ -139,7 +140,7 @@ jobs:
             --verbosity normal \
             --logger "trx;LogFileName=test-results.trx" \
             --logger "console;verbosity=detailed" \
-            --collect "XPlat Code Coverage;Format=opencover;ExcludeByAttribute=GeneratedCodeAttribute,ExcludeFromCodeCoverageAttribute" \
+            --collect "XPlat Code Coverage;Format=opencover" \
             --results-directory ./TestResults \
             -p:ParallelizeTestCollections=true \
             -p:MaxCpuCount=-1 \
@@ -149,67 +150,64 @@ jobs:
           END=$(date +%s)
           ELAPSED=$((END - START))
 
-          # ── Parse test counts from log ──
-          PASSED=$(grep -oP 'Passed:\s*\K[0-9]+' test.log | tail -1 || echo "0")
-          FAILED=$(grep -oP 'Failed:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+          PASSED=$(grep -oP  'Passed:\s*\K[0-9]+'  test.log | tail -1 || echo "0")
+          FAILED=$(grep -oP  'Failed:\s*\K[0-9]+'  test.log | tail -1 || echo "0")
           SKIPPED=$(grep -oP 'Skipped:\s*\K[0-9]+' test.log | tail -1 || echo "0")
-          TOTAL=$(grep -oP 'Total:\s*\K[0-9]+' test.log | tail -1 || echo "0")
+          TOTAL=$(grep -oP   'Total:\s*\K[0-9]+'   test.log | tail -1 || echo "0")
 
-          echo "### 🧪 Test Results" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ✅ Passed | $PASSED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ❌ Failed | $FAILED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ⏭️ Skipped | $SKIPPED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📊 Total | $TOTAL |" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 🧪 Test Results"     >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Count |"      >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|"      >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Passed   | $PASSED   |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ❌ Failed   | $FAILED   |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏭️ Skipped  | $SKIPPED  |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📊 Total    | $TOTAL    |" >> "$GITHUB_STEP_SUMMARY"
           echo "| ⏱️ Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
 
           exit $EXIT_CODE
 
-      # ─────────────────────────────────────────────
-      # 📊 COVERAGE SUMMARY
-      # ─────────────────────────────────────────────
+      # ── Coverage ──
       - name: 📊 Parse coverage summary
         id: coverage-summary
         if: always()
         run: |
+          # opencover puts the file inside a GUID sub-directory
           COVERAGE_FILE=$(find ./TestResults -name "coverage.opencover.xml" | head -1)
 
           if [ -z "$COVERAGE_FILE" ]; then
             echo "⚠️ No coverage file found"
             echo "line_coverage=N/A" >> "$GITHUB_OUTPUT"
           else
-            # ── Extract line coverage from opencover XML ──
             LINE_RATE=$(grep -oP 'sequenceCoverage="\K[0-9.]+' "$COVERAGE_FILE" | head -1 || echo "0")
-            BRANCH_RATE=$(grep -oP 'branchCoverage="\K[0-9.]+' "$COVERAGE_FILE" | head -1 || echo "0")
+            BRANCH_RATE=$(grep -oP 'branchCoverage="\K[0-9.]+'  "$COVERAGE_FILE" | head -1 || echo "0")
 
             echo "line_coverage=${LINE_RATE}" >> "$GITHUB_OUTPUT"
 
-            echo "### 📊 Code Coverage" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Type | Coverage |" >> "$GITHUB_STEP_SUMMARY"
-            echo "|------|----------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| 📝 Line/Sequence | ${LINE_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| 🌿 Branch | ${BRANCH_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 📊 Code Coverage"              >> "$GITHUB_STEP_SUMMARY"
+            echo "| Type | Coverage |"               >> "$GITHUB_STEP_SUMMARY"
+            echo "|------|----------|"               >> "$GITHUB_STEP_SUMMARY"
+            echo "| 📝 Line/Sequence | ${LINE_RATE}% |"   >> "$GITHUB_STEP_SUMMARY"
+            echo "| 🌿 Branch        | ${BRANCH_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: List TestResults
+      - name: 📂 List TestResults (debug)
         if: always()
         run: |
           echo "=== TestResults directory ==="
           find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
 
-      - name: Publish test results
+      # dorny/test-reporter needs the TRX; it runs even when tests fail
+      - name: 📝 Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Test Results
-          # ✅ Match the exact filename we set in --logger
-          path: '**/test-results.trx'
+          path: '**/TestResults/**/*.trx'   # broader glob — covers GUID sub-dirs
           reporter: dotnet-trx
           fail-on-empty: true
           fail-on-error: true
 
-      - name: Upload coverage report
+      - name: 📤 Upload coverage & logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -221,9 +219,6 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-      # ─────────────────────────────────────────────
-      # ✅ FINAL GATE SUMMARY
-      # ─────────────────────────────────────────────
       - name: ✅ PR Quality Gate Summary
         if: always()
         run: |
@@ -233,18 +228,21 @@ jobs:
 
           STATUS_ICON() { [ "$1" = "success" ] && echo "✅" || echo "❌"; }
 
-          echo "## 🎯 PR Quality Gate Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🏗️ Build | $(STATUS_ICON $BUILD_STATUS) ${BUILD_STATUS^} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🧪 Tests | $(STATUS_ICON $TEST_STATUS) ${TEST_STATUS^} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📊 Coverage | ${COVERAGE}% |" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> PR #${{ github.event.pull_request.number }} · \`${{ env.COMMIT_SHA }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🎯 PR Quality Gate Summary"   >> "$GITHUB_STEP_SUMMARY"
+          echo ""                                  >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |"               >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|"               >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🏗️ Build | $(STATUS_ICON $BUILD_STATUS) ${BUILD_STATUS^} |" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🧪 Tests | $(STATUS_ICON $TEST_STATUS) ${TEST_STATUS^} |" \
+            >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📊 Coverage | ${COVERAGE}% |"  >> "$GITHUB_STEP_SUMMARY"
+          echo ""                                  >> "$GITHUB_STEP_SUMMARY"
+          echo "> PR #${{ github.event.pull_request.number }} · \`${{ env.COMMIT_SHA }}\`" \
+            >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================
-  # ✅ JOB 2A — SONARQUBE ANALYSIS (parallel with build-for-deploy)
+  # ✅ JOB 2A — SONARQUBE ANALYSIS
   # ============================================================
   sonar-analysis:
     name: 🔍 SonarQube Analysis
@@ -262,14 +260,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: 📌 Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.0",
+              "rollForward": "latestPatch"
+            }
+          }
+          EOF
+
       - name: ⚙️ Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
 
-      # ── Cache SonarQube scanner binary ──
       - name: 💾 Cache SonarQube scanner
         uses: actions/cache@v4
         with:
@@ -279,12 +285,21 @@ jobs:
           key: sonar-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
           restore-keys: sonar-tools-${{ runner.os }}-
 
+      - name: 💾 Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: >-
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            ${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            nuget-${{ runner.os }}-
+
       - name: 🔧 Install SonarScanner
         run: |
           dotnet tool install --global dotnet-sonarscanner --version 7.1.0 2>/dev/null || true
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-          echo "### 🔧 Tools Installed" >> "$GITHUB_STEP_SUMMARY"
-          echo "- dotnet-sonarscanner 7.1.0" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📦 Restore
         run: |
@@ -300,7 +315,6 @@ jobs:
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
           echo "**Version:** \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # ── Sonar BEGIN ──
       - name: 🔍 SonarQube — Begin
         env:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -311,13 +325,12 @@ jobs:
             /d:sonar.host.url="${SONAR_HOST_URL}" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /v:"${{ steps.version.outputs.value }}" \
-            /d:sonar.cs.vstest.reportsPaths="TestResults/*.trx" \
+            /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
             /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
 
-      # ── Instrumented build ──
       - name: 🏗️ Build (instrumented)
         run: |
           dotnet build "${{ env.SOLUTION_PATH }}" \
@@ -326,7 +339,6 @@ jobs:
             --verbosity quiet \
             -maxcpucount
 
-      # ── Instrumented test ──
       - name: 🧪 Test with coverage
         run: |
           dotnet test "${{ env.SOLUTION_PATH }}" \
@@ -339,14 +351,12 @@ jobs:
             -p:ParallelizeTestCollections=true \
             -p:MaxCpuCount=-1
 
-      # ── Sonar END ──
       - name: 🔍 SonarQube — End
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
         run: |
           dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
 
-      # ── Poll Quality Gate ──
       - name: 🎯 Quality Gate check
         id: quality-gate
         env:
@@ -366,7 +376,7 @@ jobs:
             echo "   [$i/40] Task status: $STATUS"
 
             case "$STATUS" in
-              SUCCESS) break ;;
+              SUCCESS)  break ;;
               FAILED|CANCELED) echo "❌ Sonar task $STATUS"; exit 1 ;;
               *) sleep 5 ;;
             esac
@@ -391,7 +401,7 @@ jobs:
           echo "✅ Quality Gate passed!"
 
   # ============================================================
-  # ✅ JOB 2B — BUILD PUBLISH ARTIFACT (parallel with sonar)
+  # ✅ JOB 2B — BUILD PUBLISH ARTIFACT
   # ============================================================
   build-artifact:
     name: 🏗️ Build Publish Artifact
@@ -407,14 +417,34 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1 # ✅ Shallow clone — no history needed for publish
+          fetch-depth: 1
+
+      - name: 📌 Pin .NET SDK version
+        run: |
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "8.0.0",
+              "rollForward": "latestPatch"
+            }
+          }
+          EOF
 
       - name: ⚙️ Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
+
+      - name: 💾 Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: >-
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            ${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            nuget-${{ runner.os }}-
 
       - name: 🏷️ Resolve version
         id: version
@@ -451,31 +481,28 @@ jobs:
 
           END=$(date +%s)
           ELAPSED=$((END - START))
-
-          # ── Artifact size ──
           SIZE=$(du -sh "${{ env.PUBLISH_DIR }}" | cut -f1)
 
-          echo "### 🚀 Publish" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ✅ Status | Success |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📦 Size | $SIZE |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ⏱️ Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 🚀 Publish"                       >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |"                   >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|"                   >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Status | Success |"              >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📦 Size | $SIZE |"                  >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏱️ Duration | ${ELAPSED}s |"        >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |" \
+            >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🏷️ Write deployment metadata
         run: |
-          echo "${{ env.COMMIT_SHA }}" > "${{ env.PUBLISH_DIR }}/.commit-sha"
+          echo "${{ env.COMMIT_SHA }}"            > "${{ env.PUBLISH_DIR }}/.commit-sha"
           echo "${{ steps.version.outputs.value }}" > "${{ env.PUBLISH_DIR }}/.version"
-          echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" > "${{ env.PUBLISH_DIR }}/.deployed-at"
+          date -u +"%Y-%m-%dT%H:%M:%SZ"          > "${{ env.PUBLISH_DIR }}/.deployed-at"
 
       - name: 🏷️ Artifact metadata
         id: artifact-meta
         run: |
-          ARTIFACT_NAME="app-${{ env.COMMIT_SHA }}"
-          echo "name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+          echo "name=app-${{ env.COMMIT_SHA }}" >> "$GITHUB_OUTPUT"
 
-      # ✅ Upload artifact for deploy job (avoids re-building)
       - name: 📤 Upload publish artifact
         uses: actions/upload-artifact@v4
         with:
@@ -485,7 +512,7 @@ jobs:
           compression-level: 6
 
   # ============================================================
-  # ✅ JOB 3 — DEPLOY (depends on BOTH sonar + artifact)
+  # ✅ JOB 3 — DEPLOY
   # ============================================================
   deploy:
     name: 🚀 Deploy to Dev
@@ -523,7 +550,6 @@ jobs:
         run: |
           ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_DEV }} \
             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
-          echo "✅ Release directory created" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 📡 Rsync files to server
         id: rsync
@@ -543,15 +569,14 @@ jobs:
 
           END=$(date +%s)
           ELAPSED=$((END - START))
-
           TRANSFERRED=$(grep "Total transferred file size" rsync.log | awk '{print $5, $6}' || echo "N/A")
 
-          echo "### 📡 File Transfer" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ✅ Status | Success |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📦 Transferred | $TRANSFERRED |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ⏱️ Duration | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 📡 File Transfer"                       >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |"                         >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|-------|"                         >> "$GITHUB_STEP_SUMMARY"
+          echo "| ✅ Status | Success |"                    >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📦 Transferred | $TRANSFERRED |"          >> "$GITHUB_STEP_SUMMARY"
+          echo "| ⏱️ Duration | ${ELAPSED}s |"              >> "$GITHUB_STEP_SUMMARY"
 
       - name: 🔎 Verify artifact on server
         run: |
@@ -572,7 +597,6 @@ jobs:
               -o ConnectTimeout=10 \
               ubuntu@${{ secrets.EC2_HOST_DEV }} \
               "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
-          echo "✅ Slot swap complete" >> "$GITHUB_STEP_SUMMARY"
 
       - name: ❤️ Health check
         id: health
@@ -598,9 +622,6 @@ jobs:
           echo "❌ Health check failed after 10 attempts" && exit 1
         continue-on-error: true
 
-      # ─────────────────────────────────────────────
-      # ✅ DEPLOYMENT SUMMARY
-      # ─────────────────────────────────────────────
       - name: 📋 Deployment Summary
         if: always()
         env:
@@ -611,14 +632,15 @@ jobs:
           DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           HEALTH_ICON=$([ "$HEALTH" = "healthy" ] && echo "✅" || echo "⚠️")
 
-          echo "## 🚀 Deployment Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 📦 Version | \`$VERSION\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🌍 Environment | \`dev\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🕐 Deployed At | \`$DEPLOYED_AT\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🎯 Quality Gate | $QG |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |" >> "$GITHUB_STEP_SUMMARY"
+          echo "## 🚀 Deployment Summary"                       >> "$GITHUB_STEP_SUMMARY"
+          echo ""                                                 >> "$GITHUB_STEP_SUMMARY"
+          echo "| Key | Value |"                                 >> "$GITHUB_STEP_SUMMARY"
+          echo "|-----|-------|"                                 >> "$GITHUB_STEP_SUMMARY"
+          echo "| 📦 Version     | \`$VERSION\` |"              >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🔖 Commit      | \`${{ env.COMMIT_SHA }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🌍 Environment | \`dev\` |"                   >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🕐 Deployed At | \`$DEPLOYED_AT\` |"          >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🎯 Quality Gate | $QG |"                      >> "$GITHUB_STEP_SUMMARY"
+          echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"   >> "$GITHUB_STEP_SUMMARY"
+          echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |" \
+            >> "$GITHUB_STEP_SUMMARY"
