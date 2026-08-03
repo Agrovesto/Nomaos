@@ -460,7 +460,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json')
+          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json' ) }}
           restore-keys: |
             nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
             nuget-${{ runner.os }}-
