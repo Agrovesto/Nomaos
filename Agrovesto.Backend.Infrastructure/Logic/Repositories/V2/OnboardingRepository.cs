@@ -843,23 +843,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             return await CreateNewUser(model, args, role);
         }
-        private void ValidateUserType(string userType)
-        {
-            switch (userType)
-            {
-                case "Farmer":
-                case "Agent":
-                case "MemberShip":
-                case "Organization":
-                    return;
-
-                default:
-                    throw new BaseException(
-                        ExceptionType.BAD_REQUEST,
-                        "Invalid user type");
-            }
-        }
-      
+     
         private async Task<IdentityRole> GetRoleAsync(string roleName)
         {
             var role = await _roleManager.FindByNameAsync(roleName);
@@ -955,8 +939,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.PhoneNumber = model.PhoneNumber;
             }
-            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
-
+           
             if (!string.IsNullOrWhiteSpace(model.Email)
                 && !string.Equals(model.Email, user.Email, StringComparison.OrdinalIgnoreCase))
             {
@@ -1056,21 +1039,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         "This account is registered as an Organization in this business and cannot be used for other roles."
                 };
             }
+            await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
 
-            var existingSameRole = businessMemberships
-      .FirstOrDefault(x => string.Equals(x.Role, args.userType, StringComparison.OrdinalIgnoreCase));
+      //      var existingSameRole = businessMemberships
+      //.FirstOrDefault(x => string.Equals(x.Role, args.userType, StringComparison.OrdinalIgnoreCase));
 
-            if (existingSameRole != null)
-            {
-                return new CreateUserResult
-                {
-                    model = MapUserResponse(user, model),
-                    status = true,
-                    IsExisting = true,
-                    message =
-                        "An account with these details already exists for this business. Please sign in to continue."
-                };
-            }
+      //      if (existingSameRole != null)
+      //      {
+      //          return new CreateUserResult
+      //          {
+      //              model = MapUserResponse(user, model),
+      //              status = true,
+      //              IsExisting = true,
+      //              message =
+      //                  "An account with these details already exists for this business. Please sign in to continue."
+      //          };
+      //      }
 
             bool hasIdentityRole = identityRoles.Contains(role.Name);
 
@@ -1127,15 +1111,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
            
             bool isNewBusinessMembership = !businessMemberships.Any();
+            bool hasOnboardedById = !string.IsNullOrEmpty(args.OnboardedByUserId);
+            var msg = "";
+            if(!hasOnboardedById){ 
+                msg = isNewBusinessMembership 
+                ? "Welcome back. Continue onboarding to set up access for this business."
+                : "Welcome back. Continue onboarding to complete setup for your new role in this business.";
+            }
+            else
+            {
+                msg = isNewBusinessMembership
+                ? "User added successfully to this business"
+                : $"User addedd successfully as a {role.Name}.";
+            }
 
             return new CreateUserResult
             {
                 model = MapUserResponse(user, model),
                 status = true,
                 IsExisting = true,
-                message = isNewBusinessMembership
-                    ? "Welcome back. Continue onboarding to set up access for this business."
-                    : "Welcome back. Continue onboarding to complete setup for your new role in this business."
+                message = msg
             };
         }
 
