@@ -56,7 +56,7 @@ jobs:
           cat > global.json << 'EOF'
           {
             "sdk": {
-              "version": "8.0.0",
+              "version": "8.0.423",
               "rollForward": "latestPatch"
             }
           }
@@ -265,7 +265,7 @@ jobs:
           cat > global.json << 'EOF'
           {
             "sdk": {
-              "version": "8.0.0",
+              "version": "8.0.423",
               "rollForward": "latestPatch"
             }
           }
@@ -424,7 +424,7 @@ jobs:
           cat > global.json << 'EOF'
           {
             "sdk": {
-              "version": "8.0.0",
+              "version": "8.0.423",
               "rollForward": "latestPatch"
             }
           }
