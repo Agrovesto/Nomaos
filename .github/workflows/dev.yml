@@ -69,42 +69,38 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: ⚙️ Validate SDK
-        id: sdk-info
+      - name: Configure .NET SDK
         run: |
-          SDK=$(dotnet --version)
-          echo "sdk_version=$SDK" >> "$GITHUB_OUTPUT"
-          echo "### ⚙️ SDK Info" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Key | Value |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|-----|-------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| SDK Version | \`$SDK\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Runner OS | \`${{ runner.os }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Commit SHA | \`${{ env.COMMIT_SHA }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          cat > global.json << 'EOF'
+          {
+            "sdk": {
+              "version": "${{ env.DOTNET_VERSION }}",
+              "rollForward": "latestFeature"
+            }
+          }
+          EOF
+          dotnet --version
 
-      # ─────────────────────────────────────────────
-      # 📦 RESTORE (deduplicated, parallelized by MSBuild)
-      # ─────────────────────────────────────────────
-      - name: 📦 Restore dependencies
-        id: restore
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.sln', '**/packages.lock.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-${{ hashFiles('**/*.sln') }}
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
         run: |
           START=$(date +%s)
 
-          dotnet restore "${{ env.SOLUTION_PATH }}" \
-            --verbosity quiet \
-            /p:ContinuousIntegrationBuild=true
-
-          END=$(date +%s)
-          ELAPSED=$((END - START))
-
-          echo "### 📦 Restore" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Result | Duration |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|--------|----------|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| ✅ Success | ${ELAPSED}s |" >> "$GITHUB_STEP_SUMMARY"
-
-      # ─────────────────────────────────────────────
-      # 🏗️ BUILD (incremental, parallel MSBuild)
-      # ─────────────────────────────────────────────
       - name: Build
+        run: |
+          dotnet build "${{ env.SOLUTION_PATH }}" \
+            --configuration Release \
+            --no-restore
+
+      - name: Run tests
         run: |
           dotnet build "${{ env.SOLUTION_PATH }}" \
             --configuration Release \
@@ -196,23 +192,24 @@ jobs:
             echo "| 🌿 Branch | ${BRANCH_RATE}% |" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # ─────────────────────────────────────────────
-      # 📋 PUBLISH TEST RESULTS
-      # ─────────────────────────────────────────────
-      - name: 📋 Publish test results
+      - name: List TestResults
+        if: always()
+        run: |
+          echo "=== TestResults directory ==="
+          find ./TestResults -type f 2>/dev/null || echo "No files found in ./TestResults"
+
+      - name: Publish test results
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: 🧪 Unit Test Report
+          name: Test Results
+          # ✅ Match the exact filename we set in --logger
           path: '**/test-results.trx'
           reporter: dotnet-trx
           fail-on-empty: true
           fail-on-error: true
 
-      # ─────────────────────────────────────────────
-      # 📤 ARTIFACTS
-      # ─────────────────────────────────────────────
-      - name: 📤 Upload coverage artifact
+      - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
