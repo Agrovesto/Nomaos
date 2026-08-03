@@ -460,4 +460,189 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') 
+          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json')
+          restore-keys: |
+            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+            nuget-${{ runner.os }}-
+
+      - name: 🏷️ Resolve version
+        id: version
+        run: |
+          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ env.PROJECT_PATH }}" 2>/dev/null || true)
+          VERSION="${VERSION:-1.0.${{ github.run_number }}}"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: 🚀 Publish
+        id: publish
+        run: |
+          START=$(date +%s)
+
+          dotnet publish "${{ env.PROJECT_PATH }}" \
+            --configuration Release \
+            --runtime linux-x64 \
+            --framework net8.0 \
+            --self-contained true \
+            --output "${{ env.PUBLISH_DIR }}" \
+            --verbosity quiet \
+            -p:ContinuousIntegrationBuild=true \
+            -p:Deterministic=true \
+            -p:DebugType=none \
+            -p:DebugSymbols=false \
+            -maxcpucount
+
+          END=$(date +%s)
+          SIZE=$(du -sh "${{ env.PUBLISH_DIR }}" | cut -f1)
+
+          {
+            echo "### 🚀 Publish"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| ✅ Status | Success |"
+            echo "| 📦 Size | $SIZE |"
+            echo "| ⏱️ Duration | $((END - START))s |"
+            echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 🏷️ Write deployment metadata
+        run: |
+          printf '%s' "${{ env.COMMIT_SHA }}"              > "${{ env.PUBLISH_DIR }}/.commit-sha"
+          printf '%s' "${{ steps.version.outputs.value }}" > "${{ env.PUBLISH_DIR }}/.version"
+          date -u +"%Y-%m-%dT%H:%M:%SZ"                   > "${{ env.PUBLISH_DIR }}/.deployed-at"
+
+      - name: 🏷️ Artifact metadata
+        id: artifact-meta
+        run: printf 'name=app-%s\n' "${{ env.COMMIT_SHA }}" >> "$GITHUB_OUTPUT"
+
+      - name: 📤 Upload publish artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-meta.outputs.name }}
+          path: ${{ env.PUBLISH_DIR }}
+          retention-days: 1
+          compression-level: 6
+
+  # ============================================================
+  # ✅ JOB 3 — DEPLOY
+  # ============================================================
+  deploy:
+    name: 🚀 Deploy to Dev
+    needs: [sonar-analysis, build-artifact]
+    if: |
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/dev' &&
+      needs.sonar-analysis.outputs.quality-gate == 'OK'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: dev
+      url: https://dev-noma-api.nomaos.com/health
+
+    steps:
+      - name: 📥 Download publish artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build-artifact.outputs.artifact-name }}
+          path: ${{ env.PUBLISH_DIR }}
+
+      - name: 🔐 Setup SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
+
+      - name: 🔐 Trust EC2 host
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keyscan -H "${{ secrets.EC2_HOST_DEV }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: 📁 Prepare + sync in one SSH session
+        id: rsync
+        run: |
+          ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_DEV }} \
+            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+
+          START=$(date +%s)
+          rsync -az \
+            --delete \
+            --exclude='.git' \
+            --exclude='*.pdb' \
+            --exclude='*.xml' \
+            --timeout=30 \
+            --stats \
+            "${{ env.PUBLISH_DIR }}/" \
+            ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/ \
+            2>&1 | tee rsync.log
+
+          END=$(date +%s)
+          TRANSFERRED=$(grep "Total transferred file size" rsync.log | awk '{print $5, $6}' || echo "N/A")
+
+          {
+            echo "### 📡 File Transfer"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| ✅ Status | Success |"
+            echo "| 📦 Transferred | $TRANSFERRED |"
+            echo "| ⏱️ Duration | $((END - START))s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 🔎 Verify + swap in one SSH session
+        run: |
+          ssh -o ServerAliveInterval=15 \
+              -o ServerAliveCountMax=4 \
+              -o ConnectTimeout=10 \
+              ubuntu@${{ secrets.EC2_HOST_DEV }} "
+                REMOTE_SHA=\$(cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null || echo NOT_FOUND)
+                if [ \"\$REMOTE_SHA\" != \"${{ env.COMMIT_SHA }}\" ]; then
+                  echo '❌ SHA mismatch: expected ${{ env.COMMIT_SHA }}, got '\$REMOTE_SHA
+                  exit 1
+                fi
+                echo '✅ SHA verified'
+                bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}
+              "
+          echo "✅ Verified + slot swap complete" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ❤️ Health check
+        id: health
+        run: |
+          echo "⏳ Waiting 15s for service to stabilise..."
+          sleep 15   # ✅ Reduced from 20s — modern systemd restarts are fast
+
+          for i in $(seq 1 10); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 5 https://dev-noma-api.nomaos.com/health || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Healthy (attempt $i) — HTTP $HTTP_CODE"
+              printf 'health_status=healthy\n' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "   [$i/10] HTTP $HTTP_CODE — retrying in 10s..."
+            sleep 10
+          done
+
+          printf 'health_status=unhealthy\n' >> "$GITHUB_OUTPUT"
+          echo "❌ Health check failed after 10 attempts" && exit 1
+        continue-on-error: true
+
+      - name: 📋 Deployment Summary
+        if: always()
+        env:
+          HEALTH: ${{ steps.health.outputs.health_status }}
+          VERSION: ${{ needs.build-artifact.outputs.version }}
+          QG: ${{ needs.sonar-analysis.outputs.quality-gate }}
+        run: |
+          HEALTH_ICON=$([ "$HEALTH" = "healthy" ] && echo "✅" || echo "⚠️")
+          {
+            echo "## 🚀 Deployment Summary"
+            echo ""
+            echo "| Key | Value |"
+            echo "|-----|-------|"
+            echo "| 📦 Version      | \`$VERSION\` |"
+            echo "| 🔖 Commit       | \`${{ env.COMMIT_SHA }}\` |"
+            echo "| 🌍 Environment  | \`dev\` |"
+            echo "| 🕐 Deployed At  | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
+            echo "| 🎯 Quality Gate | $QG |"
+            echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
+            echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |"
+          } >> "$GITHUB_STEP_SUMMARY"
