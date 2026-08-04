@@ -1,5 +1,4 @@
-﻿using Agrovesto.Backend.Core.Models.Common;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -101,7 +100,7 @@ namespace Agrovesto.Backend.Core.Models.Payment
     public class NameEnquiryEtransactResponse
     {
         [System.Text.Json.Serialization.JsonPropertyName("result")]
-        public NameEnquiryData Result { get; set; }
+        public NameEnquiryResult Result { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("responseCode")]
         public string ResponseCode { get; set; }
