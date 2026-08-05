@@ -37,7 +37,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
         Task InvalidateActiveOtps(string userId, OtpTarget target);
 
-        Task<bool> VerifyOtpAsync(
+        Task<OneTimePassword> VerifyOtpAsync(
             string userId,
             string code,
             OtpPurpose purpose);
@@ -113,7 +113,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
 
         }
 
-        public async Task<bool> VerifyOtpAsync(string userId, string code, OtpPurpose purpose)
+        public async Task<OneTimePassword> VerifyOtpAsync(string userId, string code, OtpPurpose purpose)
         {
             var hash = OtpGenerator.Hash(code);
 
@@ -127,7 +127,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                 .FirstOrDefaultAsync();
 
             if (otp == null)
-                return false;
+                return null;
 
             otp.AttemptCount++;
 
@@ -137,13 +137,13 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
                     otp.UsedAt = DateTime.UtcNow;
 
                 await _context.SaveChangesAsync();
-                return false;
+                return null;
             }
 
             otp.UsedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
 
-            return true;
+            return otp;
         }
     }
 }

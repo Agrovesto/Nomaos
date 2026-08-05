@@ -47,7 +47,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public long OrganizationId { get; set; }
 
-        public string UserId { get; set; }
+        public string? UserId { get; set; }
 
         public string? OrganizationCode { get; set; }
 
