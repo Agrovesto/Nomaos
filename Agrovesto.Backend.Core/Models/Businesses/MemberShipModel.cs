@@ -129,6 +129,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalUnverifiedFarmers { get; set; }
         public decimal RecoveryAmount { get; set; }
         public string Tier { get; set; }
+        public bool Status { get; set; }
     }
     public class OrganizationMembershipDashboardResponse
     {

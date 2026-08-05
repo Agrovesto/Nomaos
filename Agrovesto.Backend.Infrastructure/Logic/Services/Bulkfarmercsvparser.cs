@@ -5,11 +5,12 @@ using CsvHelper.Configuration;
 using ExcelDataReader;
 using System.Data;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Services
 {
-
     public static class BulkFarmerCsvParser
     {
         private const int MaxFlatValueChains = 10;
@@ -26,223 +27,226 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             };
         }
 
-        private static List<BulkFarmerRowDto> ParseCsv(Stream csvStream)
+        private static List<BulkFarmerRowDto> ParseCsv(Stream stream)
         {
+            stream.Position = 0;
+
             var config = new CsvConfiguration(CultureInfo.InvariantCulture)
             {
                 HeaderValidated = null,
                 MissingFieldFound = null,
+                TrimOptions = TrimOptions.Trim
             };
 
-            using var reader = new StreamReader(csvStream);
+            using var reader = new StreamReader(stream);
             using var csv = new CsvReader(reader, config);
 
             csv.Read();
             csv.ReadHeader();
 
-            var rawHeaders = csv.HeaderRecord!.ToList();
-            var headerMap = HeaderMapper.Resolve(rawHeaders);
-            var unmatchedCanonicalKeys = HeaderMapper.KnownCanonicalKeys.Except(headerMap.Keys); ;
+            ValidateTemplate(csv.HeaderRecord!);
+
             var rows = new List<BulkFarmerRowDto>();
-            int rowIndex = 1;
+            var rowIndex = 1;
 
             while (csv.Read())
             {
-                string? GetField(string canonicalKey) =>
-                    headerMap.TryGetValue(canonicalKey, out var rawHeader)
-                        ? csv.GetField(rawHeader)
-                        : null;
+                string? Get(int index)
+                {
+                    if (index >= csv.HeaderRecord!.Length)
+                        return null;
 
-                rows.Add(BuildRow(headerMap.Keys.ToHashSet(), GetField, rowIndex++));
+                    return csv.GetField(index)?.Trim();
+                }
+
+                rows.Add(BuildRow(Get, rowIndex++));
             }
 
             return rows;
         }
-
-        private static List<BulkFarmerRowDto> ParseExcel(Stream excelStream)
+        private static List<BulkFarmerRowDto> ParseExcel(Stream stream)
         {
-            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            stream.Position = 0;
 
-            using var excelReader = ExcelReaderFactory.CreateReader(excelStream);
-            var dataSet = excelReader.AsDataSet(new ExcelDataSetConfiguration
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+            using var reader = ExcelReaderFactory.CreateReader(stream);
+
+            var ds = reader.AsDataSet(new ExcelDataSetConfiguration
             {
-                ConfigureDataTable = _ => new ExcelDataTableConfiguration { UseHeaderRow = true }
+                ConfigureDataTable = _ => new ExcelDataTableConfiguration
+                {
+                    UseHeaderRow = true
+                }
             });
 
-            if (dataSet.Tables.Count == 0)
-                throw new InvalidOperationException("The Excel file contains no worksheets.");
+            if (ds.Tables.Count == 0)
+                throw new InvalidOperationException("No worksheet found.");
 
-            var table = dataSet.Tables[0];
-            var rawHeaders = table.Columns.Cast<DataColumn>().Select(c => c.ColumnName).ToList();
-            var headerMap = HeaderMapper.Resolve(rawHeaders);
-            var unmatchedCanonicalKeys = HeaderMapper.KnownCanonicalKeys.Except(headerMap.Keys); ;
-            // canonicalKey -> column index (avoids re-searching rawHeaders per row)
-            var canonicalToIndex = headerMap.ToDictionary(
-                kv => kv.Key,
-                kv => rawHeaders.FindIndex(h => h == kv.Value));
+            var table = ds.Tables[0];
+
+            ValidateTemplate(
+                table.Columns.Cast<DataColumn>()
+                    .Select(x => x.ColumnName));
 
             var rows = new List<BulkFarmerRowDto>();
-            int rowIndex = 1;
+
+            var rowIndex = 1;
 
             foreach (DataRow dr in table.Rows)
             {
-                if (dr.ItemArray.All(v => v == DBNull.Value || string.IsNullOrWhiteSpace(v?.ToString())))
+                if (dr.ItemArray.All(x =>
+                    x == DBNull.Value ||
+                    string.IsNullOrWhiteSpace(x?.ToString())))
                     continue;
 
-                string? GetField(string canonicalKey)
+                string? Get(int index)
                 {
-                    if (!canonicalToIndex.TryGetValue(canonicalKey, out var idx) || idx < 0)
+                    if (index >= table.Columns.Count)
                         return null;
 
-                    var value = dr[idx];
-                    if (value == DBNull.Value) return null;
-                    if (value is DateTime dt) return dt.ToString("dd-MM-yyyy");
-                    return value.ToString();
+                    var value = dr[index];
+
+                    if (value == DBNull.Value)
+                        return null;
+
+                    if (value is DateTime dt)
+                        return dt.ToString("dd-MM-yyyy");
+
+                    return value.ToString()?.Trim();
                 }
 
-                rows.Add(BuildRow(headerMap.Keys.ToHashSet(), GetField, rowIndex++));
+                rows.Add(BuildRow(Get, rowIndex++));
             }
 
             return rows;
         }
-
         private static BulkFarmerRowDto BuildRow(
-           HashSet<string> canonicalHeaders,
-           Func<string, string?> getField,
-           int rowIndex)
+     Func<int, string?> get,
+     int rowIndex)
         {
-            var firstName = getField("firstname");
-            var middleName = getField("middlename");
-            var lastName = getField("lastname");
+            var row = new BulkFarmerRowDto();
 
-            var fullName = string.Join(" ",
-                new[] { firstName, middleName, lastName }.Where(n => !string.IsNullOrWhiteSpace(n)));
+            row.RowIndex = rowIndex;
 
-            var row = new BulkFarmerRowDto
+            row.Name = string.Join(" ",
+                new[]
+                {
+            get(FarmerColumns.FirstName),
+            get(FarmerColumns.MiddleName),
+            get(FarmerColumns.LastName)
+                }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            row.DateOfBirth = get(FarmerColumns.DateOfBirth);
+            row.Gender = get(FarmerColumns.Gender);
+            row.State = get(FarmerColumns.State);
+            row.Lga = get(FarmerColumns.Lga);
+            row.Ward = get(FarmerColumns.Ward);
+            row.Location = get(FarmerColumns.Address);
+            row.PhoneNumber = get(FarmerColumns.PhoneNumber) ?? "";
+            row.Email = get(FarmerColumns.Email);
+            row.FarmerCategory = get(FarmerColumns.FarmerCategory);
+            row.HighestLevelOfEducation = get(FarmerColumns.Education);
+            row.BVN = get(FarmerColumns.BVN);
+            row.NIN = get(FarmerColumns.NIN);
+
+            var years = get(FarmerColumns.YearsInAgric);
+
+            if (!string.IsNullOrWhiteSpace(years))
             {
-                RowIndex = rowIndex,
-                Name = !string.IsNullOrWhiteSpace(fullName) ? fullName : (getField("name") ?? string.Empty),
-                PhoneNumber = getField("phonenumber") ?? string.Empty,
-                Email = getField("email"),
-                Gender = getField("gender"),
-                DateOfBirth = getField("dateofbirth"),
-                NIN = getField("nin"),
-                BVN = getField("bvn"),
-                Location = getField("location"),
-                State = getField("state"),
-                Lga = getField("lga"),
-                Ward = getField("ward"),
-                FarmerCategory = getField("farmercategory"),
-                HighestLevelOfEducation = getField("highestlevelofeducation"),
-            };
+                var digits = new string(years.Where(char.IsDigit).ToArray());
 
-            var yearsRaw = getField("yearsinagric");
-            if (!string.IsNullOrWhiteSpace(yearsRaw))
-            {
-                var digitsOnly = new string(yearsRaw.Where(char.IsDigit).ToArray());
-                if (long.TryParse(digitsOnly, out var years))
-                    row.YearsInAgric = years;
+                if (long.TryParse(digits, out var value))
+                    row.YearsInAgric = value;
             }
 
-            bool hasJsonColumn = canonicalHeaders.Contains("valuechains");
-            bool hasFlatColumns = canonicalHeaders.Contains("valuechain1_categoryid");
-            bool hasNamedColumns = canonicalHeaders.Contains("agricpart") || canonicalHeaders.Contains("productsdealtin");
+            var part = get(FarmerColumns.AgricPart);
+            var products = get(FarmerColumns.Products);
 
-            if (hasJsonColumn)
-            {
-                row.SelectedItems = ParseJsonValueChains(getField("valuechains"));
-            }
-            else if (hasFlatColumns)
-            {
-                row.SelectedItems = ParseFlatValueChains(getField);
-            }
-            else if (hasNamedColumns)
-            {
-                var partOfAgric = getField("agricpart") ?? string.Empty;
-                var productsRaw = getField("productsdealtin") ?? string.Empty;
-
-                var items = productsRaw
-                    .Split(new[] { ",", ";" }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim())
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .ToList();
-
-                row.SelectedItems = items.Count > 0
-                    ? new List<ValueChainSelectionDto>
-                      {
-                  new ValueChainSelectionDto { ValueChainType = partOfAgric, Items = items }
-                      }
-                    : new List<ValueChainSelectionDto>();
-            }
+            row.SelectedItems = ParseNamedValueChains(part, products);
 
             return row;
         }
-        
-        //public static List<BulkFarmerRowDto> Parse(Stream csvStream)
-        //{
-        //    var config = new CsvConfiguration(CultureInfo.InvariantCulture)
-        //    {
-        //        HeaderValidated = null,
-        //        MissingFieldFound = null,
-        //        PrepareHeaderForMatch = args => args.Header.ToLowerInvariant().Trim(),
-        //    };
+        private static List<ValueChainSelectionDto> ParseNamedValueChains(
+    string? valueChain,
+    string? products)
+        {
+            if (string.IsNullOrWhiteSpace(valueChain))
+                return new();
 
-        //    using var reader = new StreamReader(csvStream);
-        //    using var csv = new CsvReader(reader, config);
+            var items = (products ?? "")
+                .Split(new[] { ",", ";" },
+                    StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
 
-        //    csv.Read();
-        //    csv.ReadHeader();
+            if (items.Count == 0)
+                return new();
 
-        //    var headers = csv.HeaderRecord!
-        //        .Select(h => h.ToLowerInvariant().Trim())
-        //        .ToHashSet();
+            return new List<ValueChainSelectionDto>
+    {
+        new ValueChainSelectionDto
+        {
+            ValueChainType = valueChain,
+            Items = items
+        }
+    };
+        }
 
-        //    bool hasJsonColumn = headers.Contains("valuechains");
-        //    bool hasFlatColumns = headers.Contains("valuechain1_categoryid");
+        private static void ValidateTemplate(IEnumerable<string> headers)
+        {
+            var list = headers.ToList();
 
-        //    var rows = new List<BulkFarmerRowDto>();
-        //    int rowIndex = 1;
+            if (list.Count < FarmerColumns.TotalColumns)
+                throw new InvalidOperationException(
+                    $"Expected at least {FarmerColumns.TotalColumns} columns.");
 
-        //    while (csv.Read())
-        //    {
-        //        var row = new BulkFarmerRowDto
-        //        {
-        //            RowIndex = rowIndex++,
+            var expected = new[]
+            {
+        "FirstName",
+        "MiddleName",
+        "LastName",
+        "DateOfBirth",
+        "Gender",
+        "State",
+        "Local Government",
+        "Ward",
+        "Residential Address",
+        "PhoneNumber",
+        "Email",
+        "Category",
+        "Agriculture",
+        "Products",
+        "Agribusiness",
+        "Education",
+        "BVN",
+        "NIN"
+    };
 
-        //            PhoneNumber = csv.GetField("phonenumber") ?? string.Empty,
-        //            Email = csv.GetField("email"),
-        //            Name = csv.GetField("name") ?? string.Empty,
-        //            Gender = csv.GetField("gender"),
-        //            DateOfBirth = csv.GetField("dateofbirth"),
-        //            NIN = csv.GetField("nin"),
-        //            BVN = csv.GetField("bvn"),
-        //            Location = csv.GetField("location"),
-        //            State = csv.GetField("state"),
-        //            Lga = csv.GetField("lga"),
-        //            Ward = csv.GetField("ward"),
-        //            FarmerCategory = csv.GetField("farmercategory"),
-        //            HighestLevelOfEducation = csv.GetField("highestlevelofeducation"),
-        //        };
+            for (var i = 0; i < expected.Length; i++)
+            {
+                var actual = Normalize(list[i]);
 
-        //        if (long.TryParse(csv.GetField("yearsinagric"), out var years))
-        //            row.YearsInAgric = years;
+                if (!actual.Contains(Normalize(expected[i])))
+                {
+                    throw new InvalidOperationException(
+                        $"Invalid template. Expected '{expected[i]}' in column {(char)('A' + i)}.");
+                }
+            }
+        }
 
+        private static string Normalize(string value)
+        {
+            value = Regex.Replace(value ?? "", @"([a-z])([A-Z])", "$1 $2");
 
-        //        if (hasJsonColumn)
-        //        {
-        //            row.SelectedItems = ParseJsonValueChains(csv.GetField("valuechains"));
-        //        }
-        //        else if (hasFlatColumns)
-        //        {
-        //            row.SelectedItems = ParseFlatValueChains(csv);
-        //        }
-
-        //        rows.Add(row);
-        //    }
-
-        //    return rows;
-        //}
-
+            return Regex.Replace(
+                    value.ToLowerInvariant(),
+                    @"[^a-z0-9]+",
+                    " ")
+                .Trim();
+        }
         private static List<ValueChainSelectionDto> ParseJsonValueChains(string? json)
         {
             if (string.IsNullOrWhiteSpace(json))
@@ -263,6 +267,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                 return new();
             }
         }
+
         private static List<ValueChainSelectionDto> ParseFlatValueChains(Func<string, string?> getField)
         {
             var selections = new List<ValueChainSelectionDto>();
@@ -299,98 +304,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
             return selections;
         }
-        //private static List<ValueChainSelectionDto> ParseFlatValueChains(CsvReader csv)
-        //{
-        //    var selections = new List<ValueChainSelectionDto>();
-
-        //    for (int n = 1; n <= MaxFlatValueChains; n++)
-        //    {
-        //        var categoryIdStr = csv.GetField($"valuechain{n}_categoryid");
-
-        //        if (string.IsNullOrWhiteSpace(categoryIdStr))
-        //            continue;
-
-        //        if (!long.TryParse(categoryIdStr, out var categoryId) || categoryId == 0)
-        //            continue;
-
-        //        var typeName = csv.GetField($"valuechain{n}_typename") ?? string.Empty;
-
-        //        var itemsRaw = csv.GetField($"valuechain{n}_itemname") ?? string.Empty;
-
-        //        var items = itemsRaw
-        //            .Split(',', StringSplitOptions.RemoveEmptyEntries)
-        //            .Select(x => x.Trim())
-        //            .Where(x => !string.IsNullOrWhiteSpace(x))
-        //            .ToList();
-
-        //        if (items.Count == 0)
-        //            continue;
-
-        //        selections.Add(new ValueChainSelectionDto
-        //        {
-        //            ValueChainType = typeName,
-        //            Items = items
-        //        });
-        //    }
-
-        //    return selections;
-        //}
-
-
     }
-    public static class HeaderMapper
+
+    public static class FarmerColumns
     {
-        private static readonly Dictionary<string, string[][]> AliasRules = new()
-        {
-            ["firstname"] = new[] { new[] { "first", "name" } },
-            ["middlename"] = new[] { new[] { "middle", "name" } },
-            ["lastname"] = new[] { new[] { "last", "name" }, new[] { "surname" } },
-            ["name"] = new[] { new[] { "name" } },
-            ["dateofbirth"] = new[] { new[] { "date", "birth" } },
-            ["gender"] = new[] { new[] { "gender" }, new[] { "sex" } },
-            ["state"] = new[] { new[] { "state" } },
-            ["lga"] = new[] { new[] { "lga" }, new[] { "local", "government" } },
-            ["ward"] = new[] { new[] { "ward" } },
-            ["location"] = new[] { new[] { "residential", "address" }, new[] { "address" } },
-            ["phonenumber"] = new[] { new[] { "phone" } },
-            ["email"] = new[] { new[] { "email" } },
-            ["farmercategory"] = new[] { new[] { "category", "farmer" } },
-            ["agricpart"] = new[] { new[] { "part", "agriculture" } },
-            ["productsdealtin"] = new[] { new[] { "type", "products" }, new[] { "products", "deal" } },
-            ["yearsinagric"] = new[] { new[] { "how", "long" }, new[] { "years", "agribusiness" }, new[] { "years", "agric" } },
-            ["highestlevelofeducation"] = new[] { new[] { "highest", "education" } },
-            ["bvn"] = new[] { new[] { "bvn" } },
-            ["nin"] = new[] { new[] { "nin" } },
-            ["valuechains"] = new[] { new[] { "valuechains" } },
-            ["valuechain1_categoryid"] = new[] { new[] { "valuechain1_categoryid" } },
-        };
+        public const int FirstName = 0;      // A
+        public const int MiddleName = 1;     // B
+        public const int LastName = 2;       // C
+        public const int DateOfBirth = 3;    // D
+        public const int Gender = 4;         // E
+        public const int State = 5;          // F
+        public const int Lga = 6;            // G
+        public const int Ward = 7;           // H
+        public const int Address = 8;        // I
+        public const int PhoneNumber = 9;    // J
+        public const int Email = 10;         // K
+        public const int FarmerCategory = 11;// L
+        public const int AgricPart = 12;     // M
+        public const int Products = 13;      // N
+        public const int YearsInAgric = 14;  // O
+        public const int Education = 15;     // P
+        public const int BVN = 16;           // Q
+        public const int NIN = 17;           // R
 
-        // Exposes the known canonical keys so callers can check for unmatched ones
-        // (e.g. in tests or startup diagnostics) without needing access to AliasRules itself.
-        public static IReadOnlyCollection<string> KnownCanonicalKeys => AliasRules.Keys;
-
-        public static Dictionary<string, string> Resolve(IEnumerable<string> rawHeaders)
-        {
-            var map = new Dictionary<string, string>();
-            var headerList = rawHeaders.ToList();
-
-            foreach (var (canonicalKey, keywordSets) in AliasRules)
-            {
-                var match = headerList.FirstOrDefault(raw => MatchesAnySet(raw, keywordSets));
-                if (match != null)
-                    map[canonicalKey] = match;
-            }
-
-            return map;
-        }
-
-        private static bool MatchesAnySet(string rawHeader, string[][] keywordSets)
-        {
-            var normalized = Normalize(rawHeader);
-            return keywordSets.Any(set => set.All(keyword => normalized.Contains(keyword)));
-        }
-
-        private static string Normalize(string header) =>
-            new string(header.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        public const int TotalColumns = 18;
     }
 }

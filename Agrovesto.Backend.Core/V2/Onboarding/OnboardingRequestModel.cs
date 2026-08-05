@@ -38,6 +38,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Phone { get; set; }
         public string NIN { get; set; }
         public string BVN { get; set; }
+        public bool IsPhoneVerified { get; set; }
+        public bool IsEmailVerified { get; set; }
         public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
@@ -191,6 +193,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Email { get; set; }
         public string? Message { get; set; }
         public bool IsExisting { get; set; }
+        public bool ShouldLogin { get; set; }
     }
     public class OnboardingRequestModel
     {
@@ -388,5 +391,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool status { get; set; }
         public string message { get; set; }
         public bool IsExisting { get; set; }
+        public bool ShouldLogin { get; set; }
     }
 }
