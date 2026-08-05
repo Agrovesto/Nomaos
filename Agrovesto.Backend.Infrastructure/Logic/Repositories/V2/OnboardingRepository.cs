@@ -466,16 +466,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             switch (model.LoginMethod)
             {
                 case LoginType.Password:
-                    if (!HasPassword(user))
-                        return (false, "Password login is not enabled for this account");
+                    //if (!HasPassword(user))
+                    //    return (false, "Password login is not enabled for this account");
 
                     if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
 
                 case LoginType.Pin:
-                    if (!HasPin(user))
-                        return (false, "PIN login is not enabled for this account");
+                    //if (!HasPin(user))
+                    //    return (false, "PIN login is not enabled for this account");
 
                     if (!ValidateUserPin(user, model.Pin))
                         return (false, "Invalid phone number or PIN");
