@@ -1227,7 +1227,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var salt = EncryptionUtil.GetSalt();
 
             string defaultPin = "1234";
-            string defaultPassword =model.PhoneNumber;
+            string defaultPassword =string.IsNullOrEmpty(model.PhoneNumber) ? "P@55w0rd*" : model.PhoneNumber;
 
             var passwordToUse = string.IsNullOrWhiteSpace(model.Password)
                 ? defaultPassword
@@ -1256,16 +1256,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             try
             {
-                if (!string.IsNullOrEmpty(passwordToUse))
-                {
-
-                    createUser = await _userManager.CreateAsync(user);
-                }
-                else
-                {
+               
 
                     createUser = await _userManager.CreateAsync(user, passwordToUse);
-                }
+                
 
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
