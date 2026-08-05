@@ -162,6 +162,40 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public string Message { get; set; }
     }
 
+    // Response shape for the Switch-IT /fund-transfer endpoint (used to credit a
+    // destination wallet/account) - distinct from the Wallet-as-a-Service
+    // TransactionOperationEtransactResponse shape used by debit/reverse/status.
+    public class FundTransferEtransactResponse
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("direction")]
+        public string Direction { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("reference")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleStringConverter))]
+        public string Reference { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("amount")]
+        public decimal Amount { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("totalFailed")]
+        public int TotalFailed { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("totalSuccess")]
+        public int TotalSuccess { get; set; }
+
+        // "0" = Successful, "1" = Pending (TSQ required), "2" = Failed
+        [System.Text.Json.Serialization.JsonPropertyName("error")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleStringConverter))]
+        public string Error { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("message")]
+        public string Message { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("otherReference")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleStringConverter))]
+        public string OtherReference { get; set; }
+    }
+
     /// <summary>
     /// Friendly descriptions for Etransact's documented HTTP status codes, used
     /// to produce clearer error messages than a bare status code.

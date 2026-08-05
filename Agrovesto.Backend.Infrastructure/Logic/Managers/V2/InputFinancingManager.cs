@@ -1056,7 +1056,11 @@ RepaymentFrequency frequency)
                             Amount = $"{amountToPay}",
                             Currency = organizationWallet.Currency,
                             Message = description,
-                            Reference = creditReference
+                            Reference = creditReference,
+                            SenderName = subscription.SubscriberUser.Name,
+                            SenderAccountNumber = subscriberWallet.WalletNumber,
+                            RecipientName = subscription.InputPackage.Organization.CompanyName
+                                ?? subscription.InputPackage.Organization.FullName
                         };
 
                         var transferResponse = await providerService.InitiateWalletTransferAsync(
@@ -2667,7 +2671,11 @@ RepaymentFrequency frequency)
                             Amount = $"{amountToDisburse}",
                             Currency = subscriberWallet.Currency,
                             Message = $"Disbursement for {subscription.InputPackage.Name} to {subscription.SubscriberUser.Name}",
-                            Reference = creditReference
+                            Reference = creditReference,
+                            SenderName = subscription.InputPackage.Organization.CompanyName
+                                ?? subscription.InputPackage.Organization.FullName,
+                            SenderAccountNumber = organizationWallet.WalletNumber,
+                            RecipientName = subscription.SubscriberUser.Name
                         };
 
                         var transferResponse = await providerService.InitiateWalletTransferAsync(
