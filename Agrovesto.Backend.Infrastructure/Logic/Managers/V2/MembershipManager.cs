@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
 
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
-        Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query);
+        Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query);
         Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query);
     }
     public class MembershipManager : IMembershipManager
@@ -242,7 +242,7 @@ DateTimeOffset dateTime)
                     Id= userId,
                     Bvn=model.Bvn,
                     NIN=model.NIN,
-                });
+                }, false);
                 farmer.Level = FarmerLevel.Level3.ToString();
                 farmer.BVN = model.Bvn;
                 farmer.NIN= model.NIN;
@@ -380,9 +380,9 @@ OnboardingRequestModel user,
                     "Unable to complete onboarding at the moment.");
             }
         }
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query)
+        public async Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query)
         {
-            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId, query.organizationCode);
+            return await _membershipRepository.GetMembershipDetailAsync(query.UserId, query.organizationCode);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

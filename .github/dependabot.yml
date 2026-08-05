@@ -17,7 +17,6 @@ updates:
       dotnet-dependencies:
         patterns:
           - "*"
-
   # 2. GitHub Actions (to keep your build/deploy scripts updated)
   - package-ecosystem: "github-actions"
     directory: "/"

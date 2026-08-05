@@ -57,10 +57,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             try
             {
-                var agent = await _agentRepository.GetAgentDetailByUserId(userId);
-
-                if (agent == null) throw new BaseException(Core.Enums.ExceptionType.NOTFOUND, $"No Record Found");
-
+               
                 var cooperative = await _cooperativeRepository.GetCooperativeByAgent(userId, query);
                 if (cooperative == null) return new PagedListResponse<List<MemberShipResponseModel>>
                 {

@@ -1117,12 +1117,12 @@ SELECT
             };
         }
         public async Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetCooperativesByOrganization(
-    string organizationCode,
-    ListQueryParams query)
+     string organizationCode,
+     ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
-            if (query.PageSize <= 0) query.PageSize = 10;
+            if (query.PageSize <= 0 || query.PageSize > 10) query.PageSize = 10;
 
             var baseQuery =
                 from m in _context.MemberShips.AsNoTracking()
@@ -1145,35 +1145,43 @@ SELECT
             }
 
             var pagedMemberships = await baseQuery
-                .OrderByDescending(m => m.OnBoardedOn)
-                .Skip((query.PageNumber - 1) * query.PageSize)
-                .Take(query.PageSize)
-                .Select(m => new
-                {
-                    m.Id,
-                    m.Name,
-                    m.Location,
-                    m.State,
-                    m.Lga,
-                    m.Ward,
-                    m.OnBoardedOn,
-                    m.MembershipLeaderLastName,
-                    m.MembershipLeaderFirstName,
-                    m.PhoneNumber,
-                    m.UserId,
-                    m.TierLevel,
-                    MembershipType = m.MemberShipType.Name })
-                .ToListAsync();
-
+      .Join(_context.MemberShipTypes.AsNoTracking(),
+            m => m.MemberShipTypeId,   
+            mt => mt.Id,
+            (m, mt) => new { m, MembershipTypeName = mt.Name })
+      .OrderByDescending(x => x.m.OnBoardedOn)
+      .Skip((query.PageNumber - 1) * query.PageSize)
+      .Take(query.PageSize)
+      .Select(x => new
+      {
+          x.m.Id,
+          x.m.Name,
+          x.m.Location,
+          x.m.State,
+          x.m.Lga,
+          x.m.Ward,
+          x.m.OnBoardedOn,
+          x.m.MembershipLeaderLastName,
+          x.m.MembershipLeaderFirstName,
+          x.m.PhoneNumber,
+          x.m.UserId,
+          x.m.TierLevel,
+          x.m.IsActive,
+          MembershipType = x.MembershipTypeName
+      })
+      .ToListAsync();
             var membershipIds = pagedMemberships.Select(m => m.Id).ToList();
 
             var farmerStats = await _context.FarmerCooperatives
                 .AsNoTracking()
-                .Where(fc => membershipIds.Contains(fc.CooperativeId))
                 .Join(_context.Farmers.AsNoTracking(),
                       fc => fc.FarmerId,
                       f => f.Id,
                       (fc, f) => new { fc.CooperativeId, fc.FarmerId, f.Level })
+                .Join(membershipIds,
+                      x => x.CooperativeId,
+                      id => id,
+                      (x, id) => x)
                 .Distinct() 
                 .GroupBy(x => x.CooperativeId)
                 .Select(g => new
@@ -1184,13 +1192,15 @@ SELECT
                 })
                 .ToDictionaryAsync(x => x.CooperativeId, x => x);
 
-            var assignedAgentIds = await _context.MemberShipAgents
+            var assignedAgentSet = (await _context.MemberShipAgents
                 .AsNoTracking()
-                .Where(a => membershipIds.Contains(a.MemberShipId))
-                .Select(a => a.MemberShipId)
+                .Join(membershipIds,
+                      a => a.MemberShipId,
+                      id => id,
+                      (a, id) => a.MemberShipId)
                 .Distinct()
-                .ToListAsync();
-            var assignedAgentSet = assignedAgentIds.ToHashSet();
+                .ToListAsync())
+                .ToHashSet();
 
             var result = pagedMemberships.Select(m =>
             {
@@ -1200,6 +1210,7 @@ SELECT
 
                 return new OrganizationMemberShipResponseModel
                 {
+                    Status = m.IsActive,
                     Id = m.Id,
                     Name = m.Name,
                     Location = m.Location,
@@ -1207,7 +1218,7 @@ SELECT
                     Lga = m.Lga,
                     Ward = m.Ward,
                     OnBoardedOn = m.OnBoardedOn,
-                    ContactPerson = m.MembershipLeaderLastName + " " + m.MembershipLeaderFirstName,
+                    ContactPerson = $"{m.MembershipLeaderLastName} {m.MembershipLeaderFirstName}",
                     PhoneNumber = m.PhoneNumber,
                     UserId = m.UserId,
                     Tier = EnumExtensions.GetDisplayName(m.TierLevel),
@@ -1229,7 +1240,8 @@ SELECT
                 PageSize = query.PageSize
             };
         }
-
+        
+        
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
         {
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
@@ -1600,7 +1612,7 @@ SELECT
                 OwnershipType=dto.OwnerShipType,
                 WardId=dto.WardId,
                 DateOfCommissioning = dto.DateOfCommissioning,
-
+                
                 HasTemperatureControl = dto.HasTemperatureControl,
                 TemperatureControlTypeId = dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null,
 
@@ -1633,13 +1645,13 @@ SELECT
             var locations = _context.OrganizationLocations
                 .Where(x => x.OrganizationId == organizationId && x.IsActive);
 
-            
+
 
             var totalWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId == x.Id);
+                .CountAsync(x => x.ParentLocationId == null || x.ParentLocationId == x.Id);
 
             var totalSubWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId !=x.Id);
+                .CountAsync(x => x.ParentLocationId != null && x.ParentLocationId != x.Id);
 
 
             var totalCapacity = await locations
@@ -1866,8 +1878,9 @@ SELECT
                 .Take(pageSize)
                 .Select(x => new LocationListResponseDto
                 {
-                    IsActive = x.LocationStatus == "Active",
-                    // IsActive= x.IsActive,
+                    IsActive = !string.IsNullOrEmpty(x.LocationStatus)
+    ? x.LocationStatus.Equals("Active", StringComparison.OrdinalIgnoreCase)
+    : x.IsActive,
                     Id = x.Id,
                     LocationName = x.LocationName,
                     Address = x.Address,

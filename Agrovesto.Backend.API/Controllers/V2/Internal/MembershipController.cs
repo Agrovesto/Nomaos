@@ -137,7 +137,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
 
-                var result = await _membershipManager.GetMembershipDashboardAsync(query);
+                var result = await _membershipManager.GetMembershipDetailAsync(query);
                 return Ok(new Response<MembershipDashboardDto>()
                 {
                     Data = result,

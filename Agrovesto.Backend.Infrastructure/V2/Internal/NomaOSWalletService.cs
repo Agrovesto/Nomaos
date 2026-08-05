@@ -7,6 +7,7 @@ using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
@@ -14,6 +15,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -162,6 +164,16 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 var userProfile = await _onboardingRepository.GetUseridentity(args.UserId);
                 if (userProfile == null)
                     return (false, "User not found");
+
+                if(request.BVN.IsNullOrEmpty() is false)
+                {
+                    if (userProfile.BVN.IsNullOrEmpty())
+                    {
+                        userProfile.BVN = request.BVN;
+                        await _onboardingRepository.UpdateUserDetails(new OnboardingRequestModel() { Bvn = request.BVN}, new OnBoardingArgs() { UserId = args.UserId });
+                    }
+                }
+
 
                 var contextType = string.IsNullOrWhiteSpace(args.organizationCode)
                     ? WalletContextType.Personal
