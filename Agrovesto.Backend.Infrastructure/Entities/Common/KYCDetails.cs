@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Enums;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -46,5 +47,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         //public string residencestatus { get; set; }
         
         //public string title { get; set; }
+
+        public KYCVerificationType? VerificationType{ get; set; }
     }
+
+  
 }

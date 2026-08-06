@@ -393,7 +393,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return updatedMembership.Map();
         }
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
+        public async Task<MembershipDashboardDto> GetMembershipDetailAsync(
       string membershipUserId,
       string organizationCode = null)
         {
