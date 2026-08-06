@@ -91,10 +91,17 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.WalletFee = _params["Fee"].Value;
             response.WalletStampDuty = _params["StampDuty"].Value;
 
+            // Unlike the fields above, these don't throw when the key is absent -
+            // FundTransferBaseUrl/TerminalId/Pin aren't provisioned for every
+            // environment yet.
+            response.FundTransferBaseUrl = _params.TryGetValue("FundTransferBaseUrl", out var fundTransferBaseUrl) ? fundTransferBaseUrl.Value : null;
+            response.TerminalId = _params.TryGetValue("TerminalId", out var terminalId) ? terminalId.Value : null;
+            response.Pin = _params.TryGetValue("Pin", out var pin) ? pin.Value : null;
 
             return response;
 
         }
+
         public async Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(
             UserProfileResponse data,
             WalletProviderParameterModel[] parameters,
@@ -616,14 +623,155 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
             }
         }
-        public  Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
+ 
+        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            if (string.IsNullOrWhiteSpace(request.WalletNumber))
+            {
+                return Task.FromResult(WalletResponseService<PaymentResponse>.Failed(
+                    "WalletNumber is required to generate funding instructions.", 400));
+            }
+
+            var instructions =
+                $"Transfer {request.Currency ?? "NGN"} {request.Amount:N2} to wallet number {request.WalletNumber}" +
+                (string.IsNullOrWhiteSpace(request.WalletName) ? "" : $" ({request.WalletName})") +
+                ". The wallet will be credited automatically once the transfer is received.";
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[InitiateWalletTopUp] reference={request.TransactionReference} walletNumber={request.WalletNumber} amount={request.Amount}");
+
+            var result = new PaymentResponse
+            {
+                Success = true,
+                ResponseCode = "PENDING",
+                ResponseDescription = instructions,
+                Reference = request.TransactionReference,
+                ProviderReference = request.WalletNumber,
+                Status = "Pending"
+            };
+
+            return Task.FromResult(WalletResponseService<PaymentResponse>.Pending(result, instructions));
         }
 
-        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var @params = await RetrieveParams(parameters, Env);
+
+                if (string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) || string.IsNullOrWhiteSpace(@params.TerminalId) || string.IsNullOrWhiteSpace(@params.Pin))
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "Etransact fund transfer is not configured for this environment. " +
+                        "FundTransferBaseUrl/TerminalId/Pin must be provisioned (Switch-IT Fund Transfer " +
+                        "activation and PIN encryption details come from your eTz business representative) " +
+                        "before transfers can be initiated.",
+                        501);
+                }
+
+                if (string.IsNullOrWhiteSpace(request.AccountNumber))
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "Destination account/wallet number (AccountNumber) is required.", 400);
+                }
+
+                if (string.IsNullOrWhiteSpace(request.SenderName)
+                    || string.IsNullOrWhiteSpace(request.SenderAccountNumber)
+                    || string.IsNullOrWhiteSpace(request.RecipientName))
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "SenderName, SenderAccountNumber and RecipientName are required to build the fund transfer request.",
+                        400);
+                }
+
+                // "700" = PocketMoni/wallet-to-wallet, otherwise a NUBAN bank account code.
+                var bankCode = string.IsNullOrWhiteSpace(request.BankCode) ? "700" : request.BankCode;
+
+                var payload = new
+                {
+                    action = "FT",
+                    terminalId = @params.TerminalId,
+                    transaction = new
+                    {
+                        pin = @params.Pin,
+                        senderName = $"{request.SenderName};{request.SenderAccountNumber};{request.RecipientName}",
+                        bankCode,
+                        amount = request.Amount,
+                        description = request.Message,
+                        destination = request.AccountNumber,
+                        reference = request.Reference,
+                        endPoint = "A"
+                    }
+                };
+
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var payloadJson = JsonSerializer.Serialize(payload, jsonOptions);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[InitiateWalletTransfer] reference={request.Reference} payloadJson={payloadJson}");
+
+                using var client = new HttpClient { BaseAddress = new Uri(@params.FundTransferBaseUrl) };
+                client.DefaultRequestHeaders.Clear();
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync("/fund-transfer", content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[InitiateWalletTransfer] status={(int)httpResponse.StatusCode} body={responseContent}");
+
+                var transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (!httpResponse.IsSuccessStatusCode || transferResponse == null)
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        $"Transfer outcome unknown ({HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}). " +
+                        $"Reconcile using transaction status before retrying. Raw: {responseContent}",
+                        (int)httpResponse.StatusCode);
+                }
+
+                var result = new PaymentResponse
+                {
+                    Success = transferResponse.Error == "0",
+                    ResponseCode = transferResponse.Error,
+                    ResponseDescription = transferResponse.Message,
+                    Reference = transferResponse.Reference,
+                    ProviderReference = transferResponse.Reference,
+                    Status = transferResponse.Error switch
+                    {
+                        "0" => "Successful",
+                        "1" => "Pending",
+                        _ => "Failed"
+                    }
+                };
+
+                return transferResponse.Error switch
+                {
+                    "0" => WalletResponseService<PaymentResponse>.Success(
+                        result, transferResponse.Message ?? "Transfer completed successfully"),
+                    "1" => WalletResponseService<PaymentResponse>.Pending(
+                        result, transferResponse.Message ?? "Transfer pending - transaction status query required"),
+                    _ => WalletResponseService<PaymentResponse>.Failed(
+                        transferResponse.Message ?? "Transfer failed", (int)httpResponse.StatusCode)
+                };
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Unable to reach Etransact service, transfer outcome unknown - reconcile via transaction status: "
+                    + ex.Message, 503);
+            }
+            catch (Exception ex)
+            {
+                return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
+            }
         }
 
       
