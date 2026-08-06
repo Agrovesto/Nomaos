@@ -64,18 +64,16 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
-       // public UserLevel UserLevel { get; set; }
+     
         public bool IsPhoneVerified { get; set; } = false;
         public bool IsEmailVerified { get; set; } = false;
 
         public bool IsPinEnabled { get; set; } = false;
-      //  public string? DefaultPassword { get; set; }
-            public bool HasDefaultPassword { get; set; } = false;
-       // public string? DefaultPin { get; set; }
+        public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;
-
-        // Add this to your User class
         public bool IsLeaderProfileComplete { get; set; } = false;
+        public bool IsNinVerified { get; set; } = false;
+        public bool IsBvnVerified { get; set; } = false;
     }
 
     public class UserOrganization

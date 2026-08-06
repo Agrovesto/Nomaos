@@ -7,6 +7,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum KYCVerificationType
+    {
+        NIN,
+        BVN
+    }
     public enum RateLimitType
     {
         OTP,
