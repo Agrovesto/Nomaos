@@ -2087,7 +2087,7 @@ DateTimeOffset dateTime)
                     Id = userId,
                     Bvn = model.Bvn,
                     NIN = model.NIN,
-                });
+                }, false);
 
                 farmer.Level = FarmerLevel.Level3.ToString();
                 farmer.BVN = model.Bvn;

@@ -3711,7 +3711,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("UserId")
-                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("OrganizationId");
@@ -5573,6 +5572,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("VerificationType")
+                        .HasColumnType("int");
+
                     b.Property<string>("VerifiedBy")
                         .HasColumnType("nvarchar(max)");
 
@@ -6071,10 +6073,16 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsBvnVerified")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsEmailVerified")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsLeaderProfileComplete")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsNinVerified")
                         .HasColumnType("bit");
 
                     b.Property<bool>("IsPhoneVerified")
