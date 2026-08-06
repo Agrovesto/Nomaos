@@ -966,6 +966,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Select(t => new FarmerTransactionDto
                  {
                      TransactionId = t.Id,
+                     TransactionReference = t.TransactionReference,
                      Amount = t.TransactionAmount,
                      BalanceAfter = t.BalanceAfter,
                      TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
