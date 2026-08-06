@@ -852,6 +852,13 @@ RepaymentFrequency frequency)
                 {
                     throw new Exception("Cannot find input package");
                 }
+
+                if (subscription.SubscriberUser == null)
+                    throw new Exception("Subscriber not found. Please try again later.");
+
+                if (subscription.InputPackage.Organization == null)
+                    throw new Exception("Organization not found for this input package.");
+
                 switch (request.PaymentChannel)
                 {
                     case PaymentChannel.Wallet:
@@ -1056,7 +1063,11 @@ RepaymentFrequency frequency)
                             Amount = $"{amountToPay}",
                             Currency = organizationWallet.Currency,
                             Message = description,
-                            Reference = creditReference
+                            Reference = creditReference,
+                            SenderName = subscription.SubscriberUser.Name,
+                            SenderAccountNumber = subscriberWallet.WalletNumber,
+                            RecipientName = subscription.InputPackage.Organization.CompanyName
+                                ?? subscription.InputPackage.Organization.FullName
                         };
 
                         var transferResponse = await providerService.InitiateWalletTransferAsync(
@@ -2111,8 +2122,9 @@ RepaymentFrequency frequency)
                     if (subscription.SubscriberUser == null)
                         throw new DisbursementException("Subscriber not found. Please try again later.");
 
-                   
-                    
+                    if (subscription.InputPackage.Organization == null)
+                        throw new DisbursementException("Organization not found for this input package.");
+
                     var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement, SubscriptionStatus.Approved };
                     if (!allowedStatuses.Contains(subscription.Status))
                         throw new Exception($"Subscription is not in PendingDisbursement status. Current subscription status: {subscription.Status}");
@@ -2667,7 +2679,11 @@ RepaymentFrequency frequency)
                             Amount = $"{amountToDisburse}",
                             Currency = subscriberWallet.Currency,
                             Message = $"Disbursement for {subscription.InputPackage.Name} to {subscription.SubscriberUser.Name}",
-                            Reference = creditReference
+                            Reference = creditReference,
+                            SenderName = subscription.InputPackage.Organization.CompanyName
+                                ?? subscription.InputPackage.Organization.FullName,
+                            SenderAccountNumber = organizationWallet.WalletNumber,
+                            RecipientName = subscription.SubscriberUser.Name
                         };
 
                         var transferResponse = await providerService.InitiateWalletTransferAsync(

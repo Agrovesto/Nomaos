@@ -24,14 +24,11 @@ namespace Agrovesto.Backend.Core.Models.Common
         public int StatusCode { get; set; }
         public NameEnquiryData data { get; set; }
     }
-    public class NameEnquiryData { 
+    public class NameEnquiryData {
         public string destinationBankCode { get; set; }
         public string destinationInstitutionCode { get; set; }
         public string accountNumber { get; set; }
         public string accountName { get; set; }
-    
-        [System.Text.Json.Serialization.JsonPropertyName("accountName")]
-        public string AccountName { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("phoneNumber")]
         public string PhoneNumber { get; set; }

@@ -34,6 +34,16 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string Reference { get; set; }
         public string AccountNumber { get; set; }
         public string Message { get; set; }
+
+        // Required by Etransact's Switch-IT fund-transfer endpoint, which packs
+        // these into a single "senderName" field as "Name;AccountNumber;RecipientName".
+        public string? SenderName { get; set; }
+        public string? SenderAccountNumber { get; set; }
+        public string? RecipientName { get; set; }
+
+        // Etransact bank code for the destination: "700" = PocketMoni/wallet,
+        // anything else = a NUBAN bank account code. Defaults to "700" when unset.
+        public string? BankCode { get; set; }
     }
     public class CreateWalletRequest
     {
@@ -205,5 +215,8 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string WalletShemeTierId { get; set; }
         public string WalletFee { get; set; }
         public string WalletStampDuty { get; set; }
+        public string FundTransferBaseUrl { get; set; }
+        public string TerminalId { get; set; }
+        public string Pin { get; set; }
     }
 }

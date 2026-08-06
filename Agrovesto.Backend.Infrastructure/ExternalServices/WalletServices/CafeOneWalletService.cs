@@ -1,14 +1,8 @@
 ﻿using Agrovesto.Backend.Core;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
-using Core.Models.Payment;
 using Newtonsoft.Json;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest;
 using CafeOneParams = Agrovesto.Backend.Core.Models.Common.CafeOneParams;
@@ -16,9 +10,7 @@ using CafeOneBankData = Agrovesto.Backend.Core.Models.Common.CafeOneBankData;
 using CafeoneDataModel = Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.CafeoneDataModel;
 using CafeoneCustomerRequest = Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.CafeoneCustomerRequest;
 using CafeOneAuthResponse = Agrovesto.Backend.Core.Models.Common.CafeOneAuthResponse;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
-using Amazon.Runtime.Internal.Endpoints.StandardLibrary;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
