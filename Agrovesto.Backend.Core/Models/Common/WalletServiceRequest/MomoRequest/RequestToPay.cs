@@ -215,5 +215,8 @@ namespace Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest
         public string WalletShemeTierId { get; set; }
         public string WalletFee { get; set; }
         public string WalletStampDuty { get; set; }
+        public string FundTransferBaseUrl { get; set; }
+        public string TerminalId { get; set; }
+        public string Pin { get; set; }
     }
 }

@@ -91,17 +91,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             response.WalletFee = _params["Fee"].Value;
             response.WalletStampDuty = _params["StampDuty"].Value;
 
+            // Unlike the fields above, these don't throw when the key is absent -
+            // FundTransferBaseUrl/TerminalId/Pin aren't provisioned for every
+            // environment yet.
+            response.FundTransferBaseUrl = _params.TryGetValue("FundTransferBaseUrl", out var fundTransferBaseUrl) ? fundTransferBaseUrl.Value : null;
+            response.TerminalId = _params.TryGetValue("TerminalId", out var terminalId) ? terminalId.Value : null;
+            response.Pin = _params.TryGetValue("Pin", out var pin) ? pin.Value : null;
 
             return response;
 
-        }
-
-        // Unlike RetrieveParams above, this doesn't throw when a key is absent -
-        // used for parameters (FundTransferBaseUrl/TerminalId/Pin) that aren't
-        // provisioned for every environment yet.
-        private static string GetOptionalParam(WalletProviderParameterModel[] parameters, string key)
-        {
-            return parameters.FirstOrDefault(x => x.Key == key)?.Value;
         }
 
         public async Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(
@@ -659,11 +657,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             try
             {
-                var fundTransferBaseUrl = GetOptionalParam(parameters, "FundTransferBaseUrl");
-                var terminalId = GetOptionalParam(parameters, "TerminalId");
-                var pin = GetOptionalParam(parameters, "Pin");
+                var @params = await RetrieveParams(parameters, Env);
 
-                if (string.IsNullOrWhiteSpace(fundTransferBaseUrl) || string.IsNullOrWhiteSpace(terminalId) || string.IsNullOrWhiteSpace(pin))
+                if (string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) || string.IsNullOrWhiteSpace(@params.TerminalId) || string.IsNullOrWhiteSpace(@params.Pin))
                 {
                     return WalletResponseService<PaymentResponse>.Failed(
                         "Etransact fund transfer is not configured for this environment. " +
@@ -694,10 +690,10 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var payload = new
                 {
                     action = "FT",
-                    terminalId,
+                    terminalId = @params.TerminalId,
                     transaction = new
                     {
-                        pin,
+                        pin = @params.Pin,
                         senderName = $"{request.SenderName};{request.SenderAccountNumber};{request.RecipientName}",
                         bankCode,
                         amount = request.Amount,
@@ -718,7 +714,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 System.Diagnostics.Debug.WriteLine(
                     $"[InitiateWalletTransfer] reference={request.Reference} payloadJson={payloadJson}");
 
-                using var client = new HttpClient { BaseAddress = new Uri(fundTransferBaseUrl) };
+                using var client = new HttpClient { BaseAddress = new Uri(@params.FundTransferBaseUrl) };
                 client.DefaultRequestHeaders.Clear();
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
 
