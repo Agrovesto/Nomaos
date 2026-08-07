@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middlename,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.telephoneno,
                 Photourl = model.photo,
                 Residentialaddress = model.residence_address,
@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middleName,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.phoneNumber1,
 
                 Residentialaddress = model.residentialAddress,

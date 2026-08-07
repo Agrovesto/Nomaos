@@ -199,10 +199,10 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     UserId = userProfile.UserId,
                     Email = userProfile.Email,
                     PhoneNumber = !string.IsNullOrEmpty( userProfile.Phone) ? userProfile.Phone : request.PhoneNumber,
-                    BVN= !string.IsNullOrEmpty(userProfile.BVN) ? userProfile.BVN : request.BVN,
+                    BVN=!string.IsNullOrEmpty(userProfile.BVN) ? userProfile.BVN : request.BVN,
                     NIN= !string.IsNullOrEmpty(userProfile.NIN) ? userProfile.NIN : request.NIN,
-
-                    FirstName= userProfile.Name
+                    ImageString= !string.IsNullOrEmpty(userProfile.KYC.Base64) ? userProfile.KYC.Base64 : null,
+                    FirstName = userProfile.Name
                 };
 
                 var validationResponse = await providerService.CreateWalletAsync(providerUserProfile, providerParams, args.env);
