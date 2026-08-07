@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string Gender { get; set; }
         public string? Maidenname { get; set; }
         public string Middlename { get; set; }
-        public string Nin { get; set; }
+        public string Number { get; set; }
         public string Firstname { get; set; }
         public string Surname { get; set; }
         public string Phonenumber { get; set; }

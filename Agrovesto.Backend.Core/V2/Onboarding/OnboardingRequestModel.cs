@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Microsoft.AspNetCore.Http;
 using System;
@@ -28,8 +29,16 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string RoleId { get; set; }
         public string RoleName { get; set; }
     }
-        public class UsersProfileResponse
+    public class KYCDto
     {
+        public string NIN { get; set; }
+        public string BVN { get; set; }
+        public string Base64 { get; set; }
+        public KYCVerificationType? KycType { get; set; }
+    }
+    public class UsersProfileResponse
+    {
+        public KYCDto KYC { get; set; }
         public string UserId { get; set; }
         public string UserType { get; set; }
         public string Name { get; set; }

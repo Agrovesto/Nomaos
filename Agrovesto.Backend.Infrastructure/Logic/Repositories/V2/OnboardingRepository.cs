@@ -532,11 +532,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (string.IsNullOrWhiteSpace(userId))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
 
-            var user = await _context.Users
+            var userWithKyc = await (
+                from u in _context.Users
+                join kyc in _context.KYCDetails on u.Id equals kyc.UserId into kycGroup
+                from kyc in kycGroup.DefaultIfEmpty() 
+                where u.Id == userId
+                select new
+                {
+                    u.Id,
+                    u.UserType,
+                    u.Email,
+                    u.PhoneNumber,
+                    u.Name,
+                    u.NIN,
+                    u.BVN,
+                    Kyc = kyc 
+                })
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == userId);
+                .FirstOrDefaultAsync();
 
-            if (user == null)
+            if (userWithKyc == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
             var roles = await (
@@ -547,19 +562,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 {
                     RoleId = r.Id,
                     RoleName = r.Name
-                }
-            ).AsNoTracking().ToListAsync();
+                })
+                .AsNoTracking()
+                .ToListAsync();
 
             return new UsersProfileResponse
             {
-                NIN=user.NIN,
-                BVN=user.BVN,
-                UserId = user.Id,
-                UserType = user.UserType,
-                Email = user.Email,
-                Phone = user.PhoneNumber,
+                UserId = userWithKyc.Id,
+                UserType = userWithKyc.UserType,
+                Email = userWithKyc.Email,
+                Phone = userWithKyc.PhoneNumber,
+                Name = userWithKyc.Name,
+                NIN = userWithKyc.NIN,
+                BVN = userWithKyc.BVN,
                 Roles = roles,
-                Name=user.Name
+                KYC = userWithKyc.Kyc == null ? null : new KYCDto
+                {
+                    NIN = userWithKyc.Kyc.Number,
+                    BVN = userWithKyc.Kyc.Number,
+                    KycType = userWithKyc.Kyc.VerificationType,
+                    Base64 = userWithKyc.Kyc.Photourl
+                    // add other KYC fields you actually need here
+                }
             };
         }
         public async Task<UsersProfileResponse> GetUserProfile(string userId)
@@ -1802,7 +1826,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
             {
-                // Surface a clear ALREADY_EXIST error for unique constraint violations
                 throw new BaseException(
                     ExceptionType.ALREADY_EXIST,
                     $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.");
@@ -1811,20 +1834,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task OnCreateKYC(KYCDetails kYC)
         {
             var existingKYC = await _context.KYCDetails
-                .FirstOrDefaultAsync(k => k.UserId == kYC.UserId);
-            if (existingKYC != null)
+                .FirstOrDefaultAsync(k => k.UserId == kYC.UserId && k.VerificationType == kYC.VerificationType);
+
+            if(existingKYC == null)
+            {
+                await _context.KYCDetails.AddAsync(kYC);
+             
+            }
+            else
             {
                 existingKYC.Birthcountry = kYC.Birthcountry;
                 existingKYC.Birthlga = kYC.Birthlga;
                 existingKYC.Birthstate = kYC.Birthstate;
                 existingKYC.Birthdate = kYC.Birthdate;
                 existingKYC.Photourl = kYC.Photourl;
+                existingKYC.Firstname = kYC.Firstname;
+                existingKYC.Middlename = kYC.Middlename;
+                existingKYC.Surname = kYC.Surname;
+                existingKYC.Number=kYC.Number;
+                existingKYC.VerifiedBy = kYC.VerifiedBy;
+                existingKYC.Phonenumber=kYC.Phonenumber;
+                existingKYC.VerificationType = kYC.VerificationType;
             }
-
-                await _context.KYCDetails.AddAsync(kYC);
             await _context.SaveChangesAsync();
-
-            
         }
 
        

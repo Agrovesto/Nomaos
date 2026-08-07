@@ -1569,7 +1569,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
+            kyc.Photourl = verifyNin.nin_data?.photo;
             kyc.VerificationType = KYCVerificationType.NIN;
+            kyc.Number = verifyNin.nin_data?.nin;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {
@@ -1684,8 +1686,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
-
+            kyc.Photourl = verifyBvn.data?.base64Image;
             kyc.VerificationType = KYCVerificationType.BVN;
+            kyc.Number = verifyBvn.data?.bvn;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {
