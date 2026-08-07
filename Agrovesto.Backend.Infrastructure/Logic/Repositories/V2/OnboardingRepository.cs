@@ -588,6 +588,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 IsPhoneVerified= user.IsPhoneVerified,
                 NIN = user.NIN,
                 BVN = user.BVN,
+                IsBvnVerified=user.IsBvnVerified,
+                IsNinVerified=user.IsNinVerified,
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
 
@@ -1256,11 +1258,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             try
             {
-               
-
-                    createUser = await _userManager.CreateAsync(user, passwordToUse);
-                
-
+                createUser = await _userManager.CreateAsync(user, passwordToUse);
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
             {

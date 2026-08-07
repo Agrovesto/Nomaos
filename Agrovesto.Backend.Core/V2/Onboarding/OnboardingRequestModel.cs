@@ -40,6 +40,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string BVN { get; set; }
         public bool IsPhoneVerified { get; set; }
         public bool IsEmailVerified { get; set; }
+        public bool IsNinVerified { get; set; }
+        public bool IsBvnVerified { get; set; }
         public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
