@@ -9,7 +9,7 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
 {
     public static class HashingHelper
     {
-                public static string ComputeSha256Hash(string input)
+       public static string ComputeSha256Hash(string input)
         {
             var bytes = Encoding.UTF8.GetBytes(input);
             var hashBytes = SHA256.HashData(bytes);
