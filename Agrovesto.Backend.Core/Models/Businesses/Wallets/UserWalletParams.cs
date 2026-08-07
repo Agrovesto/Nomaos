@@ -171,4 +171,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public bool IsDefault { get; set; }
     }
 
+    public class CreateWalletResult
+    {
+        public long WalletId { get; set; }
+        public string UserId { get; set; }
+        public string? AccountName { get; set; }
+        public string? AccountNumber { get; set; }
+        public long WalletProviderId { get; set; }
+        public string? ProviderName { get; set; }
+        public string? ProviderCode { get; set; }
+        public decimal WalletBalance { get; set; }
+        public string? Currency { get; set; }
+        public string? ContextType { get; set; }
+        public string? ContextReferenceId { get; set; }
+        public bool IsDefault { get; set; }
+    }
+
 }

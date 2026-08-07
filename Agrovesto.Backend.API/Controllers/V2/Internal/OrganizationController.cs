@@ -452,9 +452,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
               
                 return _walletService.CreateWallet(request, query);
             },
-            wallet => Ok(new Response<(bool status, string message)>
+            wallet => Ok(new Response<CreateWalletResult>
             {
-                Data = wallet,
+                Data = wallet.data,
                 Message = wallet.message,
                 Succeeded = wallet.status,
                 Code = wallet.status ? ResponseCodes.Success : ResponseCodes.Failed
