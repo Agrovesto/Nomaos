@@ -59,6 +59,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> IsUserInRoleAsync(string userId, string role);
         Task UpdateUserDetails(OnboardingRequestModel model, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUseridentity(string userId);
+        Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -1830,6 +1831,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     ExceptionType.ALREADY_EXIST,
                     $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.");
             }
+        }
+
+        public async Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType)
+        {
+            var kycDetails = await _context.KYCDetails
+                .FirstOrDefaultAsync(k => k.UserId == userId && k.VerificationType == verificationType);
+            return kycDetails;
         }
         public async Task OnCreateKYC(KYCDetails kYC)
         {

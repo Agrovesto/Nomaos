@@ -1545,6 +1545,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "NIN");
+            var isExistingNin = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.NIN);
+            if (isExistingNin != null)
+            {
+                return true;
+            }
             NINDataVerificationResponse<NINData, Verification> verifyNin = null;
             if (args.Env == Env.Live.ToString())
             {
@@ -1662,6 +1667,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "BVN");
+            var isExistingBvn = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.BVN);
+            if (isExistingBvn != null)
+            {
+                return true;
+            }
             BVNVerificationResponse<BVN_data, Verification> verifyBvn = null;
             if(args.Env == Env.Live.ToString())
             {
