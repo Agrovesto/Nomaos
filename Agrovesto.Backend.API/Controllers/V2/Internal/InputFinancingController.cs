@@ -796,8 +796,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("subscription/upload-commitment-form")]
         [Consumes("multipart/form-data")]
         public async Task<IActionResult> UploadSignedCommitmentForm(
-            IFormFile file,
-            [FromQuery] InputSubscriptionRequestArgs args)
+        IFormFile file,
+        [FromQuery] InputSubscriptionRequestArgs args)
         {
             args.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(args.BusinessCode))

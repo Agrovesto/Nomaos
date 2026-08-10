@@ -991,6 +991,76 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
          * */
 
         #region Input Subscriber
+        private static void ValidateCommitmentPlan(CommitmentPlan? commitment)
+        {
+            if (commitment == null)
+                throw new Exception("This package requires a commitment plan, please configure the commitment plan for this package");
+
+            var missing = new List<string>();
+
+            if (commitment.CommitmentValue <= 0)
+                missing.Add("commitment value");
+
+            if (commitment.CommitmentPaymentStartDate == null)
+                missing.Add("commitment payment start date");
+
+            if (commitment.CommitmentPaymentEndDate == null)
+                missing.Add("commitment payment end date");
+
+            if (commitment.CommitmentPaymentStartDate != null &&
+                commitment.CommitmentPaymentEndDate != null &&
+                commitment.CommitmentPaymentEndDate <= commitment.CommitmentPaymentStartDate)
+                missing.Add("commitment payment end date must be after the start date");
+
+            // CommitmentType-specific check: percentage-based commitments need a percentage set
+            if (commitment.CommitmentType == CommitmentType.PercentageOfTotalValue && commitment.CommitmentPercentage <= 0)
+                missing.Add("commitment percentage");
+
+            if (missing.Any())
+                throw new Exception(
+                    $"Commitment plan is not fully configured, please configure the following before subscribing: {string.Join(", ", missing)}");
+        }
+
+        private static void ValidateRepaymentPlan(RepaymentPlan? repayment)
+        {
+            if (repayment == null)
+                throw new Exception("This package requires a repayment plan, please configure the repayment plan for this package");
+
+            var missing = new List<string>();
+
+            if (repayment.RepaymentValue <= 0)
+                missing.Add("repayment value");
+
+            if (repayment.RepaymentDuration <= 0)
+                missing.Add("repayment duration");
+
+            if (repayment.RepaymentFrequency == default)
+                missing.Add("repayment frequency");
+
+            if (repayment.RepaymentMode == default)
+                missing.Add("repayment mode");
+
+            if (repayment.RiskCategory == default)
+                missing.Add("risk category");
+
+            if (repayment.RepaymentStartDate == null)
+                missing.Add("repayment start date");
+
+            if (repayment.RepaymentEndDate == null)
+                missing.Add("repayment end date");
+
+            if (repayment.RepaymentStartDate != null &&
+                repayment.RepaymentEndDate != null &&
+                repayment.RepaymentEndDate <= repayment.RepaymentStartDate)
+                missing.Add("repayment end date must be after the start date");
+
+            if (repayment.RepaymentGracePeriod == null)
+                missing.Add("repayment grace period");
+
+            if (missing.Any())
+                throw new Exception(
+                    $"Repayment plan is not fully configured, please configure the following before subscribing: {string.Join(", ", missing)}");
+        }
         public async Task<bool> AddSubscriberAsync(
         AddSubscriberRequest request,
         InputSubscriptionRequestArgs args)
@@ -1081,11 +1151,12 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var repayment = package.RepaymentPlan;
                     var commitment = package.CommitmentPlan;
 
-                    if (package.RepaymentRequired && repayment == null)
-                        throw new Exception("Repayment plan is required for subscription");
+                  
 
-                    if (package.CommitmentRequired && commitment == null)
-                        throw new Exception("Commitment plan is required for subscription");
+                    if (package.CommitmentRequired)
+                        ValidateCommitmentPlan(commitment);
+                    if (package.RepaymentRequired)
+                        ValidateRepaymentPlan(repayment);
 
                     var subscription = new InputPackageSubscription
                     {
@@ -1160,7 +1231,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     return true;
                 }
-                catch
+                catch(Exception ex)
                 {
                     await transaction.RollbackAsync();
                     throw;
