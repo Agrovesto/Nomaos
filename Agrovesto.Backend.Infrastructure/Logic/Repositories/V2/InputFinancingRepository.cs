@@ -1151,12 +1151,12 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                     var repayment = package.RepaymentPlan;
                     var commitment = package.CommitmentPlan;
 
-                    if (package.RepaymentRequired)
-                        ValidateRepaymentPlan(repayment);
+                  
 
                     if (package.CommitmentRequired)
                         ValidateCommitmentPlan(commitment);
-
+                    if (package.RepaymentRequired)
+                        ValidateRepaymentPlan(repayment);
 
                     var subscription = new InputPackageSubscription
                     {
