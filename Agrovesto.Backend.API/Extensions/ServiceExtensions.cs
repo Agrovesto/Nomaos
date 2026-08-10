@@ -130,6 +130,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IFarmerQueryService, FarmerQueryService>();
             services.AddScoped<IUserWalletRepository, UserWalletRepository>();
             services.AddScoped<INomaOSWalletService, NomaOSWalletService>();
+            services.AddScoped<ITokenService, TokenService>();
             // Concrete registrations - required for WalletServiceFactory to resolve them
            
            

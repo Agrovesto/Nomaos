@@ -311,6 +311,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+
         public async Task<UserWalletModel> CreateUserWallet(
        UserWalletModel request,
        UserWalletParams args)

@@ -299,11 +299,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                var (status, message) = await _walletManager.ValidateWalletPin(request, query);
+                var (status, message, token) = await _walletManager.ValidateWalletPin(request, query);
 
-                return Ok(new Response<bool>()
+                return Ok(new Response<ValidateWalletPinResult>()
                 {
-                    Data = status,
+                    Data = new ValidateWalletPinResult
+                    {
+                        IsValid = status,
+                        Token = token,
+                        ExpiresAt = status ? DateTimeOffset.UtcNow.AddMinutes(3) : null
+                    },
                     Message = message,
                     Succeeded = status,
                     Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed

@@ -28,6 +28,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
 
         public string Pin { get; set; }
     }
+    public class ValidateWalletPinResult
+    {
+        public bool IsValid { get; set; }
+        public string? Token { get; set; }
+        public DateTimeOffset? ExpiresAt { get; set; }
+    }
     public class WithdrawWalletRequest
     {
         public long UserWalletId { get; set; }
