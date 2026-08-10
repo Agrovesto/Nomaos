@@ -994,7 +994,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         private static void ValidateCommitmentPlan(CommitmentPlan? commitment)
         {
             if (commitment == null)
-                throw new Exception("This package requires a commitment plan, please configure the commitment plan for this package");
+                throw BaseException(ExceptionType.OPERATION_FAILED, "This package requires a commitment plan, please configure the commitment plan for this package");
 
             var missing = new List<string>();
 
@@ -1012,19 +1012,18 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 commitment.CommitmentPaymentEndDate <= commitment.CommitmentPaymentStartDate)
                 missing.Add("commitment payment end date must be after the start date");
 
-            // CommitmentType-specific check: percentage-based commitments need a percentage set
             if (commitment.CommitmentType == CommitmentType.PercentageOfTotalValue && commitment.CommitmentPercentage <= 0)
                 missing.Add("commitment percentage");
 
             if (missing.Any())
-                throw new Exception(
+                throw new BaseException(ExceptionType.OPERATION_FAILED,
                     $"Commitment plan is not fully configured, please configure the following before subscribing: {string.Join(", ", missing)}");
         }
 
         private static void ValidateRepaymentPlan(RepaymentPlan? repayment)
         {
             if (repayment == null)
-                throw new Exception("This package requires a repayment plan, please configure the repayment plan for this package");
+                throw new BaseException(ExceptionType.OPERATION_FAILED,"This package requires a repayment plan, please configure the repayment plan for this package");
 
             var missing = new List<string>();
 
@@ -1058,7 +1057,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                 missing.Add("repayment grace period");
 
             if (missing.Any())
-                throw new Exception(
+                throw new BaseException(ExceptionType.OPERATION_FAILED,
                     $"Repayment plan is not fully configured, please configure the following before subscribing: {string.Join(", ", missing)}");
         }
         public async Task<bool> AddSubscriberAsync(
