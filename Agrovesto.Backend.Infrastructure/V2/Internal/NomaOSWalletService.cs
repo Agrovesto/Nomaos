@@ -32,7 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
     public interface INomaOSWalletService
     {
         // Define methods that the NomaOSWalletService should implement
-        Task<(bool status, string message)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
+        Task<(bool status, string message, CreateWalletResult? data)> CreateWallet(CreateWalletRequest request, WalletQueryParams args);
         Task<bool> GetRequestToPayStatus(string walletProviderCode, string transactionreference, string env,
             string businessCode);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
@@ -143,27 +143,27 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
-        public async Task<(bool status, string message)> CreateWallet(Core.Models.Businesses.CreateWalletRequest request, WalletQueryParams args)
+        public async Task<(bool status, string message, CreateWalletResult? data)> CreateWallet(Core.Models.Businesses.CreateWalletRequest request, WalletQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(request.TransactionPin))
                 throw new Exception("Transaction PIN is required");
-       
+
             try
             {
-            
+
                 string? businessCode = null;
                 if (!string.IsNullOrWhiteSpace(args.businessCode))
                 {
                     var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
                     if (business == null)
-                        return (false, $"Business with code {args.businessCode} does not exist");
+                        return (false, $"Business with code {args.businessCode} does not exist", null);
 
                     businessCode = args.businessCode;
                 }
 
                 var userProfile = await _onboardingRepository.GetUseridentity(args.UserId);
                 if (userProfile == null)
-                    return (false, "User not found");
+                    return (false, "User not found", null);
 
                 if(request.BVN.IsNullOrEmpty() is false)
                 {
@@ -189,7 +189,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 object existingWallet = await _userWalletRepository.ExistingWalletForProvider(args, contextType, contextReferenceId, providerId);
 
                 if (existingWallet != null)
-                    return (false, "Wallet already exists for this provider and context");
+                    return (false, "Wallet already exists for this provider and context", null);
 
                 var providerType = request.WalletProviderCode.ToEnum<WalletProviderType>();
                 var providerService = _factory.GetService(request.WalletProviderCode);
@@ -208,11 +208,13 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 var validationResponse = await providerService.CreateWalletAsync(providerUserProfile, providerParams, args.env);
 
                 if (validationResponse == null || !validationResponse.IsSuccess)
-                    return (false, validationResponse?.Message ?? "Account creation failed");
+                    return (false, validationResponse?.Message ?? "Account creation failed", null);
 
                 var walletNumber = validationResponse.Data?.WalletNumber;
                 if (string.IsNullOrWhiteSpace(walletNumber))
-                    return (false, "Provider did not return a valid wallet number");
+                    return (false, "Provider did not return a valid wallet number", null);
+
+                var currency = providerParams.FirstOrDefault(x => x.Key == "Currency")?.Value ?? "NGN";
 
                 var walletModel = new UserWalletModel
                 {
@@ -220,7 +222,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     WalletProviderId = providerId,
                     WalletNumber = walletNumber,
                     WalletBalance = 0,
-                    Currency = providerParams.FirstOrDefault(x => x.Key == "Currency")?.Value ?? "NGN",
+                    Currency = currency,
                     BelongToBusinessCode = businessCode,
                     ContextType = contextType.ToString(),
                     ContextReferenceId = contextReferenceId,
@@ -241,12 +243,30 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     await UpdateOrganizationInputPackage(args, providerId, wallet);
                 }
 
-                return (true, "Wallet created successfully");
-            
+                var providerInfo = await _providerRepo.Get(providerId);
+
+                var result = new CreateWalletResult
+                {
+                    WalletId = wallet.WalletId,
+                    UserId = args.UserId,
+                    AccountName = validationResponse.Data?.AccountName,
+                    AccountNumber = walletNumber,
+                    WalletProviderId = providerId,
+                    ProviderName = providerInfo?.Name,
+                    ProviderCode = request.WalletProviderCode,
+                    WalletBalance = walletModel.WalletBalance,
+                    Currency = currency,
+                    ContextType = contextType.ToString(),
+                    ContextReferenceId = contextReferenceId,
+                    IsDefault = request.IsDefault
+                };
+
+                return (true, "Wallet created successfully", result);
+
             }
             catch (Exception ex)
             {
-                return (false, $"Error creating wallet: {ex.Message}");
+                return (false, $"Error creating wallet: {ex.Message}", null);
             }
         }
 

@@ -249,11 +249,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 var wallet = await _walletManager.CreateWallet(request, query);
 
-                return Ok(new Response<(bool status, string message)>()
+                return Ok(new Response<CreateWalletResult>()
                 {
-                    Data = wallet,
-
-
+                    Data = wallet.data,
                     Message = wallet.message,
                     Succeeded = wallet.status,
 
