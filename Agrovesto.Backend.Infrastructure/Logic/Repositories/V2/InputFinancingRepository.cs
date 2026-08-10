@@ -994,7 +994,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         private static void ValidateCommitmentPlan(CommitmentPlan? commitment)
         {
             if (commitment == null)
-                throw BaseException(ExceptionType.OPERATION_FAILED, "This package requires a commitment plan, please configure the commitment plan for this package");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "This package requires a commitment plan, please configure the commitment plan for this package");
 
             var missing = new List<string>();
 
