@@ -144,7 +144,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public DateTimeOffset? RepaymentEndDate { get; set; }
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
         public InputPackageRepaymentMode RepaymentModel { get; set; }
-        public decimal RepaymentValue { get; set; }
+        public decimal RepaymentValue { get; set; } = 0;
         public RiskCategory RiskCategory { get; set; }
 
 
@@ -294,6 +294,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class AdditionalCostDto
     {
+        public long Id { get; set; }
         public string Name { get; set; }
         public decimal Amount { get; set; }
     }

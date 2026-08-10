@@ -211,6 +211,8 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
         {
             if (request == null)
                 throw new Exception("Request cannot be null");
+         
+            bool repaymentRequired = request.RepaymentValue > 0;
 
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -297,10 +299,10 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                             : totalFinancingValue,
 
                         CommitmentRequired = request.CommitmentRequired,
-                        RepaymentRequired = request.RepaymentRequired,
+                        RepaymentRequired = repaymentRequired,//request.RepaymentRequired,
 
                         UserWalletId = request.UserWalletId,
-                        WalletProviderId = request.PaybackWalletId,
+                        WalletProviderId = request.PaybackWalletId > 0 ? request.PaybackWalletId : null,
 
                         IsSelectedWalletProvisioned = args.isSelectedWalletProvisioned,
 
@@ -328,7 +330,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
                         };
                     }
 
-                    if (request.RepaymentRequired || request.RepaymentValue > 0)
+                    if (request.RepaymentRequired && request.RepaymentValue > 0)
                     {
                         package.RepaymentPlan = new RepaymentPlan
                         {
@@ -367,7 +369,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                     return true;
                 }
-                catch
+                catch(Exception ex)
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -670,6 +672,7 @@ RepaymentSchedule (per subscriber tracking OR linked schedule)
 
                 AdditionalCosts = package.AdditionalCosts.Select(c => new AdditionalCostDto
                 {
+                    Id= c.Id,
                     Name = c.Name,
                     Amount = c.Amount
                 }).ToList(),

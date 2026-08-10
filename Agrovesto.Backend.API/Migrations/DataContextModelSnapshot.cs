@@ -2368,7 +2368,6 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("int");
 
                     b.Property<long?>("WalletProviderId")
-                        .IsRequired()
                         .HasColumnType("bigint");
 
                     b.HasKey("Id");
@@ -7167,9 +7166,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", "WalletProvider")
                         .WithMany()
-                        .HasForeignKey("WalletProviderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("WalletProviderId");
 
                     b.Navigation("CreatedBy");
 

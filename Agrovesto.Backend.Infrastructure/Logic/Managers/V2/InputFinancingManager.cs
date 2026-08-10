@@ -415,8 +415,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid subscriber type");
             }
+            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.OrganizationCode);
+            if (hasOrg != null)
+            {
+                query.OrganizationId = hasOrg.OrganizaionId;
+            }
 
-          
             var subscriberExists = await _onBoardingManager.GetUseridentity(request.SubscriberUserId);
 
             if (subscriberExists == null)

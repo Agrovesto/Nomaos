@@ -123,8 +123,8 @@ RepaymentTransaction
         public long? UserWalletId { get; set; } // if wallet has not been provisioned, it should be null, this allows for package configuration before wallet setup, and also allows for packages that do not require wallet disbursement (e.g. physical input delivery by 3rd party)
         public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
 
-        public long? WalletProviderId { get; set; }
-        public WalletProvider WalletProvider { get; set; }
+        public long? WalletProviderId { get; set; } = null;
+        public WalletProvider? WalletProvider { get; set; }
 
         public bool IsSelectedWalletProvisioned { get; set; } // indicates if the user wallet for disbursement has been provisioned, this is important for package activation and disbursement readiness
         public decimal AdditionalCostAmount { get; set; } // total of all additional costs, this is important for calculating total repayment amount and for farmer commitment

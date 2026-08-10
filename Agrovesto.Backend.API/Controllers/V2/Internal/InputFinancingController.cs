@@ -470,6 +470,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     ResponseCodes.AccessDenied
                 ));
             }
+            var orgError = TryResolveOrganizationCode(args.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.OrganizationCode = resolvedOrgCode;
             var result = await _inputFinancingManager
                 .AddSubscriberAsync(model, args);
 
