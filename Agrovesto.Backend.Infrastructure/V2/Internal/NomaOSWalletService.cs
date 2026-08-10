@@ -15,6 +15,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System;
@@ -42,6 +43,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
         Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
+        Task<(bool status, string message)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
     }
 
             public class NomaOSWalletService : INomaOSWalletService
@@ -54,12 +56,14 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly DataContext _context;
         private readonly IInputFinancingRepository _inputFinancingRepository;
         private readonly IMTNMomo _mtnMomoService;
+        private readonly ILogger<NomaOSWalletService> _logger;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory,
             DataContext context, IMTNMomo mtnMomoService,
-            IInputFinancingRepository inputFinancingRepository)
+            IInputFinancingRepository inputFinancingRepository,
+            ILogger<NomaOSWalletService> logger)
         {
 
             _mtnMomoService = mtnMomoService;
@@ -70,6 +74,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _context = context;
             _userWalletRepository = userWalletRepository;
             _inputFinancingRepository = inputFinancingRepository;
+            _logger = logger;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
         {
@@ -668,5 +673,39 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
+        public async Task<(bool status, string message)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args)
+        {
+            if (string.IsNullOrWhiteSpace(request.Pin))
+            {
+                _logger.LogWarning("Transaction PIN is required for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Transaction PIN is required");
+            }
+
+            var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = request.WalletId
+            });
+            if (wallet == null)
+            {
+                _logger.LogWarning("Wallet not found for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet not found");
+            }
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(wallet.Id, request.Pin);
+
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Invalid transaction PIN for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                return (false, ex.Message);
+            }
+
+            return (true, "PIN is valid");
+        }
     }
 }
