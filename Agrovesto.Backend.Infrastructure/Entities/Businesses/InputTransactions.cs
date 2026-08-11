@@ -247,6 +247,7 @@ RepaymentTransaction
         public decimal Amount { get; set; }
         public decimal AmountPaid { get; set; }
         public DateTimeOffset? PaidOn { get; set; }
+        public DateTimeOffset? GracePeriodDueDate { get; set; }
       
         public bool IsWithinGracePeriod { get; set; }
 
@@ -256,6 +257,14 @@ RepaymentTransaction
         public bool IsOverdue { get; set; }
         public decimal PenaltyAccrued { get; set; }
         public decimal PenaltyPaid { get; set; }
+
+        public bool IsDeleted { get; set; }
+        public DateTimeOffset? DeletedOn { get; set; }
+        public string? DeletedByUserId { get; set; }
+        public string? DeletionReason { get; set; }
+
+        public long? SupersededByScheduleId { get; set; }
+        public RepaymentSchedule? SupersededByRepaymentSchedule { get; set; }
     }
 
     public class InputPackageSubscription

@@ -477,6 +477,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .HasOne(p => p.RepaymentPlan)
     .WithOne(c => c.InputPackage)
     .HasForeignKey<RepaymentPlan>(c => c.InputPackageId);
+
+            modelBuilder.Entity<RepaymentSchedule>()
+    .HasQueryFilter(x => !x.IsDeleted);
         }
 
      

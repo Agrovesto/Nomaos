@@ -4569,7 +4569,19 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<decimal>("Balance")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("DeletedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("DeletedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("DeletionReason")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTimeOffset>("DueDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("GracePeriodDueDate")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<long>("InputPackageSubscriptionId")
@@ -4577,6 +4589,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<int>("InstallmentNumber")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsOverdue")
                         .HasColumnType("bit");
@@ -4599,9 +4614,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<long?>("SupersededByRepaymentScheduleId")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("SupersededByScheduleId")
+                        .HasColumnType("bigint");
+
                     b.HasKey("Id");
 
                     b.HasIndex("InputPackageSubscriptionId");
+
+                    b.HasIndex("SupersededByRepaymentScheduleId");
 
                     b.ToTable("RepaymentSchedules");
                 });
@@ -7776,7 +7799,13 @@ namespace Agrovesto.Backend.API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.RepaymentSchedule", "SupersededByRepaymentSchedule")
+                        .WithMany()
+                        .HasForeignKey("SupersededByRepaymentScheduleId");
+
                     b.Navigation("InputPackageSubscription");
+
+                    b.Navigation("SupersededByRepaymentSchedule");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubAccount", b =>

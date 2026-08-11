@@ -226,16 +226,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
         }
 
-        //public async Task<bool> GenerateInputPackageFromEopAsync(GenerateInputPackageRequest request, ListQueryParams query)
-        //{
-        //    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(query.organizationCode);
-        //    if (hasOrg != null)
-        //    {
-        //        request.OrganizationId = hasOrg.OrganizaionId;
-        //    }
-
-        //    return await _inputFinancingRepository.GenerateInputPackageFromEopAsync(request);
-        //}
 
         public async Task<EopDto> GetEopByIdAsync(ListQueryParams query)
         {
@@ -777,10 +767,10 @@ RepaymentFrequency frequency)
 
             return frequency switch
             {
-                RepaymentFrequency.Weekly =>
+                RepaymentFrequency.Daily =>
                     (int)Math.Floor((endDate - startDate).TotalDays / 7) + 1,
 
-                RepaymentFrequency.BiWeekly =>
+                RepaymentFrequency.Weekly =>
                     (int)Math.Floor((endDate - startDate).TotalDays / 14) + 1,
 
                 RepaymentFrequency.Monthly =>
@@ -791,7 +781,7 @@ RepaymentFrequency frequency)
                     (((endDate.Year - startDate.Year) * 12)
                     + endDate.Month - startDate.Month) / 3 + 1,
 
-                RepaymentFrequency.Annually =>
+                RepaymentFrequency.Yearly =>
                     endDate.Year - startDate.Year + 1,
 
                 _ => 1
