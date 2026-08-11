@@ -14,7 +14,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using LocationType = Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType;
-using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
+
 using States = Agrovesto.Backend.Infrastructure.Entities.Common.States;
 
 namespace Agrovesto.Backend.Infrastructure

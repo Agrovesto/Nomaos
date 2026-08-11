@@ -178,7 +178,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         Onboarding,
         Login,
-        PasswordReset
+        PasswordReset,
+
     }
     public class CreateAgentResponseModel
     {

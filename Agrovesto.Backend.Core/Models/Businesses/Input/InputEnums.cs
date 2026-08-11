@@ -80,11 +80,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Not Set")]
         NA = 0,
 
-        [Display(Name = "Weekly")]
-        Weekly = 1,
+        [Display(Name = "Daily")]
+        Daily = 1,
 
-        [Display(Name = "Bi Weekly")]
-        BiWeekly = 2,
+        [Display(Name = "Weekly")]
+        Weekly = 2,
 
         [Display(Name = "Monthly")]
         Monthly = 3,
@@ -92,8 +92,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Quarterly")]
         Quarterly = 4,
 
-        [Display(Name = "Annually")]
-        Annually = 5
+        [Display(Name = "Yearly")]
+        Yearly = 5
     }
 
     public enum RiskCategory
