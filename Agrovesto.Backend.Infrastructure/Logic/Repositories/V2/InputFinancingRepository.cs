@@ -642,6 +642,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 RepaymentFrequency.Yearly => EndOfMonth(start.AddYears(installmentNumber-1)),
                 RepaymentFrequency.NA => throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment frequency is not set"),
+                _ => throw new NotSupportedException($"Repayment frequency '{installmentNumber}' is not supported.")
+
             };
         }
         private static List<RepaymentScheduleDto> GenerateRepaymentScheduleBrekadown(RepaymentPlan plan)
@@ -694,25 +696,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var commitment = package.CommitmentPlan;
             var repayment = package.RepaymentPlan;
 
-            const int repaymentPreviewCount = 5;
-
-            // Only pull the first few repayments here — full history is available
-            // via GetPackageRepaymentBreakdownAsync below, which supports paging.
-            //var repaymentBreakdown = await _context.InputPackageSubscriptionPayments
-            //    .Where(x => x.PaymentType == PaymentType.Repayment
-            //        && x.Subscription.InputPackageId == id)
-            //    .OrderByDescending(x => x.PaidOn)
-            //    .Take(repaymentPreviewCount)
-            //    .Select(x => new RepaymentBreakdownDto
-            //    {
-            //        Id = x.Id,
-            //        SubscriptionId = x.SubscriptionId,
-            //        AmountPaid = x.AmountPaid,
-            //        Date = x.PaidOn,
-            //        MethodOfPayment = EnumExtensions.GetDisplayName(x.PaymentChannel),
-            //        LoanAmount = package.TotalFinancingValue
-            //    })
-            //    .ToListAsync();
+           
 
             var repaymentBreakdown =  GenerateRepaymentScheduleBrekadown(
                 repayment

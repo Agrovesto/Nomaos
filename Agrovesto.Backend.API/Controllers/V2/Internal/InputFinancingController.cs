@@ -182,7 +182,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ));
             }
 
-            var result = await _inputFinancingManager
+            await _inputFinancingManager
                 .EditRepaymentPlanAsync(args.PackageId, model, query);
 
             return Ok(ApiResponse<string>.Success(
