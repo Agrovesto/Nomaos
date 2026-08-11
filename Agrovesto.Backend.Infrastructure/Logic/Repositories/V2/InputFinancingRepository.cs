@@ -1124,9 +1124,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (repayment.RepaymentGracePeriod == null)
                 missing.Add("repayment grace period");
 
+
+            if (repayment.RepaymentDuration > 0 &&
+            repayment.RepaymentFrequency != default &&
+            repayment.RepaymentStartDate.HasValue &&
+            repayment.RepaymentEndDate.HasValue)
+            {
+                var expectedLastDueDate = GetInstallmentDueDate(
+                    repayment.RepaymentDuration,
+                    repayment.RepaymentStartDate.Value,
+                    repayment.RepaymentFrequency);
+
+                if (expectedLastDueDate.Date != repayment.RepaymentEndDate.Value.Date)
+                {
+                    missing.Add(
+                         $"Repayment schedule mismatch: with a {repayment.RepaymentFrequency} frequency and duration of " +
+                        $"{repayment.RepaymentDuration}, starting {repayment.RepaymentStartDate.Value:yyyy-MM-dd}, the final " +
+                        $"installment falls on {expectedLastDueDate:yyyy-MM-dd}, not the configured end date " +
+                        $"{repayment.RepaymentEndDate.Value:yyyy-MM-dd}. Adjust the duration, frequency, start date, or end date " +
+                        "so they agree.");
+                }
+            }
+
             if (missing.Any())
                 throw new BaseException(ExceptionType.OPERATION_FAILED,
-                    $"Repayment plan is not fully configured, please configure the following before subscribing: {string.Join(", ", missing)}");
+                    $"Repayment plan is not fully configured or has errors, please fix the following: {string.Join(", ", missing)}");
+
+            
         }
 
         public async Task<bool> AddSubscriberAsync(
