@@ -244,7 +244,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public List<InputPackageBreakdownDto> PackageInputs { get; set; }
         public List<AdditionalCostDto> AdditionalCosts { get; set; }
-        public List<RepaymentBreakdownDto> RepaymentBreakdown { get; set; }
+        public List<RepaymentScheduleDto> RepaymentBreakdown { get; set; }
     }
     public class UpdateRepaymentPlanRequest
     {

@@ -163,6 +163,32 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ResponseMessages.Successful, ResponseCodes.Success
             ));
         }
+        [HttpPatch("update-package-repayment-plan")]
+        public async Task<IActionResult> EditRepaymentPlanAsync(
+            [FromBody] UpdateRepaymentPlanRequest model,
+            [FromQuery] ReplacePackageItemRequestArgs args,
+            [FromQuery] InputPackageConfigArgs query)
+        {
+            var orgError = TryResolveOrganizationCode(query.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            query.OrganizationCode = resolvedOrgCode;
+
+            query.createdByUserId = CurrentUserId;
+            if (string.IsNullOrWhiteSpace(query.OrganizationCode) || string.IsNullOrWhiteSpace(query.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                      ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+
+            var result = await _inputFinancingManager
+                .EditRepaymentPlanAsync(args.PackageId, model, query);
+
+            return Ok(ApiResponse<string>.Success(
+                ResponseMessages.Successful, ResponseCodes.Success
+            ));
+        }
         [HttpGet("packages")]
         public async Task<IActionResult> GetPackagesAsync(
       [FromQuery] InputPackageFilterRequest filter,
