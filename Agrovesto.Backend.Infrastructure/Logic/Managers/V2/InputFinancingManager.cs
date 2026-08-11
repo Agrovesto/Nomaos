@@ -98,6 +98,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
         Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs query, CancellationToken cancellationToken = default);
+        Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
     }
 
     public class InputFinancingManager : IInputFinancingManager
@@ -300,6 +301,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 args.organizationId = hasOrg.OrganizaionId;
             }
             return await _inputFinancingRepository.UpdateInputPackageConfig(packageId, request, args);
+        }
+        public async Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(
+        long packageId,
+        UpdateRepaymentPlanRequest request,
+        InputPackageConfigArgs args)
+        {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (packageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(packageId));
+           
+            return await _inputFinancingRepository.EditRepaymentPlanAsync(packageId, request, args);
         }
 
         public async Task<bool> ReactivatePackageAsync(ReplacePackageItemRequestArgs query)
