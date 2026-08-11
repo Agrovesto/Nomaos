@@ -151,6 +151,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Destination { get; set; }
         public DateTime ExpiresAt { get; set; }
     }
+
+    public class TokenResult
+    {
+        public string Token { get; set; }
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
     public class ConfirmOtpRequest
     {
         [Required]
@@ -179,7 +185,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         Onboarding,
         Login,
         PasswordReset,
-
+        WalletPinUpdate
     }
     public class CreateAgentResponseModel
     {

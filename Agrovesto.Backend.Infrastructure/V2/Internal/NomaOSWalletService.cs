@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
@@ -10,11 +11,13 @@ using Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.MomoRequest;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
+using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System;
@@ -42,6 +45,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
         Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
+        Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
+        Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
     }
 
             public class NomaOSWalletService : INomaOSWalletService
@@ -54,12 +59,16 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly DataContext _context;
         private readonly IInputFinancingRepository _inputFinancingRepository;
         private readonly IMTNMomo _mtnMomoService;
+        private readonly ILogger<NomaOSWalletService> _logger;
+        private readonly IOtpService _otpService;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
             IWalletProviderRepository providerRepo, IWalletServiceFactory factory,
             DataContext context, IMTNMomo mtnMomoService,
-            IInputFinancingRepository inputFinancingRepository)
+            IInputFinancingRepository inputFinancingRepository,
+            ILogger<NomaOSWalletService> logger,
+            IOtpService otpService)
         {
 
             _mtnMomoService = mtnMomoService;
@@ -70,6 +79,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _context = context;
             _userWalletRepository = userWalletRepository;
             _inputFinancingRepository = inputFinancingRepository;
+            _logger = logger;
+            _otpService = otpService;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
         {
@@ -668,5 +679,80 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
+        public async Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args)
+        {
+            if (string.IsNullOrWhiteSpace(request.Pin))
+            {
+                _logger.LogWarning("Transaction PIN is required for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Transaction PIN is required");
+            }
+
+            var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = request.WalletId
+            });
+            if (wallet == null)
+            {
+                _logger.LogWarning("Wallet not found for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet not found");
+            }
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(wallet.Id, request.Pin);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Invalid transaction PIN for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                return (false, ex.Message, null);
+            }
+
+            var token = await _otpService.GenerateTokenAsync(args.UserId, OtpPurpose.WalletPinUpdate);
+
+            return (true, "PIN is valid", token);
+        }
+
+        public async Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args)
+        {
+            if (string.IsNullOrWhiteSpace(request.Token))
+            {
+                _logger.LogWarning("Token is required for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Token is required");
+            }
+
+            var (isTokenValid, tokenMessage) = await _otpService.ValidateTokenAsync(args.UserId, request.Token, OtpPurpose.WalletPinUpdate);
+            if (!isTokenValid)
+            {
+                _logger.LogWarning("Wallet pin update rejected for UserId: {UserId}, WalletId: {WalletId} - {Reason}", args.UserId, request.WalletId, tokenMessage);
+                return (false, tokenMessage);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.NewPin) || string.IsNullOrWhiteSpace(request.ConfirmNewPin))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "New PIN and confirmation PIN are required");
+
+            if (request.NewPin != request.ConfirmNewPin)
+                return (false, "New PIN and confirmation PIN do not match");
+
+            var wallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = request.WalletId
+            });
+            if (wallet == null)
+            {
+                _logger.LogWarning("Wallet not found for UserId: {UserId}, WalletId: {WalletId}", args.UserId, request.WalletId);
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet not found");
+            }
+
+            await _userWalletRepository.UpdateTransactionPin(wallet.Id, request.NewPin);
+            await _otpService.InvalidateTokenAsync(args.UserId, request.Token, OtpPurpose.WalletPinUpdate);
+
+            return (true, "Wallet PIN updated successfully");
+        }
     }
 }

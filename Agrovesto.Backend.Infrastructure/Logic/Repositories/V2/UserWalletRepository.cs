@@ -40,6 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null);
         Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
         Task ValidateTransactionPin(long walletId, string inputPin);
+        Task UpdateTransactionPin(long walletId, string newPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
@@ -311,6 +312,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task UpdateTransactionPin(long walletId, string newPin)
+        {
+            var security = await _context.WalletSecurities
+                .FirstOrDefaultAsync(x => x.UserWalletId == walletId);
+
+            if (security == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet security record not found");
+
+            security.TransactionPinHash = BCrypt.Net.BCrypt.HashPassword(newPin);
+            security.PinFailedAttempts = 0;
+            security.PinLockedUntil = null;
+            security.LastPinChangeDate = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<UserWalletModel> CreateUserWallet(
        UserWalletModel request,
        UserWalletParams args)

@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -277,6 +278,107 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
 
+        }
+
+        [HttpPost("validate-pin")]
+        [Authorize]
+        public async Task<IActionResult> ValidateWalletPin([FromBody] ValidateWalletPinRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, token) = await _walletManager.ValidateWalletPin(request, query);
+
+                return Ok(new Response<ValidateWalletPinResult>()
+                {
+                    Data = new ValidateWalletPinResult
+                    {
+                        IsValid = status,
+                        Token = token?.Token,
+                        ExpiresAt = token?.ExpiresAt
+                    },
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("update-pin")]
+        [Authorize]
+        public async Task<IActionResult> UpdateWalletPin([FromBody] UpdateWalletPinRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message) = await _walletManager.UpdateWalletPin(request, query);
+
+                return Ok(new Response<bool>()
+                {
+                    Data = status,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
         }
 
         [HttpGet("wallet-summary")]
