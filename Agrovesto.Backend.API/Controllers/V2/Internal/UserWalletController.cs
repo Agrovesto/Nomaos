@@ -306,9 +306,57 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Data = new ValidateWalletPinResult
                     {
                         IsValid = status,
-                        Token = token,
-                        ExpiresAt = status ? DateTimeOffset.UtcNow.AddMinutes(3) : null
+                        Token = token?.Token,
+                        ExpiresAt = token?.ExpiresAt
                     },
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("update-pin")]
+        [Authorize]
+        public async Task<IActionResult> UpdateWalletPin([FromBody] UpdateWalletPinRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message) = await _walletManager.UpdateWalletPin(request, query);
+
+                return Ok(new Response<bool>()
+                {
+                    Data = status,
                     Message = message,
                     Succeeded = status,
                     Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
