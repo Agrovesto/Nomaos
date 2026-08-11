@@ -1028,11 +1028,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (commitment.CommitmentValue <= 0)
                 missing.Add("commitment value");
 
-            if (commitment.CommitmentPaymentStartDate == null)
-                missing.Add("commitment payment start date");
+            //if (commitment.CommitmentPaymentStartDate == null)
+            //    missing.Add("commitment payment start date");
 
-            if (commitment.CommitmentPaymentEndDate == null)
-                missing.Add("commitment payment end date");
+            //if (commitment.CommitmentPaymentEndDate == null)
+            //    missing.Add("commitment payment end date");
 
             if (commitment.CommitmentPaymentStartDate != null &&
                 commitment.CommitmentPaymentEndDate != null &&
@@ -1069,11 +1069,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (repayment.RiskCategory == default)
                 missing.Add("risk category");
 
-            if (repayment.RepaymentStartDate == null)
-                missing.Add("repayment start date");
+            //if (repayment.RepaymentStartDate == null)
+            //    missing.Add("repayment start date");
 
-            if (repayment.RepaymentEndDate == null)
-                missing.Add("repayment end date");
+            //if (repayment.RepaymentEndDate == null)
+            //    missing.Add("repayment end date");
 
             if (repayment.RepaymentStartDate != null &&
                 repayment.RepaymentEndDate != null &&
