@@ -630,6 +630,53 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 PageSize = pageSize
             };
         }
+        private static DateTimeOffset GetDueDate(DateTimeOffset start, RepaymentFrequency frequency, int installmentNumber)
+        {
+            return frequency switch
+            {
+                RepaymentFrequency.Daily => start.AddDays(installmentNumber),
+                RepaymentFrequency.Weekly => start.AddDays(7 * installmentNumber),
+
+                RepaymentFrequency.Monthly => EndOfMonth(start.AddMonths(installmentNumber - 1)),
+                RepaymentFrequency.Quarterly => EndOfMonth(start.AddMonths(3 * (installmentNumber - 1))),
+
+                RepaymentFrequency.Yearly => EndOfMonth(start.AddYears(installmentNumber-1)),
+                RepaymentFrequency.NA => throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment frequency is not set"),
+            };
+        }
+        private static List<RepaymentScheduleDto> GenerateRepaymentScheduleBrekadown(RepaymentPlan plan)
+        {
+            var schedule = new List<RepaymentScheduleDto>();
+
+            if (plan.RepaymentDuration <= 0 || plan.RepaymentStartDate == null)
+                return schedule;
+
+            int duration = plan.RepaymentDuration;
+
+            decimal baseAmount = Math.Floor(plan.RepaymentValue / duration * 100m) / 100m;
+            decimal lastAmount = plan.RepaymentValue - (baseAmount * (duration - 1));
+
+            var start = plan.RepaymentStartDate.Value;
+
+            for (int i = 1; i <= duration; i++)
+            {
+                var dueDate = GetDueDate(start, plan.RepaymentFrequency, i);
+                var amount = (i == duration) ? lastAmount : baseAmount;
+                var grace = plan.RepaymentGracePeriod.HasValue
+                    ? EndOfMonth(dueDate.AddMonths(1)) 
+                    : (DateTimeOffset?)null;
+
+                schedule.Add(new RepaymentScheduleDto
+                {
+                    InstallmentNumber = i,
+                    DueDate = dueDate,
+                    AmountToPay = amount,
+                    GracePeriodDeadline = grace
+                });
+            }
+
+            return schedule;
+        }
         public async Task<InputPackageDto> GetPackageByIdAsync(long id)
         {
             var package = await _context.InputPackages
@@ -651,21 +698,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             // Only pull the first few repayments here — full history is available
             // via GetPackageRepaymentBreakdownAsync below, which supports paging.
-            var repaymentBreakdown = await _context.InputPackageSubscriptionPayments
-                .Where(x => x.PaymentType == PaymentType.Repayment
-                    && x.Subscription.InputPackageId == id)
-                .OrderByDescending(x => x.PaidOn)
-                .Take(repaymentPreviewCount)
-                .Select(x => new RepaymentBreakdownDto
-                {
-                    Id = x.Id,
-                    SubscriptionId = x.SubscriptionId,
-                    AmountPaid = x.AmountPaid,
-                    Date = x.PaidOn,
-                    MethodOfPayment = EnumExtensions.GetDisplayName(x.PaymentChannel),
-                    LoanAmount = package.TotalFinancingValue
-                })
-                .ToListAsync();
+            //var repaymentBreakdown = await _context.InputPackageSubscriptionPayments
+            //    .Where(x => x.PaymentType == PaymentType.Repayment
+            //        && x.Subscription.InputPackageId == id)
+            //    .OrderByDescending(x => x.PaidOn)
+            //    .Take(repaymentPreviewCount)
+            //    .Select(x => new RepaymentBreakdownDto
+            //    {
+            //        Id = x.Id,
+            //        SubscriptionId = x.SubscriptionId,
+            //        AmountPaid = x.AmountPaid,
+            //        Date = x.PaidOn,
+            //        MethodOfPayment = EnumExtensions.GetDisplayName(x.PaymentChannel),
+            //        LoanAmount = package.TotalFinancingValue
+            //    })
+            //    .ToListAsync();
+
+            var repaymentBreakdown =  GenerateRepaymentScheduleBrekadown(
+                repayment
+                );
 
             return new InputPackageDto
             {
