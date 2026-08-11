@@ -1,15 +1,13 @@
-using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
-using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
-using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -72,7 +70,7 @@ public class ValidateWalletPinTests
     private static NomaOSWalletService CreateService(DataContext context)
     {
         var userWalletRepository = new UserWalletRepository(context, Mock.Of<IAWSService>());
-        var tokenService = new TokenService(context);
+        var otpService = new OtpService(context);
 
         return new NomaOSWalletService(
             Mock.Of<IBusinessRepository>(),
@@ -84,7 +82,7 @@ public class ValidateWalletPinTests
             Mock.Of<IMTNMomo>(),
             Mock.Of<IInputFinancingRepository>(),
             Mock.Of<ILogger<NomaOSWalletService>>(),
-            tokenService);
+            otpService);
     }
 
     private static WalletQueryParams QueryFor(long walletId) => new()
@@ -108,15 +106,21 @@ public class ValidateWalletPinTests
 
         status.Should().BeTrue();
         message.Should().Be("PIN is valid");
-        token.Should().NotBeNullOrEmpty();
-        token!.Length.Should().Be(9);
-        token.Should().MatchRegex("^[0-9a-f]{9}$");
+        token.Should().NotBeNull();
 
-        var persisted = await context.Tokens.SingleAsync(x => x.Value == token);
-        persisted.OwnerId.Should().Be(UserId);
-        persisted.Use.Should().Be(TokenUse.WalletPinUpdate);
-        persisted.IsActive.Should().BeTrue();
-        persisted.LastAttemptOn.Should().BeNull();
+        // A short UUID: the 16 bytes of a GUID as URL-safe base64, padding trimmed.
+        token!.Token.Should().MatchRegex("^[A-Za-z0-9_-]{22}$");
+        token.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(3), TimeSpan.FromMinutes(1));
+
+        var persisted = await context.OneTimePasswords.SingleAsync();
+        persisted.UserId.Should().Be(UserId);
+        persisted.Purpose.Should().Be(OtpPurpose.WalletPinUpdate);
+        persisted.UsedAt.Should().BeNull();
+        persisted.AttemptCount.Should().Be(0);
+
+        // The token itself is never persisted - only its hash.
+        persisted.CodeHash.Should().Be(OtpGenerator.Hash(token.Token));
+        persisted.CodeHash.Should().NotBe(token.Token);
     }
 
     [Fact]
@@ -133,7 +137,7 @@ public class ValidateWalletPinTests
         status.Should().BeFalse();
         message.Should().Be("Invalid transaction PIN");
         token.Should().BeNull();
-        (await context.Tokens.AnyAsync()).Should().BeFalse();
+        (await context.OneTimePasswords.AnyAsync()).Should().BeFalse();
 
         var security = await context.WalletSecurities.SingleAsync(x => x.UserWalletId == wallet.Id);
         security.PinFailedAttempts.Should().Be(1);
@@ -170,32 +174,38 @@ public class ValidateWalletPinTests
     }
 
     [Fact]
-    public async Task GeneratedToken_IsValidImmediately_ThenExpiresAfterThreeMinutes_AndStaysInactiveOnRetry()
+    public async Task GeneratedToken_IsValidImmediately_ThenExpires_AndStaysInactiveOnRetry()
     {
         await using var context = CreateContext();
-        var tokenService = new TokenService(context);
+        var otpService = new OtpService(context);
 
-        var token = await tokenService.GenerateToken(UserId, TokenUse.WalletPinUpdate);
+        var token = await otpService.GenerateTokenAsync(UserId, OtpPurpose.WalletPinUpdate);
 
-        var (validNow, messageNow) = await tokenService.ValidateToken(token);
+        var (validNow, messageNow) = await otpService.ValidateTokenAsync(
+            UserId, token.Token, OtpPurpose.WalletPinUpdate);
         validNow.Should().BeTrue();
         messageNow.Should().Be("Token is valid");
 
-        // Simulate 4 minutes having elapsed since generation.
-        var record = await context.Tokens.SingleAsync(x => x.Value == token);
-        record.GeneratedOn = DateTimeOffset.UtcNow.AddMinutes(-4);
+        // Validating does not consume the token - the follow-up update still needs it.
+        var record = await context.OneTimePasswords.SingleAsync();
+        record.UsedAt.Should().BeNull();
+
+        // Simulate the three minute window having elapsed.
+        record.ExpiresAt = DateTime.UtcNow.AddMinutes(-1);
         await context.SaveChangesAsync();
 
-        var (validAfterExpiry, messageAfterExpiry) = await tokenService.ValidateToken(token);
+        var (validAfterExpiry, messageAfterExpiry) = await otpService.ValidateTokenAsync(
+            UserId, token.Token, OtpPurpose.WalletPinUpdate);
         validAfterExpiry.Should().BeFalse();
         messageAfterExpiry.Should().Be("Token has expired");
 
-        record = await context.Tokens.SingleAsync(x => x.Value == token);
-        record.IsActive.Should().BeFalse();
-        record.LastAttemptOn.Should().NotBeNull();
+        record = await context.OneTimePasswords.SingleAsync();
+        record.UsedAt.Should().NotBeNull();
+        record.AttemptCount.Should().Be(2);
 
         // A further retry against the now-inactive token hits the "no longer active" branch.
-        var (validOnRetry, messageOnRetry) = await tokenService.ValidateToken(token);
+        var (validOnRetry, messageOnRetry) = await otpService.ValidateTokenAsync(
+            UserId, token.Token, OtpPurpose.WalletPinUpdate);
         validOnRetry.Should().BeFalse();
         messageOnRetry.Should().Be("Token is no longer active");
     }
@@ -204,11 +214,73 @@ public class ValidateWalletPinTests
     public async Task ValidateToken_WithUnknownValue_ReturnsInvalid()
     {
         await using var context = CreateContext();
-        var tokenService = new TokenService(context);
+        var otpService = new OtpService(context);
 
-        var (isValid, message) = await tokenService.ValidateToken("doesnotexist");
+        var (isValid, message) = await otpService.ValidateTokenAsync(
+            UserId, "doesnotexist", OtpPurpose.WalletPinUpdate);
 
         isValid.Should().BeFalse();
         message.Should().Be("Invalid token");
+    }
+
+    [Fact]
+    public async Task ValidateToken_ByAnotherUser_IsRejected()
+    {
+        await using var context = CreateContext();
+        var otpService = new OtpService(context);
+
+        var token = await otpService.GenerateTokenAsync(UserId, OtpPurpose.WalletPinUpdate);
+
+        var (isValid, message) = await otpService.ValidateTokenAsync(
+            "someone-else", token.Token, OtpPurpose.WalletPinUpdate);
+
+        isValid.Should().BeFalse();
+        message.Should().Be("Invalid token");
+
+        // The rightful owner's token is untouched by the attempt.
+        var record = await context.OneTimePasswords.SingleAsync();
+        record.UsedAt.Should().BeNull();
+        record.AttemptCount.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task UpdateWalletPin_ConsumesTheToken_SoItCannotBeReplayed()
+    {
+        await using var context = CreateContext();
+        var wallet = await SeedWalletAsync(context);
+        var service = CreateService(context);
+
+        var (_, _, token) = await service.ValidateWalletPin(
+            new ValidateWalletPinRequest { WalletId = wallet.Id, Pin = CorrectPin },
+            QueryFor(wallet.Id));
+
+        var (status, message) = await service.UpdateWalletPin(
+            new UpdateWalletPinRequest
+            {
+                WalletId = wallet.Id,
+                NewPin = "5678",
+                ConfirmNewPin = "5678",
+                Token = token!.Token
+            },
+            QueryFor(wallet.Id));
+
+        status.Should().BeTrue();
+        message.Should().Be("Wallet PIN updated successfully");
+
+        var record = await context.OneTimePasswords.SingleAsync();
+        record.UsedAt.Should().NotBeNull();
+
+        var (replayStatus, replayMessage) = await service.UpdateWalletPin(
+            new UpdateWalletPinRequest
+            {
+                WalletId = wallet.Id,
+                NewPin = "9999",
+                ConfirmNewPin = "9999",
+                Token = token.Token
+            },
+            QueryFor(wallet.Id));
+
+        replayStatus.Should().BeFalse();
+        replayMessage.Should().Be("Token is no longer active");
     }
 }

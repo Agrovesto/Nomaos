@@ -217,11 +217,6 @@ namespace Agrovesto.Backend.Infrastructure.DB
                       .HasForeignKey(x => x.WalletProviderId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
-            modelBuilder.Entity<Token>(entity =>
-            {
-                entity.Property(x => x.Use)
-                      .HasConversion<string>();
-            });
             modelBuilder.Entity<UserWalletContext>(entity =>
             {
                 entity.HasIndex(x => new { x.UserId, x.ContextType, x.ContextReferenceId })
@@ -578,7 +573,6 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<KYCDetails> KYCDetails { get; set; }
         public DbSet<UserWallet> UserWallets { get; set; }
         public DbSet<WalletSecurity> WalletSecurities { get; set; }
-        public DbSet<Token> Tokens { get; set; }
         public DbSet<UserWalletTransactions> UserWalletTransactions { get; set; }
         public DbSet<WalletReconciliationLog> WalletReconciliationLogs { get; set; }
         public DbSet<UserWalletContext> UserWalletContexts { get; set; }
