@@ -46,11 +46,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         {
             return frequency switch
             {
-                RepaymentFrequency.Weekly => date.AddDays(7),
-                RepaymentFrequency.BiWeekly => date.AddDays(14),
+                RepaymentFrequency.Daily => date.AddDays(7),
+                RepaymentFrequency.Weekly => date.AddDays(14),
                 RepaymentFrequency.Monthly => date.AddMonths(1),
                 RepaymentFrequency.Quarterly => date.AddMonths(3),
-                RepaymentFrequency.Annually => date.AddYears(1),
+                RepaymentFrequency.Yearly => date.AddYears(1),
                 _ => date
             };
         }

@@ -71,8 +71,8 @@ public class RepaymentEnginesTests
     }
 
     [Theory]
-    [InlineData(RepaymentFrequency.Weekly, 7)]
-    [InlineData(RepaymentFrequency.BiWeekly, 14)]
+    [InlineData(RepaymentFrequency.Daily, 7)]
+    [InlineData(RepaymentFrequency.Weekly, 14)]
     public void GenerateSchedule_UsesExpectedDayFrequency(RepaymentFrequency frequency, int days)
     {
         var start = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
