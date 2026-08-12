@@ -499,7 +499,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     OutStandingInputDebt = userFinancialSummary.OutstandingInputDebt,
                     NextDuePaymentAmount = userFinancialSummary.NextRepaymentAmount,
-                    NextDuePaymentDate = (DateTimeOffset)userFinancialSummary.NextRepaymentDate,
+                    NextDuePaymentDate = userFinancialSummary.NextRepaymentDate,
                     TotalWalletBalance = userFinancialSummary.TotalWalletBalance
                 };
                 return Ok(dashboardResponse);
