@@ -964,6 +964,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.WalletTransactionType == txnType);
             }
 
+            if (args.TransactionStatus.HasValue)
+            {
+                var txnStatus = (WalletTransactionStatus)args.TransactionStatus;
+
+                query = query.Where(x =>
+                    x.WalletTransactionStatus == txnStatus);
+            }
+
             var totalCount = await query.CountAsync();
 
             if (totalCount == 0)
@@ -988,6 +996,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                      Amount = t.TransactionAmount,
                      BalanceAfter = t.BalanceAfter,
                      TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
+                     Status = EnumExtensions.GetDisplayName(t.WalletTransactionStatus),
                      Timestamp = t.TransactionDate,
                      Description = t.TransactionDescription
                  })
