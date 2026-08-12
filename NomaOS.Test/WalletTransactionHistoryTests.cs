@@ -150,6 +150,106 @@ public class WalletTransactionHistoryTests
             .Which.TransactionReference.Should().Be("REF-PENDING");
     }
 
+    private static async Task SeedAtAsync(DataContext context, params DateTimeOffset[] stamps)
+    {
+        var i = 0;
+        foreach (var stamp in stamps)
+        {
+            context.UserWalletTransactions.Add(new UserWalletTransactions
+            {
+                UserWalletId = WalletId,
+                TransactionReference = $"REF-{i++}",
+                TransactionAmount = 100,
+                BalanceAfter = 100,
+                WalletTransactionType = WalletTransactionType.Credit,
+                WalletTransactionStatus = WalletTransactionStatus.Completed,
+                TransactionDate = stamp
+            });
+        }
+
+        await context.SaveChangesAsync();
+    }
+
+    private static ListQueryParams QueryOn(DateTimeOffset transactionDate) => new()
+    {
+        Id = WalletId,
+        PageNumber = 1,
+        PageSize = 50,
+        TransactionDate = transactionDate
+    };
+
+    [Fact]
+    public async Task GetUserWalletTransaction_DateFilter_MatchesTheWholeUtcDay()
+    {
+        using var context = CreateContext();
+        await SeedAtAsync(context,
+            new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero),      // first instant of the day
+            new DateTimeOffset(2026, 8, 10, 12, 30, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 10, 23, 59, 59, TimeSpan.Zero));  // last instant of the day
+
+        var result = await CreateRepository(context)
+            .GetUserWalletTransaction(QueryOn(new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero)));
+
+        result.Count.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task GetUserWalletTransaction_DateFilter_ExcludesAdjacentDays()
+    {
+        using var context = CreateContext();
+        await SeedAtAsync(context,
+            new DateTimeOffset(2026, 8, 9, 23, 59, 59, TimeSpan.Zero),   // day before
+            new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero),     // the day asked for
+            new DateTimeOffset(2026, 8, 11, 0, 0, 0, TimeSpan.Zero));    // day after, first instant
+
+        var result = await CreateRepository(context)
+            .GetUserWalletTransaction(QueryOn(new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero)));
+
+        result.Count.Should().Be(1);
+        result.Data.Should().ContainSingle()
+            .Which.Timestamp.Should().Be(new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// The filter keys off the calendar date the caller stated, not the instant that date
+    /// resolves to in their offset, so the same day sent from different offsets agrees.
+    /// </summary>
+    [Fact]
+    public async Task GetUserWalletTransaction_DateFilter_IgnoresTheCallersOffset()
+    {
+        using var context = CreateContext();
+        await SeedAtAsync(context,
+            new DateTimeOffset(2026, 8, 10, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 8, 11, 9, 0, 0, TimeSpan.Zero));
+
+        var repository = CreateRepository(context);
+
+        var fromUtc = await repository.GetUserWalletTransaction(
+            QueryOn(new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero)));
+        var fromWat = await repository.GetUserWalletTransaction(
+            QueryOn(new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.FromHours(1))));
+
+        fromUtc.Count.Should().Be(1);
+        fromWat.Count.Should().Be(1);
+        fromWat.Data![0].TransactionReference.Should().Be(fromUtc.Data![0].TransactionReference);
+    }
+
+    [Fact]
+    public async Task GetUserWalletTransaction_DateFilter_CombinesWithStatus()
+    {
+        using var context = CreateContext();
+        await SeedTransactionsAsync(context);
+
+        var query = QueryOn(new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero));
+        query.TransactionStatus = CoreTxnStatus.Completed;
+
+        var result = await CreateRepository(context).GetUserWalletTransaction(query);
+
+        result.Count.Should().Be(1);
+        result.Data.Should().ContainSingle()
+            .Which.TransactionReference.Should().Be("REF-COMPLETED");
+    }
+
     /// <summary>
     /// The Core enum is a hand-maintained mirror of the entity one and the repository casts
     /// between them by ordinal, so any drift would silently filter on the wrong status.

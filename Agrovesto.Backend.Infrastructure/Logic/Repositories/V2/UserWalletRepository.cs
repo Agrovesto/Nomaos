@@ -950,10 +950,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (args.TransactionDate.HasValue)
             {
-                var date = args.TransactionDate.Value.Date;
+                // The caller's stated calendar date, matched as a UTC day. Transactions are
+                // always written with DateTimeOffset.UtcNow, so this is the day they belong to.
+                //
+                // A half-open range replaces CONVERT(date, column) == date, which had two
+                // problems: the function around the column made the predicate non-SARGable,
+                // and it compared the date in whatever offset each row was stored with rather
+                // than a fixed one. Comparing instants avoids both.
+                var dayStart = new DateTimeOffset(args.TransactionDate.Value.Date, TimeSpan.Zero);
+                var dayEnd = dayStart.AddDays(1);
 
                 query = query.Where(x =>
-                    x.TransactionDate.Date == date);
+                    x.TransactionDate >= dayStart && x.TransactionDate < dayEnd);
             }
 
             if (args.TransactionType.HasValue)
