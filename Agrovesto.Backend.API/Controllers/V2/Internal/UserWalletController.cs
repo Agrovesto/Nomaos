@@ -80,8 +80,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Succeeded = true,
                     Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    // Carried through from the repository, which has already normalised them.
+                    // Hardcoding PageSize here made totalPages disagree with the rows returned.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
