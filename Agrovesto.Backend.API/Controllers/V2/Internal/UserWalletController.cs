@@ -39,7 +39,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
-
+                    // Carried through from the repository, which has already normalised them.
+                    // Left unset they default to 0, and TotalPages then divides by zero.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
