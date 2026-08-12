@@ -11,6 +11,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -82,7 +83,9 @@ public class ValidateWalletPinTests
             Mock.Of<IMTNMomo>(),
             Mock.Of<IInputFinancingRepository>(),
             Mock.Of<ILogger<NomaOSWalletService>>(),
-            otpService);
+            otpService,
+            Mock.Of<IAWSService>(),
+            Mock.Of<IConfiguration>());
     }
 
     private static WalletQueryParams QueryFor(long walletId) => new()

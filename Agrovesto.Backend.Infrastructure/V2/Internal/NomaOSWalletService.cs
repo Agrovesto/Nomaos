@@ -17,6 +17,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -47,10 +48,14 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
+        Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args);
+        Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args);
     }
 
             public class NomaOSWalletService : INomaOSWalletService
     {
+        private const int PinResetOtpExpiryMinutes = 5;
+
         private readonly IWalletServiceFactory _factory;
         private readonly IBusinessRepository _businessRepository;
         private readonly IOnboardingRepository _onboardingRepository;
@@ -61,6 +66,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly IMTNMomo _mtnMomoService;
         private readonly ILogger<NomaOSWalletService> _logger;
         private readonly IOtpService _otpService;
+        private readonly IAWSService _awsService;
+        private readonly IConfiguration _configuration;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
             IUserWalletRepository userWalletRepository,
@@ -68,7 +75,9 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             DataContext context, IMTNMomo mtnMomoService,
             IInputFinancingRepository inputFinancingRepository,
             ILogger<NomaOSWalletService> logger,
-            IOtpService otpService)
+            IOtpService otpService,
+            IAWSService awsService,
+            IConfiguration configuration)
         {
 
             _mtnMomoService = mtnMomoService;
@@ -81,6 +90,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _inputFinancingRepository = inputFinancingRepository;
             _logger = logger;
             _otpService = otpService;
+            _awsService = awsService;
+            _configuration = configuration;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
         {
@@ -753,6 +764,85 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             await _otpService.InvalidateTokenAsync(args.UserId, request.Token, OtpPurpose.WalletPinUpdate);
 
             return (true, "Wallet PIN updated successfully");
+        }
+
+        public async Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args)
+        {
+            if (string.IsNullOrWhiteSpace(args.UserId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+
+            var user = await _onboardingRepository.GetUserById(args.UserId);
+            if (!user.status || user.model == null)
+            {
+                _logger.LogWarning("Wallet PIN reset OTP requested for unknown UserId: {UserId}", args.UserId);
+                throw new BaseException(ExceptionType.NOTFOUND, "User not found");
+            }
+
+            var email = user.model.Email;
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                _logger.LogWarning("Wallet PIN reset OTP requested but no email is on file for UserId: {UserId}", args.UserId);
+                return (false, "No email address is on file for this account", null);
+            }
+
+            // Throws BAD_REQUEST if the user has burnt their 3-per-10-minutes OTP allowance.
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            {
+                UserId = args.UserId,
+                Target = OtpTarget.Email,
+                Destination = email,
+                Purpose = OtpPurpose.WalletPinReset,
+                ExpiryMinutes = PinResetOtpExpiryMinutes
+            });
+
+            var body = $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
+                       "If you did not request this, ignore this email and your PIN stays unchanged.";
+
+            await _awsService.SendEmailAsync(
+                _configuration["Official:Email"],
+                email,
+                "Reset your wallet PIN",
+                body,
+                body);
+
+            _logger.LogInformation("Wallet PIN reset OTP sent for UserId: {UserId}", args.UserId);
+
+            return (true, "A reset code has been sent to your email address", new WalletPinResetOtpResult
+            {
+                Destination = MaskEmail(email),
+                ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
+            });
+        }
+
+        public async Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args)
+        {
+            if (string.IsNullOrWhiteSpace(request.Code))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Reset code is required");
+
+            // Consumes the code on success, and counts the attempt on failure.
+            var otp = await _otpService.VerifyOtpAsync(args.UserId, request.Code, OtpPurpose.WalletPinReset);
+            if (otp == null)
+            {
+                _logger.LogWarning("Wallet PIN reset code rejected for UserId: {UserId}", args.UserId);
+                return (false, "The reset code is invalid or has expired", null);
+            }
+
+            // The code is spent, so hand back the same token that a successful PIN
+            // check issues - update-pin accepts either without knowing which it got.
+            var token = await _otpService.GenerateTokenAsync(args.UserId, OtpPurpose.WalletPinUpdate);
+
+            _logger.LogInformation("Wallet PIN reset code accepted for UserId: {UserId}", args.UserId);
+
+            return (true, "Reset code is valid", token);
+        }
+
+        private static string MaskEmail(string email)
+        {
+            var at = email.IndexOf('@');
+
+            return at <= 1
+                ? email
+                : $"{email[0]}{new string('*', at - 1)}{email.Substring(at)}";
         }
     }
 }
