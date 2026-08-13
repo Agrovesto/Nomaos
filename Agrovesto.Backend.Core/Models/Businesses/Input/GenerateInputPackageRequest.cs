@@ -415,7 +415,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Required]
         [EnumDataType(typeof(InputSubScriptionType))]
-        public InputSubScriptionType SubscriberType { get; set; }
+        public InputSubScriptionType SubscriberType { get; set; } = InputSubScriptionType.Individual;
     }
     public class InputSubscriptionRequestArgs
     {
@@ -452,6 +452,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public PaymentChannel PaymentChannel { get; set; }
 
+        public PaidBy PaidFromAccount { get; set; } = PaidBy.Subscriber;
         public string? Reference { get; set; }
 
         public string? ExternalReference { get; set; }

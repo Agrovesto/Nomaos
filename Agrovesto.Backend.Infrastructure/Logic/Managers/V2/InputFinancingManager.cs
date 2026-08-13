@@ -307,7 +307,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         UpdateRepaymentPlanRequest request,
         InputPackageConfigArgs args)
         {
-            if (args == null) throw new ArgumentNullException(nameof(args));
+            ArgumentNullException.ThrowIfNull(request, nameof(request));
             if (packageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(packageId));
            
             return await _inputFinancingRepository.EditRepaymentPlanAsync(packageId, request, args);
