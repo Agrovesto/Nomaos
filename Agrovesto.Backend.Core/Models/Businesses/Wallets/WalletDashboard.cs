@@ -10,7 +10,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
     {
         public decimal OutStandingInputDebt { get; set; }
         public decimal NextDuePaymentAmount { get; set; }
-        public DateTimeOffset NextDuePaymentDate { get; set; }
+        // Null when the user has no input financing, so nothing is due.
+        public DateTimeOffset? NextDuePaymentDate { get; set; }
         public decimal TotalWalletBalance { get; set; }
 
     }

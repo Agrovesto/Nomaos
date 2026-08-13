@@ -185,7 +185,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         Onboarding,
         Login,
         PasswordReset,
-        WalletPinUpdate
+        WalletPinUpdate,
+        // Delivered to the user when they have forgotten their transaction PIN.
+        // Deliberately distinct from WalletPinUpdate, which is a token bucket.
+        WalletPinReset
     }
     public class CreateAgentResponseModel
     {

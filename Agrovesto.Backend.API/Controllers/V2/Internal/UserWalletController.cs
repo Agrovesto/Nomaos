@@ -39,7 +39,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
-
+                    // Carried through from the repository, which has already normalised them.
+                    // Left unset they default to 0, and TotalPages then divides by zero.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -77,8 +80,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Succeeded = true,
                     Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    // Carried through from the repository, which has already normalised them.
+                    // Hardcoding PageSize here made totalPages disagree with the rows returned.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -333,6 +338,111 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+        /// <summary>
+        /// Emails a one-time code to the signed-in user so they can reset a transaction PIN they have forgotten.
+        /// </summary>
+        [HttpPost("send-pin-reset-otp")]
+        [Authorize]
+        public async Task<IActionResult> SendWalletPinResetOtp([FromQuery] WalletQueryParams query)
+        {
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(query);
+
+                return Ok(new Response<WalletPinResetOtpResult>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        /// <summary>
+        /// Verifies a PIN reset code emailed by send-pin-reset-otp and, on success, returns the
+        /// same short-lived token that validate-pin issues, for spending at update-pin.
+        /// </summary>
+        [HttpPost("verify-pin-reset-otp")]
+        [Authorize]
+        public async Task<IActionResult> VerifyWalletPinResetOtp([FromBody] VerifyPinResetOtpRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, token) = await _walletManager.VerifyWalletPinResetOtp(request, query);
+
+                return Ok(new Response<ValidateWalletPinResult>()
+                {
+                    Data = new ValidateWalletPinResult
+                    {
+                        IsValid = status,
+                        Token = token?.Token,
+                        ExpiresAt = token?.ExpiresAt
+                    },
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
         [HttpPost("update-pin")]
         [Authorize]
         public async Task<IActionResult> UpdateWalletPin([FromBody] UpdateWalletPinRequest request, [FromQuery] WalletQueryParams query)
@@ -394,7 +504,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     OutStandingInputDebt = userFinancialSummary.OutstandingInputDebt,
                     NextDuePaymentAmount = userFinancialSummary.NextRepaymentAmount,
-                    NextDuePaymentDate = (DateTimeOffset)userFinancialSummary.NextRepaymentDate,
+                    NextDuePaymentDate = userFinancialSummary.NextRepaymentDate,
                     TotalWalletBalance = userFinancialSummary.TotalWalletBalance
                 };
                 return Ok(dashboardResponse);

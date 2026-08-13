@@ -34,6 +34,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? Token { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
     }
+    public class VerifyPinResetOtpRequest
+    {
+        [Required]
+        public string Code { get; set; }
+    }
+    public class WalletPinResetOtpResult
+    {
+        /// <summary>Partially masked, so the caller can show where the code went without leaking the address.</summary>
+        public string Destination { get; set; }
+
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
     public class UpdateWalletPinRequest
     {
         public long WalletId { get; set; }
