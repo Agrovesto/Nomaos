@@ -642,6 +642,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 RepaymentFrequency.Yearly => EndOfMonth(start.AddYears(installmentNumber-1)),
                 RepaymentFrequency.NA => throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment frequency is not set"),
+                _ => throw new NotSupportedException($"Repayment frequency '{installmentNumber}' is not supported.")
+
             };
         }
         private static List<RepaymentScheduleDto> GenerateRepaymentScheduleBrekadown(RepaymentPlan plan)
@@ -694,25 +696,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var commitment = package.CommitmentPlan;
             var repayment = package.RepaymentPlan;
 
-            const int repaymentPreviewCount = 5;
-
-            // Only pull the first few repayments here — full history is available
-            // via GetPackageRepaymentBreakdownAsync below, which supports paging.
-            //var repaymentBreakdown = await _context.InputPackageSubscriptionPayments
-            //    .Where(x => x.PaymentType == PaymentType.Repayment
-            //        && x.Subscription.InputPackageId == id)
-            //    .OrderByDescending(x => x.PaidOn)
-            //    .Take(repaymentPreviewCount)
-            //    .Select(x => new RepaymentBreakdownDto
-            //    {
-            //        Id = x.Id,
-            //        SubscriptionId = x.SubscriptionId,
-            //        AmountPaid = x.AmountPaid,
-            //        Date = x.PaidOn,
-            //        MethodOfPayment = EnumExtensions.GetDisplayName(x.PaymentChannel),
-            //        LoanAmount = package.TotalFinancingValue
-            //    })
-            //    .ToListAsync();
+           
 
             var repaymentBreakdown =  GenerateRepaymentScheduleBrekadown(
                 repayment
@@ -3064,86 +3048,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var query = _context.InputPackageSubscriptions
                 .Where(x => x.BusinessCode == filter.BusinessCode)
                 .Include(x => x.InputPackage)
+                .ThenInclude(x => x.CommitmentPlan)
+                .Include(x => x.InputPackage)
+                .ThenInclude(x => x.RepaymentPlan)
                 .Include(x => x.SubscriberUser)
                 .Include(x => x.AddedByUser)
                 .AsQueryable();
 
-
-            if (!string.IsNullOrEmpty(filter.SubscriberUserId))
-                query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
-
-
-            if (filter.PackageId.HasValue)
-                query = query.Where(x => x.InputPackageId == filter.PackageId);
-
-
-            if (filter.OrganizationId.HasValue)
-                query = query.Where(x => x.OrganizationId == filter.OrganizationId);
-
-
-            if (filter.Status.HasValue)
-                query = query.Where(x => x.Status == filter.Status);
-
-
-            if (filter.IsActiveOnly == true)
-                query = query.Where(x => x.IsActive);
+            query = ApplyFilterIfPresent(filter, query);
 
 
             // Agent scope filtering
-            if (filter.CurrentLoggedInUserRole == UserType.Agent.ToString())
-            {
-                var agentId = await _context.Agents
-                    .Where(x => x.UserId == filter.UserId)
-                    .Select(x => x.Id)
-                    .FirstOrDefaultAsync();
+            query = await ApplyFilterForAgentRole(filter, query);
 
-                if (filter.OrganizationId.HasValue)
-                {
-                    var organizationAgent = await _context.OrganizationAgents
-                        .Where(x => x.OrganizationId == filter.OrganizationId && x.AgentId == agentId)
-                        .Select(x => x.AgentId)
-                        .FirstOrDefaultAsync();
 
-                    if (organizationAgent == null)
-                    {
-                        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Agent not found in Organization");
-                    }
+            // Membership scope filtering
+            query = await ApplyFilterForMemberShipRole(filter, query);
 
-                    query = query.Where(x =>
-                        (x.SubscriberType == InputSubScriptionType.Individual &&
-                         _context.FarmerAgents.Any(fa =>
-                             fa.AgentId == organizationAgent &&
-                             _context.Farmers.Any(f =>
-                                 f.Id == fa.FarmerId &&
-                                 f.UserId == x.SubscriberUserId)))
-                        ||
-                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
-                         _context.MemberShipAgents.Any(ma =>
-                             ma.AgentId == organizationAgent &&
-                             _context.MemberShips.Any(m =>
-                                 m.Id == ma.MemberShipId &&
-                                 m.UserId == x.SubscriberUserId)))
-                    );
-                }
-                else
-                {
-                    query = query.Where(x =>
-                        (x.SubscriberType == InputSubScriptionType.Individual &&
-                         _context.FarmerAgents.Any(fa =>
-                             fa.AgentId == agentId &&
-                             _context.Farmers.Any(f =>
-                                 f.Id == fa.FarmerId &&
-                                 f.UserId == x.SubscriberUserId)))
-                        ||
-                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
-                         _context.MemberShipAgents.Any(ma =>
-                             ma.AgentId == agentId &&
-                             _context.MemberShips.Any(m =>
-                                 m.Id == ma.MemberShipId &&
-                                 m.UserId == x.SubscriberUserId)))
-                    );
-                }
-            }
+            // Farmer scope filtering
+            query = await ApplyFilterForFarmerRole(filter, query);
 
             if (filter.ViewType.HasValue)
             {
@@ -3227,6 +3150,182 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
 
+            return query;
+        }
+
+        private async Task<IQueryable<InputPackageSubscription>> ApplyFilterForFarmerRole(SubscriptionQueryFilter filter, IQueryable<InputPackageSubscription> query)
+        {
+            if (filter.CurrentLoggedInUserRole == UserType.Farmer.ToString())
+            {
+                var farmerId = await _context.Farmers
+                    .Where(x => x.UserId == filter.UserId)
+                    .Select(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                if (filter.OrganizationId.HasValue)
+                {
+                    var organizationFarmer = await _context.FarmerOrganizations
+                        .Where(x => x.OrganizationCode == filter.OrganizationCode && x.FarmerId == farmerId)
+                        .Select(x => x.FarmerId)
+                        .FirstOrDefaultAsync();
+
+                    if (organizationFarmer == null)
+                    {
+                        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Farmer not found in Organization");
+                    }
+
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerOrganizations.Any(fa =>
+                             fa.FarmerId == organizationFarmer &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+
+                    );
+                }
+                else
+                {
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerOrganizations.Any(fa =>
+                             fa.FarmerId == farmerId &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                    );
+                }
+            }
+
+            return query;
+        }
+        private async Task<IQueryable<InputPackageSubscription>> ApplyFilterForMemberShipRole(SubscriptionQueryFilter filter, IQueryable<InputPackageSubscription> query)
+        {
+            if (filter.CurrentLoggedInUserRole == UserType.MemberShip.ToString())
+            {
+                var memberShipId = await _context.MemberShips
+                    .Where(x => x.UserId == filter.UserId)
+                    .Select(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                if (filter.OrganizationId.HasValue)
+                {
+                    var organizationMembership = await _context.OrganizationMemberships
+                        .Where(x => x.OrganizationId == filter.OrganizationId && x.MembershipId == memberShipId)
+                        .Select(x => x.MembershipId)
+                        .FirstOrDefaultAsync();
+
+                    if (organizationMembership == null)
+                    {
+                        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Membership not found in Organization");
+                    }
+
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerCooperatives.Any(fa =>
+                             fa.CooperativeId == organizationMembership &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+
+                    );
+                }
+                else
+                {
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerCooperatives.Any(fa =>
+                             fa.CooperativeId == memberShipId &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                    );
+                }
+            }
+
+            return query;
+        }
+
+        private async Task<IQueryable<InputPackageSubscription>> ApplyFilterForAgentRole(SubscriptionQueryFilter filter, IQueryable<InputPackageSubscription> query)
+        {
+            if (filter.CurrentLoggedInUserRole == UserType.Agent.ToString())
+            {
+                var agentId = await _context.Agents
+                    .Where(x => x.UserId == filter.UserId)
+                    .Select(x => x.Id)
+                    .FirstOrDefaultAsync();
+
+                if (filter.OrganizationId.HasValue)
+                {
+                    var organizationAgent = await _context.OrganizationAgents
+                        .Where(x => x.OrganizationId == filter.OrganizationId && x.AgentId == agentId)
+                        .Select(x => x.AgentId)
+                        .FirstOrDefaultAsync();
+
+                    if (organizationAgent == null)
+                    {
+                        throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Agent not found in Organization");
+                    }
+
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerAgents.Any(fa =>
+                             fa.AgentId == organizationAgent &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                        ||
+                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
+                         _context.MemberShipAgents.Any(ma =>
+                             ma.AgentId == organizationAgent &&
+                             _context.MemberShips.Any(m =>
+                                 m.Id == ma.MemberShipId &&
+                                 m.UserId == x.SubscriberUserId)))
+                    );
+                }
+                else
+                {
+                    query = query.Where(x =>
+                        (x.SubscriberType == InputSubScriptionType.Individual &&
+                         _context.FarmerAgents.Any(fa =>
+                             fa.AgentId == agentId &&
+                             _context.Farmers.Any(f =>
+                                 f.Id == fa.FarmerId &&
+                                 f.UserId == x.SubscriberUserId)))
+                        ||
+                        (x.SubscriberType == InputSubScriptionType.MemberShip &&
+                         _context.MemberShipAgents.Any(ma =>
+                             ma.AgentId == agentId &&
+                             _context.MemberShips.Any(m =>
+                                 m.Id == ma.MemberShipId &&
+                                 m.UserId == x.SubscriberUserId)))
+                    );
+                }
+            }
+
+            return query;
+        }
+
+        private static IQueryable<InputPackageSubscription> ApplyFilterIfPresent(SubscriptionQueryFilter filter, IQueryable<InputPackageSubscription> query)
+        {
+            if (!string.IsNullOrEmpty(filter.SubscriberUserId))
+                query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
+
+
+            if (filter.PackageId.HasValue)
+                query = query.Where(x => x.InputPackageId == filter.PackageId);
+
+
+            if (filter.OrganizationId.HasValue)
+                query = query.Where(x => x.OrganizationId == filter.OrganizationId);
+
+
+            if (filter.Status.HasValue)
+                query = query.Where(x => x.Status == filter.Status);
+
+
+            if (filter.IsActiveOnly == true)
+                query = query.Where(x => x.IsActive);
             return query;
         }
 
@@ -3480,8 +3579,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.RiskLevel,
 
                     TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
-    ? x.TotalFinancingValue
-    : 0m,
+                        ? x.TotalFinancingValue
+                        : 0m,
                     RepaymentRequired = x.InputPackage.RepaymentRequired
 
                 })
@@ -3497,14 +3596,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         ? "Paid"
                         : "Pending";
                 var commitmentBalance = !x.CommitmentRequired || x.CommitmentValue <= 0
-        ? 0m
-        : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
+                    ? 0m
+                    : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
                 var repaymentBalance = x.TotalRepaymentValue <= 0
-     ? 0m
-     : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
+                    ? 0m
+                    : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
                 var roi = !x.RepaymentRequired || x.TotalRepaymentValue <= 0
-    ? 0m
-    : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
+                    ? 0m
+                    : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
 
                 return new SubscriptionDetailDto
                 {
