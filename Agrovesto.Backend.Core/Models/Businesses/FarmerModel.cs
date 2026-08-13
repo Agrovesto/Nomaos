@@ -251,6 +251,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal Amount { get; set; }
         public decimal BalanceAfter { get; set; }
         public string TransactionType { get; set; } // e.g., Deposit, Withdrawal
+        public string Status { get; set; } // e.g., Completed, DebitPending, Failed
         public DateTimeOffset Timestamp { get; set; }
         public string Description { get; set; }
     }
