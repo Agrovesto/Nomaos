@@ -220,6 +220,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         Produce = 2
     }
 
+    public enum PaidBy
+    {
+        Subscriber,
+        CurrentUser
+    }
+
     public enum PaymentChannel
     {
         [Display(Name = "Wallet")]

@@ -481,7 +481,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #region subscriptions
         [HttpPost("add-subscriber")]
-        [Authorize(Roles = "Organization,Agent")]
+        [Authorize(Roles = "Organization,Agent,MemberShip")]
         public async Task<IActionResult> AddSubscriberAsync(
         [FromBody] AddSubscriberRequest model,
         [FromQuery] InputSubscriptionRequestArgs args)
@@ -560,18 +560,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpGet("get-subscribers")]
 
-        [Authorize(Roles = "Organization,Agent")]
+        [Authorize(Roles = "Organization,Agent,MemberShip,Farmer")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
 
-
-            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
-            }
+            DetermineRoleViewAccess(filter);
 
             var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
@@ -596,7 +591,24 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 ));
         }
 
-
+        private void DetermineRoleViewAccess(SubscriptionQueryFilter filter)
+        {
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
+            }
+            if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.MemberShip.ToString();
+            }
+            if (CurrentUserRoles.Contains("Farmer", StringComparer.OrdinalIgnoreCase) &&
+                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
+            {
+                filter.CurrentLoggedInUserRole = UserType.Farmer.ToString();
+            }
+        }
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
