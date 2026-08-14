@@ -158,40 +158,47 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (!response.IsSuccessStatusCode
-                    && etransactResponse == null 
-                    )
+                // The provider signals failure both with a non-2xx status and with
+                // status=false on a 200, so either one has to fail the call - otherwise
+                // the null Result below is dereferenced and the caller gets an NRE
+                // message instead of the reason the wallet wasn't created.
+                if (!response.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
                 {
-                    return new WalletResponseService<AccountValidationResponse>
-                    {
-                        IsSuccess = false,
-                        Message = etransactResponse?.Message
-                                  ?? etransactResponse?.ResponseDescription
-                                  ?? responseContent
-                    };
+                    var errorMessage = etransactResponse?.Message
+                        ?? etransactResponse?.ResponseDescription
+                        ?? HttpStatusCodeHelper.Describe(response.StatusCode)
+                        ?? responseContent;
+
+                    return WalletResponseService<AccountValidationResponse>.Failed(
+                        errorMessage, (int)response.StatusCode);
+                }
+
+                if (string.IsNullOrWhiteSpace(etransactResponse.Result?.WalletNumber))
+                {
+                    return WalletResponseService<AccountValidationResponse>.Failed(
+                        $"Provider reported success but returned no wallet number. Raw: {responseContent}",
+                        (int)response.StatusCode);
                 }
 
                 var walletResponse = new AccountValidationResponse
                 {
-                    WalletNumber = etransactResponse.Result?.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName,
-                    macChecksum= etransactResponse.Result.MacCheckSum
+                    WalletNumber = etransactResponse.Result.WalletNumber,
+                    AccountName = etransactResponse.Result.AccountName,
+                    macChecksum = etransactResponse.Result.MacCheckSum
                 };
 
-                return new WalletResponseService<AccountValidationResponse>
-                {
-                    IsSuccess = true,
-                    Data = walletResponse,
-                    Message = "Wallet created successfully."
-                };
+                return WalletResponseService<AccountValidationResponse>.Success(
+                    walletResponse,
+                    etransactResponse.ResponseDescription ?? "Wallet created successfully.");
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<AccountValidationResponse>.Failed(
+                    "Unable to reach Etransact service: " + ex.Message, 503);
             }
             catch (Exception ex)
             {
-                return new WalletResponseService<AccountValidationResponse>
-                {
-                    IsSuccess = false,
-                    Message = ex.Message
-                };
+                return WalletResponseService<AccountValidationResponse>.Failed(ex.Message, 500);
             }
         }
 

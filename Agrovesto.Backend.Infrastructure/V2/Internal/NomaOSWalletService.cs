@@ -23,6 +23,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -469,12 +470,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 if (response.IsSuccess && response.Data !=null)
                 {
                     result = true;
+
+                    decimal? amount = decimal.TryParse(
+                        response.Data.Amount,
+                        NumberStyles.Number,
+                        CultureInfo.InvariantCulture,
+                        out var parsedAmount)
+                        ? parsedAmount
+                        : null;
+
                     var webhookRequest = new ProviderWebhookRequest
                     {
-                        Amount=decimal.Parse( response.Data.Amount),
+                        Amount = amount,
                         ProviderReference=response.Data.FinancialTransactionId,
-                        Status= response.Data.Status,
-                        TransactionReference=response.Data.ExternalId,
+                        Status = response.Data.Status ?? string.Empty,
+                        TransactionReference = !string.IsNullOrWhiteSpace(response.Data.ExternalId)
+                            ? response.Data.ExternalId
+                            : transactionreference,
                         RawPayload= JsonSerializer.Serialize(response.Data),
                         BusinessCode=businessCode
                     };
@@ -522,7 +534,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 "SUCCESSFUL"
             }.Contains(request.Status, StringComparer.OrdinalIgnoreCase);
 
-                    var isFailed = request.Status.Equals(
+                    var isFailed = string.Equals(
+                        request.Status,
                         "FAILED",
                         StringComparison.OrdinalIgnoreCase);
 
@@ -538,6 +551,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                             transaction.TransactionReference,
                             WalletTransactionStatus.Failed);
 
+                        await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
 
                         return "Transaction Failed";
@@ -545,16 +559,10 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
                     if (isSuccessful)
                     {
-                        var wallet = await _userWalletRepository.GetWalletById(
-                            new UserWalletParams
-                            {
-                                UserId = transaction.UserWallet.UserId,
-                                Id = transaction.UserWalletId.Value,
-                                businessCode = request.BusinessCode
-                            });
+                        var wallet = transaction.UserWallet;
 
                         if (wallet == null)
-                            return "Successful";
+                            return "Wallet not found";
 
                         var balanceBefore = wallet.WalletBalance;
 
@@ -563,23 +571,25 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                             - transaction.TransactionFee
                             - transaction.CommissionFee;
 
-                        wallet.WalletBalance += netAmount;
+                        var balanceAfter = balanceBefore + netAmount;
 
                         transaction.BalanceBefore = balanceBefore;
-                        transaction.BalanceAfter = wallet.WalletBalance;
+                        transaction.BalanceAfter = balanceAfter;
                         transaction.WalletTransactionStatus =
                             WalletTransactionStatus.Completed;
+                        transaction.CreditWalletId = transaction.UserWalletId;
 
                         await _userWalletRepository.UpdateWalletBalance(
                             new UserWallet
                             {
                                 Id = wallet.Id,
-                                WalletBalance = wallet.WalletBalance,
+                                WalletBalance = balanceAfter,
                                 IsActive = wallet.IsActive
                             });
 
                         await _userWalletRepository.UpdateTransaction(transaction);
 
+                        await _context.SaveChangesAsync();
                         await dbTransaction.CommitAsync();
 
                         return "Successful";
@@ -589,6 +599,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                         transaction.TransactionReference,
                         WalletTransactionStatus.DebitPending);
 
+                    await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
 
                     return "Transaction Pending";
