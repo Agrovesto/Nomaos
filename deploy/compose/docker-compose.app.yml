@@ -1,0 +1,93 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NomaOS — one application slot (project: ${APP_NAME}-${SLOT})
+#
+# This single file serves BOTH apps and BOTH slots. The compose project name
+# keeps blue and green completely isolated:
+#
+#   docker compose -p nomaos-api-blue  --env-file ... -f docker-compose.app.yml up -d
+#   docker compose -p nomaos-api-green --env-file ... -f docker-compose.app.yml up -d
+#
+# The container never publishes a host port — nginx reaches it by container
+# name over nomaos_edge. That is exactly how an ECS service talks to its
+# target group, so the move to ECS later is a copy of this env block into a
+# task definition.
+# ─────────────────────────────────────────────────────────────────────────────
+
+networks:
+  nomaos_edge:
+    name: nomaos_edge
+    external: true
+  nomaos_data:
+    name: nomaos_data
+    external: true
+
+services:
+  app:
+    image: "${IMAGE:?IMAGE must be set (full ECR ref incl. tag)}"
+    container_name: "${APP_NAME:?APP_NAME must be set}-${SLOT:?SLOT must be set}"
+    restart: unless-stopped
+    networks:
+      nomaos_edge:
+        aliases:
+          - "${APP_NAME}-${SLOT}"
+      nomaos_data: {}
+    environment:
+      # ── Host / runtime ──────────────────────────────────────────────────
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Production}"
+      ASPNETCORE_URLS: "http://+:${APP_PORT:-5000}"
+      DOTNET_PRINT_TELEMETRY_MESSAGE: "false"
+      TZ: "${TZ:-UTC}"
+
+      # ── Vault (AppRole) — unchanged from the systemd setup ──────────────
+      # Program.cs reads these three and pulls kv/nomaos/prod/appsettings.
+      # Values come from the slot env file, which is root-owned 0600 on the host.
+      VAULT_ADDR: "${VAULT_ADDR:?VAULT_ADDR must be set}"
+      VAULT_ROLE_ID: "${VAULT_ROLE_ID:?VAULT_ROLE_ID must be set}"
+      VAULT_SECRET_ID: "${VAULT_SECRET_ID:?VAULT_SECRET_ID must be set}"
+
+      # ── Data plane ──────────────────────────────────────────────────────
+      # localhost:6379 and localhost,1433 no longer exist inside a container.
+      # These override the appsettings values via standard .NET config binding
+      # (__ is the nesting separator), so Vault-sourced keys still win when set.
+      ConnectionStrings__DefaultConnection: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING must be set}"
+      Redis__ConnectionString: "${REDIS_CONNECTION_STRING:-redis:6379}"
+
+      # ── Observability ───────────────────────────────────────────────────
+      # Serilog's file sink only activates when LOG_FILE_PATH is set (Program.cs).
+      LOG_FILE_PATH: "${LOG_FILE_PATH:-/app/logs/nomaos-.log}"
+      SLOT: "${SLOT}"
+      COMMIT_SHA: "${COMMIT_SHA:-unknown}"
+    env_file:
+      # Optional per-app overrides that are NOT secrets. Missing file is fine.
+      - path: "${NOMAOS_STATE_DIR:-/opt/nomaos}/env/${APP_NAME}.extra.env"
+        required: false
+    volumes:
+      - "${NOMAOS_STATE_DIR:-/opt/nomaos}/logs/${APP_NAME}/${SLOT}:/app/logs"
+    expose:
+      - "${APP_PORT:-5000}"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -fsS --max-time 4 http://127.0.0.1:${APP_PORT:-5000}/health/ready || exit 1"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: "${HEALTHCHECK_START_PERIOD:-45s}"
+    stop_grace_period: "${STOP_GRACE_PERIOD:-30s}"
+    deploy:
+      resources:
+        limits:
+          memory: "${APP_MEM_LIMIT:-1500m}"
+        reservations:
+          memory: "${APP_MEM_RESERVATION:-512m}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+        labels: "com.nomaos.app,com.nomaos.slot"
+    labels:
+      com.nomaos.app: "${APP_NAME}"
+      com.nomaos.slot: "${SLOT}"
+      com.nomaos.commit: "${COMMIT_SHA:-unknown}"
+      com.nomaos.managed-by: "deploy.sh"

@@ -1,168 +1,268 @@
-# name: Build and Deploy
-# on:
-#   push:
-#     branches:
-#       # - dev
-# env:
-#   AWS_REGION: eu-west-1
-#   ECR_REPOSITORY: nomaos
+name: Docker Build & Blue/Green Deploy
 
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
-#   cancel-in-progress: true
+# Replaces the rsync + systemd pipeline in prod.yaml.
+# Build once in CI -> push an immutable tag to ECR -> the EC2 host pulls that
+# exact digest and flips slots. The same image is what will later be handed to
+# an ECS task definition, so nothing about the artifact changes in that move.
 
-# permissions:
-#   id-token: write
-#   contents: read
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      app:
+        description: "Which app to deploy"
+        required: true
+        default: nomaos-api
+        type: choice
+        options: [nomaos-api, nomaos-app2]
+      environment:
+        description: "Target environment"
+        required: true
+        default: prod
+        type: choice
+        options: [staging, prod]
 
-# jobs:
-#   deploy:
-#     runs-on: ubuntu-latest
+concurrency:
+  # Never let two deploys race for the same slot on the same box.
+  group: docker-deploy-${{ github.ref }}-${{ inputs.environment || 'prod' }}
+  cancel-in-progress: false
 
-#     steps:
-#       - name: Checkout source
-#         uses: actions/checkout@v4
-#       - name: Debug OIDC Context
-#         run: |
-#           echo "repo = ${{ github.repository }}"
-#           echo "ref = ${{ github.ref }}"
-#       - name: Configure AWS Credentials (OIDC)
-#         uses: aws-actions/configure-aws-credentials@v4
-#         with:
-#           role-to-assume: ${{ secrets.DEV_ROLE_ARN }}
-#           aws-region: ${{ env.AWS_REGION }}
+permissions:
+  id-token: write   # OIDC federation into AWS — no long-lived keys
+  contents: read
 
-#       - name: Create repository if ∄
-#         # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ecr/create-repository.html
-#         shell: bash
-#         run: |
-#           LIFECYCLE_POLICY_FILE=$(mktemp)
+env:
+  AWS_REGION: eu-west-1
+  ECR_REPOSITORY: nomaos
+  APP_NAME: ${{ inputs.app || 'nomaos-api' }}
 
-#           echo '{
-#             "rules": [
-#               {
-#                 "rulePriority": 1,
-#                 "description": "Keep only the last 3 images",
-#                 "selection": {
-#                   "tagStatus": "any",
-#                   "countType": "imageCountMoreThan",
-#                   "countNumber": 3
-#                 },
-#                 "action": {
-#                   "type": "expire"
-#                 }
-#               }
-#             ]
-#           }' > "$LIFECYCLE_POLICY_FILE"
+jobs:
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'prod' }}
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest_ref: ${{ steps.meta.outputs.digest_ref }}
 
-#           if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1; then
-#             echo "Repository does not exist. Creating repository..."
-#             aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-#             echo "Applying lifecycle policy..."
-#             aws ecr put-lifecycle-policy \
-#                 --repository-name ${{ env.ECR_REPOSITORY }} \
-#                 --lifecycle-policy file://$LIFECYCLE_POLICY_FILE
-#           else
-#             echo "Repository already exists."
-#           fi
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-#           rm "$LIFECYCLE_POLICY_FILE"  
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-#       - name: Login to Amazon ECR
-#         id: login-ecr
-#         uses: aws-actions/amazon-ecr-login@v2
+      - name: Ensure ECR repository exists
+        run: |
+          set -euo pipefail
+          if ! aws ecr describe-repositories \
+               --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            echo "creating repository $ECR_REPOSITORY"
+            aws ecr create-repository \
+              --repository-name "$ECR_REPOSITORY" \
+              --image-scanning-configuration scanOnPush=true \
+              --image-tag-mutability IMMUTABLE
 
-#       - name: Generate Image Tag
-#         shell: bash
-#         run: |
-#           calculatedSha=$(echo ${{ github.sha }} | cut -c 1-12)
-#           echo "SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
-      
-#       - name: Set up QEMU
-#         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # sha for v4.0.0
-      
-#       - name: Set up Docker Buildx
-#         uses: docker/setup-buildx-action@v3
+            # Keep the last 15 images: blue/green means the previous image must
+            # remain pullable for rollback, so don't prune too aggressively.
+            aws ecr put-lifecycle-policy \
+              --repository-name "$ECR_REPOSITORY" \
+              --lifecycle-policy-text '{
+                "rules": [{
+                  "rulePriority": 1,
+                  "description": "Keep last 15 images",
+                  "selection": {
+                    "tagStatus": "any",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 15
+                  },
+                  "action": { "type": "expire" }
+                }]
+              }'
+          fi
 
-#       - name: Build and Push Docker Image
-#         id: build-and-push
-#         uses: docker/build-push-action@v6
-#         env:
-#           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-#           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-#         with:
-#           context: .
-#           push: true
-#           provenance: false
-#           tags: |
-#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-#             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-#           cache-from: type=gha
-#           cache-to: type=gha,mode=max
+      - name: Compute image metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-12)"
+          echo "image=${REGISTRY}/${ECR_REPOSITORY}:${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}"                            >> "$GITHUB_OUTPUT"
+          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"           >> "$GITHUB_OUTPUT"
 
-#       - name: Verify Image Exists
-#         shell: bash
-#         run: |
-#           aws ecr describe-images \
-#             --repository-name "${ECR_REPOSITORY}" \
-#             --image-ids imageTag="${GITHUB_SHA}"          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-#       - name: Deploy via SSM (Atomic + Track Status)
-#         shell: bash
-#         run: |
-#           set -euo pipefail
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          provenance: false
+          tags: ${{ steps.meta.outputs.image }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_VERSION=1.0.${{ github.run_number }}
+            BUILT_AT=${{ steps.meta.outputs.built_at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-#           IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+      - name: Record immutable digest
+        id: digest
+        run: |
+          set -euo pipefail
+          # Deploy by digest, not tag — guarantees the host runs the exact bits
+          # CI built, even if a tag were ever moved.
+          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          echo "digest_ref=${REGISTRY}/${ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
+            >> "$GITHUB_OUTPUT"
 
-#           echo "Triggering SSM deployment for image: $IMAGE"
+      - name: Summary
+        run: |
+          {
+            echo "### Image built"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Tag | \`${{ steps.meta.outputs.image }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-#           COMMAND_ID=$(aws ssm send-command \
-#             --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
-#             --document-name "AWS-RunShellScript" \
-#             --region $AWS_REGION \
-#             --comment "Deploy ${{ github.sha }}" \
-#             --parameters commands="[
-#               'set -euo pipefail',
-#               'cd /opt/agrovesto',
-#               'sudo chmod +x docker.sh',
-#               './docker.sh $IMAGE'
-#             ]" \
-#             --query "Command.CommandId" \
-#             --output text)
+  deploy:
+    name: Blue/green deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+    environment: ${{ inputs.environment || 'prod' }}
 
-#           echo "SSM Command ID: $COMMAND_ID"
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-#           echo "Waiting for command to complete..."
+      # SSM instead of SSH: no inbound port 22, no private key in GitHub
+      # secrets, and every command is audited in CloudTrail.
+      - name: Deploy via SSM
+        id: ssm
+        run: |
+          set -euo pipefail
 
-#           # Poll execution status
-#           for i in {1..30}; do
-#             STATUS=$(aws ssm list-command-invocations \
-#               --command-id "$COMMAND_ID" \
-#               --details \
-#               --query "CommandInvocations[0].Status" \
-#               --output text)
+          IMAGE="${{ needs.build.outputs.image }}"
+          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
 
-#             echo "Attempt $i - Status: $STATUS"
+          echo "deploying $IMAGE to $INSTANCE_ID"
 
-#             if [[ "$STATUS" == "Success" ]]; then
-#               echo "Deployment succeeded"
-#               exit 0
-#             fi
+          # The host keeps a checkout at /opt/nomaos/repo purely for the deploy
+          # scripts; the application itself only ever runs from the image.
+          #
+          # Build the parameter JSON with jq so the image ref and SHA are
+          # interpolated safely — hand-quoting shell inside JSON inside YAML is
+          # exactly how deploy scripts end up silently running the wrong image.
+          REGISTRY="${IMAGE%%/*}"
+          jq -n \
+            --arg image    "$IMAGE" \
+            --arg sha      "${{ github.sha }}" \
+            --arg app      "${{ env.APP_NAME }}" \
+            --arg region   "${{ env.AWS_REGION }}" \
+            --arg registry "$REGISTRY" \
+            '{
+              executionTimeout: ["1800"],
+              commands: [
+                "set -euo pipefail",
+                "cd /opt/nomaos/repo",
+                "sudo git fetch --all --quiet",
+                ("sudo git checkout --quiet " + $sha),
+                ("aws ecr get-login-password --region " + $region
+                  + " | sudo docker login --username AWS --password-stdin " + $registry),
+                ("sudo ./deploy/scripts/deploy.sh --app " + $app
+                  + " --image " + $image + " --commit " + $sha)
+              ]
+            }' > /tmp/ssm-params.json
 
-#             if [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" || "$STATUS" == "TimedOut" ]]; then
-#               echo "Deployment failed with status: $STATUS"
-#               aws ssm list-command-invocations \
-#                 --command-id "$COMMAND_ID" \
-#                 --details
-#               exit 1
-#             fi
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy ${{ github.sha }}" \
+            --cloud-watch-output-config CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/nomaos/deploy \
+            --parameters file:///tmp/ssm-params.json \
+            --query "Command.CommandId" \
+            --output text)
 
-#             sleep 5
-#           done
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          echo "SSM command: $COMMAND_ID"
 
-#           echo "Timeout waiting for SSM command"
-#           exit 1
+          # Poll rather than `aws ssm wait`, so we can stream status and pull
+          # the real output on failure.
+          for i in $(seq 1 120); do
+            STATUS=$(aws ssm list-command-invocations \
+              --command-id "$COMMAND_ID" --details \
+              --query "CommandInvocations[0].Status" --output text 2>/dev/null || echo "Pending")
 
-#       - name: Done
-#         run: echo "Deployment triggered via SSM"
+            case "$STATUS" in
+              Success)
+                echo "deployment succeeded"
+                aws ssm list-command-invocations --command-id "$COMMAND_ID" --details \
+                  --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut)
+                echo "::error::deployment $STATUS"
+                aws ssm list-command-invocations --command-id "$COMMAND_ID" --details \
+                  --query "CommandInvocations[0].CommandPlugins[0].Output" --output text
+                exit 1
+                ;;
+            esac
+
+            [ $((i % 6)) -eq 0 ] && echo "  status: $STATUS (${i}0s)"
+            sleep 10
+          done
+
+          echo "::error::timed out waiting for the SSM command"
+          exit 1
+
+      - name: Verify public health endpoint
+        run: |
+          set -euo pipefail
+          URL="${{ vars.HEALTH_URL || 'https://noma-api.nomaos.com/health' }}"
+          echo "probing $URL"
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$URL" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "health check passed"
+              exit 0
+            fi
+            echo "  attempt $i/10 -> HTTP $CODE"
+            sleep 10
+          done
+          # /health aggregates third-party probes (SendGrid, Termii, Prembly, S3)
+          # and can report Degraded while the API itself is fine. deploy.sh
+          # already gated on /health/ready before flipping traffic.
+          echo "::warning::public /health did not return 200 — check the slot manually"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| App | \`${{ env.APP_NAME }}\` |"
+            echo "| Image | \`${{ needs.build.outputs.image }}\` |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Actor | \`${{ github.actor }}\` |"
+            echo "| Result | ${{ job.status }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
