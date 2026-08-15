@@ -314,3 +314,35 @@ Two things to do before that move, both already set up here:
   the box. Point `DB_CONNECTION_STRING` at RDS and
   `REDIS_CONNECTION_STRING` at ElastiCache, and the app containers become
   fully stateless — which is the actual precondition for ECS.
+
+---
+
+## Installing the CI workflow
+
+The pipeline lives at **`deploy/ci/docker-deploy.yml`** rather than
+`.github/workflows/`, because the GitHub App used for this branch does not hold
+the `workflows` permission and the push is rejected otherwise.
+
+Activate it yourself with:
+
+```bash
+git mv deploy/ci/docker-deploy.yml .github/workflows/docker.yml
+git commit -m "Enable Docker deploy workflow"
+git push
+```
+
+Required repository settings:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `AWS_DEPLOY_ROLE_ARN` | IAM role trusted for GitHub OIDC |
+| Secret | `EC2_INSTANCE_ID` | `i-…` of the target box |
+| Variable | `HEALTH_URL` | e.g. `https://noma-api.nomaos.com/health` |
+
+The IAM role needs `ecr:*` on the `nomaos` repository plus
+`ssm:SendCommand` / `ssm:ListCommandInvocations` on the instance. The EC2
+instance profile needs `AmazonSSMManagedInstanceCore` and ECR pull rights.
+
+Note this replaces `prod.yaml` (rsync + systemd). Keep both only while you are
+mid-migration, and make sure just one of them is enabled on `master` at a time
+so two pipelines never deploy the same box.
