@@ -2732,11 +2732,12 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("RequestCreatedOn")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("RequestForUserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
                     b.Property<decimal?>("RequestedAmount")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("RequestedByUserId")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
@@ -2753,6 +2754,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("LocationId");
 
                     b.HasIndex("RequestByUserId");
+
+                    b.HasIndex("RequestForUserId");
 
                     b.HasIndex("SubscriptionId");
 
@@ -6306,6 +6309,10 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset>("AddedOn")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("BankName")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("BelongToBusinessCode")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -6486,6 +6493,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bigint");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ProviderId"));
+
+                    b.Property<string>("BankName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Code")
                         .IsRequired()
@@ -7305,6 +7315,12 @@ namespace Agrovesto.Backend.API.Migrations
                         .WithMany()
                         .HasForeignKey("RequestByUserId");
 
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "RequestForUser")
+                        .WithMany()
+                        .HasForeignKey("RequestForUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscription", "Subscription")
                         .WithMany()
                         .HasForeignKey("SubscriptionId")
@@ -7318,6 +7334,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("Location");
 
                     b.Navigation("RequestByUser");
+
+                    b.Navigation("RequestForUser");
 
                     b.Navigation("Subscription");
                 });

@@ -77,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<OverdueRepaymentReminderDto>> GetOverdueSchedulesAcrossSubscriptionsAsync();
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(long subscriptionId);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(long subscriptionId, int pageNumber, int pageSize);
-        Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs args, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
     }
@@ -1824,8 +1824,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 subscription.Status = SubscriptionStatus.PendingDisbursement;
 
-                await RequestInputDisbursementApprovalAsync(subscription.Id,
-                    payment.ExternalReference, performedBy, subscription.SubscriberUserId);
+                //await RequestInputDisbursementApprovalAsync(subscription.Id,
+                //    payment.ExternalReference, performedBy, subscription.SubscriberUserId);
 
                 _context.OutboxMessages.Add(new OutboxMessage
                 {
@@ -2523,15 +2523,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         string? reference,
         string userId, string subscriberuserId)
         {
+            if(string.IsNullOrEmpty(subscriberuserId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Subscriber user ID is required");
+
             var subscription = await _context.InputPackageSubscriptions
                 .FirstOrDefaultAsync(x => x.Id == subscriptionId && x.SubscriberUserId == subscriberuserId);
 
             if (subscription == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Subscription not found");
 
-            var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement, SubscriptionStatus.Active };
+            var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement };
             if (!allowedStatuses.Contains(subscription.Status))
-                throw new Exception($"Not ready for disbursement. Current subscription status: {subscription.Status}");
+                throw new Exception($"Current status does not allow for input release request. Current subscription status: {subscription.Status}");
 
             var blockingDisbursementStatuses = new[] { DisbursementStatus.PendingApproval, DisbursementStatus.Approved };
 
@@ -2542,12 +2545,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (existingDisbursement != null)
             {
                 existingDisbursement.RequestedAmount = subscription.TotalFinancingValue;
-                existingDisbursement.RequestedByUserId = userId;
+                existingDisbursement.RequestByUserId = userId;
+                existingDisbursement.RequestForUserId = subscriberuserId;
                 existingDisbursement.RequestCreatedOn = DateTimeOffset.Now;
                 existingDisbursement.Reference = reference;
                 existingDisbursement.Status = DisbursementStatus.PendingApproval;
 
-                subscription.Status = SubscriptionStatus.PendingApproval;
+                subscription.Status = SubscriptionStatus.PendingReleaseApproval;
                 await _context.SaveChangesAsync();
 
                 return existingDisbursement.Id;
@@ -2557,14 +2561,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 SubscriptionId = subscriptionId,
                 RequestedAmount = subscription.TotalFinancingValue,
-                RequestedByUserId = userId,
+                RequestByUserId = userId,
+                RequestForUserId = subscriberuserId,
                 RequestCreatedOn = DateTimeOffset.Now,
                 Reference = reference,
                 Status = DisbursementStatus.PendingApproval,
             };
             _context.InputSubscriptionDisbursements.Add(request);
 
-            subscription.Status = SubscriptionStatus.PendingApproval;
+            subscription.Status = SubscriptionStatus.PendingReleaseApproval;
             await _context.SaveChangesAsync();
 
             return request.Id;
@@ -2598,7 +2603,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             disbursementRequest.Status = DisbursementStatus.Approved;
             disbursementRequest.ApprovedByUserId = args.UserId;
             disbursementRequest.ApprovedOn = DateTimeOffset.UtcNow;
-            disbursementRequest.Subscription.Status = SubscriptionStatus.Approved;
+            disbursementRequest.Subscription.Status = SubscriptionStatus.PendingDisbursement;
             disbursementRequest.ApprovedAmount = request.Amount.HasValue ? request.Amount.Value : disbursementRequest.RequestedAmount;
 
             await _context.SaveChangesAsync();
@@ -3090,6 +3095,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         filter.HasPaidCommitment ??= true;
                         break;
 
+                    case SubscriptionView.InputReleaseRequest:
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.PendingReleaseApproval);
+                        break;
+
                     case SubscriptionView.PendingDisbursement:
                         query = query.Where(x =>
                             x.Status == SubscriptionStatus.PendingDisbursement);
@@ -3383,17 +3393,119 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                          m.UserId == x.SubscriberUserId)))
             );
         }
+        private async Task<IQueryable<InputPackageSubscription>> ApplyMembershipScope(
+        IQueryable<InputPackageSubscription> query,
+        string userId, long? organizationId)
+        {
+            var membershipId = await _context.MemberShips
+                .Where(x => x.UserId == userId)
+                .Select(x => x.Id)
+                .FirstOrDefaultAsync();
 
-        public async Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+            if (organizationId.HasValue)
+            {
+                var organizationMembership = await _context.OrganizationMemberships
+                    .Where(x => x.OrganizationId == organizationId.Value && x.MembershipId == membershipId)
+                    .Select(x => x.MembershipId)
+                    .FirstOrDefaultAsync();
+
+                if (organizationMembership == 0)
+                {
+                    throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Membership not found in Organization");
+                }
+
+                return query.Where(x =>
+                    (x.SubscriberType == InputSubScriptionType.Individual &&
+                     _context.FarmerCooperatives.Any(fa =>
+                         fa.CooperativeId == organizationMembership &&
+                         _context.Farmers.Any(f =>
+                             f.Id == fa.FarmerId &&
+                             f.UserId == x.SubscriberUserId)))
+                    
+                );
+            }
+
+            return query.Where(x =>
+                (x.SubscriberType == InputSubScriptionType.Individual &&
+                 _context.FarmerCooperatives.Any(fa =>
+                     fa.CooperativeId == membershipId &&
+                     _context.Farmers.Any(f =>
+                         f.Id == fa.FarmerId &&
+                         f.UserId == x.SubscriberUserId)))
+          
+            );
+        }
+        private async Task<IQueryable<InputPackageSubscription>> ApplyFarmerScope(
+        IQueryable<InputPackageSubscription> query,
+        string userId, string? organizationCode =null)
+        {
+            var farmerId = await _context.Farmers
+                .Where(x => x.UserId == userId)
+                .Select(x => x.Id)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrEmpty(organizationCode))
+            {
+                var organizationFarmer = await _context.FarmerOrganizations
+                    .Where(x => x.OrganizationCode == organizationCode && x.FarmerId == farmerId)
+                    .Select(x => x.FarmerId)
+                    .FirstOrDefaultAsync();
+
+                if (organizationFarmer == 0)
+                {
+                    throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Farmer not found in Organization");
+                }
+
+                return query.Where(x =>
+                    (x.SubscriberType == InputSubScriptionType.Individual &&
+                     _context.FarmerOrganizations.Any(fa =>
+                         fa.FarmerId == organizationFarmer &&
+                         _context.Farmers.Any(f =>
+                             f.Id == fa.FarmerId &&
+                             f.UserId == x.SubscriberUserId)))
+                    
+                );
+            }
+
+            return query.Where(x =>
+                (x.SubscriberType == InputSubScriptionType.Individual &&
+                 _context.FarmerOrganizations.Any(fa =>
+                     fa.FarmerId == farmerId &&
+                     _context.Farmers.Any(f =>
+                         f.Id == fa.FarmerId &&
+                         f.UserId == x.SubscriberUserId)))
+          
+            );
+        }
+
+        public async Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(
         SubscriptionQueryFilter filter)
         {
+            if (string.IsNullOrWhiteSpace(filter.UserId))
+            {
+                throw new ArgumentException("UserId is required to resolve subscription overview.", nameof(filter));
+            }
+
             var baseQuery = _context.InputPackageSubscriptions
+                
                 .Where(x => x.BusinessCode == filter.BusinessCode)
                 .AsQueryable();
 
-            var scopedQuery = await ApplyAgentScope(baseQuery, filter.UserId!, filter.OrganizationId);
+            if (filter.CurrentLoggedInUserRole == UserType.Farmer.ToString())
+            {
+                return await BuildFarmerOverview(baseQuery, filter);
+            }
 
-            var statusCounts = await scopedQuery
+            if (filter.CurrentLoggedInUserRole == UserType.Agent.ToString())
+            {
+                baseQuery = await ApplyAgentScope(baseQuery, filter.UserId!, filter.OrganizationId);
+            }
+            else if (filter.CurrentLoggedInUserRole == UserType.MemberShip.ToString())
+            {
+                baseQuery = await ApplyMembershipScope(baseQuery, filter.UserId!, filter.OrganizationId);
+            }
+
+            var statusCounts = await baseQuery
                 .GroupBy(x => x.Status)
                 .Select(g => new { Status = g.Key, Count = g.Count() })
                 .ToListAsync();
@@ -3401,16 +3513,66 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             long CountFor(SubscriptionStatus status) =>
                 statusCounts.FirstOrDefault(s => s.Status == status)?.Count ?? 0;
 
-            return new AgentSubscriptionOverviewDto
+            return new RoleBasedSubscriptionOverviewDto
             {
                 TotalSubscriptions = statusCounts.Sum(s => s.Count),
                 PendingApproval = CountFor(SubscriptionStatus.PendingApproval),
                 PendingCommitment = CountFor(SubscriptionStatus.PendingCommitment)
                                      + CountFor(SubscriptionStatus.Approved),
-                PendingDisbursement = CountFor(SubscriptionStatus.Disbursed),
+                InputsReleased = CountFor(SubscriptionStatus.Disbursed),
                 Active = CountFor(SubscriptionStatus.Active)
             };
         }
+        private async Task<FarmerSubscriptionOverviewDto> BuildFarmerOverview(
+    IQueryable<InputPackageSubscription> baseQuery,
+    SubscriptionQueryFilter filter)
+        {
+            var farmerQuery = baseQuery
+                .Where(x => x.SubscriberUserId == filter.UserId);
+
+            // Statuses that represent "money is actually out and repayable".
+            // Adjust this set to match whatever your domain considers disbursed/live.
+            var repayableStatuses = new[] { SubscriptionStatus.Active, SubscriptionStatus.Disbursed };
+
+            var activePackageCount = await farmerQuery
+                .CountAsync(x => x.Status == SubscriptionStatus.Active);
+
+            var repayableQuery = farmerQuery.Where(x => repayableStatuses.Contains(x.Status));
+
+            var payment = await repayableQuery
+                .Select(x => new
+                {
+                    x.Id,
+                    x.TotalFinancingValue,
+                    TotalRepaid = _context.InputPackageSubscriptionPayments
+                        .Where(p =>
+                            p.SubscriptionId == x.Id &&
+                            p.Status == TransactionStatus.Successful &&
+                            p.PaymentType == PaymentType.Repayment)
+                        .Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToListAsync();
+
+            var totalRepaid = payment.Sum(x => x.TotalRepaid);
+            var outstanding = payment.Sum(x => x.TotalFinancingValue) - totalRepaid;
+
+            var repayableSubscriptionIds = payment.Select(x => x.Id).ToList();
+
+            var nextDueDate = await _context.RepaymentSchedules
+                .Where(x => repayableSubscriptionIds.Contains(x.InputPackageSubscriptionId) && !x.IsPaid)
+                .OrderBy(x => x.DueDate)
+                .Select(x => (DateTimeOffset?)x.DueDate)
+                .FirstOrDefaultAsync();
+
+            return new FarmerSubscriptionOverviewDto
+            {
+                ActivePackages = activePackageCount,
+                TotalOutstanding = outstanding,
+                NextDueDate = nextDueDate,
+                TotalRepaid = totalRepaid
+            };
+        }
+
         public async Task<InputFinancingDashboardDto> GetInputFinancingOverviewAsync(
         SubscriptionQueryFilter filter)
         {
@@ -3585,6 +3747,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 })
                 .ToListAsync();
+
+            //TODO: improvment on query when viewtype is for release request, the request date from input disbursement table
+
 
             var items = rawItems.Select(x =>
             {

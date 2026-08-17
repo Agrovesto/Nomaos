@@ -96,7 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<RepaymentResponse> RecordRepaymentAsync(RecordRepaymentRequest request, InputSubscriptionRequestArgs args);
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
-        Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs query, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
     }
@@ -477,7 +477,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _inputFinancingRepository.GetSubscriptionsAsync(filter, pageNumber, pageSize);
         }
-        public async Task<AgentSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+        public async Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(
             SubscriptionQueryFilter filter)
         {
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
@@ -798,10 +798,6 @@ RepaymentFrequency frequency)
                 _ => 1
             };
         }
-        //public async Task<(byte[] FileBytes, string FileName)> DownloadCommissionLetterAsync(long subscriptionId)
-        //{
-        //    return await _inputFinancingRepository.DownloadCommissionLetterAsync(subscriptionId);
-        //}
 
         public async Task<bool> CommitmentPaymentAsync(
       RecordCommitmentPaymentRequest request,
@@ -832,6 +828,9 @@ RepaymentFrequency frequency)
 
                 if (subscription.Status == SubscriptionStatus.PendingDisbursement)
                     throw new Exception("Already completed commitment stage");
+
+                if(subscription.InputPackage.WalletProviderId != request.WalletProviderId)
+                    throw new Exception("Selected wallet does not match configured package wallet, please use the configured package wallet");
 
                 var org = subscription.Organization;
 
@@ -916,18 +915,48 @@ RepaymentFrequency frequency)
     PaymentType paymentType)
         {
             // ─── Step 1: Validate wallets ───
-
-            var subscriberWallet = await _userWalletRepository.GetUserWalletByProviderId(
+            UserWalletDetailResponseModel debitFromUserWallet = null;
+            if (request.PaidFromAccount == PaidBy.CurrentUser)
+            {
+                debitFromUserWallet = await _userWalletRepository.GetUserWalletByProviderId(
                 new UserWalletParams
                 {
                     Id = request.WalletProviderId,
-                    UserId = request.SubscriberUserId,
+                    UserId = args.UserId,
                     businessCode = args.BusinessCode
                 });
+                if (debitFromUserWallet == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Current user wallet not found");
+            }
+            else if (request.PaidFromAccount == PaidBy.Subscriber)
+            {
 
-            if (subscriberWallet == null)
-                throw new BaseException(ExceptionType.NOTFOUND, "Subscriber wallet not found");
+                debitFromUserWallet = await _userWalletRepository.GetUserWalletByProviderId(
+                    new UserWalletParams
+                    {
+                        Id = request.WalletProviderId,
+                        UserId = request.SubscriberUserId,
+                        businessCode = args.BusinessCode
+                    });
 
+                if (debitFromUserWallet == null)
+                    throw new BaseException(ExceptionType.NOTFOUND, "Subscriber wallet not found");
+            }
+            else
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
+            }
+            //verify wallet pin
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
+                request.WalletPin);
+            }
+            catch(Exception ex)
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
+            }
+            
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
             if (!organizationWalletProviderId.HasValue)
@@ -948,7 +977,7 @@ RepaymentFrequency frequency)
 
             // ─── Step 2: Balance check ───
 
-            if (subscriberWallet.WalletBalance < amountToPay)
+            if (debitFromUserWallet.WalletBalance < amountToPay)
                 throw new BaseException(
                     ExceptionType.OPERATION_FAILED,
                     $"Insufficient wallet balance. Kindly top up at least ₦{amountToPay:N0}");
@@ -964,7 +993,7 @@ RepaymentFrequency frequency)
 
             // ─── Step 4: Resolve provider ───
 
-            var provider = await _providerRepo.Get(subscriberWallet.WalletProviderId);
+            var provider = await _providerRepo.Get(debitFromUserWallet.WalletProviderId);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
@@ -999,7 +1028,7 @@ RepaymentFrequency frequency)
                         });
 
                     await _walletTransactionRepository.InitiateWalletWithdrawal(
-                        subscriberWallet.Id, amountToPay, description, $"{debitReference}-DB");
+                        debitFromUserWallet.Id, amountToPay, description, $"{debitReference}-DB");
 
                     string? debitProviderReference = null;
                     string providerMessage = "";
@@ -1008,37 +1037,52 @@ RepaymentFrequency frequency)
                     {
                         var debitRequest = new WalletTopUpProviderRequest
                         {
-                            WalletNumber = subscriberWallet.WalletNumber,
+                            WalletNumber = debitFromUserWallet.WalletNumber,
                             Amount = amountToPay,
-                            Currency = subscriberWallet.Currency,
+                            Currency = debitFromUserWallet.Currency,
                             Message = description,
                             TransactionReference = debitReference
                         };
 
-                        switch (provider.Code)
-                        {
-                            case  "Momo":
-                                {
-                                    ProcessMomoWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
-                                    break;
-                                }
 
-                            case "Etransact":
-                                ProcessEtransactWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
-                                //debit on etransact
-                                break;
+                        ProviderDebitResult debitResult = provider.Code switch
+                           {
+                               "Momo" => await ProcessMomoWalletDebit(
+                                             args, debitReference, providerParams, providerService,debitRequest),
 
-                            default:
-                                throw new BaseException(
-                                    ExceptionType.OPERATION_FAILED,
-                                    $"Debit not implemented for provider {provider.Code}");
-                        }
+                               "Etransact" => await ProcessEtransactWalletDebit(
+                                             args, debitReference, providerParams, providerService, debitRequest),
+
+                               _ => throw new BaseException(
+                                        ExceptionType.OPERATION_FAILED,
+                                        $"Debit not implemented for provider {provider.Code}")
+                           };
+                        debitProviderReference = debitResult.ProviderReference;
+                        providerMessage = debitResult.Message;
+                        //switch (provider.Code)
+                        //{
+                        //    case  "Momo":
+                        //        {
+                        //           var result = await ProcessMomoWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
+                        //            break;
+                        //        }
+
+                        //    case "Etransact":
+                        //        var result = await ProcessEtransactWalletDebit(args, debitReference, providerParams, providerService, debitProviderReference, providerMessage, debitRequest);
+                        //        //debit on etransact
+                        //        break;
+
+                        //    default:
+                        //        throw new BaseException(
+                        //            ExceptionType.OPERATION_FAILED,
+                        //            $"Debit not implemented for provider {provider.Code}");
+                        //}
 
                         await _walletTransactionRepository.CompleteWalletWithdrawal(
                             $"{debitReference}-DB", true, debitProviderReference, providerMessage);
 
                         await _userWalletRepository.AdjustWalletBalanceAsync(
-                            subscriberWallet.Id, -amountToPay);
+                            debitFromUserWallet.Id, -amountToPay);
                     }
                     catch (BaseException)
                     {
@@ -1070,7 +1114,7 @@ RepaymentFrequency frequency)
                             Message = description,
                             Reference = creditReference,
                             SenderName = subscription.SubscriberUser.Name,
-                            SenderAccountNumber = subscriberWallet.WalletNumber,
+                            SenderAccountNumber = debitFromUserWallet.WalletNumber,
                             RecipientName = subscription.InputPackage.Organization.CompanyName
                                 ?? subscription.InputPackage.Organization.FullName
                         };
@@ -1203,9 +1247,10 @@ RepaymentFrequency frequency)
             }
         }
 
-        private async void ProcessMomoWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
-            IGenericWalletService providerService,  string? debitProviderReference,  string providerMessage, WalletTopUpProviderRequest debitRequest)
+        private async Task<ProviderDebitResult> ProcessMomoWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
+            IGenericWalletService providerService,  WalletTopUpProviderRequest debitRequest)
         {
+            var result = new ProviderDebitResult();
             var debitResponse = await providerService.DebitWalletAsync(
                 debitRequest, providerParams, args.Env);
 
@@ -1232,12 +1277,16 @@ RepaymentFrequency frequency)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, debitFailMessage);
             }
 
-            providerMessage = debitResponse.Data.Status;
-            debitProviderReference = debitResponse.Data.Reference;
+            result.ProviderReference = debitResponse.Data.Reference;
+            result.Message = debitResponse.Status;
+
+            return result;
         }
-        private async void ProcessEtransactWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
-            IGenericWalletService providerService,  string? debitProviderReference,  string providerMessage, WalletTopUpProviderRequest debitRequest)
+        private async Task<ProviderDebitResult> ProcessEtransactWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
+            IGenericWalletService providerService,  WalletTopUpProviderRequest debitRequest)
         {
+            var result = new ProviderDebitResult();
+
             var balanceEnquiry = await providerService.BalanceEnquiryAsync(new UserProfileResponse
             {
                 WalletNumber = debitRequest.WalletNumber,
@@ -1279,8 +1328,9 @@ RepaymentFrequency frequency)
                     ExceptionType.OPERATION_FAILED,
                     "Could not initiate wallet debit");
             }
-            providerMessage = debitResponse.Data.Status;
-            debitProviderReference = debitResponse.Data.Reference;
+            result.ProviderReference = debitResponse.Data.ProviderReference;
+            result.Message = debitResponse.Status;
+            return result;
         }
 
         public async Task<RepaymentResponse> RecordRepaymentAsync(
@@ -2094,6 +2144,8 @@ RepaymentFrequency frequency)
                     // ── 1. Validate args ──────────────────────────────────────────────
                     if (string.IsNullOrEmpty(args.SubscriberUserId))
                         throw new DisbursementException("Subscriber user is required.");
+                    if (string.IsNullOrEmpty(args.OrganizationCode))
+                        throw new DisbursementException("Organization disbursement requires valid organizationCode.");
 
                     if (args.SubscriptionId <= 0)
                         throw new DisbursementException("A valid Subscription Id is required.");
@@ -2106,51 +2158,69 @@ RepaymentFrequency frequency)
 
                     ValidateLiveImage(request.UserImage);
 
-                    var subscription = await _context.InputPackageSubscriptions
-                        .Include(x => x.InputPackage)
-                            .ThenInclude(x => x.InputPackageItems)
-                        .Include(x => x.InputPackage)
-                            .ThenInclude(x => x.RepaymentPlan)
-                        .Include(x => x.InputPackage)
-                            .ThenInclude(x => x.AdditionalCosts)
-                        .Include(x => x.InputPackage)
-                            .ThenInclude(x => x.Organization)
-                        .Include(x => x.SubscriberUser)
-                        .Include(x => x.Organization)
-                        .FirstOrDefaultAsync(x =>
-                            x.Id == args.SubscriptionId &&
-                            x.SubscriberUserId == args.SubscriberUserId);
+                    var query = await _context.InputSubscriptionDisbursements
+                    .Include(x => x.Subscription)
+                    .ThenInclude(x => x.InputPackage)
+                    .ThenInclude(x=>x.RepaymentPlan)
+                    .ThenInclude(x => x.InputPackage)
+                    .ThenInclude(x => x.Organization)
+                    .Include(x => x.RequestForUser)
+                    .FirstOrDefaultAsync(x => x.SubscriptionId
+                    == args.SubscriptionId
+                    && x.RequestForUserId == args.SubscriberUserId);
+                    //&& x.Status == DisbursementStatus.Approved);
 
-                    if (subscription == null)
-                        throw new DisbursementException("Subscription not found.");
+                    //var subscription = await _context.InputPackageSubscriptions
+                    //    .Include(x => x.InputPackage)
+                    //        .ThenInclude(x => x.InputPackageItems)
+                    //    .Include(x => x.InputPackage)
+                    //        .ThenInclude(x => x.RepaymentPlan)
+                    //    .Include(x => x.InputPackage)
+                    //        .ThenInclude(x => x.AdditionalCosts)
+                    //    .Include(x => x.InputPackage)
+                    //        .ThenInclude(x => x.Organization)
+                    //    .Include(x => x.SubscriberUser)
+                    //    .Include(x => x.Organization)
+                    //    .FirstOrDefaultAsync(x =>
+                    //        x.Id == args.SubscriptionId &&
+                    //        x.SubscriberUserId == args.SubscriberUserId);
 
-                    if (subscription.SubscriberUser == null)
-                        throw new DisbursementException("Subscriber not found. Please try again later.");
+                    if (query == null)
+                        throw new DisbursementException("Disbursement Request  not found.");
 
-                    if (subscription.InputPackage.Organization == null)
+                    //if (subscription == null)
+                    //    throw new DisbursementException("Subscriber not found. Please try again later.");
+
+                    if (query.Subscription.InputPackage.Organization == null)
                         throw new DisbursementException("Organization not found for this input package.");
 
-                    var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement, SubscriptionStatus.Approved };
-                    if (!allowedStatuses.Contains(subscription.Status))
-                        throw new Exception($"Subscription is not in PendingDisbursement status. Current subscription status: {subscription.Status}");
+                    var allowedStatuses = new[] { DisbursementStatus.Approved };
+                    if (!allowedStatuses.Contains(query.Status))
+                        throw new BaseException(ExceptionType.OPERATION_FAILED,$"Subscription is not approved " +
+                            $"for disbursement. Current subscription status: {query.Status.ToString()}");
 
 
-                    if (subscription.InputPackage.RepaymentPlan == null)
+                    if (query.Subscription.InputPackage.RepaymentRequired && query.Subscription.InputPackage.RepaymentPlan == null)
                         throw new DisbursementException("Repayment plan is required before disbursement.");
-                    var org = subscription.InputPackage.Organization;
-                    var user = await _onBoardingManager.GetUseridentity(subscription.SubscriberUser.Id);
-                    if (user == null)
+
+                    var org = query.Subscription.InputPackage.Organization;
+
+                    if(string.IsNullOrEmpty(query.RequestForUserId)) 
+                        throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber user ID is missing in the disbursement request.");
+
+                    var subscriberDetails = await _onBoardingManager.GetUseridentity(query.RequestForUserId);
+                    if (subscriberDetails == null)
                         throw new DisbursementException("User details not found.");
 
-                    if (request.NIN != user.NIN)
-                        throw new DisbursementException(
+                    if (request.NIN != subscriberDetails.NIN)
+                        throw new BaseException(ExceptionType.CONFLICT,
                             "Supplied NIN does not match our records. " +
                             "Kindly update the subscriber's profile.");
 
                     var farmerImage = await _farmerRepository.GetFarmerImage(
-                        subscription.SubscriberUser.Id,
+                        query.RequestForUserId,
                         args.BusinessCode,
-                        subscription.Organization?.OrganizationCode);
+                        args.OrganizationCode);
 
                     if (farmerImage == null)
                         throw new DisbursementException(
@@ -2162,7 +2232,7 @@ RepaymentFrequency frequency)
                         {
                             OrganizationCode=args.OrganizationCode,
                             BusinessCode = args.BusinessCode,
-                            FarmerUserId = subscription.SubscriberUser.Id
+                            FarmerUserId = query.RequestForUserId
                         });
 
                     if (faceResult == null || !faceResult.IsSimilarFace)
@@ -2212,25 +2282,27 @@ RepaymentFrequency frequency)
                             $"the assigned inventory location '{agentLocation.LocationName}'. " +
                             "Move to the correct location and try again.");
 
-                    var approvedRequest = await _context.InputSubscriptionDisbursements
-                        .FirstOrDefaultAsync(x =>
-                            x.SubscriptionId == args.SubscriptionId &&
-                            x.Status == DisbursementStatus.Approved);
 
-                    if (approvedRequest == null)
-                        throw new DisbursementException("No approved disbursement request found.");
+                    //var approvedRequest = await _context.InputSubscriptionDisbursements
+                    //    .FirstOrDefaultAsync(x =>
+                    //        x.SubscriptionId == args.SubscriptionId &&
+                    //        x.Status == DisbursementStatus.Approved);
 
-                    var alreadyDisbursed = await _context.InputSubscriptionDisbursements
-                        .AnyAsync(x =>
-                            x.SubscriptionId == subscription.Id &&
-                            x.Status == DisbursementStatus.Disbursed);
+                    //if (approvedRequest == null)
+                    //    throw new DisbursementException("No approved disbursement request found.");
 
-                    if (alreadyDisbursed)
+                    
+                    //var alreadyDisbursed = await _context.InputSubscriptionDisbursements
+                    //    .AnyAsync(x =>
+                    //        x.SubscriptionId == subscription.Id &&
+                    //        x.Status == DisbursementStatus.Disbursed);
+
+                    if (query.Status == DisbursementStatus.Disbursed)
                         throw new DisbursementException("This subscription has already been fully disbursed.");
 
                     var reference = ReferenceUtil.GenerateDisbursementReference();
 
-                    var additionalCosts = subscription.InputPackage.AdditionalCosts
+                    var additionalCosts = query.Subscription.InputPackage.AdditionalCosts
                         ?? new List<AdditionalInputPackageCost>();
 
                     decimal paidToUserTotal = additionalCosts
@@ -2245,10 +2317,10 @@ RepaymentFrequency frequency)
                     bool isPartial = false;
                     var lineItems = new List<DisbursementLineItem>();
 
-                    if (subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
+                    if (query.Subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
                     {
                         disbursedAmount = await ProcessPhysicalDisbursementAsync(
-                            subscription, agentLocation, approvedRequest,
+                            query.Subscription, agentLocation, query,
                             request, args, reference,
                             paidToUserTotal, vendorPaidTotal,
                             lineItems,  isPartial);
@@ -2256,7 +2328,7 @@ RepaymentFrequency frequency)
                     else
                     {
                         disbursedAmount = await ProcessMonetaryDisbursementAsync(
-                            subscription, agentLocation, approvedRequest,
+                            query.Subscription, agentLocation, query,
                             request, args, reference,
                             isPartial);
                     }
@@ -2264,42 +2336,42 @@ RepaymentFrequency frequency)
                     if (lineItems.Count > 0)
                         _context.DisbursementLineItems.AddRange(lineItems);
 
-                    approvedRequest.Status = DisbursementStatus.Disbursed;
-                    approvedRequest.DisbursedOn = DateTimeOffset.UtcNow;
-                    approvedRequest.ApprovedAmount = disbursedAmount;
-                    approvedRequest.DisbursedByUserId = args.UserId;
-                    approvedRequest.Reference = reference;          // use generated ref
-                    approvedRequest.IsPartial = isPartial;
-                    approvedRequest.LocationId = agentLocation.Id;
-                    approvedRequest.Latitude = request.Latitude;
-                    approvedRequest.Longitude = request.Longitude;
+                    query.Status = DisbursementStatus.Disbursed;
+                    query.DisbursedOn = DateTimeOffset.UtcNow;
+                    query.ApprovedAmount = disbursedAmount;
+                    query.DisbursedByUserId = args.UserId;
+                    query.Reference = reference;          // use generated ref
+                    query.IsPartial = isPartial;
+                    query.LocationId = agentLocation.Id;
+                    query.Latitude = request.Latitude;
+                    query.Longitude = request.Longitude;
 
-                    subscription.Status = isPartial
+                    query.Subscription.Status = isPartial
                         ? SubscriptionStatus.PartiallyDisbursed
                         : SubscriptionStatus.Active;
-                    subscription.DisbursedOn = DateTimeOffset.UtcNow;
+                    query.Subscription.DisbursedOn = DateTimeOffset.UtcNow;
 
-                    var plan = subscription.InputPackage.RepaymentPlan;
-                    var schedule = _repaymentEngine.GenerateSchedule(new RepaymentEngineRequest
-                    {
-                        InputSubscriptionId = subscription.Id,
-                        Frequency = plan.RepaymentFrequency,
-                        Duration = plan.RepaymentDuration,
-                        StartDate = plan.RepaymentStartDate,
-                        EndDate = plan.RepaymentEndDate,
-                        GracePeriod = plan.RepaymentGracePeriod,
-                        TotalAmount = disbursedAmount
-                    });
+                    //var plan = query.Subscription.InputPackage.RepaymentPlan;
+                    //var schedule = _repaymentEngine.GenerateSchedule(new RepaymentEngineRequest
+                    //{
+                    //    InputSubscriptionId = query.SubscriptionId,
+                    //    Frequency = plan.RepaymentFrequency,
+                    //    Duration = plan.RepaymentDuration,
+                    //    StartDate = plan.RepaymentStartDate,
+                    //    EndDate = plan.RepaymentEndDate,
+                    //    GracePeriod = plan.RepaymentGracePeriod,
+                    //    TotalAmount = disbursedAmount
+                    //});
 
-                    _context.RepaymentSchedules.AddRange(schedule.Select(x => new RepaymentSchedule
-                    {
-                        InputPackageSubscriptionId = subscription.Id,
-                        InstallmentNumber = x.InstallmentNumber,
-                        DueDate = x.DueDate,
-                        Amount = x.Amount,
-                        IsWithinGracePeriod = x.IsWithinGracePeriod,
-                        IsPaid = false
-                    }));
+                    //_context.RepaymentSchedules.AddRange(schedule.Select(x => new RepaymentSchedule
+                    //{
+                    //    InputPackageSubscriptionId = query.SubscriptionId,
+                    //    InstallmentNumber = x.InstallmentNumber,
+                    //    DueDate = x.DueDate,
+                    //    Amount = x.Amount,
+                    //    IsWithinGracePeriod = x.IsWithinGracePeriod,
+                    //    IsPaid = false
+                    //}));
 
                     _context.OutboxMessages.Add(new OutboxMessage
                     {
@@ -2309,8 +2381,8 @@ RepaymentFrequency frequency)
                         IsProcessed = false,
                         Payload = JsonSerializer.Serialize(new SubscriptionDisbursedEvent
                         {
-                            SubscriptionId = subscription.Id,
-                            PackageId = subscription.InputPackageId,
+                            SubscriptionId = query.SubscriptionId,
+                            PackageId = query.Subscription.InputPackageId,
                             Amount = disbursedAmount,
                             IsPartial = isPartial,
                             LocationId = agentLocation.Id,

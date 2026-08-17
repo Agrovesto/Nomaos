@@ -13,6 +13,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public long ProviderId { get; set; }
         public string Code { get; set; }
         public string Name { get; set; }
+        public string? BankName { get; set; }
         public string Status { get; set; }
         public ICollection<WalletProviderParameter> WalletProviderParameters { get; set; } = new HashSet<WalletProviderParameter>();
         public ICollection<BusinessWalletProvider> BusinessWalletProviders { get; set; } = new HashSet<BusinessWalletProvider>();

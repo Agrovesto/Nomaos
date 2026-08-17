@@ -477,7 +477,9 @@ public class SubscriptionDocument
         public long SubscriptionId { get; set; }
         public InputPackageSubscription Subscription { get; set; }
         public decimal? RequestedAmount { get; set; }
-        public string? RequestedByUserId { get; set; }
+        public string RequestForUserId { get; set; }
+        public User RequestForUser { get; set; }
+        public string? RequestByUserId { get; set; }
         public User RequestByUser { get; set; }
         public string? Reference { get; set; }
         public DateTimeOffset RequestCreatedOn { get; set; } = DateTimeOffset.UtcNow;

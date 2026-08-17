@@ -446,7 +446,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class RecordCommitmentPaymentRequest
     {
         public long SubscriptionId { get; set; }
-        public string ?SubscriberUserId { get; set; }
+        public string? SubscriberUserId { get; set; }
 
         public decimal Amount { get; set; }
 
@@ -454,7 +454,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public PaidBy PaidFromAccount { get; set; } = PaidBy.Subscriber;
         public string? Reference { get; set; }
-
+        public string WalletPin { get; set; }
         public string? ExternalReference { get; set; }
 
         public string? PaidByUserId { get; set; }
@@ -619,13 +619,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public decimal RepaymentProgress { get; set; }
     }
-    public class AgentSubscriptionOverviewDto
+    public class RoleBasedSubscriptionOverviewDto
     {
         public long TotalSubscriptions { get; set; }
         public long PendingApproval { get; set; }
         public long PendingCommitment { get; set; }
-        public long PendingDisbursement { get; set; }
+        public long InputsReleased { get; set; }
         public long Active { get; set; }
+    }
+    public class FarmerSubscriptionOverviewDto : RoleBasedSubscriptionOverviewDto
+    {
+       public long ActivePackages { get; set; }
+        public decimal TotalOutstanding { get; set; }
+        public DateTimeOffset? NextDueDate { get; set; }
+        public decimal TotalRepaid { get; set; }
     }
     public class InputFinancingDashboardDto
     {
@@ -900,7 +907,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string BusinessCode { get; set; }
         public long AdditionalCostId { get; set; }
     }
-
+    public class ProviderDebitResult
+    {
+        public string? ProviderReference { get; set; }
+        public string Message { get; set; } = "";
+    }
 
     #region disbursement
     public class DisburseSubscriptionRequest
