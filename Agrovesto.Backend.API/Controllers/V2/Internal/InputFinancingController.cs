@@ -965,7 +965,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         //release input
-        [HttpPost("release-input")]
+        [HttpPost("approve-input-release")]
         public async Task<IActionResult> ApproveInputDisbursementRequestAsync(
             [FromQuery] ApproveDisbursementRequestDto model,
             [FromQuery] InputSubscriptionRequestArgs args)
