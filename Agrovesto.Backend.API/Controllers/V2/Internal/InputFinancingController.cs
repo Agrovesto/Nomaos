@@ -638,10 +638,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("agent-dashboard")]
-        public async Task<IActionResult> GetAgentSubscriptionOverview(
-            [FromQuery] SubscriptionQueryFilter filter)
-        {
+        public Task<IActionResult> GetAgentDashboard([FromQuery] SubscriptionQueryFilter filter)
+    => GetSubscriptionOverview(filter, SubscriptionRole.Agent);
 
+        [HttpGet("farmer-dashboard")]
+        public Task<IActionResult> GetFarmerDashboard([FromQuery] SubscriptionQueryFilter filter)
+            => GetSubscriptionOverview(filter, SubscriptionRole.Farmer);
+
+        [HttpGet("membership-dashboard")]
+        public Task<IActionResult> GetMembershipDashboard([FromQuery] SubscriptionQueryFilter filter)
+            => GetSubscriptionOverview(filter, SubscriptionRole.Membership);
+
+        private async Task<IActionResult> GetSubscriptionOverview(
+            SubscriptionQueryFilter filter,
+            SubscriptionRole role)
+        {
             filter.UserId = CurrentUserId;
 
             var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
@@ -651,19 +662,51 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
-                      ResponseMessages.AccessDenied,
+                    ResponseMessages.AccessDenied,
                     ResponseCodes.AccessDenied
                 ));
             }
-            var result = await _inputFinancingManager
+            filter.CurrentLoggedInUserRole = role.ToString();
+           var result = await _inputFinancingManager
                 .GetAgentSubscriptionOverview(filter);
 
-            return Ok(ApiResponse<AgentSubscriptionOverviewDto>.Success(
+            return Ok(ApiResponse<RoleBasedSubscriptionOverviewDto>.Success(
                 result,
-               ResponseCodes.Success,
-               ResponseMessages.Successful
+                ResponseCodes.Success,
+                ResponseMessages.Successful
             ));
         }
+        //[HttpGet("agent-dashboard")]
+        //[HttpGet("farmer-dashboard")]
+        //[HttpGet("membership-dashboard")]
+        //public async Task<IActionResult> GetAgentSubscriptionOverview(
+        //    [FromQuery] SubscriptionQueryFilter filter)
+        //{
+
+        //    filter.UserId = CurrentUserId;
+
+        //    var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+        //    if (orgError != null) return orgError;
+        //    filter.OrganizationCode = resolvedOrgCode;
+
+        //    if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+        //    {
+        //        return Unauthorized(ApiResponse<object>.Fail(
+        //              ResponseMessages.AccessDenied,
+        //            ResponseCodes.AccessDenied
+        //        ));
+        //    }
+        //    var result = await _inputFinancingManager
+        //        .GetAgentSubscriptionOverview(filter);
+
+        //    return Ok(ApiResponse<AgentSubscriptionOverviewDto>.Success(
+        //        result,
+        //       ResponseCodes.Success,
+        //       ResponseMessages.Successful
+        //    ));
+        //}
+
+
 
         [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(

@@ -177,7 +177,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Partially Disbursed")]
         PartiallyDisbursed = 11,
         [Display(Name = "Pending Repayment")]
-        PendingRepayment = 12
+        PendingRepayment = 12,
+
+        [Display(Name = "Pending Release Approval")]
+        PendingReleaseApproval = 13, 
     }
 
     public enum DisbursementType
@@ -307,7 +310,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Legal")]
         Legal = 3
     }
-
+    public enum SubscriptionRole
+    {
+        Agent = 1,
+        Farmer = 2,
+        Membership = 3
+    }
     public enum SubscriptionView
     {
         [Display(Name = "All")]
@@ -343,6 +351,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Display(Name = "Input Released")]
         InputReleased = 10,
+        [Display(Name = "Input Release Request")]
+        InputReleaseRequest = 11,
     }
 
     public enum ExportFormat
