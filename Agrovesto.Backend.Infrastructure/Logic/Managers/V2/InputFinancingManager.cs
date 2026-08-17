@@ -797,104 +797,128 @@ RepaymentFrequency frequency)
         }
 
         public async Task<bool> CommitmentPaymentAsync(
-      RecordCommitmentPaymentRequest request,
-      InputSubscriptionRequestArgs args)
+           RecordCommitmentPaymentRequest request,
+           InputSubscriptionRequestArgs args)
         {
-            if (request == null)
-                throw new BaseException(ExceptionType.BAD_REQUEST,"Invalid request");
+            ValidateRequest(request);
+
             request.SubscriptionId = args.SubscriptionId;
             request.SubscriberUserId = args.SubscriberUserId;
-            if (request.SubscriptionId <= 0) throw new Exception("Subscription Id required");
-            if (string.IsNullOrEmpty(request.SubscriberUserId)) throw new Exception("Subscriber User Id required");
-            
-            try
-            {
-                var subscription = await _context.InputPackageSubscriptions
-                    .Include(x => x.InputPackage)
-                    .ThenInclude(x => x.Organization)
-                    .Include(x => x.SubscriberUser)
-                    .FirstOrDefaultAsync(x =>
-                        x.Id == request.SubscriptionId &&
-                        x.SubscriberUserId == args.SubscriberUserId);
+            ValidateArgs(request);
 
-                if (subscription == null)
-                    throw new BaseException(ExceptionType.NOTFOUND,"Subscription not found");
+            var subscription = await GetSubscriptionAsync(request, args);
+            ValidateSubscription(subscription, request);
 
-                if (!subscription.InputPackage.CommitmentRequired)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment not required");
+            var amountToPay = await CalculateAmountToPayAsync(request, subscription);
 
-                if (subscription.Status == SubscriptionStatus.PendingDisbursement)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Already completed commitment stage");
+            await ProcessPaymentAsync(request, args, subscription, amountToPay);
 
-                if(subscription.InputPackage.WalletProviderId != request.WalletProviderId)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Selected wallet does not match configured package wallet, please use the configured package wallet");
-
-                var org = subscription.Organization;
-
-                var outstanding =
-                    subscription.CommitmentValue -
-                    await _inputFinancingRepository
-                        .GetTotalCommitmentPaidAsync(subscription.Id);
-
-                if (outstanding <= 0)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Already fully paid");
-
-                var amountToPay =
-                    request.Amount > 0 ? request.Amount : outstanding;
-
-                amountToPay = Math.Round(amountToPay, 2);
-
-                if (amountToPay > outstanding)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Amount exceeds outstanding balance");
-
-              
-                WalletTransferResponse walletResponse = null;
-                if (subscription.InputPackage == null)
-                {
-                    throw new BaseException(ExceptionType.NOTFOUND, "Cannot find input package");
-                }
-
-                if (subscription.SubscriberUser == null)
-                    throw new BaseException(ExceptionType.NOTFOUND, "Subscriber not found. Please try again later.");
-
-                if (subscription.InputPackage.Organization == null)
-                    throw new BaseException(ExceptionType.NOTFOUND, "Organization not found for this input package.");
-
-                switch (request.PaymentChannel)
-                {
-                    case PaymentChannel.Wallet:
-                        walletResponse = await ProcessWalletTransferAsync(
-                            request,
-                            args,
-                            subscription,
-                            amountToPay,
-                            "Payment for Commitment on input subscription",
-                            PaymentType.Commitment);
-
-                        break;
-
-
-                    //case PaymentChannel.OffilineBankTransfer:
-                    //    // mark pending reconciliation
-                    //    await _inputFinancingRepository.FlagPendingBankTransferAsync(paymentId);
-                    //    break;
-
-                    //case PaymentChannel.PayemntGateway:
-                    //    // must be verified by agent
-                    //    await _inputFinancingRepository.FlagPendingCashApprovalAsync(paymentId);
-                    //    break;
-                    default: throw new Exception("Channel Not supported");
-                }
-
-                               return true;
-            }
-            catch
-            {
-                     throw;
-            }
+            return true;
         }
 
+        private static void ValidateRequest(RecordCommitmentPaymentRequest request)
+        {
+            if (request == null)
+                throw new Exception("Invalid request");
+        }
 
+        private static void ValidateArgs(RecordCommitmentPaymentRequest request)
+        {
+            if (request.SubscriptionId <= 0)
+                throw new Exception("Subscription Id required");
+
+            if (string.IsNullOrEmpty(request.SubscriberUserId))
+                throw new Exception("Subscriber User Id required");
+        }
+
+        private async Task<InputPackageSubscription> GetSubscriptionAsync(
+            RecordCommitmentPaymentRequest request,
+            InputSubscriptionRequestArgs args)
+        {
+            return await _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
+                .ThenInclude(x => x.Organization)
+                .Include(x => x.SubscriberUser)
+                .FirstOrDefaultAsync(x =>
+                    x.Id == request.SubscriptionId &&
+                    x.SubscriberUserId == args.SubscriberUserId);
+        }
+
+        private static void ValidateSubscription(
+            InputPackageSubscription subscription,
+            RecordCommitmentPaymentRequest request)
+        {
+            if (subscription == null)
+                throw new Exception("Subscription not found");
+
+            if (subscription.InputPackage == null)
+                throw new Exception("Cannot find input package");
+
+            if (!subscription.InputPackage.CommitmentRequired)
+                throw new Exception("Commitment not required");
+
+            if (subscription.Status == SubscriptionStatus.PendingDisbursement)
+                throw new Exception("Already completed commitment stage");
+
+            if (subscription.InputPackage.WalletProviderId != request.WalletProviderId)
+                throw new Exception("Selected wallet does not match configured package wallet, please use the configured package wallet");
+
+            if (subscription.SubscriberUser == null)
+                throw new Exception("Subscriber not found. Please try again later.");
+
+            if (subscription.InputPackage.Organization == null)
+                throw new Exception("Organization not found for this input package.");
+        }
+
+        private async Task<decimal> CalculateAmountToPayAsync(
+            RecordCommitmentPaymentRequest request,
+            InputPackageSubscription subscription)
+        {
+            var outstanding = subscription.CommitmentValue -
+                await _inputFinancingRepository.GetTotalCommitmentPaidAsync(subscription.Id);
+
+            if (outstanding <= 0)
+                throw new Exception("Already fully paid");
+
+            var amountToPay = request.Amount > 0 ? request.Amount : outstanding;
+            amountToPay = Math.Round(amountToPay, 2);
+
+            if (amountToPay > outstanding)
+                throw new Exception("Amount exceeds outstanding balance");
+
+            return amountToPay;
+        }
+
+        private async Task ProcessPaymentAsync(
+            RecordCommitmentPaymentRequest request,
+            InputSubscriptionRequestArgs args,
+            InputPackageSubscription subscription,
+            decimal amountToPay)
+        {
+            switch (request.PaymentChannel)
+            {
+                case PaymentChannel.Wallet:
+                    await ProcessWalletTransferAsync(
+                        request,
+                        args,
+                        subscription,
+                        amountToPay,
+                        "Payment for Commitment on input subscription",
+                        PaymentType.Commitment);
+                    break;
+
+                // case PaymentChannel.OffilineBankTransfer:
+                //     await _inputFinancingRepository.FlagPendingBankTransferAsync(paymentId);
+                //     break;
+
+                // case PaymentChannel.PayemntGateway:
+                //     await _inputFinancingRepository.FlagPendingCashApprovalAsync(paymentId);
+                //     break;
+
+                default:
+                    throw new Exception("Channel Not supported");
+            }
+        }
         private async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
         {
             var provider = await _providerRepo.GetProvidersForBusiness(businessCode);

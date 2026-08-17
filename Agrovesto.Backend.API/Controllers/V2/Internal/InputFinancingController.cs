@@ -873,7 +873,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //repay financing
         //pay commitment fee
         [HttpPost("subscription/commitment/initiate-payment")]
-        public async Task<IActionResult> SendCommitmentReminderAsync(
+        public async Task<IActionResult> InitiateCommitmentPayment(
            [FromQuery] InputSubscriptionRequestArgs filter,
            [FromBody] RecordCommitmentPaymentRequest request)
         {
