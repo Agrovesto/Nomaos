@@ -3435,49 +3435,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
           
             );
         }
-        private async Task<IQueryable<InputPackageSubscription>> ApplyFarmerScope(
-        IQueryable<InputPackageSubscription> query,
-        string userId, string? organizationCode =null)
-        {
-            var farmerId = await _context.Farmers
-                .Where(x => x.UserId == userId)
-                .Select(x => x.Id)
-                .FirstOrDefaultAsync();
-
-            if (!string.IsNullOrEmpty(organizationCode))
-            {
-                var organizationFarmer = await _context.FarmerOrganizations
-                    .Where(x => x.OrganizationCode == organizationCode && x.FarmerId == farmerId)
-                    .Select(x => x.FarmerId)
-                    .FirstOrDefaultAsync();
-
-                if (organizationFarmer == 0)
-                {
-                    throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Farmer not found in Organization");
-                }
-
-                return query.Where(x =>
-                    (x.SubscriberType == InputSubScriptionType.Individual &&
-                     _context.FarmerOrganizations.Any(fa =>
-                         fa.FarmerId == organizationFarmer &&
-                         _context.Farmers.Any(f =>
-                             f.Id == fa.FarmerId &&
-                             f.UserId == x.SubscriberUserId)))
-                    
-                );
-            }
-
-            return query.Where(x =>
-                (x.SubscriberType == InputSubScriptionType.Individual &&
-                 _context.FarmerOrganizations.Any(fa =>
-                     fa.FarmerId == farmerId &&
-                     _context.Farmers.Any(f =>
-                         f.Id == fa.FarmerId &&
-                         f.UserId == x.SubscriberUserId)))
-          
-            );
-        }
-
+     
         public async Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(
         SubscriptionQueryFilter filter)
         {
@@ -3530,8 +3488,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var farmerQuery = baseQuery
                 .Where(x => x.SubscriberUserId == filter.UserId);
 
-            // Statuses that represent "money is actually out and repayable".
-            // Adjust this set to match whatever your domain considers disbursed/live.
             var repayableStatuses = new[] { SubscriptionStatus.Active, SubscriptionStatus.Disbursed };
 
             var activePackageCount = await farmerQuery
@@ -3592,9 +3548,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var totalFinancedValue = await subscriptionsQuery
                 .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
 
-            //var totalCommitted = await subscriptionsQuery
-            //    .Where(x => x.CommitmentRequired)
-            //    .SumAsync(x => (decimal?)x.CommitmentValue) ?? 0m;
+         
 
             var totalActivePackages = await _context.InputPackages
       .Where(p =>
