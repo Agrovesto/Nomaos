@@ -676,38 +676,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 ResponseMessages.Successful
             ));
         }
-        //[HttpGet("agent-dashboard")]
-        //[HttpGet("farmer-dashboard")]
-        //[HttpGet("membership-dashboard")]
-        //public async Task<IActionResult> GetAgentSubscriptionOverview(
-        //    [FromQuery] SubscriptionQueryFilter filter)
-        //{
-
-        //    filter.UserId = CurrentUserId;
-
-        //    var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
-        //    if (orgError != null) return orgError;
-        //    filter.OrganizationCode = resolvedOrgCode;
-
-        //    if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
-        //    {
-        //        return Unauthorized(ApiResponse<object>.Fail(
-        //              ResponseMessages.AccessDenied,
-        //            ResponseCodes.AccessDenied
-        //        ));
-        //    }
-        //    var result = await _inputFinancingManager
-        //        .GetAgentSubscriptionOverview(filter);
-
-        //    return Ok(ApiResponse<AgentSubscriptionOverviewDto>.Success(
-        //        result,
-        //       ResponseCodes.Success,
-        //       ResponseMessages.Successful
-        //    ));
-        //}
-
-
-
+   
         [HttpGet("export-subscription")]
         public async Task<IActionResult> ExportSubscriptions(
             [FromQuery] SubscriptionQueryFilter filter, [FromQuery] ExportFormat format)

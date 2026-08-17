@@ -454,6 +454,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public PaidBy PaidFromAccount { get; set; } = PaidBy.Subscriber;
         public string? Reference { get; set; }
+    
         public string WalletPin { get; set; }
         public string? ExternalReference { get; set; }
 
