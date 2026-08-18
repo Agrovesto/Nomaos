@@ -14,6 +14,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/wallet")]
     [ApiController]
+    [Authorize]
     public class UserWalletController : BaseController
     {
         private readonly INomaOSWalletService _walletManager;
@@ -159,6 +160,53 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("transfer")]
+        public async Task<IActionResult> TransferBetweenWallets([FromBody] WalletTransferRequest request, [FromQuery] WalletQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(args.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, data) = await _walletManager.TransferBetweenWallets(request, args);
+
+                return Ok(new Response<WalletTransferReceipt>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
             catch (BaseException ex)
             {
                 return StatusCode(400, new Response<string>
@@ -342,7 +390,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// Emails a one-time code to the signed-in user so they can reset a transaction PIN they have forgotten.
         /// </summary>
         [HttpPost("send-pin-reset-otp")]
-        [Authorize]
         public async Task<IActionResult> SendWalletPinResetOtp([FromQuery] WalletQueryParams query)
         {
             query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
@@ -391,7 +438,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// same short-lived token that validate-pin issues, for spending at update-pin.
         /// </summary>
         [HttpPost("verify-pin-reset-otp")]
-        [Authorize]
         public async Task<IActionResult> VerifyWalletPinResetOtp([FromBody] VerifyPinResetOtpRequest request, [FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)
@@ -444,7 +490,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("update-pin")]
-        [Authorize]
         public async Task<IActionResult> UpdateWalletPin([FromBody] UpdateWalletPinRequest request, [FromQuery] WalletQueryParams query)
         {
             if (!ModelState.IsValid)

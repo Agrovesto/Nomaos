@@ -7,16 +7,9 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using SendGrid.Helpers.Mail;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
@@ -660,6 +653,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             return Task.FromResult(WalletResponseService<PaymentResponse>.Pending(result, instructions));
         }
 
+        private static string StripDelimiter(string value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Replace(';', ' ').Trim();
+
         public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
             try
@@ -701,7 +697,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     transaction = new
                     {
                         pin = @params.Pin,
-                        senderName = $"{request.SenderName};{request.SenderAccountNumber};{request.RecipientName}",
+                        senderName = $"{StripDelimiter(request.SenderName)};{StripDelimiter(request.SenderAccountNumber)};{StripDelimiter(request.RecipientName)}",
                         bankCode,
                         amount = request.Amount,
                         description = request.Message,
@@ -786,5 +782,4 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
     
     }
-
 }

@@ -72,6 +72,44 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
 
         public string? TransactionPin { get; set; }
     }
+    public class WalletTransferRequest
+    {
+        [Required]
+        public long SourceWalletId { get; set; }
+
+        [Required]
+        public string DestinationWalletNumber { get; set; }
+
+        [Required]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Amount must be greater than zero")]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public string TransactionPin { get; set; }
+
+        public string? Description { get; set; }
+
+        [MaxLength(64)]
+        public string? ClientReference { get; set; }
+    }
+    public class WalletTransferReceipt
+    {
+        public string TransactionReference { get; set; }
+
+        public string? ProviderReference { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public string Currency { get; set; }
+
+        public string SourceWalletNumber { get; set; }
+
+        public string DestinationWalletNumber { get; set; }
+
+        public decimal SourceBalanceAfter { get; set; }
+
+        public string Status { get; set; }
+    }
     public class ProviderResponse
     {
         public bool IsSuccess { get; set; }
