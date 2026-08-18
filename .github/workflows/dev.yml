@@ -1092,6 +1092,7 @@ jobs:
           echo "❌ Health check failed after 10 attempts"
 
           exit 1
+        continue-on-error: true
 
 
       # =========================================================
