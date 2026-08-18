@@ -481,7 +481,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         #region subscriptions
         [HttpPost("add-subscriber")]
-        [Authorize(Roles = "Organization,Agent,MemberShip")]
+      
         public async Task<IActionResult> AddSubscriberAsync(
         [FromBody] AddSubscriberRequest model,
         [FromQuery] InputSubscriptionRequestArgs args)
@@ -560,13 +560,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpGet("get-subscribers")]
 
-        [Authorize(Roles = "Organization,Agent,MemberShip,Farmer")]
         public async Task<IActionResult> GetSubscriptionsAsync(
             [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
 
-            DetermineRoleViewAccess(filter);
+            var roleCheck = DetermineRoleViewAccess(filter);
+            if (roleCheck != null)
+                return roleCheck;
 
             var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
@@ -584,32 +585,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
             return Ok(ApiResponse<List<SubscriptionDetailDto>>.SuccessPaged(
-    result,
-    ResponseCodes.Success,
-    ResponseMessages.Successful,
-    HttpContext.TraceIdentifier
-));
+                    result,
+                    ResponseCodes.Success,
+                    ResponseMessages.Successful,
+                    HttpContext.TraceIdentifier
+                    ));
         }
 
-        private void DetermineRoleViewAccess(SubscriptionQueryFilter filter)
-        {
-            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
-            }
-            if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.MemberShip.ToString();
-            }
-            if (CurrentUserRoles.Contains("Farmer", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.Farmer.ToString();
-            }
-        }
-
+     
+        
+        
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetInputFinancingDashboardAsync(
             [FromQuery] SubscriptionQueryFilter filter)
@@ -776,12 +761,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
 
             filter.UserId = CurrentUserId;
-
-            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
-            }
+            var roleCheck = DetermineRoleViewAccess(filter);
+            if (roleCheck != null)
+                return roleCheck;
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -966,7 +948,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         //disburse input
         [HttpPost("disburse-input")]
-        [Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> DisburseSubscriptionAsync(
             [FromForm] DisburseSubscriptionRequest request,
             [FromQuery] InputSubscriptionRequestArgs filter)
@@ -983,6 +964,17 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             {
                 return Unauthorized(ApiResponse<object>.Fail(
                       ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+            var orgError = TryResolveOrganizationCode(filter.OrganizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            filter.OrganizationCode = resolvedOrgCode;
+
+            if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
                     ResponseCodes.AccessDenied
                 ));
             }

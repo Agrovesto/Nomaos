@@ -51,6 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<WalletReconciliationLog>> GetPendingReconciliations();
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
         Task AdjustWalletBalanceAsync(long walletId, decimal delta);
+        Task MarkPendingReconciliation(string reference, string reason);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -1019,6 +1020,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
+        public async Task MarkPendingReconciliation(string reference, string reason)
+        {
+            var tx = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == reference);
+
+            if (tx == null)
+                return; 
+
+            tx.WalletTransactionStatus = WalletTransactionStatus.ReconciliationRequired;
+            //tx.IsSuccessful = null; // explicitly unknown, not false
+            //tx.FailureReason = reason;
+            //tx.UpdatedOn = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
 
         public async Task FlagForReconciliation(
     string debitReference,

@@ -3,6 +3,7 @@ using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -34,7 +35,59 @@ namespace Agrovesto.Backend.API.Controllers
         }
         protected static readonly string[] RolePriority = { "Agent", "MemberShip" };
 
-        
+        protected IActionResult? DetermineRoleViewAccess(SubscriptionQueryFilter filter)
+        {
+            // Organization is never itself a selectable "view" role 
+            // only count the other roles as candidates.
+            var eligibleRoles = new List<string>();
+
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.Agent.ToString());
+
+            if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.MemberShip.ToString());
+
+            if (CurrentUserRoles.Contains("Farmer", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.Farmer.ToString());
+
+            var suppliedRole = filter.CurrentLoggedInUserRole;
+
+            // No eligible roles at all (e.g. pure Organization user, or no roles)
+            if (eligibleRoles.Count == 0)
+                return null; 
+
+           
+            if (eligibleRoles.Count == 1 && string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                filter.CurrentLoggedInUserRole = eligibleRoles[0];
+                return null;
+            }
+
+            if (eligibleRoles.Count > 1 && string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                var response = ApiResponse<List<string>>.Fail(
+                    "You belong to multiple roles. Please specify a role to continue.",
+                    ResponseCodes.RoleSelectionRequired
+                );
+                response.Data = eligibleRoles;
+                return Unauthorized(response);
+            }
+
+            var match = eligibleRoles.FirstOrDefault(r =>
+                r.Equals(suppliedRole, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+
+            filter.CurrentLoggedInUserRole = match;
+            return null;
+        }
+
         protected string RequireOrganizationCode(string? provided)
         {
             if (!string.IsNullOrEmpty(provided))

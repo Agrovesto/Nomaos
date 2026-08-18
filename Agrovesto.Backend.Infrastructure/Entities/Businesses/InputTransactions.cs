@@ -177,7 +177,7 @@ RepaymentTransaction
         public long InputPackageId { get; set; }
         public InputPackage InputPackage { get; set; }
         public bool IsActive { get; set; } = true;
-        public AdditionalCostType Type { get; set; }
+        public AdditionalCostType Type { get; set; } = AdditionalCostType.Other;
         public bool IsPerUnit { get; set; } // e.g. per hectare
         public decimal? Quantity { get; set; }
         public AdditionalCostTreatmentType AdditionalCostTreatmentType { get; set; } = AdditionalCostTreatmentType.Internal;
@@ -498,6 +498,11 @@ public class SubscriptionDocument
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public DisbursementStatus Status { get; set; } = DisbursementStatus.PendingApproval;
+        public string? RejectedByUserId { get; set; }
+        public DateTimeOffset? RejectedOn { get; set; }
+
+        public string? RejectionReason { get; set; }
+
     }
 
     public class PaymentReconciliation
@@ -533,7 +538,7 @@ public class SubscriptionDocument
         public decimal UnitCost { get; set; }
         public decimal TotalDisbursedValue { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
-        public long LocationId { get; set; }
+        public long OrganizationLocationId { get; set; }
         public OrganizationLocation OrganizationLocation { get; set; }
         public string AgentUserId { get; set; }
         public User User { get; set; }

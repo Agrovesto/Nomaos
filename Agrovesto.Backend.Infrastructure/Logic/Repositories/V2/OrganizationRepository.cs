@@ -1131,6 +1131,20 @@ SELECT
                 where o.OrganizationCode == organizationCode
                 select m;
 
+            if (!string.IsNullOrWhiteSpace(query.SearchParam))
+            {
+                var pattern = $"%{query.SearchParam.Trim()}%";
+                baseQuery = baseQuery.Where(m =>
+                    EF.Functions.Like(m.Name, pattern) ||
+                    EF.Functions.Like(m.Location, pattern) ||
+                    EF.Functions.Like(m.State, pattern) ||
+                    EF.Functions.Like(m.Lga, pattern) ||
+                    EF.Functions.Like(m.Ward, pattern) ||
+                    EF.Functions.Like(m.MembershipLeaderFirstName, pattern) ||
+                    EF.Functions.Like(m.MembershipLeaderLastName, pattern) ||
+                    EF.Functions.Like(m.PhoneNumber, pattern));
+            }
+
             var totalCount = await baseQuery.CountAsync();
 
             if (totalCount == 0)
@@ -3654,8 +3668,21 @@ SELECT
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
             var skip = (args.PageNumber - 1) * args.PageSize;
+            
 
             var query = GetOrganizationFarmerQuery(args.organizationCode);
+
+            if (!string.IsNullOrWhiteSpace(args.SearchParam))
+            {
+                var search = args.SearchParam.Trim();
+                query = query.Where(x =>
+                    EF.Functions.Like(x.Name, $"%{search}%") ||
+                    EF.Functions.Like(x.PhoneNumber, $"%{search}%") ||
+                    EF.Functions.Like(x.Email, $"%{search}%") ||
+                    EF.Functions.Like(x.State, $"%{search}%") ||
+                    EF.Functions.Like(x.Lga, $"%{search}%") ||
+                    EF.Functions.Like(x.Ward, $"%{search}%"));
+            }
 
             // if (args.IsActive.HasValue)
             //     query = query.Where(x => x.OrganizationIsActive == args.IsActive.Value);
