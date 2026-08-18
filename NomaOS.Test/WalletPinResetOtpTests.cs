@@ -77,7 +77,7 @@ public class WalletPinResetOtpTests
             .Setup(x => x.SendEmailAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Callback<string, string, string, string, string>((_, _, _, bodyHtml, _) => bodies.Add(bodyHtml))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         return awsService;
     }
@@ -134,7 +134,7 @@ public class WalletPinResetOtpTests
             .Setup(x => x.SendEmailAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Callback<string, string, string, string, string>((_, _, _, bodyHtml, _) => sentBody = bodyHtml)
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         var service = CreateService(context, awsService, "farmer@example.com");
 
@@ -188,6 +188,29 @@ public class WalletPinResetOtpTests
     }
 
     [Fact]
+    public async Task SendWalletPinResetOtp_WhenTheMailIsNotAccepted_ReportsFailureAndLeavesNoLiveCode()
+    {
+        await using var context = CreateContext();
+
+        var awsService = new Mock<IAWSService>();
+        awsService
+            .Setup(x => x.SendEmailAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(false);
+
+        var service = CreateService(context, awsService, "farmer@example.com");
+
+        var (status, message, data) = await service.SendWalletPinResetOtp(Query());
+
+        status.Should().BeFalse();
+        message.Should().Be("We could not send the reset code right now. Please try again shortly.");
+        data.Should().BeNull();
+
+        var otp = await context.OneTimePasswords.SingleAsync();
+        otp.UsedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task SendWalletPinResetOtp_WithUnknownUser_ThrowsNotFound()
     {
         await using var context = CreateContext();
@@ -210,7 +233,7 @@ public class WalletPinResetOtpTests
         awsService
             .Setup(x => x.SendEmailAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         var service = CreateService(context, awsService, "farmer@example.com");
 
@@ -239,7 +262,7 @@ public class WalletPinResetOtpTests
             .Setup(x => x.SendEmailAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
             .Callback<string, string, string, string, string>((_, _, _, bodyHtml, _) => bodies.Add(bodyHtml))
-            .Returns(Task.CompletedTask);
+            .ReturnsAsync(true);
 
         var service = CreateService(context, awsService, "farmer@example.com");
 

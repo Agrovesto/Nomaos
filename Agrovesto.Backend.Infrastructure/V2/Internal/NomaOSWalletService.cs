@@ -809,12 +809,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             var body = $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
                        "If you did not request this, ignore this email and your PIN stays unchanged.";
 
-            await _awsService.SendEmailAsync(
+            var delivered = await _awsService.SendEmailAsync(
                 _configuration["Official:Email"],
                 email,
                 "Reset your wallet PIN",
                 body,
                 body);
+
+            if (!delivered)
+            {
+                await _otpService.InvalidateActiveOtps(args.UserId, OtpTarget.Email);
+
+                _logger.LogError(
+                    "Wallet PIN reset OTP could not be emailed for UserId: {UserId}. See the preceding SES error.",
+                    args.UserId);
+
+                return (false, "We could not send the reset code right now. Please try again shortly.", null);
+            }
 
             _logger.LogInformation("Wallet PIN reset OTP sent for UserId: {UserId}", args.UserId);
 
