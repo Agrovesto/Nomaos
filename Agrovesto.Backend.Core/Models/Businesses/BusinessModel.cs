@@ -50,6 +50,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class ListQueryParams
     {
+        public string? SearchParam { get; set; }
         public bool? IsActive { get; set; }
         public long OrganizationId { get; set; }
         public string? FilterBy { get; set; }
