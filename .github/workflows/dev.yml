@@ -34,7 +34,7 @@ jobs:
     name: 🔍 PR Quality Gate
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
 
     outputs:
       test-outcome: ${{ steps.test.outcome }}
@@ -45,7 +45,7 @@ jobs:
       - name: 📥 Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0 # SonarQube needs full git history for accurate blame and PR tracking
 
       - name: 📌 Pin .NET SDK version
         run: |
@@ -69,6 +69,19 @@ jobs:
           echo "Active SDK: $SDK"
           [[ "$SDK" == 10.* ]] && echo "❌ SDK 10 active — pin failed" && exit 1 || true
 
+      - name: 🏗️ Setup Java Runtime
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17' # SonarScanner requires Java 17+
+
+      - name: 💾 Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
       - name: 💾 Cache NuGet packages
         uses: actions/cache@v4
         id: nuget-cache
@@ -79,27 +92,28 @@ jobs:
             nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
             nuget-${{ runner.os }}-
 
-      - name: 💾 Cache build outputs
-        uses: actions/cache@v4
-        id: build-cache
-        with:
-          path: |
-            **/bin/Release/net8.0
-            **/obj/Release
-          key: build-${{ runner.os }}-${{ hashFiles('**/*.cs', '**/*.csproj', '**/*.sln') }}
-          restore-keys: |
-            build-${{ runner.os }}-
-
       - name: 📦 Restore dependencies
-        if: steps.nuget-cache.outputs.cache-hit != 'true' || steps.build-cache.outputs.cache-hit != 'true'
         run: |
           dotnet restore "${{ env.SOLUTION_PATH }}" \
             --verbosity quiet \
             /p:ContinuousIntegrationBuild=true
 
-      - name: 🏗️ Build
+      - name: 🛠️ Install SonarScanner for .NET
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+
+      - name: 🚀 SonarQube Begin Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner begin \
+            /k:"${{ env.SONAR_PROJECT_KEY }}" \
+            /d:sonar.token="${{ secrets.SONAR_TOKEN }}" \
+            /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" \
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
+
+      - name: 🏗️ Build (Required for Sonar Analysis)
         id: build
-        if: steps.build-cache.outputs.cache-hit != 'true'
         run: |
           START=$(date +%s)
 
@@ -124,17 +138,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit $EXIT_CODE
-
-      - name: 🧪 Run tests (fast pass/fail)
-        id: test-fast
-        run: |
-          dotnet test "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-build \
-            --verbosity minimal \
-            --logger "console;verbosity=minimal" \
-            -p:MaxCpuCount=2 \
-            2>&1 | tee test-fast.log
 
       - name: 📊 Run tests with coverage
         id: test
@@ -175,6 +178,12 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit $EXIT_CODE
+
+      - name: 🏁 SonarQube End Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet sonarscanner end /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
 
       - name: 📊 Parse coverage summary
         id: coverage-summary
@@ -229,7 +238,6 @@ jobs:
             TestResults/**/*.trx
             build.log
             test.log
-            test-fast.log
           retention-days: 7
           if-no-files-found: warn
 
@@ -250,430 +258,4 @@ jobs:
             echo "| 🏗️ Build    | $(STATUS_ICON "$BUILD_STATUS") ${BUILD_STATUS^} |"
             echo "| 🧪 Tests    | $(STATUS_ICON "$TEST_STATUS") ${TEST_STATUS^} |"
             echo "| 📊 Coverage | ${COVERAGE}% |"
-            echo ""
-            echo "> PR #${{ github.event.pull_request.number }} · \`${{ env.COMMIT_SHA }}\`"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ============================================================
-  # ✅ JOB 2A — SONARQUBE ANALYSIS
-  # ============================================================
-  sonar-analysis:
-    name: 🔍 SonarQube Analysis
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-
-    outputs:
-      quality-gate: ${{ steps.quality-gate.outputs.status }}
-      version: ${{ steps.version.outputs.value }}
-
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: 📌 Pin .NET SDK version
-        run: |
-          cat > global.json << 'EOF'
-          {
-            "sdk": {
-              "version": "8.0.423",
-              "rollForward": "latestPatch"
-            }
-          }
-          EOF
-
-      - name: ⚙️ Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: 💾 Cache Sonar scanner + tools
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.sonar/cache
-            ~/.dotnet/tools
-          key: sonar-${{ runner.os }}-7.1.0
-          restore-keys: sonar-${{ runner.os }}-
-
-      - name: 💾 Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
-            nuget-${{ runner.os }}-
-
-      - name: 🔧 Install SonarScanner
-        run: |
-          dotnet tool install --global dotnet-sonarscanner --version 7.1.0 2>/dev/null || true
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
-
-      - name: 📦 Restore
-        run: |
-          dotnet restore "${{ env.SOLUTION_PATH }}" \
-            --verbosity quiet \
-            /p:ContinuousIntegrationBuild=true
-
-      - name: 🏷️ Resolve version
-        id: version
-        run: |
-          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ env.PROJECT_PATH }}" 2>/dev/null || true)
-          VERSION="${VERSION:-1.0.${{ github.run_number }}}"
-          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "**Version:** \`$VERSION\`" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 🔍 SonarQube — Begin
-        env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
-          dotnet sonarscanner begin \
-            /k:"${{ env.SONAR_PROJECT_KEY }}" \
-            /d:sonar.host.url="${SONAR_HOST_URL}" \
-            /d:sonar.token="${SONAR_TOKEN}" \
-            /v:"${{ steps.version.outputs.value }}" \
-            /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
-            /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
-            /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
-            /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
-
-      - name: 🏗️ Build (instrumented for Sonar)
-        run: |
-          dotnet build "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-restore \
-            --verbosity quiet \
-            -maxcpucount
-
-      - name: 🧪 Test with coverage
-        run: |
-          dotnet test "${{ env.SOLUTION_PATH }}" \
-            --configuration Release \
-            --no-build \
-            --verbosity minimal \
-            --logger "trx;LogFileName=test-results.trx" \
-            --collect "XPlat Code Coverage" \
-            --settings coverlet.runsettings \
-            --results-directory ./TestResults \
-            -p:MaxCpuCount=2
-
-      - name: 🔍 SonarQube — End
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
-
-      - name: 🎯 Quality Gate check
-        id: quality-gate
-        env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
-          REPORT=".sonarqube/out/.sonar/report-task.txt"
-          [ ! -f "$REPORT" ] && echo "❌ report-task.txt missing" && exit 1
-
-          ANALYSIS_ID=$(grep -oP 'ceTaskId=\K.*' "$REPORT")
-          echo "📋 Task ID: $ANALYSIS_ID"
-
-          for i in $(seq 1 30); do
-            RESP=$(curl -sf --max-time 10 -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}")
-            STATUS=$(echo "$RESP" | jq -r '.task.status')
-            echo "   [$i/30] $STATUS"
-
-            case "$STATUS" in
-              SUCCESS)          break ;;
-              FAILED|CANCELED)  echo "❌ Sonar task $STATUS"; exit 1 ;;
-              *)                sleep $(( i < 4 ? 5 : i < 8 ? 10 : 15 )) ;;
-            esac
-          done
-
-          QG=$(curl -sf --max-time 10 -u "${SONAR_TOKEN}:" \
-            "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
-          QG_STATUS=$(echo "$QG" | jq -r '.projectStatus.status')
-
-          echo "status=$QG_STATUS" >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### 🎯 Quality Gate: $QG_STATUS"
-            echo ""
-            echo "| Metric | Actual | Threshold | Status |"
-            echo "|--------|--------|-----------|--------|"
-            echo "$QG" | jq -r '
-              .projectStatus.conditions[] |
-              "| \(.metricKey) | \(.actualValue // "N/A") | \(.errorThreshold // "N/A") | \(if .status == "OK" then "✅" else "❌" end) |"
-            '
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          [ "$QG_STATUS" != "OK" ] && echo "❌ Quality Gate FAILED" && exit 1
-          echo "✅ Quality Gate passed!"
-
-  # ============================================================
-  # ✅ JOB 2B — BUILD PUBLISH ARTIFACT (runs parallel to sonar)
-  # ============================================================
-  build-artifact:
-    name: 🏗️ Build Publish Artifact
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    outputs:
-      artifact-name: ${{ steps.artifact-meta.outputs.name }}
-      version: ${{ steps.version.outputs.value }}
-
-    steps:
-      - name: 📥 Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: 📌 Pin .NET SDK version
-        run: |
-          cat > global.json << 'EOF'
-          {
-            "sdk": {
-              "version": "8.0.423",
-              "rollForward": "latestPatch"
-            }
-          }
-          EOF
-
-      - name: ⚙️ Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: 💾 Cache NuGet packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
-            nuget-${{ runner.os }}-
-
-      - name: 🏷️ Resolve version
-        id: version
-        run: |
-          VERSION=$(grep -oPm1 '(?<=<Version>)[^<]+' "${{ env.PROJECT_PATH }}" 2>/dev/null || true)
-          VERSION="${VERSION:-1.0.${{ github.run_number }}}"
-          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: 🚀 Publish
-        id: publish
-        run: |
-          START=$(date +%s)
-
-          dotnet publish "${{ env.PROJECT_PATH }}" \
-            --configuration Release \
-            --runtime linux-x64 \
-            --framework net8.0 \
-            --self-contained true \
-            --output "${{ env.PUBLISH_DIR }}" \
-            --verbosity quiet \
-            -p:ContinuousIntegrationBuild=true \
-            -p:Deterministic=true \
-            -p:DebugType=none \
-            -p:DebugSymbols=false \
-            -maxcpucount
-
-          END=$(date +%s)
-          SIZE=$(du -sh "${{ env.PUBLISH_DIR }}" | cut -f1)
-
-          {
-            echo "### 🚀 Publish"
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Size | $SIZE |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-            echo "| 🏷️ Version | ${{ steps.version.outputs.value }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ✅ Write dotfiles the deploy-staging.sh script expects
-      - name: 🏷️ Write deployment metadata
-        run: |
-          echo "${{ env.COMMIT_SHA }}"              > "${{ env.PUBLISH_DIR }}/.commit-sha"
-          echo "${{ steps.version.outputs.value }}" > "${{ env.PUBLISH_DIR }}/.version"
-          date -u +"%Y-%m-%dT%H:%M:%SZ"             > "${{ env.PUBLISH_DIR }}/.deployed-at"
-
-          echo "=== Metadata files ==="
-          ls -la "${{ env.PUBLISH_DIR }}/.commit-sha" \
-                 "${{ env.PUBLISH_DIR }}/.version" \
-                 "${{ env.PUBLISH_DIR }}/.deployed-at"
-          echo "=== .commit-sha content ==="
-          cat "${{ env.PUBLISH_DIR }}/.commit-sha"
-
-      - name: 🏷️ Artifact metadata
-        id: artifact-meta
-        run: printf 'name=app-%s\n' "${{ env.COMMIT_SHA }}" >> "$GITHUB_OUTPUT"
-
-      # 🔥 CRITICAL: include-hidden-files preserves .commit-sha, .version, .deployed-at
-      - name: 📤 Upload publish artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.artifact-meta.outputs.name }}
-          path: ${{ env.PUBLISH_DIR }}
-          retention-days: 1
-          compression-level: 6
-          include-hidden-files: true
-
-  # ============================================================
-  # ✅ JOB 3 — DEPLOY
-  # ============================================================
-  deploy:
-    name: 🚀 Deploy to Dev
-    needs: [sonar-analysis, build-artifact]
-    if: |
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/dev' &&
-      needs.sonar-analysis.outputs.quality-gate == 'OK'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: dev
-      url: https://dev-noma-api.nomaos.com/health
-
-    steps:
-      - name: 📥 Download publish artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.build-artifact.outputs.artifact-name }}
-          path: ${{ env.PUBLISH_DIR }}
-
-      # ✅ Fail fast if metadata was stripped in transit
-      - name: 🔎 Verify metadata files present locally
-        run: |
-          echo "=== Publish dir contents ==="
-          ls -la "${{ env.PUBLISH_DIR }}"
-
-          if [ ! -f "${{ env.PUBLISH_DIR }}/.commit-sha" ]; then
-            echo "❌ .commit-sha missing from downloaded artifact"
-            echo "   The upload step likely stripped hidden files."
-            echo "   Ensure include-hidden-files: true is set in upload-artifact."
-            exit 1
-          fi
-
-          LOCAL_SHA=$(cat "${{ env.PUBLISH_DIR }}/.commit-sha" | tr -d '[:space:]')
-          if [ "$LOCAL_SHA" != "${{ env.COMMIT_SHA }}" ]; then
-            echo "❌ Local SHA mismatch"
-            echo "   Expected: ${{ env.COMMIT_SHA }}"
-            echo "   Got:      $LOCAL_SHA"
-            exit 1
-          fi
-          echo "✅ Local artifact verified: $LOCAL_SHA"
-
-      - name: 🔐 Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_DEV }}
-
-      - name: 🔐 Trust EC2 host
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          ssh-keyscan -H "${{ secrets.EC2_HOST_DEV }}" >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
-
-      - name: 📁 Prepare + sync artifact
-        id: rsync
-        run: |
-          ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
-
-          START=$(date +%s)
-
-          # rsync preserves dotfiles by default; --stats gives us transfer info
-          rsync -az \
-            --delete \
-            --exclude='.git' \
-            --exclude='*.pdb' \
-            --exclude='*.xml' \
-            --timeout=30 \
-            --stats \
-            "${{ env.PUBLISH_DIR }}/" \
-            ubuntu@${{ secrets.EC2_HOST_DEV }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/ \
-            2>&1 | tee rsync.log
-
-          END=$(date +%s)
-          TRANSFERRED=$(grep "Total transferred file size" rsync.log | awk '{print $5, $6}' || echo "N/A")
-
-          {
-            echo "### 📡 File Transfer"
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Transferred | $TRANSFERRED |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 🔎 Verify artifact on server
-        run: |
-          REMOTE_SHA=$(ssh -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST_DEV }} \
-            "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null | tr -d '[:space:]' || echo NOT_FOUND")
-
-          if [ "$REMOTE_SHA" != "${{ env.COMMIT_SHA }}" ]; then
-            echo "❌ Remote SHA mismatch: expected ${{ env.COMMIT_SHA }}, got $REMOTE_SHA"
-            echo "=== Remote release dir contents ==="
-            ssh ubuntu@${{ secrets.EC2_HOST_DEV }} "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
-            exit 1
-          fi
-          echo "✅ Remote SHA verified: $REMOTE_SHA" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 🔄 Swap deployment slot
-        run: |
-          ssh -o ServerAliveInterval=15 \
-              -o ServerAliveCountMax=4 \
-              -o ConnectTimeout=10 \
-              ubuntu@${{ secrets.EC2_HOST_DEV }} \
-              "bash /var/www/Nomaos/deploy-staging.sh ${{ env.COMMIT_SHA }}"
-          echo "✅ Slot swap complete" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: ❤️ Health check
-        id: health
-        run: |
-          echo "⏳ Waiting 15s for service to stabilise..."
-          sleep 15
-
-          for i in $(seq 1 10); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-              --max-time 5 https://dev-noma-api.nomaos.com/health || echo "000")
-
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Healthy (attempt $i) — HTTP $HTTP_CODE"
-              printf 'health_status=healthy\n' >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-
-            echo "   [$i/10] HTTP $HTTP_CODE — retrying in 10s..."
-            sleep 10
-          done
-
-          printf 'health_status=unhealthy\n' >> "$GITHUB_OUTPUT"
-          echo "❌ Health check failed after 10 attempts" && exit 1
-        continue-on-error: true
-
-      - name: 📋 Deployment Summary
-        if: always()
-        env:
-          HEALTH: ${{ steps.health.outputs.health_status }}
-          VERSION: ${{ needs.build-artifact.outputs.version }}
-          QG: ${{ needs.sonar-analysis.outputs.quality-gate }}
-        run: |
-          HEALTH_ICON=$([ "$HEALTH" = "healthy" ] && echo "✅" || echo "⚠️")
-          {
-            echo "## 🚀 Deployment Summary"
-            echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
-            echo "| 📦 Version      | \`$VERSION\` |"
-            echo "| 🔖 Commit       | \`${{ env.COMMIT_SHA }}\` |"
-            echo "| 🌍 Environment  | \`dev\` |"
-            echo "| 🕐 Deployed At  | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
-            echo "| 🎯 Quality Gate | $QG |"
-            echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
-            echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |"
           } >> "$GITHUB_STEP_SUMMARY"
