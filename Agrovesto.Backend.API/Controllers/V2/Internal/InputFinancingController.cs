@@ -655,7 +655,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
            var result = await _inputFinancingManager
                 .GetAgentSubscriptionOverview(filter);
 
-            return Ok(ApiResponse<RoleBasedSubscriptionOverviewDto>.Success(
+            return Ok(ApiResponse<FarmerSubscriptionOverviewDto>.Success(
                 result,
                 ResponseCodes.Success,
                 ResponseMessages.Successful
@@ -950,16 +950,14 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("disburse-input")]
         public async Task<IActionResult> DisburseSubscriptionAsync(
             [FromForm] DisburseSubscriptionRequest request,
-            [FromQuery] InputSubscriptionRequestArgs filter)
+            [FromQuery] SubscriptionQueryFilter filter)
         {
 
             filter.UserId = CurrentUserId;
 
-            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase) &&
-                    !CurrentUserRoles.Contains("Organization", StringComparer.OrdinalIgnoreCase))
-            {
-                filter.CurrentLoggedInUserRole = UserType.Agent.ToString();
-            }
+            var roleCheck = DetermineRoleViewAccess(filter);
+            if (roleCheck != null)
+                return roleCheck;
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
             {
                 return Unauthorized(ApiResponse<object>.Fail(
@@ -992,7 +990,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("subscription/commitment-reminder")]
         public async Task<IActionResult> SendCommitmentReminderAsync(
-           [FromQuery] SubscriptionQueryFilter filter)
+        [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(filter.OrganizationCode) || string.IsNullOrWhiteSpace(filter.BusinessCode))
@@ -1014,8 +1012,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [HttpPost("subscription/record-repayment")]
         public async Task<IActionResult> RecordRepaymentAsync(
-   [FromQuery] InputSubscriptionRequestArgs filter,
-   [FromBody] RecordRepaymentRequest request)
+        [FromQuery] InputSubscriptionRequestArgs filter,
+        [FromBody] RecordRepaymentRequest request)
         {
             filter.UserId = CurrentUserId;
             if (string.IsNullOrWhiteSpace(filter.BusinessCode))
@@ -1037,7 +1035,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("subscription/repayment-reminder")]
         public async Task<IActionResult> SendRepaymentReminder(
-           [FromQuery] SubscriptionQueryFilter filter)
+        [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
 
@@ -1058,7 +1056,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpGet("subscription/repayment-schedule")]
         public async Task<IActionResult> GetRepaymentScheduleAsync(
-           [FromQuery] SubscriptionQueryFilter filter)
+        [FromQuery] SubscriptionQueryFilter filter)
         {
             filter.UserId = CurrentUserId;
             (bool flowControl, IActionResult value) = ValidateAuthorization(filter);

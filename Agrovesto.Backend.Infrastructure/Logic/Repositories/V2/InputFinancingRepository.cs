@@ -77,7 +77,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<OverdueRepaymentReminderDto>> GetOverdueSchedulesAcrossSubscriptionsAsync();
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(long subscriptionId);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(long subscriptionId, int pageNumber, int pageSize);
-        Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs args, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
     }
@@ -3450,7 +3450,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             );
         }
      
-        public async Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+        public async Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(
         SubscriptionQueryFilter filter)
         {
             if (string.IsNullOrWhiteSpace(filter.UserId))
@@ -3459,6 +3459,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             var baseQuery = _context.InputPackageSubscriptions
+                .Include(x => x.InputPackage)
                 
                 .Where(x => x.BusinessCode == filter.BusinessCode)
                 .AsQueryable();
@@ -3485,7 +3486,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             long CountFor(SubscriptionStatus status) =>
                 statusCounts.FirstOrDefault(s => s.Status == status)?.Count ?? 0;
 
-            return new RoleBasedSubscriptionOverviewDto
+            return new FarmerSubscriptionOverviewDto
             {
                 TotalSubscriptions = statusCounts.Sum(s => s.Count),
                 PendingApproval = CountFor(SubscriptionStatus.PendingApproval),
@@ -3510,22 +3511,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var repayableQuery = farmerQuery.Where(x => repayableStatuses.Contains(x.Status));
 
             var payment = await repayableQuery
-                .Select(x => new
-                {
-                    x.Id,
-                    x.TotalFinancingValue,
-                    TotalRepaid = _context.InputPackageSubscriptionPayments
-                        .Where(p =>
-                            p.SubscriptionId == x.Id &&
-                            p.Status == TransactionStatus.Successful &&
-                            p.PaymentType == PaymentType.Repayment)
-                        .Sum(p => (decimal?)p.AmountPaid) ?? 0m
-                })
-                .ToListAsync();
+       .Select(x => new
+       {
+           x.Id,
+           x.InputPackage.RepaymentRequired,
+           x.TotalFinancingValue,
+           TotalRepaid = _context.InputPackageSubscriptionPayments
+               .Where(p =>
+                   p.SubscriptionId == x.Id &&
+                   p.Status == TransactionStatus.Successful &&
+                   p.PaymentType == PaymentType.Repayment)
+               .Sum(p => (decimal?)p.AmountPaid) ?? 0m
+       })
+       .ToListAsync();
 
             var totalRepaid = payment.Sum(x => x.TotalRepaid);
-            var outstanding = payment.Sum(x => x.TotalFinancingValue) - totalRepaid;
 
+            var outstanding = payment
+                .Where(x => x.RepaymentRequired)
+                .Sum(x => x.TotalFinancingValue - x.TotalRepaid);
             var repayableSubscriptionIds = payment.Select(x => x.Id).ToList();
 
             var nextDueDate = await _context.RepaymentSchedules
@@ -3533,12 +3537,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .OrderBy(x => x.DueDate)
                 .Select(x => (DateTimeOffset?)x.DueDate)
                 .FirstOrDefaultAsync();
-
             return new FarmerSubscriptionOverviewDto
             {
                 ActivePackages = activePackageCount,
                 TotalOutstanding = outstanding,
-                NextDueDate = nextDueDate,
+                NextDueDate = nextDueDate.HasValue
+                    ? nextDueDate.Value.ToString("dd-MMM-yyyy") // or whatever format you use elsewhere
+                    : "NA",
                 TotalRepaid = totalRepaid
             };
         }
