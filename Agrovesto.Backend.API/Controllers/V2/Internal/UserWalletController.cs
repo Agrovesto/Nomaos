@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/wallet")]
     [ApiController]
-    //[Authorize]
+    [Authorize]
     public class UserWalletController : BaseController
     {
         private readonly INomaOSWalletService _walletManager;
