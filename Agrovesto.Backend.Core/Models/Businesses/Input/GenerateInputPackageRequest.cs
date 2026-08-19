@@ -647,6 +647,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class SubscriptionDetailDto
     {
+        public DateTimeOffset? DisbursedOn { get; set; }
+        public DateTimeOffset? NextDueDate { get; set; }
+        public string Season { get; set; }
         public decimal ROI { get; set; }
         public decimal TotalRepaymentValue { get; set; }
         public decimal RepaymentBalance { get; set; }
@@ -662,11 +665,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string CreatedBy { get; set; }
         public string Location { get; set; }
         public string PackageName { get; set; }
-
+        public string RepaymentDuration { get; set; }
         public decimal CommitmentValue { get; set; }
         public decimal TotalFinancingValue { get; set; }
         public DateTimeOffset? SubscribedOn { get; set; }
         public DateTimeOffset? RejectedOn { get; set; }
+        public DateTimeOffset? ApprovedOn { get; set; }
+        public DateTimeOffset? CommitmentPaymentDeadline { get; set; }
 
         public string CommitmentStatus { get; set; }
         public SubscriptionStatus SubscriptionStatus { get; set; }

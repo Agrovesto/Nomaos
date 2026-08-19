@@ -857,6 +857,14 @@ RepaymentFrequency frequency)
             if (!subscription.InputPackage.CommitmentRequired)
                 throw new Exception("Commitment not required");
 
+
+            if (subscription.InputPackage.CommitmentPlan == null)
+                throw new Exception("Commitment plan not found for this input package");
+
+            if (subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow)
+                throw new Exception("Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
+            
+            
             if (subscription.Status == SubscriptionStatus.PendingDisbursement)
                 throw new Exception("Already completed commitment stage");
 

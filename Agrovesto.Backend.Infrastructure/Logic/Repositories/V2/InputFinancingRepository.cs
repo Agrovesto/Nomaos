@@ -13,6 +13,7 @@ using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using QuestPDF.Fluent;
 using StackExchange.Redis;
+using System.Linq;
 using System.Text.Json;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
@@ -2105,13 +2106,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (subscription == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Subscription not found");
 
-            if (subscription.Status != SubscriptionStatus.PendingRepayment)
-            {
-                return new RepaymentReminderDto
-                {
-                    RequiresReminder = false
-                };
-            }
+            //if (subscription.Status != SubscriptionStatus.PendingRepayment)
+            //{
+            //    return new RepaymentReminderDto
+            //    {
+            //        RequiresReminder = false
+            //    };
+            //}
 
             var totalPaid = await _context.InputPackageSubscriptionPayments
                 .Where(x =>
@@ -2124,8 +2125,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var required = subscription.RepaymentValue;
 
-            // Outstanding is based on actual payments only — credit does NOT reduce this,
-            // it's tracked separately until formally reconciled.
             var outstanding = required - totalPaid;
 
             if (outstanding <= 0)
@@ -2151,7 +2150,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var email = user?.Email;
             var phone = user?.PhoneNumber;
 
-            // Credit fully covers what's left, but hasn't been consumed/reconciled yet.
             var coveredByCredit = creditBalance >= outstanding;
 
             string message;
@@ -3129,8 +3127,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         break;
 
                     case SubscriptionView.Completed:
+
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.Repaid);
+                            x.Status == SubscriptionStatus.Repaid
+                            || (!x.InputPackage.RepaymentRequired && x.Status == SubscriptionStatus.Disbursed)
+                            || (!x.InputPackage.RepaymentRequired && x.Status == SubscriptionStatus.Active)
+
+                            );
                         break;
 
                     case SubscriptionView.Defaulted:
@@ -3548,6 +3551,247 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
+        public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
+    SubscriptionQueryFilter filter,
+    int pageNumber,
+    int pageSize)
+        {
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+
+            var query = await BuildSubscriptionQuery(filter);
+            var count = await query.CountAsync();
+
+            if (count == 0)
+            {
+                return new PagedResult<SubscriptionDetailDto>
+                {
+                    Data = [],
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+
+            var pagedIds = await query
+                .OrderByDescending(x => x.Id)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(x => new { x.Id, x.CommitmentRequired, x.CommitmentValue })
+                .ToListAsync();
+
+            var subscriptionIds = pagedIds.Select(x => x.Id).ToList();
+
+            var commitmentTotals = await GetPaymentTotalsAsync(subscriptionIds, PaymentType.Commitment);
+            var repaymentTotals = await GetPaymentTotalsAsync(subscriptionIds, PaymentType.Repayment);
+            var disbursedDates = await GetDisbursedDatesAsync(subscriptionIds);
+            var nextDueDates = await GetNextDueDatesAsync(subscriptionIds);
+
+            var rawItems = await _context.InputPackageSubscriptions
+                .Where(x => subscriptionIds.Contains(x.Id))
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.CommitmentPlan)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.RepaymentPlan)
+                .Include(x => x.SubscriberUser)
+                .Include(x => x.AddedByUser)
+                .Include(x => x.Organization)
+                .OrderByDescending(x => x.Id)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.InputPackageId,
+                    x.SubscriberUserId,
+                    x.SubscriberType,
+                    x.CommitmentRequired,
+                    x.CommitmentValue,
+                    x.TotalFinancingValue,
+                    x.SubscribedOn,
+                    x.Status,
+                    SubscriberName = x.SubscriberUser == null
+                        ? x.SubscriberUserId
+                        : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
+                            ? x.SubscriberUser.Name
+                            : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
+                                ? x.SubscriberUser.PhoneNumber
+                                : x.SubscriberUser.Email,
+                    CreatedBy = x.AddedByUser == null
+                        ? x.AddedByUserId
+                        : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
+                            ? x.AddedByUser.Name
+                            : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
+                                ? x.AddedByUser.PhoneNumber
+                                : x.AddedByUser.Email,
+                    Location = x.Organization != null ? x.Organization.CompanyName : null,
+                    PackageName = x.InputPackage.Name,
+                    x.RejectedOn,
+                    RepaymentMethod = x.InputPackage.RepaymentPlan != null
+                        ? EnumExtensions.GetDisplayName(x.InputPackage.RepaymentPlan.RepaymentMode)
+                        : null,
+                    x.RiskLevel,
+                    TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
+                        ? x.TotalFinancingValue
+                        : 0m,
+                    RepaymentRequired = x.InputPackage.RepaymentRequired,
+                    CommitmentPaymentDeadline = x.InputPackage.CommitmentPlan != null
+                        ? x.InputPackage.CommitmentPlan.CommitmentPaymentEndDate
+                        : (DateTimeOffset?)null,
+                    RepaymentDuration = x.InputPackage.RepaymentPlan != null
+                        ? GetRepaymentPeriod(
+                            x.InputPackage.RepaymentPlan.RepaymentFrequency,
+                            x.InputPackage.RepaymentPlan.RepaymentDuration)
+                        : null,
+                    x.ApprovedOn,
+                    Season = x.InputPackage.InputSeason
+                })
+                .ToListAsync();
+
+            //TODO: improvement on query when viewtype is for release request, the request date from input disbursement table
+
+            var items = rawItems
+                .Select(x => MapToDto(x, commitmentTotals, repaymentTotals, disbursedDates, nextDueDates))
+                .ToList();
+
+            return new PagedResult<SubscriptionDetailDto>
+            {
+                Data = items,
+                Count = count,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
+
+       
+
+        private async Task<Dictionary<long, decimal>> GetPaymentTotalsAsync(
+            List<long> subscriptionIds,
+            PaymentType paymentType)
+        {
+            return await _context.InputPackageSubscriptionPayments
+                .Where(p =>
+                    subscriptionIds.Contains(p.SubscriptionId) &&
+                    p.PaymentType == paymentType &&
+                    p.Status == TransactionStatus.Successful)
+                .GroupBy(p => p.SubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
+        }
+
+        private async Task<Dictionary<long, DateTimeOffset?>> GetDisbursedDatesAsync(List<long> subscriptionIds)
+        {
+            return await _context.InputSubscriptionDisbursements
+                .Where(p => subscriptionIds.Contains(p.SubscriptionId) &&
+                            p.Status == DisbursementStatus.Disbursed)
+                .GroupBy(p => p.SubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    DisbursedOn = (DateTimeOffset?)g.Max(x => x.DisbursedOn)
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.DisbursedOn);
+        }
+
+        private async Task<Dictionary<long, DateTimeOffset?>> GetNextDueDatesAsync(List<long> subscriptionIds)
+        {
+            var today = DateTimeOffset.UtcNow;
+
+            return await _context.RepaymentSchedules
+                .Where(x => subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+                            !x.IsPaid &&
+                            x.DueDate >= today)
+                .GroupBy(x => x.InputPackageSubscriptionId)
+                .Select(g => new
+                {
+                    SubscriptionId = g.Key,
+                    NextDueDate = (DateTimeOffset?)g.Min(x => x.DueDate)
+                })
+                .ToDictionaryAsync(x => x.SubscriptionId, x => x.NextDueDate);
+        }
+
+        private static string GetCommitmentStatus(bool commitmentRequired, decimal commitmentValue, decimal commitmentPaid)
+        {
+            if (!commitmentRequired || commitmentValue <= 0)
+                return "Not Required";
+
+            return commitmentPaid >= commitmentValue ? "Paid" : "Pending";
+        }
+
+        private static decimal GetCommitmentBalance(bool commitmentRequired, decimal commitmentValue, decimal commitmentPaid)
+        {
+            if (!commitmentRequired || commitmentValue <= 0)
+                return 0m;
+
+            return Math.Max(commitmentValue - commitmentPaid, 0m);
+        }
+
+        private static decimal GetRoi(bool repaymentRequired, decimal totalRepaymentValue, decimal totalFinancingValue)
+        {
+            if (!repaymentRequired || totalRepaymentValue <= 0)
+                return 0m;
+
+            return Math.Max(totalRepaymentValue - totalFinancingValue, 0m);
+        }
+
+        private static SubscriptionDetailDto MapToDto(
+            dynamic x,
+            Dictionary<long, decimal> commitmentTotals,
+            Dictionary<long, decimal> repaymentTotals,
+            Dictionary<long, DateTimeOffset?> disbursedDates,
+            Dictionary<long, DateTimeOffset?> nextDueDates)
+        {
+            long id = x.Id;
+            bool commitmentRequired = x.CommitmentRequired;
+            decimal commitmentValue = x.CommitmentValue;
+            decimal totalRepaymentValue = x.TotalRepaymentValue;
+            decimal totalFinancingValue = x.TotalFinancingValue;
+            bool repaymentRequired = x.RepaymentRequired;
+
+            var commitmentPaid = commitmentTotals.GetValueOrDefault(id, 0m);
+            var repaymentPaid = repaymentTotals.GetValueOrDefault(id, 0m);
+            var repaymentBalance = totalRepaymentValue <= 0
+                ? 0m
+                : Math.Max(totalRepaymentValue - repaymentPaid, 0m);
+
+            var nextDueDate = repaymentRequired
+        ? nextDueDates.GetValueOrDefault(id)
+        : null;
+
+            return new SubscriptionDetailDto
+            {
+                PackageId = x.InputPackageId,
+                SubscriptionId = id,
+                SubscriberUserId = x.SubscriberUserId,
+                SubscriberName = x.SubscriberName,
+                CreatedBy = x.CreatedBy,
+                SubscriptionType = x.SubscriberType,
+                Location = x.Location,
+                PackageName = x.PackageName,
+                CommitmentValue = commitmentValue,
+                TotalFinancingValue = totalFinancingValue,
+                SubscribedOn = x.SubscribedOn,
+                SubscriptionStatus = x.Status,
+                SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
+                CommitmentStatus = GetCommitmentStatus(commitmentRequired, commitmentValue, commitmentPaid),
+                RejectedOn = x.RejectedOn,
+                SubscriptionTypeName = EnumExtensions.GetDisplayName(x.SubscriberType),
+                CommitmentPaid = commitmentPaid,
+                CommitmentBalance = GetCommitmentBalance(commitmentRequired, commitmentValue, commitmentPaid),
+                RiskLevel = EnumExtensions.GetDisplayName(x.RiskLevel),
+                RepaymentBalance = repaymentBalance,
+                RepaymentMethod = x.RepaymentMethod,
+                ROI = GetRoi(repaymentRequired, totalRepaymentValue, totalFinancingValue),
+                RepaymentDuration = x.RepaymentDuration,
+                ApprovedOn = x.ApprovedOn,
+                CommitmentPaymentDeadline = x.CommitmentPaymentDeadline,
+                Season = x.Season,
+                DisbursedOn = disbursedDates.GetValueOrDefault(id),
+                NextDueDate = nextDueDates.GetValueOrDefault(id)
+            };
+        }
         public async Task<InputFinancingDashboardDto> GetInputFinancingOverviewAsync(
         SubscriptionQueryFilter filter)
         {
@@ -3567,7 +3811,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var totalFinancedValue = await subscriptionsQuery
                 .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
 
-         
+
 
             var totalActivePackages = await _context.InputPackages
       .Where(p =>
@@ -3608,176 +3852,220 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 TotalActivePackages = totalActivePackages
             };
         }
-        public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
-        SubscriptionQueryFilter filter,
-        int pageNumber,
-        int pageSize)
-        {
-            pageNumber = pageNumber < 1 ? 1 : pageNumber;
-            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
-
-            var query = await BuildSubscriptionQuery(filter);
-
-            var count = await query.CountAsync();
-
-            if (count == 0)
-            {
-                return new PagedResult<SubscriptionDetailDto>
-                {
-                    Data = [],
-                    Count = 0,
-                    PageNumber = pageNumber,
-                    PageSize = pageSize
-                };
-            }
-
-            var pagedIds = await query
-                .OrderByDescending(x => x.Id)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
-                .Select(x => new { x.Id, x.CommitmentRequired, x.CommitmentValue })
-                .ToListAsync();
-
-            var subscriptionIds = pagedIds.Select(x => x.Id).ToList();
-
-            var commitmentTotals = await _context.InputPackageSubscriptionPayments
-                .Where(p =>
-                    subscriptionIds.Contains(p.SubscriptionId) &&
-                    p.PaymentType == PaymentType.Commitment &&
-                    p.Status == TransactionStatus.Successful)
-                .GroupBy(p => p.SubscriptionId)
-                .Select(g => new
-                {
-                    SubscriptionId = g.Key,
-                    Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
-                })
-                .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
-
-            var repaymentTotals = await _context.InputPackageSubscriptionPayments
-                .Where(p =>
-                    subscriptionIds.Contains(p.SubscriptionId) &&
-                    p.PaymentType == PaymentType.Repayment &&
-                    p.Status == TransactionStatus.Successful)
-                .GroupBy(p => p.SubscriptionId)
-                .Select(g => new
-                {
-                    SubscriptionId = g.Key,
-                    Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
-                })
-                .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
-
-            var rawItems = await _context.InputPackageSubscriptions
-                .Where(x => subscriptionIds.Contains(x.Id))
-                .Include(x => x.InputPackage)
-                    .ThenInclude(x => x.CommitmentPlan)
-                .Include(x => x.InputPackage)
-                    .ThenInclude(x => x.RepaymentPlan)
-                .Include(x => x.SubscriberUser)
-                .Include(x => x.AddedByUser)
-                .Include(x => x.Organization)
-                .OrderByDescending(x => x.Id)
-                .Select(x => new
-                {
-                    x.Id,
-                    x.InputPackageId,
-                    x.SubscriberUserId,
-                    x.SubscriberType,
-                    x.CommitmentRequired,
-                    x.CommitmentValue,
-                    x.TotalFinancingValue,
-                    x.SubscribedOn,
-                    x.Status,
-                    SubscriberName = x.SubscriberUser == null
-                        ? x.SubscriberUserId
-                        : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
-                            ? x.SubscriberUser.Name
-                            : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
-                                ? x.SubscriberUser.PhoneNumber
-                                : x.SubscriberUser.Email,
-                    CreatedBy = x.AddedByUser == null
-                        ? x.AddedByUserId
-                        : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
-                            ? x.AddedByUser.Name
-                            : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
-                                ? x.AddedByUser.PhoneNumber
-                                : x.AddedByUser.Email,
-                    Location = x.Organization != null ? x.Organization.CompanyName : null,
-                    PackageName = x.InputPackage.Name,
-                    RejectedOn = x.RejectedOn,
-                    TotalRepaid = x.InputPackage.RepaymentPlan != null
-                        ? repaymentTotals.GetValueOrDefault(x.Id, 0m)
-                        : 0m,
-                    RepaymentMethod = x.InputPackage.RepaymentPlan != null
-                        ? EnumExtensions.GetDisplayName(x.InputPackage.RepaymentPlan.RepaymentMode)
-                        : null,
-                    Duration = x.InputPackage.RepaymentPlan != null,
-                    x.RiskLevel,
-
-                    TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
-                        ? x.TotalFinancingValue
-                        : 0m,
-                    RepaymentRequired = x.InputPackage.RepaymentRequired
-
-                })
-                .ToListAsync();
-
-            //TODO: improvment on query when viewtype is for release request, the request date from input disbursement table
 
 
-            var items = rawItems.Select(x =>
-            {
-                var commitmentPaid = commitmentTotals.GetValueOrDefault(x.Id, 0m);
-                var repaymentPaid = repaymentTotals.GetValueOrDefault(x.Id, 0m);
-                var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
-                    ? "Not Required"
-                    : commitmentPaid >= x.CommitmentValue
-                        ? "Paid"
-                        : "Pending";
-                var commitmentBalance = !x.CommitmentRequired || x.CommitmentValue <= 0
-                    ? 0m
-                    : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
-                var repaymentBalance = x.TotalRepaymentValue <= 0
-                    ? 0m
-                    : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
-                var roi = !x.RepaymentRequired || x.TotalRepaymentValue <= 0
-                    ? 0m
-                    : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
+        //public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
+        //SubscriptionQueryFilter filter,
+        //int pageNumber,
+        //int pageSize)
+        //{
+        //    pageNumber = pageNumber < 1 ? 1 : pageNumber;
+        //    pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
 
-                return new SubscriptionDetailDto
-                {
-                    PackageId = x.InputPackageId,
-                    SubscriptionId = x.Id,
-                    SubscriberUserId = x.SubscriberUserId,
-                    SubscriberName = x.SubscriberName,
-                    CreatedBy = x.CreatedBy,
-                    SubscriptionType = x.SubscriberType,
-                    Location = x.Location,
-                    PackageName = x.PackageName,
-                    CommitmentValue = x.CommitmentValue,
-                    TotalFinancingValue = x.TotalFinancingValue,
-                    SubscribedOn = x.SubscribedOn,
-                    SubscriptionStatus = x.Status,
-                    SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
-                    CommitmentStatus = commitmentStatus,
-                    RejectedOn = x.RejectedOn,
-                    SubscriptionTypeName = EnumExtensions.GetDisplayName(x.SubscriberType),
-                    CommitmentPaid = commitmentPaid,
-                    CommitmentBalance = commitmentBalance,
-                    RiskLevel = EnumExtensions.GetDisplayName(x.RiskLevel),
-                    RepaymentBalance = repaymentBalance,
-                    RepaymentMethod = x.RepaymentMethod,
-                    ROI = roi
-                };
-            }).ToList();
+        //    var query = await BuildSubscriptionQuery(filter);
 
-            return new PagedResult<SubscriptionDetailDto>
-            {
-                Data = items,
-                Count = count,
-                PageNumber = pageNumber,
-                PageSize = pageSize
-            };
-        }
+        //    var count = await query.CountAsync();
+
+        //    if (count == 0)
+        //    {
+        //        return new PagedResult<SubscriptionDetailDto>
+        //        {
+        //            Data = [],
+        //            Count = 0,
+        //            PageNumber = pageNumber,
+        //            PageSize = pageSize
+        //        };
+        //    }
+
+        //    var pagedIds = await query
+        //        .OrderByDescending(x => x.Id)
+        //        .Skip((pageNumber - 1) * pageSize)
+        //        .Take(pageSize)
+        //        .Select(x => new { x.Id, x.CommitmentRequired, x.CommitmentValue })
+        //        .ToListAsync();
+
+        //    var subscriptionIds = pagedIds.Select(x => x.Id).ToList();
+
+        //    var commitmentTotals = await _context.InputPackageSubscriptionPayments
+        //        .Where(p =>
+        //            subscriptionIds.Contains(p.SubscriptionId) &&
+        //            p.PaymentType == PaymentType.Commitment &&
+        //            p.Status == TransactionStatus.Successful)
+        //        .GroupBy(p => p.SubscriptionId)
+        //        .Select(g => new
+        //        {
+        //            SubscriptionId = g.Key,
+        //            Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+        //        })
+        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
+
+        //    var repaymentTotals = await _context.InputPackageSubscriptionPayments
+        //        .Where(p =>
+        //            subscriptionIds.Contains(p.SubscriptionId) &&
+        //            p.PaymentType == PaymentType.Repayment &&
+        //            p.Status == TransactionStatus.Successful)
+        //        .GroupBy(p => p.SubscriptionId)
+        //        .Select(g => new
+        //        {
+        //            SubscriptionId = g.Key,
+        //            Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+        //        })
+        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
+        //    var today = DateTimeOffset.UtcNow;
+
+        //    var inputreleasedDate = await _context.InputSubscriptionDisbursements
+        //        .Where(p => subscriptionIds.Contains(p.SubscriptionId) &&
+        //                    p.Status == DisbursementStatus.Disbursed)
+        //        .GroupBy(p => p.SubscriptionId)
+        //        .Select(g => new
+        //        {
+        //            SubscriptionId = g.Key,
+        //            DisbursedOn = (DateTimeOffset?)g.Max(x => x.DisbursedOn)
+        //        })
+        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.DisbursedOn);
+
+        //    var nextPaymentDate = await _context.RepaymentSchedules
+        //        .Where(x => subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
+        //                    !x.IsPaid &&
+        //                    x.DueDate >= today)
+        //        .GroupBy(x => x.InputPackageSubscriptionId)
+        //        .Select(g => new
+        //        {
+        //            SubscriptionId = g.Key,
+        //            NextDueDate = (DateTimeOffset?)g.Min(x => x.DueDate)
+        //        })
+        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.NextDueDate);
+
+        //    var rawItems = await _context.InputPackageSubscriptions
+        //        .Where(x => subscriptionIds.Contains(x.Id))
+        //        .Include(x => x.InputPackage)
+        //            .ThenInclude(x => x.CommitmentPlan)
+        //        .Include(x => x.InputPackage)
+        //            .ThenInclude(x => x.RepaymentPlan)
+        //        .Include(x => x.SubscriberUser)
+        //        .Include(x => x.AddedByUser)
+        //        .Include(x => x.Organization)
+        //        .OrderByDescending(x => x.Id)
+        //        .Select(x => new
+        //        {
+        //            x.Id,
+        //            x.InputPackageId,
+        //            x.SubscriberUserId,
+        //            x.SubscriberType,
+        //            x.CommitmentRequired,
+        //            x.CommitmentValue,
+        //            x.TotalFinancingValue,
+        //            x.SubscribedOn,
+        //            x.Status,
+        //            SubscriberName = x.SubscriberUser == null
+        //                ? x.SubscriberUserId
+        //                : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
+        //                    ? x.SubscriberUser.Name
+        //                    : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
+        //                        ? x.SubscriberUser.PhoneNumber
+        //                        : x.SubscriberUser.Email,
+        //            CreatedBy = x.AddedByUser == null
+        //                ? x.AddedByUserId
+        //                : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
+        //                    ? x.AddedByUser.Name
+        //                    : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
+        //                        ? x.AddedByUser.PhoneNumber
+        //                        : x.AddedByUser.Email,
+        //            Location = x.Organization != null ? x.Organization.CompanyName : null,
+        //            PackageName = x.InputPackage.Name,
+        //            RejectedOn = x.RejectedOn,
+        //            TotalRepaid = x.InputPackage.RepaymentPlan != null
+        //                ? repaymentTotals.GetValueOrDefault(x.Id, 0m)
+        //                : 0m,
+        //            RepaymentMethod = x.InputPackage.RepaymentPlan != null
+        //                ? EnumExtensions.GetDisplayName(x.InputPackage.RepaymentPlan.RepaymentMode)
+        //                : null,
+        //            Duration = x.InputPackage.RepaymentPlan != null,
+        //            x.RiskLevel,
+
+        //            TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
+        //                ? x.TotalFinancingValue
+        //                : 0m,
+        //            RepaymentRequired = x.InputPackage.RepaymentRequired,
+        //            CommitmentPaymentDeadline= x.InputPackage.CommitmentPlan != null
+        //            ? x.InputPackage.CommitmentPlan.CommitmentPaymentEndDate
+        //            : null,
+        //           RepaymentDuration = x.InputPackage.RepaymentPlan != null
+        //        ? GetRepaymentPeriod(
+        //            x.InputPackage.RepaymentPlan.RepaymentFrequency,
+        //            x.InputPackage.RepaymentPlan.RepaymentDuration)
+        //        : null,
+        //        ApprovedOn =x.ApprovedOn,
+        //        Season = x.InputPackage.InputSeason,
+        //            DisbursedOn = inputreleasedDate.GetValueOrDefault(x.Id),
+        //            NextDueDate = nextPaymentDate.GetValueOrDefault(x.Id)
+
+        //        })
+        //        .ToListAsync();
+
+        //    //TODO: improvment on query when viewtype is for release request, the request date from input disbursement table
+
+
+        //    var items = rawItems.Select(x =>
+        //    {
+        //        var commitmentPaid = commitmentTotals.GetValueOrDefault(x.Id, 0m);
+        //        var repaymentPaid = repaymentTotals.GetValueOrDefault(x.Id, 0m);
+        //        var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
+        //            ? "Not Required"
+        //            : commitmentPaid >= x.CommitmentValue
+        //                ? "Paid"
+        //                : "Pending";
+        //        var commitmentBalance = !x.CommitmentRequired || x.CommitmentValue <= 0
+        //            ? 0m
+        //            : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
+        //        var repaymentBalance = x.TotalRepaymentValue <= 0
+        //            ? 0m
+        //            : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
+        //        var roi = !x.RepaymentRequired || x.TotalRepaymentValue <= 0
+        //            ? 0m
+        //            : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
+
+        //        return new SubscriptionDetailDto
+        //        {
+        //            PackageId = x.InputPackageId,
+        //            SubscriptionId = x.Id,
+        //            SubscriberUserId = x.SubscriberUserId,
+        //            SubscriberName = x.SubscriberName,
+        //            CreatedBy = x.CreatedBy,
+        //            SubscriptionType = x.SubscriberType,
+        //            Location = x.Location,
+        //            PackageName = x.PackageName,
+        //            CommitmentValue = x.CommitmentValue,
+        //            TotalFinancingValue = x.TotalFinancingValue,
+        //            SubscribedOn = x.SubscribedOn,
+        //            SubscriptionStatus = x.Status,
+        //            SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
+        //            CommitmentStatus = commitmentStatus,
+        //            RejectedOn = x.RejectedOn,
+        //            SubscriptionTypeName = EnumExtensions.GetDisplayName(x.SubscriberType),
+        //            CommitmentPaid = commitmentPaid,
+        //            CommitmentBalance = commitmentBalance,
+        //            RiskLevel = EnumExtensions.GetDisplayName(x.RiskLevel),
+        //            RepaymentBalance = repaymentBalance,
+        //            RepaymentMethod = x.RepaymentMethod,
+        //            ROI = roi,
+        //            RepaymentDuration =x.RepaymentDuration,
+        //            ApprovedOn=x.ApprovedOn,
+        //            CommitmentPaymentDeadline=x.CommitmentPaymentDeadline,
+        //            Season=x.Season,
+        //            DisbursedOn = x.DisbursedOn,
+        //            NextDueDate = x.NextDueDate,
+        //        };
+        //    }).ToList();
+
+        //    return new PagedResult<SubscriptionDetailDto>
+        //    {
+        //        Data = items,
+        //        Count = count,
+        //        PageNumber = pageNumber,
+        //        PageSize = pageSize
+        //    };
+        //}
 
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {

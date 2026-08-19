@@ -204,10 +204,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<BusinessWalletProviderModel[]> GetProvidersForBusiness(string businessCode)
         {
+            var normalizedCode = businessCode.ToLower();
+            var activeStatus = ProviderStatus.Active.ToString().ToLower();
+
             BusinessWalletProvider[] entities = await _context.Set<BusinessWalletProvider>()
                 .Include(x => x.WalletProvider)
-                .Where(x => x.BusinessCode.ToLower() == businessCode.ToLower()
-                         && x.Status == ProviderStatus.Active.ToString())
+                .Where(x => x.BusinessCode.ToLower() == normalizedCode
+                         && x.Status.ToLower() == activeStatus)
                 .OrderBy(x => x.WalletProvider.Name)
                 .ToArrayAsync();
 
