@@ -46,6 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
         public string ProviderKey => "Etransact";
         public bool RequiresPreDebit => true;
+        public bool SupportsBankTransfer => true;
         private string GenerateHashKey(
            string clientSecret,
            string payloadJson = "",

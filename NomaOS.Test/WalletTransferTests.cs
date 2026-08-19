@@ -34,14 +34,24 @@ public class WalletTransferTests
     private sealed class StubTransferService : IGenericWalletService
     {
         private readonly Func<TransferRequest, WalletResponseService<PaymentResponse>> _transfer;
+        private readonly Func<WalletTopUpProviderRequest, WalletResponseService<PaymentResponse>> _debit;
 
-        public StubTransferService(Func<TransferRequest, WalletResponseService<PaymentResponse>>? transfer = null)
-            => _transfer = transfer ?? (r => WalletResponseService<PaymentResponse>.Success(
+        public StubTransferService(
+            Func<TransferRequest, WalletResponseService<PaymentResponse>>? transfer = null,
+            Func<WalletTopUpProviderRequest, WalletResponseService<PaymentResponse>>? debit = null)
+        {
+            _transfer = transfer ?? (r => WalletResponseService<PaymentResponse>.Success(
                 new PaymentResponse { Status = "Successful", Reference = r.Reference, ProviderReference = "PRV-1" },
                 "Transfer completed"));
 
+            _debit = debit ?? (r => WalletResponseService<PaymentResponse>.Success(
+                new PaymentResponse { Status = "Successful", Reference = r.TransactionReference, ProviderReference = "DBT-1" },
+                "Debit completed"));
+        }
+
         public TransferRequest? LastRequest { get; private set; }
         public int CallCount { get; private set; }
+        public int DebitCallCount { get; private set; }
 
         public string ProviderKey => "Momo";
         public bool RequiresPreDebit => true;
@@ -52,6 +62,13 @@ public class WalletTransferTests
             LastRequest = request;
             CallCount++;
             return Task.FromResult(_transfer(request));
+        }
+
+        public Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(
+            WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string env)
+        {
+            DebitCallCount++;
+            return Task.FromResult(_debit(request));
         }
 
         public Task<ProviderParams> RetrieveParams(WalletProviderParameterModel[] parameters, string env)
@@ -71,10 +88,6 @@ public class WalletTransferTests
 
         public Task<WalletResponseService<PaymentStatusResponse>> TransactionStatusAsync(
             string reference, WalletProviderParameterModel[] parameters, string env)
-            => throw new NotSupportedException();
-
-        public Task<WalletResponseService<PaymentResponse>> DebitWalletAsync(
-            WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string env)
             => throw new NotSupportedException();
     }
 
@@ -179,6 +192,73 @@ public class WalletTransferTests
 
         var factory = new Mock<IWalletServiceFactory>();
         factory.Setup(x => x.GetService("Momo")).Returns(provider);
+
+        var onboardingRepository = new Mock<IOnboardingRepository>();
+        onboardingRepository
+            .Setup(x => x.GetUserById(SenderId))
+            .ReturnsAsync((new UserModel { Id = SenderId, Name = "Ada Lovelace" }, true, string.Empty));
+        onboardingRepository
+            .Setup(x => x.GetUserById(RecipientId))
+            .ReturnsAsync((new UserModel { Id = RecipientId, Name = "Charles Babbage" }, true, string.Empty));
+
+        return new NomaOSWalletService(
+            Mock.Of<IBusinessRepository>(),
+            onboardingRepository.Object,
+            new UserWalletRepository(context, Mock.Of<IAWSService>()),
+            providerRepo.Object,
+            factory.Object,
+            context,
+            Mock.Of<IMTNMomo>(),
+            Mock.Of<IInputFinancingRepository>(),
+            Mock.Of<ILogger<NomaOSWalletService>>(),
+            new OtpService(context),
+            Mock.Of<IAWSService>(),
+            Mock.Of<IConfiguration>());
+    }
+
+    private static NomaOSWalletService CreateCrossProviderService(
+        DataContext context,
+        IGenericWalletService sourceProvider,
+        IGenericWalletService destinationProvider)
+    {
+        var providerRepo = new Mock<IWalletProviderRepository>();
+
+        providerRepo
+            .Setup(x => x.Get(ProviderId))
+            .ReturnsAsync(new WalletProviderModel { ProviderId = ProviderId, Code = "Momo", Name = "MTN Momo" });
+
+        providerRepo
+            .Setup(x => x.Get(OtherProviderId))
+            .ReturnsAsync(new WalletProviderModel { ProviderId = OtherProviderId, Code = "Etransact", Name = "Etransact" });
+
+        providerRepo
+            .Setup(x => x.GetProvidersForBusiness(BusinessCode))
+            .ReturnsAsync(new[]
+            {
+                new BusinessWalletProviderModel
+                {
+                    BusinessCode = BusinessCode,
+                    ProviderId = ProviderId,
+                    WalletProvider = new WalletProviderModel { ProviderId = ProviderId, Code = "Momo" }
+                },
+                new BusinessWalletProviderModel
+                {
+                    BusinessCode = BusinessCode,
+                    ProviderId = OtherProviderId,
+                    WalletProvider = new WalletProviderModel { ProviderId = OtherProviderId, Code = "Etransact" }
+                }
+            });
+
+        providerRepo
+            .Setup(x => x.GetParametersByProvider(It.IsAny<long>(), BusinessCode, It.IsAny<string>()))
+            .ReturnsAsync(new[]
+            {
+                new WalletProviderParameterModel { Key = "BaseUrl", Value = "https://example.test", ProviderId = ProviderId }
+            });
+
+        var factory = new Mock<IWalletServiceFactory>();
+        factory.Setup(x => x.GetService("Momo")).Returns(sourceProvider);
+        factory.Setup(x => x.GetService("Etransact")).Returns(destinationProvider);
 
         var onboardingRepository = new Mock<IOnboardingRepository>();
         onboardingRepository
@@ -370,19 +450,132 @@ public class WalletTransferTests
     }
 
     [Fact]
-    public async Task TransferBetweenWallets_AcrossProviders_IsRejected()
+    public async Task TransferBetweenWallets_AcrossProviders_DebitsTheSourceAndCreditsTheDestination()
     {
         using var context = CreateContext();
-        var (source, _) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
+        var (source, destination) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
 
-        var provider = new StubTransferService();
-        var service = CreateService(context, provider);
+        var sourceProvider = new StubTransferService();
+        var destinationProvider = new StubTransferService();
+        var service = CreateCrossProviderService(context, sourceProvider, destinationProvider);
+
+        var (status, message, data) = await service.TransferBetweenWallets(TransferOf(source.Id), Query());
+
+        status.Should().BeTrue();
+        message.Should().Be("Transfer completed successfully");
+        data!.Status.Should().Be("Successful");
+
+        sourceProvider.DebitCallCount.Should().Be(1);
+        destinationProvider.CallCount.Should().Be(1);
+
+        var wallets = await context.UserWallets.ToListAsync();
+        wallets.Single(x => x.Id == source.Id).WalletBalance.Should().Be(4500m);
+        wallets.Single(x => x.Id == destination.Id).WalletBalance.Should().Be(600m);
+    }
+
+    [Fact]
+    public async Task TransferBetweenWallets_AcrossProviders_WhenTheDebitFails_CreditsNothingAndMovesNoMoney()
+    {
+        using var context = CreateContext();
+        var (source, destination) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
+
+        var sourceProvider = new StubTransferService(
+            debit: _ => WalletResponseService<PaymentResponse>.Failed("Source provider declined the debit", 400));
+        var destinationProvider = new StubTransferService();
+
+        var service = CreateCrossProviderService(context, sourceProvider, destinationProvider);
 
         var (status, message, _) = await service.TransferBetweenWallets(TransferOf(source.Id), Query());
 
         status.Should().BeFalse();
-        message.Should().Be("Transfers are only supported between wallets on the same provider");
-        provider.CallCount.Should().Be(0);
+        message.Should().Be("Source provider declined the debit");
+
+        destinationProvider.CallCount.Should().Be(0);
+
+        var wallets = await context.UserWallets.ToListAsync();
+        wallets.Single(x => x.Id == source.Id).WalletBalance.Should().Be(5000m);
+        wallets.Single(x => x.Id == destination.Id).WalletBalance.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task TransferBetweenWallets_AcrossProviders_WhenTheCreditFails_ReversesTheDebit()
+    {
+        using var context = CreateContext();
+        var (source, destination) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
+
+        var sourceProvider = new StubTransferService();
+        var destinationProvider = new StubTransferService(
+            transfer: _ => WalletResponseService<PaymentResponse>.Failed("Destination provider unavailable", 503));
+
+        var service = CreateCrossProviderService(context, sourceProvider, destinationProvider);
+
+        var (status, message, data) = await service.TransferBetweenWallets(TransferOf(source.Id), Query());
+
+        status.Should().BeFalse();
+        message.Should().Contain("has been reversed");
+        data!.Status.Should().Be("Reversed");
+
+        sourceProvider.CallCount.Should().Be(1);
+
+        var wallets = await context.UserWallets.ToListAsync();
+        wallets.Single(x => x.Id == source.Id).WalletBalance.Should().Be(5000m);
+        wallets.Single(x => x.Id == destination.Id).WalletBalance.Should().Be(100m);
+
+        var rows = await context.UserWalletTransactions.ToListAsync();
+        rows.Should().Contain(x => x.TransactionReference.EndsWith("-RV")
+            && x.WalletTransactionStatus == WalletTransactionStatus.Completed);
+    }
+
+    [Fact]
+    public async Task TransferBetweenWallets_AcrossProviders_WhenTheReversalAlsoFails_FlagsForReconciliation()
+    {
+        using var context = CreateContext();
+        var (source, destination) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
+
+        var sourceProvider = new StubTransferService(
+            transfer: _ => WalletResponseService<PaymentResponse>.Failed("Reversal rejected", 400));
+        var destinationProvider = new StubTransferService(
+            transfer: _ => WalletResponseService<PaymentResponse>.Failed("Destination provider unavailable", 503));
+
+        var service = CreateCrossProviderService(context, sourceProvider, destinationProvider);
+
+        var (status, message, data) = await service.TransferBetweenWallets(TransferOf(source.Id), Query());
+
+        status.Should().BeFalse();
+        message.Should().Contain("could not be automatically reversed");
+        data.Should().BeNull();
+
+        var log = await context.WalletReconciliationLogs.FirstOrDefaultAsync();
+        log.Should().NotBeNull();
+
+        var wallets = await context.UserWallets.ToListAsync();
+        wallets.Single(x => x.Id == source.Id).WalletBalance.Should().Be(4500m);
+        wallets.Single(x => x.Id == destination.Id).WalletBalance.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task TransferBetweenWallets_AcrossProviders_WhenTheDebitIsPending_MovesNoMoney()
+    {
+        using var context = CreateContext();
+        var (source, destination) = await SeedWalletsAsync(context, destinationProviderId: OtherProviderId);
+
+        var sourceProvider = new StubTransferService(
+            debit: r => WalletResponseService<PaymentResponse>.Pending(
+                new PaymentResponse { Status = "Pending", Reference = r.TransactionReference }, "Pending"));
+        var destinationProvider = new StubTransferService();
+
+        var service = CreateCrossProviderService(context, sourceProvider, destinationProvider);
+
+        var (status, _, data) = await service.TransferBetweenWallets(TransferOf(source.Id), Query());
+
+        status.Should().BeTrue();
+        data!.Status.Should().Be("Pending");
+
+        destinationProvider.CallCount.Should().Be(0);
+
+        var wallets = await context.UserWallets.ToListAsync();
+        wallets.Single(x => x.Id == source.Id).WalletBalance.Should().Be(5000m);
+        wallets.Single(x => x.Id == destination.Id).WalletBalance.Should().Be(100m);
     }
 
     [Fact]

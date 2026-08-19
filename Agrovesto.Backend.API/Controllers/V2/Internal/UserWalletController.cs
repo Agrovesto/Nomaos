@@ -14,7 +14,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/wallet")]
     [ApiController]
-    [Authorize]
+    //[Authorize]
     public class UserWalletController : BaseController
     {
         private readonly INomaOSWalletService _walletManager;
@@ -182,6 +182,43 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("transfer")]
         public async Task<IActionResult> TransferBetweenWallets([FromBody] WalletTransferRequest request, [FromQuery] WalletQueryParams args)
         {
+            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+
+            try
+            {
+                var (status, message, data) = await _walletManager.TransferBetweenWallets(request, args);
+
+                return Ok(new Response<WalletTransferReceipt>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("bank-transfer")]
+        [Authorize]
+        public async Task<IActionResult> TransferToBank([FromBody] BankTransferRequest request, [FromQuery] WalletQueryParams args)
+        {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
 
@@ -197,9 +234,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                var (status, message, data) = await _walletManager.TransferBetweenWallets(request, args);
+                var (status, message, data) = await _walletManager.TransferToBank(request, args);
 
-                return Ok(new Response<WalletTransferReceipt>()
+                return Ok(new Response<BankTransferReceipt>()
                 {
                     Data = data,
                     Message = message,
