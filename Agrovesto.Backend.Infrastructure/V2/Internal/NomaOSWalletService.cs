@@ -17,6 +17,7 @@ using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Core.Models.Payment;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -47,6 +48,8 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<ProviderResponse> TopUpWallet(TopUpWalletRequest request, WalletQueryParams args);
         Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
+        Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args);
+        Task<(bool status, string message, BankTransferReceipt? data)> TransferToBank(BankTransferRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args);
@@ -648,6 +651,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     return new ProviderResponse { IsSuccess = false, Message = ex.Message };
                 }
 
+                var user = await _onboardingRepository.GetUserById(args.UserId);
+                var senderName = ResolveUserName(user.model);
+
+                if (string.IsNullOrWhiteSpace(senderName))
+                {
+                    _logger.LogWarning("Wallet withdrawal blocked: no name on file for UserId: {UserId}", args.UserId);
+                    return new ProviderResponse
+                    {
+                        IsSuccess = false,
+                        Message = "No account name is on file for this user, which the provider requires to process a withdrawal."
+                    };
+                }
+
+                var recipientName = !string.IsNullOrWhiteSpace(request.RecipientName)
+                    ? request.RecipientName
+                    : senderName;
+
                 var providerParams = await RetrieveParams(request.WalletProviderCode, args.env, args.businessCode);
                 var providerId = providerParams.Select(x => x.ProviderId).FirstOrDefault();
 
@@ -665,7 +685,10 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     Amount = $"{request.Amount}",
                     Currency = wallet.Currency,
                     Message = request.Description ?? "Wallet withdrawal",
-                    Reference = transactionReference
+                    Reference = transactionReference,
+                    SenderName = senderName,
+                    SenderAccountNumber = wallet.WalletNumber,
+                    RecipientName = recipientName
                 };
 
                 var providerResponse = await providerService.InitiateWalletTransferAsync(
@@ -680,6 +703,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                         IsSuccess = false,
                         Message = providerResponse?.Message ?? "Provider withdrawal failed",
                         ProviderReference = providerResponse?.Data?.ToString()
+                    };
+                }
+
+                if (string.Equals(providerResponse.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+                {
+                    await _userWalletRepository.UpdateTransactionProviderInfo(
+                        transactionReference, providerResponse.Data?.ProviderReference, "Pending", null);
+
+                    _logger.LogWarning(
+                        "Wallet withdrawal {Reference} is pending at the provider; balance left unchanged", transactionReference);
+
+                    return new ProviderResponse
+                    {
+                        IsSuccess = true,
+                        Message = providerResponse.Message ?? "Withdrawal accepted and awaiting confirmation",
+                        ProviderReference = providerResponse.Data?.ProviderReference,
+                        Data = new { TransactionReference = transactionReference, Status = "Pending" }
                     };
                 }
 
@@ -699,6 +739,520 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             {
                 return new ProviderResponse { IsSuccess = false, Message = ex.Message };
             }
+        }
+
+        public async Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args)
+        {
+            if (request.Amount <= 0)
+                return (false, "Transfer amount must be greater than zero", null);
+
+            if (string.IsNullOrWhiteSpace(request.DestinationWalletNumber))
+                return (false, "Destination wallet number is required", null);
+
+            if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                return (false, "Transaction PIN is required", null);
+
+            var sourceWallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = request.SourceWalletId
+            });
+
+            if (sourceWallet == null)
+                return (false, "Source wallet not found", null);
+
+            if (!sourceWallet.IsActive)
+                return (false, "Source wallet is inactive", null);
+
+            var destinationWallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.WalletNumber == request.DestinationWalletNumber && !x.IsDeleted);
+
+            if (destinationWallet == null)
+                return (false, "Destination wallet not found", null);
+
+            if (!destinationWallet.IsActive)
+                return (false, "Destination wallet is inactive", null);
+
+            if (destinationWallet.Id == sourceWallet.Id)
+                return (false, "Cannot transfer to the same wallet", null);
+
+            if (sourceWallet.WalletBalance < request.Amount)
+                return (false, "Insufficient balance", null);
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(sourceWallet.Id, request.TransactionPin);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message, null);
+            }
+
+            var sender = await _onboardingRepository.GetUserById(args.UserId);
+            var senderName = ResolveUserName(sender.model);
+
+            if (string.IsNullOrWhiteSpace(senderName))
+            {
+                _logger.LogWarning("Wallet transfer blocked: no name on file for UserId: {UserId}", args.UserId);
+                return (false, "No account name is on file for this user, which the provider requires to process a transfer.", null);
+            }
+
+            var recipient = await _onboardingRepository.GetUserById(destinationWallet.UserId);
+            var recipientName = ResolveUserName(recipient.model);
+
+            if (string.IsNullOrWhiteSpace(recipientName))
+                recipientName = destinationWallet.WalletNumber;
+
+            var provider = await _providerRepo.Get(sourceWallet.WalletProviderId);
+
+            if (provider == null)
+                return (false, "Wallet provider not found", null);
+
+            var providerParams = await RetrieveParams(provider.Code, args.env, args.businessCode);
+            var providerService = _factory.GetService(provider.Code);
+
+            if (providerService == null)
+                return (false, $"Wallet service for {provider.Code} was not found", null);
+
+            var isCrossProvider = destinationWallet.WalletProviderId != sourceWallet.WalletProviderId;
+
+            var destinationProvider = provider;
+            var destinationParams = providerParams;
+            var destinationService = providerService;
+
+            if (isCrossProvider)
+            {
+                destinationProvider = await _providerRepo.Get(destinationWallet.WalletProviderId);
+
+                if (destinationProvider == null)
+                    return (false, "Destination wallet provider not found", null);
+
+                destinationParams = await RetrieveParams(destinationProvider.Code, args.env, args.businessCode);
+                destinationService = _factory.GetService(destinationProvider.Code);
+
+                if (destinationService == null)
+                    return (false, $"Wallet service for {destinationProvider.Code} was not found", null);
+            }
+
+            var description = string.IsNullOrWhiteSpace(request.Description) ? "Wallet transfer" : request.Description;
+
+            var masterReference = string.IsNullOrWhiteSpace(request.ClientReference)
+                ? $"{Guid.NewGuid():D}"
+                : request.ClientReference.Trim();
+
+            var debitReference = $"{masterReference}-DB";
+            var creditReference = $"{masterReference}-CR";
+
+            if (!string.IsNullOrWhiteSpace(request.ClientReference))
+            {
+                var existing = await _context.UserWalletTransactions
+                    .FirstOrDefaultAsync(x => x.TransactionReference == debitReference);
+
+                if (existing != null)
+                {
+                    _logger.LogInformation(
+                        "Wallet transfer {Reference} replayed by UserId: {UserId}; returning the original outcome",
+                        masterReference, args.UserId);
+
+                    return (existing.WalletTransactionStatus == WalletTransactionStatus.Completed,
+                        "A transfer with this reference has already been submitted",
+                        new WalletTransferReceipt
+                        {
+                            TransactionReference = masterReference,
+                            ProviderReference = existing.ProviderReference,
+                            Amount = existing.TransactionAmount,
+                            Currency = existing.Currency,
+                            SourceWalletNumber = sourceWallet.WalletNumber,
+                            DestinationWalletNumber = destinationWallet.WalletNumber,
+                            SourceBalanceAfter = sourceWallet.WalletBalance,
+                            Status = existing.WalletTransactionStatus.ToString()
+                        });
+                }
+            }
+
+            var execution = new TransferExecution
+            {
+                Args = args,
+                Amount = request.Amount,
+                Description = description,
+                MasterReference = masterReference,
+                SourceWallet = sourceWallet,
+                DestinationWallet = destinationWallet,
+                SourceService = providerService,
+                SourceParams = providerParams,
+                DestinationService = destinationService,
+                DestinationParams = destinationParams,
+                SenderName = senderName,
+                RecipientName = recipientName
+            };
+
+            if (isCrossProvider)
+                return await ExecuteCrossProviderTransfer(execution);
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<(bool status, string message, WalletTransferReceipt? data)>(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    await _userWalletRepository.InitiateWalletWithdrawal(
+                        sourceWallet.Id, request.Amount, description, debitReference);
+
+                    await _userWalletRepository.CreateWalletFundinAsync(
+                        destinationWallet.Id, request.Amount, description, creditReference);
+
+                    WalletResponseService<PaymentResponse>? providerResponse = null;
+                    string? failureMessage = null;
+
+                    try
+                    {
+                        providerResponse = await providerService.InitiateWalletTransferAsync(new TransferRequest
+                        {
+                            AccountNumber = destinationWallet.WalletNumber,
+                            Amount = $"{request.Amount}",
+                            Currency = sourceWallet.Currency,
+                            Message = description,
+                            Reference = masterReference,
+                            SenderName = senderName,
+                            SenderAccountNumber = sourceWallet.WalletNumber,
+                            RecipientName = recipientName
+                        }, providerParams, args.env);
+                    }
+                    catch (Exception ex)
+                    {
+                        failureMessage = ex.Message;
+                        _logger.LogError(ex, "Wallet transfer {Reference} threw before the provider answered", masterReference);
+                    }
+
+                    if (failureMessage == null && (providerResponse == null || !providerResponse.IsSuccess))
+                        failureMessage = providerResponse?.Message ?? "Wallet service did not return a response";
+
+                    if (failureMessage != null)
+                    {
+                        await _userWalletRepository.CompleteWalletWithdrawal(debitReference, false, null, failureMessage);
+                        await _userWalletRepository.CompleteWalletFunding(creditReference, false, null, failureMessage);
+                        await dbTransaction.CommitAsync();
+
+                        _logger.LogWarning("Wallet transfer {Reference} failed: {Message}", masterReference, failureMessage);
+
+                        return (false, failureMessage, null);
+                    }
+
+                    var providerReference = providerResponse!.Data?.ProviderReference ?? providerResponse.Data?.Reference;
+                    var providerStatus = providerResponse.Data?.Status;
+
+                    if (string.Equals(providerResponse.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            debitReference, providerReference, providerStatus ?? "Pending", null);
+
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            creditReference, providerReference, providerStatus ?? "Pending", null);
+
+                        await dbTransaction.CommitAsync();
+
+                        await _userWalletRepository.FlagForReconciliation(
+                            debitReference, creditReference,
+                            "Provider accepted the transfer but has not confirmed it; a transaction status query is required");
+
+                        _logger.LogWarning(
+                            "Wallet transfer {Reference} is pending at the provider; balances left unchanged", masterReference);
+
+                        return (true, "Your transfer has been accepted and is awaiting confirmation.", new WalletTransferReceipt
+                        {
+                            TransactionReference = masterReference,
+                            ProviderReference = providerReference,
+                            Amount = request.Amount,
+                            Currency = sourceWallet.Currency,
+                            SourceWalletNumber = sourceWallet.WalletNumber,
+                            DestinationWalletNumber = destinationWallet.WalletNumber,
+                            SourceBalanceAfter = sourceWallet.WalletBalance,
+                            Status = "Pending"
+                        });
+                    }
+
+                    await _userWalletRepository.CompleteWalletWithdrawal(debitReference, true, providerReference, providerStatus);
+
+                    try
+                    {
+                        await _userWalletRepository.CompleteWalletFunding(creditReference, true, providerReference, providerStatus);
+                    }
+                    catch (Exception ex)
+                    {
+                        await dbTransaction.CommitAsync();
+
+                        await _userWalletRepository.FlagForReconciliation(
+                            debitReference, creditReference, $"Credit leg failed after a successful debit: {ex.Message}");
+
+                        _logger.LogError(ex,
+                            "Wallet transfer {Reference} debited but could not credit the destination", masterReference);
+
+                        return (false,
+                            "Your transfer was debited but the destination could not be credited. Our team has been notified to reconcile it.",
+                            null);
+                    }
+
+                    await dbTransaction.CommitAsync();
+
+                    var balanceAfter = await _context.UserWallets
+                        .Where(x => x.Id == sourceWallet.Id)
+                        .Select(x => x.WalletBalance)
+                        .FirstOrDefaultAsync();
+
+                    _logger.LogInformation("Wallet transfer {Reference} completed for UserId: {UserId}", masterReference, args.UserId);
+
+                    return (true, "Transfer completed successfully", new WalletTransferReceipt
+                    {
+                        TransactionReference = masterReference,
+                        ProviderReference = providerReference,
+                        Amount = request.Amount,
+                        Currency = sourceWallet.Currency,
+                        SourceWalletNumber = sourceWallet.WalletNumber,
+                        DestinationWalletNumber = destinationWallet.WalletNumber,
+                        SourceBalanceAfter = balanceAfter,
+                        Status = providerStatus ?? "Completed"
+                    });
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        public async Task<(bool status, string message, BankTransferReceipt? data)> TransferToBank(BankTransferRequest request, WalletQueryParams args)
+        {
+            if (request.Amount <= 0)
+                return (false, "Transfer amount must be greater than zero", null);
+
+            if (string.IsNullOrWhiteSpace(request.DestinationAccountNumber))
+                return (false, "Destination account number is required", null);
+
+            if (string.IsNullOrWhiteSpace(request.BankCode))
+                return (false, "Bank code is required", null);
+
+            if (string.IsNullOrWhiteSpace(request.DestinationAccountName))
+                return (false, "Destination account name is required. Resolve it with a name enquiry before transferring.", null);
+
+            if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                return (false, "Transaction PIN is required", null);
+
+            var destinationAccountNumber = request.DestinationAccountNumber.Trim();
+            var bankCode = request.BankCode.Trim();
+            var destinationAccountName = request.DestinationAccountName.Trim();
+
+            var sourceWallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = request.SourceWalletId
+            });
+
+            if (sourceWallet == null)
+                return (false, "Source wallet not found", null);
+
+            if (!sourceWallet.IsActive)
+                return (false, "Source wallet is inactive", null);
+
+            if (string.Equals(sourceWallet.WalletNumber, destinationAccountNumber, StringComparison.Ordinal))
+                return (false, "Cannot transfer to the same account", null);
+
+            var destinationIsInternalWallet = await _context.UserWallets
+                .AnyAsync(x => x.WalletNumber == destinationAccountNumber && !x.IsDeleted);
+
+            if (destinationIsInternalWallet)
+                return (false, "That account number belongs to a wallet on this platform. Use the wallet transfer endpoint so both ledgers stay in step.", null);
+
+            if (sourceWallet.WalletBalance < request.Amount)
+                return (false, "Insufficient balance", null);
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(sourceWallet.Id, request.TransactionPin);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message, null);
+            }
+
+            var sender = await _onboardingRepository.GetUserById(args.UserId);
+            var senderName = ResolveUserName(sender.model);
+
+            if (string.IsNullOrWhiteSpace(senderName))
+            {
+                _logger.LogWarning("Bank transfer blocked: no name on file for UserId: {UserId}", args.UserId);
+                return (false, "No account name is on file for this user, which the provider requires to process a transfer.", null);
+            }
+
+            var provider = await _providerRepo.Get(sourceWallet.WalletProviderId);
+
+            if (provider == null)
+                return (false, "Wallet provider not found", null);
+
+            var providerService = _factory.GetService(provider.Code);
+
+            if (providerService == null)
+                return (false, $"Wallet service for {provider.Code} was not found", null);
+
+            if (!providerService.SupportsBankTransfer)
+                return (false, $"{provider.Code} wallets cannot pay out to a bank account", null);
+
+            var providerParams = await RetrieveParams(provider.Code, args.env, args.businessCode);
+
+            var description = string.IsNullOrWhiteSpace(request.Description) ? "Bank transfer" : request.Description;
+
+            var masterReference = string.IsNullOrWhiteSpace(request.ClientReference)
+                ? $"{Guid.NewGuid():D}"
+                : request.ClientReference.Trim();
+
+            var debitReference = $"{masterReference}-DB";
+
+            if (!string.IsNullOrWhiteSpace(request.ClientReference))
+            {
+                var existing = await _context.UserWalletTransactions
+                    .FirstOrDefaultAsync(x => x.TransactionReference == debitReference);
+
+                if (existing != null)
+                {
+                    _logger.LogInformation(
+                        "Bank transfer {Reference} replayed by UserId: {UserId}; returning the original outcome",
+                        masterReference, args.UserId);
+
+                    return (existing.WalletTransactionStatus == WalletTransactionStatus.Completed,
+                        "A transfer with this reference has already been submitted",
+                        new BankTransferReceipt
+                        {
+                            TransactionReference = masterReference,
+                            ProviderReference = existing.ProviderReference,
+                            Amount = existing.TransactionAmount,
+                            Currency = existing.Currency,
+                            SourceWalletNumber = sourceWallet.WalletNumber,
+                            DestinationAccountNumber = destinationAccountNumber,
+                            BankCode = bankCode,
+                            DestinationAccountName = destinationAccountName,
+                            SourceBalanceAfter = sourceWallet.WalletBalance,
+                            Status = existing.WalletTransactionStatus.ToString()
+                        });
+                }
+            }
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<(bool status, string message, BankTransferReceipt? data)>(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    await _userWalletRepository.InitiateWalletWithdrawal(
+                        sourceWallet.Id, request.Amount, description, debitReference);
+
+                    WalletResponseService<PaymentResponse>? providerResponse = null;
+                    string? failureMessage = null;
+
+                    try
+                    {
+                        providerResponse = await providerService.InitiateWalletTransferAsync(new TransferRequest
+                        {
+                            AccountNumber = destinationAccountNumber,
+                            BankCode = bankCode,
+                            Amount = $"{request.Amount}",
+                            Currency = sourceWallet.Currency,
+                            Message = description,
+                            Reference = masterReference,
+                            SenderName = senderName,
+                            SenderAccountNumber = sourceWallet.WalletNumber,
+                            RecipientName = destinationAccountName
+                        }, providerParams, args.env);
+                    }
+                    catch (Exception ex)
+                    {
+                        failureMessage = ex.Message;
+                        _logger.LogError(ex, "Bank transfer {Reference} threw before the provider answered", masterReference);
+                    }
+
+                    if (failureMessage == null && (providerResponse == null || !providerResponse.IsSuccess))
+                        failureMessage = providerResponse?.Message ?? "Wallet service did not return a response";
+
+                    if (failureMessage != null)
+                    {
+                        await _userWalletRepository.CompleteWalletWithdrawal(debitReference, false, null, failureMessage);
+                        await dbTransaction.CommitAsync();
+
+                        _logger.LogWarning("Bank transfer {Reference} failed: {Message}", masterReference, failureMessage);
+
+                        return (false, failureMessage, null);
+                    }
+
+                    var providerReference = providerResponse!.Data?.ProviderReference ?? providerResponse.Data?.Reference;
+                    var providerStatus = providerResponse.Data?.Status;
+
+                    if (string.Equals(providerResponse.Status, "Pending", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            debitReference, providerReference, providerStatus ?? "Pending", null);
+
+                        await dbTransaction.CommitAsync();
+
+                        await _userWalletRepository.FlagForReconciliation(
+                            debitReference, debitReference,
+                            "Provider accepted the bank transfer but has not confirmed it; a transaction status query is required");
+
+                        _logger.LogWarning(
+                            "Bank transfer {Reference} is pending at the provider; balance left unchanged", masterReference);
+
+                        return (true, "Your transfer has been accepted and is awaiting confirmation.", new BankTransferReceipt
+                        {
+                            TransactionReference = masterReference,
+                            ProviderReference = providerReference,
+                            Amount = request.Amount,
+                            Currency = sourceWallet.Currency,
+                            SourceWalletNumber = sourceWallet.WalletNumber,
+                            DestinationAccountNumber = destinationAccountNumber,
+                            BankCode = bankCode,
+                            DestinationAccountName = destinationAccountName,
+                            SourceBalanceAfter = sourceWallet.WalletBalance,
+                            Status = "Pending"
+                        });
+                    }
+
+                    await _userWalletRepository.CompleteWalletWithdrawal(debitReference, true, providerReference, providerStatus);
+
+                    await dbTransaction.CommitAsync();
+
+                    var balanceAfter = await _context.UserWallets
+                        .Where(x => x.Id == sourceWallet.Id)
+                        .Select(x => x.WalletBalance)
+                        .FirstOrDefaultAsync();
+
+                    _logger.LogInformation("Bank transfer {Reference} completed for UserId: {UserId}", masterReference, args.UserId);
+
+                    return (true, "Transfer completed successfully", new BankTransferReceipt
+                    {
+                        TransactionReference = masterReference,
+                        ProviderReference = providerReference,
+                        Amount = request.Amount,
+                        Currency = sourceWallet.Currency,
+                        SourceWalletNumber = sourceWallet.WalletNumber,
+                        DestinationAccountNumber = destinationAccountNumber,
+                        BankCode = bankCode,
+                        DestinationAccountName = destinationAccountName,
+                        SourceBalanceAfter = balanceAfter,
+                        Status = providerStatus ?? "Completed"
+                    });
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
         }
 
         public async Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args)
@@ -809,12 +1363,23 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             var body = $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
                        "If you did not request this, ignore this email and your PIN stays unchanged.";
 
-            await _awsService.SendEmailAsync(
+            var delivered = await _awsService.SendEmailAsync(
                 _configuration["Official:Email"],
                 email,
                 "Reset your wallet PIN",
                 body,
                 body);
+
+            if (!delivered)
+            {
+                await _otpService.InvalidateActiveOtps(args.UserId, OtpTarget.Email);
+
+                _logger.LogError(
+                    "Wallet PIN reset OTP could not be emailed for UserId: {UserId}. See the preceding SES error.",
+                    args.UserId);
+
+                return (false, "We could not send the reset code right now. Please try again shortly.", null);
+            }
 
             _logger.LogInformation("Wallet PIN reset OTP sent for UserId: {UserId}", args.UserId);
 
@@ -845,6 +1410,268 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _logger.LogInformation("Wallet PIN reset code accepted for UserId: {UserId}", args.UserId);
 
             return (true, "Reset code is valid", token);
+        }
+
+        private sealed class TransferExecution
+        {
+            public WalletQueryParams Args { get; init; } = null!;
+            public decimal Amount { get; init; }
+            public string Description { get; init; } = null!;
+            public string MasterReference { get; init; } = null!;
+            public UserWalletDetailResponseModel SourceWallet { get; init; } = null!;
+            public UserWallet DestinationWallet { get; init; } = null!;
+            public IGenericWalletService SourceService { get; init; } = null!;
+            public WalletProviderParameterModel[] SourceParams { get; init; } = null!;
+            public IGenericWalletService DestinationService { get; init; } = null!;
+            public WalletProviderParameterModel[] DestinationParams { get; init; } = null!;
+            public string SenderName { get; init; } = null!;
+            public string RecipientName { get; init; } = null!;
+
+            public string DebitReference => $"{MasterReference}-DB";
+            public string CreditReference => $"{MasterReference}-CR";
+            public string ReversalReference => $"{MasterReference}-RV";
+        }
+
+        private WalletTransferReceipt BuildReceipt(TransferExecution execution, string? providerReference, decimal sourceBalanceAfter, string status) =>
+            new()
+            {
+                TransactionReference = execution.MasterReference,
+                ProviderReference = providerReference,
+                Amount = execution.Amount,
+                Currency = execution.SourceWallet.Currency,
+                SourceWalletNumber = execution.SourceWallet.WalletNumber,
+                DestinationWalletNumber = execution.DestinationWallet.WalletNumber,
+                SourceBalanceAfter = sourceBalanceAfter,
+                Status = status
+            };
+
+        private async Task<(bool status, string message, WalletTransferReceipt? data)> ExecuteCrossProviderTransfer(TransferExecution execution)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync<(bool status, string message, WalletTransferReceipt? data)>(async () =>
+            {
+                await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    await _userWalletRepository.InitiateWalletWithdrawal(
+                        execution.SourceWallet.Id, execution.Amount, execution.Description, execution.DebitReference);
+
+                    await _userWalletRepository.CreateWalletFundinAsync(
+                        execution.DestinationWallet.Id, execution.Amount, execution.Description, execution.CreditReference);
+
+                    var debit = await CallProvider(() => execution.SourceService.DebitWalletAsync(
+                        new WalletTopUpProviderRequest
+                        {
+                            WalletNumber = execution.SourceWallet.WalletNumber,
+                            WalletName = execution.SenderName,
+                            Amount = execution.Amount,
+                            Currency = execution.SourceWallet.Currency,
+                            Message = execution.Description,
+                            TransactionReference = execution.DebitReference
+                        },
+                        execution.SourceParams,
+                        execution.Args.env));
+
+                    if (!debit.ok)
+                    {
+                        await _userWalletRepository.CompleteWalletWithdrawal(execution.DebitReference, false, null, debit.message);
+                        await _userWalletRepository.CompleteWalletFunding(execution.CreditReference, false, null, debit.message);
+                        await dbTransaction.CommitAsync();
+
+                        _logger.LogWarning(
+                            "Cross-provider transfer {Reference} failed on the debit leg: {Message}",
+                            execution.MasterReference, debit.message);
+
+                        return (false, debit.message, null);
+                    }
+
+                    if (debit.pending)
+                    {
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            execution.DebitReference, debit.providerReference, "Pending", null);
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            execution.CreditReference, debit.providerReference, "Pending", null);
+
+                        await dbTransaction.CommitAsync();
+
+                        await _userWalletRepository.FlagForReconciliation(
+                            execution.DebitReference, execution.CreditReference,
+                            "Debit leg is pending at the source provider; a transaction status query is required before the destination is credited");
+
+                        _logger.LogWarning(
+                            "Cross-provider transfer {Reference} is pending on the debit leg; balances left unchanged",
+                            execution.MasterReference);
+
+                        return (true, "Your transfer has been accepted and is awaiting confirmation.",
+                            BuildReceipt(execution, debit.providerReference, execution.SourceWallet.WalletBalance, "Pending"));
+                    }
+
+                    await _userWalletRepository.CompleteWalletWithdrawal(
+                        execution.DebitReference, true, debit.providerReference, debit.status);
+
+                    var credit = await CallProvider(() => execution.DestinationService.InitiateWalletTransferAsync(
+                        new TransferRequest
+                        {
+                            AccountNumber = execution.DestinationWallet.WalletNumber,
+                            Amount = $"{execution.Amount}",
+                            Currency = execution.DestinationWallet.Currency,
+                            Message = execution.Description,
+                            Reference = execution.CreditReference,
+                            SenderName = execution.SenderName,
+                            SenderAccountNumber = execution.SourceWallet.WalletNumber,
+                            RecipientName = execution.RecipientName
+                        },
+                        execution.DestinationParams,
+                        execution.Args.env));
+
+                    if (!credit.ok)
+                        return await ReverseCrossProviderDebit(execution, dbTransaction, credit.message);
+
+                    if (credit.pending)
+                    {
+                        await _userWalletRepository.UpdateTransactionProviderInfo(
+                            execution.CreditReference, credit.providerReference, "Pending", null);
+
+                        await dbTransaction.CommitAsync();
+
+                        await _userWalletRepository.FlagForReconciliation(
+                            execution.DebitReference, execution.CreditReference,
+                            "Destination provider accepted the credit but has not confirmed it; a transaction status query is required");
+
+                        var debitedBalance = await ReadWalletBalance(execution.SourceWallet.Id);
+
+                        _logger.LogWarning(
+                            "Cross-provider transfer {Reference} debited; credit leg pending at the destination provider",
+                            execution.MasterReference);
+
+                        return (true, "Your transfer has been sent and is awaiting confirmation from the receiving provider.",
+                            BuildReceipt(execution, credit.providerReference, debitedBalance, "Pending"));
+                    }
+
+                    await _userWalletRepository.CompleteWalletFunding(
+                        execution.CreditReference, true, credit.providerReference, credit.status);
+
+                    await dbTransaction.CommitAsync();
+
+                    var balanceAfter = await ReadWalletBalance(execution.SourceWallet.Id);
+
+                    _logger.LogInformation(
+                        "Cross-provider transfer {Reference} completed for UserId: {UserId}",
+                        execution.MasterReference, execution.Args.UserId);
+
+                    return (true, "Transfer completed successfully",
+                        BuildReceipt(execution, credit.providerReference, balanceAfter, "Successful"));
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
+
+        private async Task<(bool status, string message, WalletTransferReceipt? data)> ReverseCrossProviderDebit(
+            TransferExecution execution,
+            IDbContextTransaction dbTransaction,
+            string creditFailureMessage)
+        {
+            await _userWalletRepository.CompleteWalletFunding(
+                execution.CreditReference, false, null, creditFailureMessage);
+
+            var reversal = await CallProvider(() => execution.SourceService.InitiateWalletTransferAsync(
+                new TransferRequest
+                {
+                    AccountNumber = execution.SourceWallet.WalletNumber,
+                    Amount = $"{execution.Amount}",
+                    Currency = execution.SourceWallet.Currency,
+                    Message = $"Reversal of {execution.MasterReference}",
+                    Reference = execution.ReversalReference,
+                    SenderName = execution.SenderName,
+                    SenderAccountNumber = execution.SourceWallet.WalletNumber,
+                    RecipientName = execution.SenderName
+                },
+                execution.SourceParams,
+                execution.Args.env));
+
+            if (!reversal.ok || reversal.pending)
+            {
+                await dbTransaction.CommitAsync();
+
+                await _userWalletRepository.FlagForReconciliation(
+                    execution.DebitReference, execution.CreditReference,
+                    $"Credit leg failed ({creditFailureMessage}) and the reversal did not confirm ({reversal.message})");
+
+                _logger.LogError(
+                    "Cross-provider transfer {Reference} debited but neither credited nor reversed: credit={CreditMessage}, reversal={ReversalMessage}",
+                    execution.MasterReference, creditFailureMessage, reversal.message);
+
+                return (false,
+                    "Your transfer could not be completed and the debit could not be automatically reversed. Our team has been notified to resolve it.",
+                    null);
+            }
+
+            await _userWalletRepository.CreateWalletFundinAsync(
+                execution.SourceWallet.Id, execution.Amount,
+                $"Reversal of {execution.MasterReference}", execution.ReversalReference);
+
+            await _userWalletRepository.CompleteWalletFunding(
+                execution.ReversalReference, true, reversal.providerReference, "Reversed");
+
+            await dbTransaction.CommitAsync();
+
+            var balanceAfter = await ReadWalletBalance(execution.SourceWallet.Id);
+
+            _logger.LogWarning(
+                "Cross-provider transfer {Reference} failed on the credit leg and was reversed: {Message}",
+                execution.MasterReference, creditFailureMessage);
+
+            return (false,
+                $"Your transfer could not be completed and has been reversed. {creditFailureMessage}",
+                BuildReceipt(execution, reversal.providerReference, balanceAfter, "Reversed"));
+        }
+
+        private async Task<(bool ok, bool pending, string? providerReference, string? status, string message)> CallProvider(
+            Func<Task<WalletResponseService<PaymentResponse>>> call)
+        {
+            try
+            {
+                var response = await call();
+
+                if (response == null)
+                    return (false, false, null, null, "Wallet service did not return a response");
+
+                var providerReference = response.Data?.ProviderReference ?? response.Data?.Reference;
+
+                if (!response.IsSuccess)
+                    return (false, false, providerReference, response.Data?.Status, response.Message ?? "Wallet service rejected the request");
+
+                var pending = string.Equals(response.Status, "Pending", StringComparison.OrdinalIgnoreCase);
+
+                return (true, pending, providerReference, response.Data?.Status, response.Message ?? string.Empty);
+            }
+            catch (Exception ex)
+            {
+                return (false, false, null, null, ex.Message);
+            }
+        }
+
+        private async Task<decimal> ReadWalletBalance(long walletId) =>
+            await _context.UserWallets
+                .Where(x => x.Id == walletId)
+                .Select(x => x.WalletBalance)
+                .FirstOrDefaultAsync();
+
+        private static string ResolveUserName(UserModel? user)
+        {
+            if (user == null)
+                return string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(user.Name))
+                return user.Name.Trim();
+
+            return $"{user.FirstName} {user.LastName}".Trim();
         }
 
         private static string MaskEmail(string email)

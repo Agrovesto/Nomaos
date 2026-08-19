@@ -17,6 +17,8 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         string ProviderKey { get; } // e.g. "MTNMomo", "Etransact" — matches a DB column
 
         bool RequiresPreDebit { get; }
+
+        bool SupportsBankTransfer => false;
         // Create wallet/account with provider
         
         // Collect money from user (RequestToPay)
