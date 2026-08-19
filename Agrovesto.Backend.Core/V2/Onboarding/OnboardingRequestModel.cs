@@ -395,6 +395,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long? Id { get; set; }
         public DateTimeOffset? StartDate { get; set; }
         public DateTimeOffset? EndDate { get; set; }
+        public string? SearchParam { get; set; }
     }
 
     public class BulkOnboardingQueueResponse

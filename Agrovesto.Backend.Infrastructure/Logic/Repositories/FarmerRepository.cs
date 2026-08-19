@@ -1341,6 +1341,21 @@ WHERE f.UserId = @userId
             if (query.Id > 0)
                 queryable = queryable.Where(f => f.Id == query.Id);
 
+
+            if (!string.IsNullOrWhiteSpace(query.SearchParam))
+            {
+                var pattern = $"%{query.SearchParam.Trim()}%";
+                queryable = queryable.Where(f =>
+                    EF.Functions.Like(f.Name, pattern) ||
+                    EF.Functions.Like(f.State, pattern) ||
+                    EF.Functions.Like(f.Lga, pattern) ||
+                    EF.Functions.Like(f.Ward, pattern) ||
+                    EF.Functions.Like(f.Location, pattern) ||
+                    EF.Functions.Like(f.PhoneNumber, pattern) ||
+                    EF.Functions.Like(f.Email, pattern) ||
+                    EF.Functions.Like(f.Level, pattern) 
+                    );
+            }
             return queryable;
         }
         public async Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByFarmer(
@@ -1665,6 +1680,20 @@ WHERE f.UserId = @userId
                         fo.FarmerId == f.Id &&
                         fo.OrganizationCode == filter.OrganizationCode));
             }
+            if (!string.IsNullOrWhiteSpace(filter.SearchParam))
+            {
+                var pattern = $"%{filter.SearchParam.Trim()}%";
+                query = query.Where(f =>
+                    EF.Functions.Like(f.Name, pattern) ||
+                    EF.Functions.Like(f.State, pattern) ||
+                    EF.Functions.Like(f.Lga, pattern) ||
+                    EF.Functions.Like(f.Ward, pattern) ||
+                    EF.Functions.Like(f.Location, pattern) ||
+                    EF.Functions.Like(f.PhoneNumber, pattern) ||
+                    EF.Functions.Like(f.Email, pattern) ||
+                    EF.Functions.Like(f.Level, pattern) 
+                    );
+            }
 
             return query.Distinct();
         }
@@ -1688,7 +1717,8 @@ WHERE f.UserId = @userId
                 State = query.State,
                 Id = query.Id,
                 StartDate = query.startDate,
-                EndDate = query.endDate
+                EndDate = query.endDate,
+                SearchParam= query.SearchParam
             };
 
             var baseQuery = BuildFarmerQuery(filter);

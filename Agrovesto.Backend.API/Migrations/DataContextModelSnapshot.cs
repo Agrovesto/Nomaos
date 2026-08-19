@@ -837,9 +837,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<double>("Latitude")
                         .HasColumnType("float");
 
-                    b.Property<long>("LocationId")
-                        .HasColumnType("bigint");
-
                     b.Property<double>("Longitude")
                         .HasColumnType("float");
 
@@ -2721,6 +2718,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("float");
 
                     b.Property<string>("Reference")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("RejectedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset?>("RejectedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("RejectionReason")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal?>("RemainingBalance")

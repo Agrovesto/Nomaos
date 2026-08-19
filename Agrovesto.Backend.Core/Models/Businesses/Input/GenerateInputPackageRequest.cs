@@ -750,6 +750,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public long? SubscriptionId { get; set; }
         public string? Reference { get; set; }
         public decimal? Amount { get; set; }
+
+
+        [Required]
+        [EnumDataType(typeof(ApprovalDecision))]
+        public ApprovalDecision ApprovalState { get; set; }
     }
     public class PaymentReceiptResponse
     {

@@ -2599,12 +2599,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (disbursementRequest.Status != DisbursementStatus.PendingApproval)
                 throw new Exception($"Request already processed. Current disbursement status: {disbursementRequest.Status}");
+            if(request.ApprovalState == ApprovalDecision.Approved)
+            {
+                disbursementRequest.Status = DisbursementStatus.Approved;
+                disbursementRequest.ApprovedByUserId = args.UserId;
+                disbursementRequest.ApprovedOn = DateTimeOffset.UtcNow;
+                disbursementRequest.Subscription.Status = SubscriptionStatus.PendingDisbursement;
+                disbursementRequest.ApprovedAmount = request.Amount.HasValue ? request.Amount.Value : disbursementRequest.RequestedAmount;
 
-            disbursementRequest.Status = DisbursementStatus.Approved;
-            disbursementRequest.ApprovedByUserId = args.UserId;
-            disbursementRequest.ApprovedOn = DateTimeOffset.UtcNow;
-            disbursementRequest.Subscription.Status = SubscriptionStatus.PendingDisbursement;
-            disbursementRequest.ApprovedAmount = request.Amount.HasValue ? request.Amount.Value : disbursementRequest.RequestedAmount;
+            }else if(request.ApprovalState == ApprovalDecision.Rejected)
+            {
+                disbursementRequest.Status = DisbursementStatus.Rejected;
+                disbursementRequest.RejectedByUserId = args.UserId;
+                disbursementRequest.RejectedOn = DateTimeOffset.UtcNow;
+                disbursementRequest.Subscription.Status = SubscriptionStatus.Rejected;
+                disbursementRequest.RejectionReason = "Disbursement Rejected by Organization";
+            }
+            else
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid approval state");
+            }
 
             await _context.SaveChangesAsync();
 
