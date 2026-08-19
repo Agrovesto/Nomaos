@@ -10,6 +10,7 @@ using CafeOneBankData = Agrovesto.Backend.Core.Models.Common.CafeOneBankData;
 using CafeoneDataModel = Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.CafeoneDataModel;
 using CafeoneCustomerRequest = Agrovesto.Backend.Core.Models.Common.WalletServiceRequest.CafeoneCustomerRequest;
 using CafeOneAuthResponse = Agrovesto.Backend.Core.Models.Common.CafeOneAuthResponse;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
@@ -17,15 +18,19 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
     public class CafeOneWalletService : ICafeOneWalletService
     {
+        private static readonly TimeSpan BankListCacheDuration = TimeSpan.FromHours(1);
+
         private readonly IWalletProviderRepository _providerRepo;
         private readonly IHttpService _httpService;
         private readonly IWalletRepository _walletRepository;
+        private readonly IDistributedCache _cache;
         private readonly ILogger<CafeOneWalletService> _log;
-        public CafeOneWalletService(ILogger<CafeOneWalletService> log, IHttpService httpService, IWalletProviderRepository providerRepo, IWalletRepository walletRepository)
+        public CafeOneWalletService(ILogger<CafeOneWalletService> log, IHttpService httpService, IWalletProviderRepository providerRepo, IWalletRepository walletRepository, IDistributedCache cache)
         {
             _providerRepo = providerRepo;
             _httpService = httpService;
             _walletRepository = walletRepository;
+            _cache = cache;
 
             _log = log;
         }
@@ -148,6 +153,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
         public async Task<List<CafeOneBankData>> GetBanks(string env)
         {
+            var cacheKey = BankListCacheKey(env);
+            var cached = await ReadCachedBanks(cacheKey);
+
+            if (cached != null)
+            {
+                _log.LogInformation("Returning {Count} CafeOne banks from cache for env {Env}", cached.Count, env);
+                return cached;
+            }
+
             var @params = await RetrieveParams(env);
 
 
@@ -166,18 +180,61 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 var readResponse = await request.Content.ReadAsStringAsync();
                 var response = JsonConvert.DeserializeObject<Core.Models.Common.AccountResolutionResponse<List<CafeOneBankData>>>(readResponse);
 
+                var banks = response?.data;
 
+                if (banks != null && banks.Count > 0)
+                    await WriteCachedBanks(cacheKey, banks);
 
-                return response.data;
+                return banks;
 
 
             }
             catch (Exception ex)
             {
                 string errorMsg = ex.InnerException != null ? ex.InnerException.Message : ex.Message;
+                _log.LogError(ex, "Failed to retrieve CafeOne banks for env {Env}: {Message}", env, errorMsg);
                 return null;
             }
 
+        }
+
+        private static string BankListCacheKey(string env) =>
+            $"cafeone:banks:{(string.IsNullOrWhiteSpace(env) ? "default" : env.Trim().ToLowerInvariant())}";
+
+        private async Task<List<CafeOneBankData>?> ReadCachedBanks(string cacheKey)
+        {
+            try
+            {
+                var cached = await _cache.GetStringAsync(cacheKey);
+
+                if (string.IsNullOrWhiteSpace(cached))
+                    return null;
+
+                return JsonConvert.DeserializeObject<List<CafeOneBankData>>(cached);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Could not read the CafeOne bank list from cache; falling back to the provider");
+                return null;
+            }
+        }
+
+        private async Task WriteCachedBanks(string cacheKey, List<CafeOneBankData> banks)
+        {
+            try
+            {
+                await _cache.SetStringAsync(
+                    cacheKey,
+                    JsonConvert.SerializeObject(banks),
+                    new DistributedCacheEntryOptions
+                    {
+                        AbsoluteExpiration = DateTimeOffset.UtcNow.Add(BankListCacheDuration)
+                    });
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "Could not cache the CafeOne bank list; it will be fetched again on the next call");
+            }
         }
 
         public async Task<List<CafeoneDataModel>> GetCustomers(string env)
