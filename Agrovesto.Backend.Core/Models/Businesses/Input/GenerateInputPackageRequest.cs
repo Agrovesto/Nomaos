@@ -603,6 +603,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
         public long SubscriptionId { get; set; }
+        public string? Env { get; set; }
     }
 
 
@@ -632,7 +633,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     {
        public long ActivePackages { get; set; }
         public decimal TotalOutstanding { get; set; }
-        public DateTimeOffset? NextDueDate { get; set; }
+        public string NextDueDate { get; set; }
         public decimal TotalRepaid { get; set; }
     }
     public class InputFinancingDashboardDto

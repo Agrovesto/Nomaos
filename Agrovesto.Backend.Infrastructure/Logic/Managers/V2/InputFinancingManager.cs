@@ -86,7 +86,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> UpdateAdditionalCostAsync(UpdateAdditionalCostRequest request, UpdateAdditionalCostArgs query);
         Task<bool> CommitmentPaymentAsync(RecordCommitmentPaymentRequest request, InputSubscriptionRequestArgs args);
         Task<bool> ApproveInputDisbursementRequestAsync(ApproveDisbursementRequestDto request, InputSubscriptionRequestArgs args);
-        Task<DisburseSubscriptionResult> DisburseSubscriptionAsync(DisburseSubscriptionRequest request, InputSubscriptionRequestArgs args);
+        Task<DisburseSubscriptionResult> DisburseSubscriptionAsync(DisburseSubscriptionRequest request, SubscriptionQueryFilter args);
         Task<long> RequestInputDisbursementApprovalAsync(InputSubscriptionRequestArgs args);
         Task<CommitmentFormDto> DownloadCommitmentLetter(SubscriptionQueryFilter filter);
         Task<(byte[] FileBytes, string FileName)> UploadCommissionLetterAsync(long subscriptionId, string userId, IFormFile file);
@@ -96,7 +96,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<RepaymentResponse> RecordRepaymentAsync(RecordRepaymentRequest request, InputSubscriptionRequestArgs args);
         Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter);
         Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter);
-        Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
+        Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs query, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
     }
@@ -474,7 +474,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _inputFinancingRepository.GetSubscriptionsAsync(filter, pageNumber, pageSize);
         }
-        public async Task<RoleBasedSubscriptionOverviewDto> GetAgentSubscriptionOverview(
+        public async Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(
             SubscriptionQueryFilter filter)
         {
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
@@ -1762,7 +1762,7 @@ RepaymentFrequency frequency)
             return await _inputFinancingRepository.RequestInputDisbursementApprovalAsync(args.SubscriptionId, reference, args.UserId
                 ,args.SubscriberUserId);
         }
-        private async Task<OrganizationAgent> ResolveAgentOrganizationAsync(long agentId, string? organizationCode)
+        private async Task<OrganizationAgent> ResolveOrganizationAgentLocation(long agentId, string? organizationCode)
         {
             if (string.IsNullOrWhiteSpace(organizationCode))
                 throw new BaseException(ExceptionType.NOTFOUND, "Organization code is required");
@@ -1781,7 +1781,6 @@ RepaymentFrequency frequency)
 
             var orgIds = organizations.Select(o => o.OrganizationId).ToList();
 
-            // All active, valid (location-backed) agent assignments across the candidate orgs
             var agentAssignments = await _context.OrganizationAgents
                 .Include(x => x.Location)
                 .Where(x =>
@@ -1795,7 +1794,6 @@ RepaymentFrequency frequency)
 
             if (codes.Count == 1)
             {
-                // Explicit single org code supplied — must match exactly, no silent fallback
                 var requestedOrgId = organizations.First().OrganizationId;
                 selected = agentAssignments.FirstOrDefault(x => x.OrganizationId == requestedOrgId);
 
@@ -1806,7 +1804,6 @@ RepaymentFrequency frequency)
             }
             else
             {
-                // No explicit code — pick the first org (in claim order) the agent is actively linked to
                 selected = orgIds
                     .Select(id => agentAssignments.FirstOrDefault(x => x.OrganizationId == id))
                     .FirstOrDefault(x => x != null);
@@ -1819,10 +1816,30 @@ RepaymentFrequency frequency)
 
             return selected;
         }
+        
+        private async Task<OrganizationLocation> ResolveOrganizationUserLocation(long organizationId, long locationId)
+        {
+           var orgLocation = await _context.OrganizationLocations
+                .Where(x =>
+                    x.OrganizationId == organizationId &&
+                    x.Id == locationId &&
+                    x.IsActive)
+                .FirstOrDefaultAsync();
+            if (orgLocation == null)
+            {
+                throw new DisbursementException(
+                       "Selected location not found in this organization " +
+                       "and cannot perform disbursements.");
+            }
+
+            return orgLocation;
+        }
+        
+
 
         public async Task<DisburseSubscriptionResult> DisburseSubscriptionAsync(
             DisburseSubscriptionRequest request,
-            InputSubscriptionRequestArgs args)
+            SubscriptionQueryFilter args)
         {
             var strategy = _context.Database.CreateExecutionStrategy();
 
@@ -1927,40 +1944,48 @@ RepaymentFrequency frequency)
 
                     if (agent == null)
                         throw new DisbursementException("No agent profile found for the current user.");
+                    OrganizationLocation? disbursementLocation;
 
-                    var organizationAgent = await ResolveAgentOrganizationAsync(agent.Id, org.OrganizationCode);
+                    if(args.CurrentLoggedInUserRole == UserType.Agent.ToString())
+                    {
+                        var organizationAgent = await ResolveOrganizationAgentLocation(agent.Id, org.OrganizationCode);
 
-                    if (organizationAgent == null)
-                        throw new DisbursementException(
-                            "Agent does not have an active assignment within this organization " +
-                            "and cannot perform disbursements.");
+                        if (organizationAgent == null)
+                            throw new DisbursementException(
+                                "Agent does not have an active assignment within this organization " +
+                                "and cannot perform disbursements.");
 
-                    if (organizationAgent.Location == null)
-                        throw new DisbursementException(
-                            "Agent's assigned location could not be resolved. " +
-                            "Contact an administrator to correct the assignment.");
+                        if (organizationAgent.Location == null)
+                            throw new DisbursementException(
+                                "Agent's assigned location could not be resolved. " +
+                                "Contact an administrator to correct the assignment.");
 
-                    if (!organizationAgent.Location.IsActive)
-                        throw new DisbursementException(
-                            $"Location '{organizationAgent.Location.LocationName}' is currently " +
-                            "inactive and cannot be used for disbursements.");
+                        if (!organizationAgent.Location.IsActive)
+                            throw new DisbursementException(
+                                $"Location '{organizationAgent.Location.LocationName}' is currently " +
+                                "inactive and cannot be used for disbursements.");
 
-                    if (organizationAgent.Location.Id != request.WarehouseId)
-                        throw new DisbursementException(
-                            "Selected location does not match the agent's assigned location.");
+                        if (organizationAgent.Location.Id != request.WarehouseId)
+                            throw new DisbursementException(
+                                "Selected location does not match the agent's assigned location.");
 
-                    var agentLocation = organizationAgent.Location;
+                        disbursementLocation = organizationAgent.Location;
 
+                    }
+                    else
+                    {
+                        disbursementLocation = await ResolveOrganizationUserLocation(org.OrganizationId, request.WarehouseId);
+                    }
                     double distanceMetres = GeometryHelper.HaversineDistanceMetres(
                         lat1: request.Latitude,
                         lon1: request.Longitude,
-                        lat2: agentLocation.Latitude,
-                        lon2: agentLocation.Longitude);
+                        lat2: disbursementLocation.Latitude,
+                        lon2: disbursementLocation.Longitude);
 
                     if (distanceMetres > GeometryHelper.AllowedRadiusMetres)
                         throw new DisbursementException(
                             $"Your current location ({distanceMetres:F0} m away) does not match " +
-                            $"the assigned inventory location '{agentLocation.LocationName}'. " +
+                            $"the assigned inventory location '{disbursementLocation.LocationName}'. " +
                             "Move to the correct location and try again.");
 
 
@@ -1987,7 +2012,7 @@ RepaymentFrequency frequency)
                     if (query.Subscription.InputPackage.PackageStructure == InputPackageStructure.Physical)
                     {
                         disbursement = await ProcessPhysicalDisbursementAsync(
-                            query.Subscription, agentLocation, query,
+                            query.Subscription, disbursementLocation, query,
                             request, args, reference,
                             paidToUserTotal, vendorPaidTotal,
                             lineItems);
@@ -2024,7 +2049,7 @@ RepaymentFrequency frequency)
                     query.DisbursedByUserId = args.UserId;
                     query.Reference = reference;          // use generated ref
                     query.IsPartial = isPartial;
-                    query.LocationId = agentLocation.Id;
+                    query.LocationId = disbursementLocation.Id;
                     query.Latitude = request.Latitude;
                     query.Longitude = request.Longitude;
 
@@ -2046,7 +2071,7 @@ RepaymentFrequency frequency)
                             PackageId = query.Subscription.InputPackageId,
                             Amount = disbursedAmount,
                             IsPartial = isPartial,
-                            LocationId = agentLocation.Id,
+                            LocationId = disbursementLocation.Id,
                             AgentUserId = args.UserId,
                             Latitude = request.Latitude,
                             Longitude = request.Longitude,
@@ -2061,7 +2086,7 @@ RepaymentFrequency frequency)
                         Success = true,
                         DisbursedAmount = disbursedAmount,
                         IsPartial = isPartial,
-                        LocationName = agentLocation.LocationName,
+                        LocationName = disbursementLocation.LocationName,
                         LineItems = lineItems.Select(x => new DisbursementLineItemModel
                         {
                             Id = x.Id,
@@ -2124,7 +2149,7 @@ RepaymentFrequency frequency)
     OrganizationLocation agentLocation,
     InputSubscriptionDisbursement approvedRequest,
     DisburseSubscriptionRequest request,
-    InputSubscriptionRequestArgs args,
+    SubscriptionQueryFilter args,
     string reference,
     decimal paidToUserTotal,
     decimal vendorPaidTotal,
@@ -2224,7 +2249,7 @@ RepaymentFrequency frequency)
     OrganizationLocation agentLocation,
     InputSubscriptionDisbursement approvedRequest,
     DisburseSubscriptionRequest request,
-    InputSubscriptionRequestArgs args,
+    SubscriptionQueryFilter args,
     decimal requestAmount,
     string reference)
         {
@@ -2328,7 +2353,7 @@ RepaymentFrequency frequency)
 
         private async Task<WalletTransferResponse> ProcessWalletDisbursementTransferAsync(
     InputPackageSubscription subscription,
-    InputSubscriptionRequestArgs args,
+    SubscriptionQueryFilter args,
     decimal amountToDisburse,
     string reference,
     string description)
@@ -2481,7 +2506,7 @@ RepaymentFrequency frequency)
 
         private async Task<WalletTransferResponse> AttemptCreditAndFinalizeAsync(
             InputPackageSubscription subscription,
-            InputSubscriptionRequestArgs args,
+            SubscriptionQueryFilter args,
             UserWalletDetailResponseModel subscriberWallet,
             UserWalletDetailResponseModel organizationWallet,
             WalletProviderModel provider,
