@@ -450,7 +450,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public decimal Amount { get; set; }
 
-        public PaymentChannel PaymentChannel { get; set; }
+        public PaymentChannel PaymentChannel { get; set; } = PaymentChannel.Wallet;
 
         public PaidBy PaidFromAccount { get; set; } = PaidBy.Subscriber;
         public string? Reference { get; set; }
