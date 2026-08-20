@@ -225,8 +225,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public enum PaidBy
     {
-        Subscriber,
-        CurrentUser
+        Subscriber=1,
+        CurrentUser=2
     }
 
     public enum PaymentChannel
