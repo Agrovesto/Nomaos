@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Microsoft.AspNetCore.Http;
 using System;
@@ -28,8 +29,16 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string RoleId { get; set; }
         public string RoleName { get; set; }
     }
-        public class UsersProfileResponse
+    public class KYCDto
     {
+        public string NIN { get; set; }
+        public string BVN { get; set; }
+        public string Base64 { get; set; }
+        public KYCVerificationType? KycType { get; set; }
+    }
+    public class UsersProfileResponse
+    {
+        public KYCDto KYC { get; set; }
         public string UserId { get; set; }
         public string UserType { get; set; }
         public string Name { get; set; }
@@ -40,6 +49,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string BVN { get; set; }
         public bool IsPhoneVerified { get; set; }
         public bool IsEmailVerified { get; set; }
+        public bool IsNinVerified { get; set; }
+        public bool IsBvnVerified { get; set; }
         public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
@@ -140,6 +151,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Destination { get; set; }
         public DateTime ExpiresAt { get; set; }
     }
+
+    public class TokenResult
+    {
+        public string Token { get; set; }
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
     public class ConfirmOtpRequest
     {
         [Required]
@@ -167,7 +184,11 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         Onboarding,
         Login,
-        PasswordReset
+        PasswordReset,
+        WalletPinUpdate,
+        // Delivered to the user when they have forgotten their transaction PIN.
+        // Deliberately distinct from WalletPinUpdate, which is a token bucket.
+        WalletPinReset
     }
     public class CreateAgentResponseModel
     {
@@ -374,6 +395,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long? Id { get; set; }
         public DateTimeOffset? StartDate { get; set; }
         public DateTimeOffset? EndDate { get; set; }
+        public string? SearchParam { get; set; }
     }
 
     public class BulkOnboardingQueueResponse

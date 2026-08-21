@@ -1545,6 +1545,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "NIN");
+            var isExistingNin = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.NIN);
+            if (isExistingNin != null)
+            {
+                return true;
+            }
             NINDataVerificationResponse<NINData, Verification> verifyNin = null;
             if (args.Env == Env.Live.ToString())
             {
@@ -1569,7 +1574,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
+            kyc.Photourl = verifyNin.nin_data?.photo;
             kyc.VerificationType = KYCVerificationType.NIN;
+            kyc.Number = verifyNin.nin_data?.nin;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {
@@ -1660,6 +1667,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "BVN");
+            var isExistingBvn = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.BVN);
+            if (isExistingBvn != null)
+            {
+                return true;
+            }
             BVNVerificationResponse<BVN_data, Verification> verifyBvn = null;
             if(args.Env == Env.Live.ToString())
             {
@@ -1684,8 +1696,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
-
+            kyc.Photourl = verifyBvn.data?.base64Image;
             kyc.VerificationType = KYCVerificationType.BVN;
+            kyc.Number = verifyBvn.data?.bvn;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {

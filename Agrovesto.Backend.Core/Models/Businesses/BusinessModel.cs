@@ -50,6 +50,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     }
     public class ListQueryParams
     {
+        public string? SearchParam { get; set; }
         public bool? IsActive { get; set; }
         public long OrganizationId { get; set; }
         public string? FilterBy { get; set; }
@@ -82,6 +83,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? TransactionReference { get; set; }
         public DateTimeOffset? TransactionDate { get; set; }
         public WalletTransactionType? TransactionType { get; set; }
+        // Not named Status - that is already taken above by the bool? flag other endpoints filter on.
+        public WalletTransactionStatus? TransactionStatus { get; set; }
     }
     public class BusinessRegistrationArgs
     {

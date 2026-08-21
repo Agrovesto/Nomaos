@@ -61,6 +61,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         [MaxLength(50)]
         public string? BelongToBusinessCode { get; set; }
 
+        [MaxLength(50)]
+        public string? BankName { get; set; }
+
         public string? MaxCheckSum { get; set; }
         // Navigation
         public ICollection<UserWalletTransactions> Transactions { get; set; }
@@ -170,6 +173,10 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
 
         [MaxLength(50)]
         public string? ProviderStatus { get; set; }
+
+        //public bool? IsSuccessful { get; set; } = true;
+        //public string? FailureReason { get; set; }
+        //public DateTimeOffset? UpdatedOn { get; set; }
     }
     public enum WalletTransactionStatus
     {

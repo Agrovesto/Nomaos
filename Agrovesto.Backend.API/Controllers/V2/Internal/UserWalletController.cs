@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -13,6 +14,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/wallet")]
     [ApiController]
+    [Authorize]
     public class UserWalletController : BaseController
     {
         private readonly INomaOSWalletService _walletManager;
@@ -38,7 +40,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                     Succeeded = true,
                     Count = result.Count,
-
+                    // Carried through from the repository, which has already normalised them.
+                    // Left unset they default to 0, and TotalPages then divides by zero.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -76,8 +81,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.Failed,
                     Succeeded = true,
                     Count = result.Count,
-                    PageNumber = query.PageNumber,
-                    PageSize = 10,
+                    // Carried through from the repository, which has already normalised them.
+                    // Hardcoding PageSize here made totalPages disagree with the rows returned.
+                    PageNumber = result.PageNumber,
+                    PageSize = result.PageSize,
                     Code = (result.Count > 0) ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
                 });
             }
@@ -153,6 +160,90 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("transfer")]
+        public async Task<IActionResult> TransferBetweenWallets([FromBody] WalletTransferRequest request, [FromQuery] WalletQueryParams args)
+        {
+            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+
+            try
+            {
+                var (status, message, data) = await _walletManager.TransferBetweenWallets(request, args);
+
+                return Ok(new Response<WalletTransferReceipt>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("bank-transfer")]
+        [Authorize]
+        public async Task<IActionResult> TransferToBank([FromBody] BankTransferRequest request, [FromQuery] WalletQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(args.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, data) = await _walletManager.TransferToBank(request, args);
+
+                return Ok(new Response<BankTransferReceipt>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
             catch (BaseException ex)
             {
                 return StatusCode(400, new Response<string>
@@ -249,11 +340,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 var wallet = await _walletManager.CreateWallet(request, query);
 
-                return Ok(new Response<(bool status, string message)>()
+                return Ok(new Response<CreateWalletResult>()
                 {
-                    Data = wallet,
-
-
+                    Data = wallet.data,
                     Message = wallet.message,
                     Succeeded = wallet.status,
 
@@ -281,6 +370,209 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        [HttpPost("validate-pin")]
+        [Authorize]
+        public async Task<IActionResult> ValidateWalletPin([FromBody] ValidateWalletPinRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, token) = await _walletManager.ValidateWalletPin(request, query);
+
+                return Ok(new Response<ValidateWalletPinResult>()
+                {
+                    Data = new ValidateWalletPinResult
+                    {
+                        IsValid = status,
+                        Token = token?.Token,
+                        ExpiresAt = token?.ExpiresAt
+                    },
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        /// <summary>
+        /// Emails a one-time code to the signed-in user so they can reset a transaction PIN they have forgotten.
+        /// </summary>
+        [HttpPost("send-pin-reset-otp")]
+        public async Task<IActionResult> SendWalletPinResetOtp([FromQuery] WalletQueryParams query)
+        {
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(query);
+
+                return Ok(new Response<WalletPinResetOtpResult>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        /// <summary>
+        /// Verifies a PIN reset code emailed by send-pin-reset-otp and, on success, returns the
+        /// same short-lived token that validate-pin issues, for spending at update-pin.
+        /// </summary>
+        [HttpPost("verify-pin-reset-otp")]
+        public async Task<IActionResult> VerifyWalletPinResetOtp([FromBody] VerifyPinResetOtpRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message, token) = await _walletManager.VerifyWalletPinResetOtp(request, query);
+
+                return Ok(new Response<ValidateWalletPinResult>()
+                {
+                    Data = new ValidateWalletPinResult
+                    {
+                        IsValid = status,
+                        Token = token?.Token,
+                        ExpiresAt = token?.ExpiresAt
+                    },
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpPost("update-pin")]
+        public async Task<IActionResult> UpdateWalletPin([FromBody] UpdateWalletPinRequest request, [FromQuery] WalletQueryParams query)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var (status, message) = await _walletManager.UpdateWalletPin(request, query);
+
+                return Ok(new Response<bool>()
+                {
+                    Data = status,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
         [HttpGet("wallet-summary")]
         public async Task<IActionResult> GetUserFinancialSummary([FromQuery] UserWalletParams query)
         {
@@ -294,7 +586,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     OutStandingInputDebt = userFinancialSummary.OutstandingInputDebt,
                     NextDuePaymentAmount = userFinancialSummary.NextRepaymentAmount,
-                    NextDuePaymentDate = (DateTimeOffset)userFinancialSummary.NextRepaymentDate,
+                    NextDuePaymentDate = userFinancialSummary.NextRepaymentDate,
                     TotalWalletBalance = userFinancialSummary.TotalWalletBalance
                 };
                 return Ok(dashboardResponse);

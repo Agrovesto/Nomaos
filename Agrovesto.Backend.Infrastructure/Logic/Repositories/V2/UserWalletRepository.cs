@@ -40,6 +40,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null);
         Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
         Task ValidateTransactionPin(long walletId, string inputPin);
+        Task UpdateTransactionPin(long walletId, string newPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
@@ -50,6 +51,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<WalletReconciliationLog>> GetPendingReconciliations();
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
         Task AdjustWalletBalanceAsync(long walletId, decimal delta);
+        Task MarkPendingReconciliation(string reference, string reason);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
@@ -311,6 +313,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task UpdateTransactionPin(long walletId, string newPin)
+        {
+            var security = await _context.WalletSecurities
+                .FirstOrDefaultAsync(x => x.UserWalletId == walletId);
+
+            if (security == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet security record not found");
+
+            security.TransactionPinHash = BCrypt.Net.BCrypt.HashPassword(newPin);
+            security.PinFailedAttempts = 0;
+            security.PinLockedUntil = null;
+            security.LastPinChangeDate = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<UserWalletModel> CreateUserWallet(
        UserWalletModel request,
        UserWalletParams args)
@@ -932,10 +951,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (args.TransactionDate.HasValue)
             {
-                var date = args.TransactionDate.Value.Date;
+                // The caller's stated calendar date, matched as a UTC day. Transactions are
+                // always written with DateTimeOffset.UtcNow, so this is the day they belong to.
+                //
+                // A half-open range replaces CONVERT(date, column) == date, which had two
+                // problems: the function around the column made the predicate non-SARGable,
+                // and it compared the date in whatever offset each row was stored with rather
+                // than a fixed one. Comparing instants avoids both.
+                var dayStart = new DateTimeOffset(args.TransactionDate.Value.Date, TimeSpan.Zero);
+                var dayEnd = dayStart.AddDays(1);
 
                 query = query.Where(x =>
-                    x.TransactionDate.Date == date);
+                    x.TransactionDate >= dayStart && x.TransactionDate < dayEnd);
             }
 
             if (args.TransactionType.HasValue)
@@ -944,6 +971,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 query = query.Where(x =>
                     x.WalletTransactionType == txnType);
+            }
+
+            if (args.TransactionStatus.HasValue)
+            {
+                var txnStatus = (WalletTransactionStatus)args.TransactionStatus;
+
+                query = query.Where(x =>
+                    x.WalletTransactionStatus == txnStatus);
             }
 
             var totalCount = await query.CountAsync();
@@ -966,9 +1001,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Select(t => new FarmerTransactionDto
                  {
                      TransactionId = t.Id,
+                     TransactionReference = t.TransactionReference,
                      Amount = t.TransactionAmount,
                      BalanceAfter = t.BalanceAfter,
                      TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
+                     Status = EnumExtensions.GetDisplayName(t.WalletTransactionStatus),
                      Timestamp = t.TransactionDate,
                      Description = t.TransactionDescription
                  })
@@ -983,6 +1020,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
+        public async Task MarkPendingReconciliation(string reference, string reason)
+        {
+            var tx = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == reference);
+
+            if (tx == null)
+                return; 
+
+            tx.WalletTransactionStatus = WalletTransactionStatus.ReconciliationRequired;
+            //tx.IsSuccessful = null; // explicitly unknown, not false
+            //tx.FailureReason = reason;
+            //tx.UpdatedOn = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
 
         public async Task FlagForReconciliation(
     string debitReference,
