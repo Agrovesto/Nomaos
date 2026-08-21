@@ -14,7 +14,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using LocationType = Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType;
-using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
+
 using States = Agrovesto.Backend.Infrastructure.Entities.Common.States;
 
 namespace Agrovesto.Backend.Infrastructure
@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middlename,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.telephoneno,
                 Photourl = model.photo,
                 Residentialaddress = model.residence_address,
@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middleName,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.phoneNumber1,
 
                 Residentialaddress = model.residentialAddress,
@@ -1982,8 +1982,9 @@ namespace Agrovesto.Backend.Infrastructure
                 ContactEmail = model.CompanyEmail,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
-                StateId = model.StateId,
-                LgaId = model.LgaId,
+                StateId = (model.StateId == null || model.StateId == 0) ? null : model.StateId,
+                LgaId = (model.LgaId == null || model.LgaId == 0) ? null : model.LgaId,
+
                 FullName = $"{model.FirstName} {model.LastName}",
                 OnboardedOn = DateTimeOffset.Now,
                 OrganizationEmail = model.CompanyEmail,

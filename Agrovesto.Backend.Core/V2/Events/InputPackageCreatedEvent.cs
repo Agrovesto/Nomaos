@@ -6,6 +6,17 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.V2.Events
 {
+    public class RepaymentPlanUpdatedEvent
+    {
+        public long? OrganizationId { get; set; }
+
+        public long PackageId { get; set; }
+
+        public int SubscribersRegenerated { get; set; }
+
+        public List<long> SubscribersRequiringManualReview { get; set; } 
+
+    }
     public class InputPackageCreatedEvent
     {
         public long PackageId { get; set; }

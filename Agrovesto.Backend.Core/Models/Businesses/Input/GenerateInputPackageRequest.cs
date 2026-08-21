@@ -144,7 +144,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public DateTimeOffset? RepaymentEndDate { get; set; }
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
         public InputPackageRepaymentMode RepaymentModel { get; set; }
-        public decimal RepaymentValue { get; set; }
+        public decimal RepaymentValue { get; set; } = 0;
         public RiskCategory RiskCategory { get; set; }
 
 
@@ -179,7 +179,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string Name { get; set; }
         public string? Description { get; set; }
         public decimal Amount { get; set; }
-        public AdditionalCostType Type { get; set; }
+        public AdditionalCostType Type { get; set; } = AdditionalCostType.Other;
         public bool IsPerUnit { get; set; } // e.g. per hectare
         public decimal? Quantity { get; set; }
     }
@@ -187,28 +187,23 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class UpdateInputPackageConfigRequest
     {
-        public bool CommitmentRequired { get; set; }
-        public bool RepaymentRequired { get; set; }
-        public CommitmentType CommitmentType { get; set; }
-        public decimal CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
+        public bool? CommitmentRequired { get; set; }
+        public bool? RepaymentRequired { get; set; }
 
+        public CommitmentType? CommitmentType { get; set; }
+        public decimal? CommitmentValue { get; set; }
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
 
-
-        public RepaymentFrequency RepaymentFrequency { get; set; }
-        public int RepaymentDuration { get; set; }
-
-        public DateTimeOffset RepaymentStartDate { get; set; }
-        public DateTimeOffset RepaymentEndDate { get; set; }
-
-        public DateTimeOffset RepaymentGracePeriod { get; set; }
-        public InputPackageRepaymentMode RepaymentModel { get; set; }
-        public decimal RepaymentValue { get; set; }
-        public RiskCategory RiskCategory { get; set; }
-
-    }
-    //views
+        public RepaymentFrequency? RepaymentFrequency { get; set; }
+        public int? RepaymentDuration { get; set; }
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
+        public InputPackageRepaymentMode? RepaymentModel { get; set; }
+        public decimal? RepaymentValue { get; set; }
+        public RiskCategory? RiskCategory { get; set; }
+    }//views
     public class EopDto
     {
         public long Id { get; set; }
@@ -249,7 +244,25 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public List<InputPackageBreakdownDto> PackageInputs { get; set; }
         public List<AdditionalCostDto> AdditionalCosts { get; set; }
-        public List<RepaymentBreakdownDto> RepaymentBreakdown { get; set; }
+        public List<RepaymentScheduleDto> RepaymentBreakdown { get; set; }
+    }
+    public class UpdateRepaymentPlanRequest
+    {
+        public RepaymentFrequency? RepaymentFrequency { get; set; }
+        public int? RepaymentDuration { get; set; }
+        public DateTimeOffset? RepaymentStartDate { get; set; }
+        public DateTimeOffset? RepaymentEndDate { get; set; }
+        public DateTimeOffset? RepaymentGracePeriod { get; set; }
+        public InputPackageRepaymentMode? RepaymentModel { get; set; }
+        public decimal? RepaymentValue { get; set; }
+        public RiskCategory? RiskCategory { get; set; }
+    }
+
+    public class EditRepaymentPlanResult
+    {
+        public bool Success { get; set; }
+        public int SubscribersRegenerated { get; set; }
+        public List<long> SubscribersRequiringManualReview { get; set; } = new();
     }
     public class InputPackageFinancingStructureDto
     {
@@ -294,6 +307,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class AdditionalCostDto
     {
+        public long Id { get; set; }
         public string Name { get; set; }
         public decimal Amount { get; set; }
     }
@@ -401,7 +415,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Required]
         [EnumDataType(typeof(InputSubScriptionType))]
-        public InputSubScriptionType SubscriberType { get; set; }
+        public InputSubScriptionType SubscriberType { get; set; } = InputSubScriptionType.Individual;
     }
     public class InputSubscriptionRequestArgs
     {
@@ -432,14 +446,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     public class RecordCommitmentPaymentRequest
     {
         public long SubscriptionId { get; set; }
-        public string ?SubscriberUserId { get; set; }
+        public string? SubscriberUserId { get; set; }
 
         public decimal Amount { get; set; }
 
-        public PaymentChannel PaymentChannel { get; set; }
+        public PaymentChannel PaymentChannel { get; set; } = PaymentChannel.Wallet;
 
+        public PaidBy PaidFromAccount { get; set; } = PaidBy.Subscriber;
         public string? Reference { get; set; }
-
+    
+        public string WalletPin { get; set; }
         public string? ExternalReference { get; set; }
 
         public string? PaidByUserId { get; set; }
@@ -587,6 +603,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public int PageNumber { get; set; } = 1;
         public int PageSize { get; set; } = 10;
         public long SubscriptionId { get; set; }
+        public string? Env { get; set; }
     }
 
 
@@ -604,13 +621,20 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         public decimal RepaymentProgress { get; set; }
     }
-    public class AgentSubscriptionOverviewDto
+    public class RoleBasedSubscriptionOverviewDto
     {
         public long TotalSubscriptions { get; set; }
         public long PendingApproval { get; set; }
         public long PendingCommitment { get; set; }
-        public long PendingDisbursement { get; set; }
+        public long InputsReleased { get; set; }
         public long Active { get; set; }
+    }
+    public class FarmerSubscriptionOverviewDto : RoleBasedSubscriptionOverviewDto
+    {
+       public long ActivePackages { get; set; }
+        public decimal TotalOutstanding { get; set; }
+        public string NextDueDate { get; set; }
+        public decimal TotalRepaid { get; set; }
     }
     public class InputFinancingDashboardDto
     {
@@ -623,6 +647,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class SubscriptionDetailDto
     {
+        public DateTimeOffset? DisbursedOn { get; set; }
+        public DateTimeOffset? NextDueDate { get; set; }
+        public string Season { get; set; }
         public decimal ROI { get; set; }
         public decimal TotalRepaymentValue { get; set; }
         public decimal RepaymentBalance { get; set; }
@@ -638,11 +665,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string CreatedBy { get; set; }
         public string Location { get; set; }
         public string PackageName { get; set; }
-
+        public string RepaymentDuration { get; set; }
         public decimal CommitmentValue { get; set; }
         public decimal TotalFinancingValue { get; set; }
         public DateTimeOffset? SubscribedOn { get; set; }
         public DateTimeOffset? RejectedOn { get; set; }
+        public DateTimeOffset? ApprovedOn { get; set; }
+        public DateTimeOffset? CommitmentPaymentDeadline { get; set; }
 
         public string CommitmentStatus { get; set; }
         public SubscriptionStatus SubscriptionStatus { get; set; }
@@ -727,6 +756,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public long? SubscriptionId { get; set; }
         public string? Reference { get; set; }
         public decimal? Amount { get; set; }
+
+
+        [Required]
+        [EnumDataType(typeof(ApprovalDecision))]
+        public ApprovalDecision ApprovalState { get; set; }
     }
     public class PaymentReceiptResponse
     {
@@ -885,7 +919,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public string BusinessCode { get; set; }
         public long AdditionalCostId { get; set; }
     }
-
+    public class ProviderDebitResult
+    {
+        public string? ProviderReference { get; set; }
+        public string Message { get; set; } = "";
+    }
 
     #region disbursement
     public class DisburseSubscriptionRequest

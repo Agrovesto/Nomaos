@@ -247,9 +247,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class FarmerTransactionDto
     {
         public long TransactionId { get; set; }
+        public string TransactionReference { get; set; }
         public decimal Amount { get; set; }
         public decimal BalanceAfter { get; set; }
         public string TransactionType { get; set; } // e.g., Deposit, Withdrawal
+        public string Status { get; set; } // e.g., Completed, DebitPending, Failed
         public DateTimeOffset Timestamp { get; set; }
         public string Description { get; set; }
     }

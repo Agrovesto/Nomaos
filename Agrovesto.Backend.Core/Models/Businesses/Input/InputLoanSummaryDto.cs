@@ -37,12 +37,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal Amount { get; set; }
         public string Reference { get; set; }
     }
+ 
     public class RepaymentScheduleDto
     {
-        public int InstallmentNo { get; set; }
+        public int InstallmentNumber { get; set; }
         public DateTimeOffset DueDate { get; set; }
-        public decimal ExpectedAmount { get; set; }
-        public bool IsPaid { get; set; }
+        public decimal AmountToPay { get; set; }
+        public DateTimeOffset? GracePeriodDeadline { get; set; }
     }
     public class LoanDetailDto
     {

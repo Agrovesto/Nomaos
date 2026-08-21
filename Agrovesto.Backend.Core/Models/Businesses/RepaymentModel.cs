@@ -1,7 +1,8 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -28,15 +29,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
           public long Id { get; set; }
           public long RepaymentId { get; set; }
-           public RepaymentMode RepaymentMode { get; set; } //Cash/Crop/both
+           public InputPackageRepaymentMode RepaymentMode { get; set; } //Cash/Crop/both
         public decimal AmountOrEquivalent { get; set; }
         public DateTimeOffset PaidOn { get; set; }
          }
-    public enum RepaymentMode
-    {
-       Cash,
-       Crop,
-
-
-    }
+   
 }

@@ -393,7 +393,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             return updatedMembership.Map();
         }
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(
+        public async Task<MembershipDashboardDto> GetMembershipDetailAsync(
       string membershipUserId,
       string organizationCode = null)
         {
@@ -992,7 +992,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                                     select f;
             }
 
-            cooperativesQuery = cooperativesQuery.Distinct(); // guard against join fan-out
+
+            if (!string.IsNullOrWhiteSpace(query.SearchParam))
+            {
+                var pattern = $"%{query.SearchParam.Trim()}%";
+                cooperativesQuery = cooperativesQuery.Where(f =>
+                    EF.Functions.Like(f.Name, pattern) ||
+                    EF.Functions.Like(f.Location, pattern) ||
+                    EF.Functions.Like(f.State, pattern) ||
+                    EF.Functions.Like(f.Lga, pattern) ||
+                    EF.Functions.Like(f.Ward, pattern) ||
+                    EF.Functions.Like(f.ContactPerson, pattern) ||
+                    EF.Functions.Like(f.PhoneNumber, pattern) ||
+                    EF.Functions.Like(f.MembershipLeaderFirstName, pattern) ||
+                    EF.Functions.Like(f.MembershipLeaderLastName, pattern));
+            }
+
+            cooperativesQuery = cooperativesQuery.Distinct(); 
 
             var totalCount = await cooperativesQuery.CountAsync();
             if (totalCount == 0)
@@ -1008,7 +1024,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             var skip = (query.PageNumber - 1) * query.PageSize;
 
-            // page IDs first, then join farmer counts in a single grouped query
             var pageIds = await cooperativesQuery
                 .OrderByDescending(s => s.OnBoardedOn)
                 .Skip(skip)
@@ -1061,6 +1076,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 PageSize = query.PageSize
             };
         }
+       
+        
         public async Task<AgentModel> AssignSupervisorToAgent(string agentId, string supervisorId)
         {
             var agent = await _context.Agents.Where(c => c.UserId == agentId).FirstOrDefaultAsync();
@@ -1075,7 +1092,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
          public async Task<List<FarmerModel>> AssignFarmerToAgent(string agentUserId, long cooperativeId)
         {
             var agent= await _context.Agents.Where(c => c.UserId == agentUserId).FirstOrDefaultAsync();
-            // Get all farmers in this cooperative via FarmerCooperatives
+     
             var farmers = await (
                 from f in _context.Farmers.AsNoTracking()
                 join fc in _context.FarmerCooperatives.AsNoTracking()
@@ -1089,13 +1106,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             foreach (var farmer in farmers)
             {
-                // Check if the assignment already exists
+              
                 var alreadyAssigned = await _context.FarmerAgents
                     .AnyAsync(fa => fa.FarmerId == farmer.Id && fa.AgentId == agent.Id);
 
                 if (!alreadyAssigned)
                 {
-                    // Assign agent
+                   
                     await _context.FarmerAgents.AddAsync(new FarmerAgent
                     {
                         FarmerId = farmer.Id,
@@ -1107,7 +1124,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             await _context.SaveChangesAsync();
 
-            // Return mapped farmers
+        
             return farmers.Select(f => f.Map()).ToList();
         }
         public async Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, List<long> membershipIds)

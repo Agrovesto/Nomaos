@@ -722,16 +722,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 args.userType = !string.IsNullOrEmpty(args.userType) ? args.userType : updateUser.UserType;
                
-                if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
-                {
-                    if (!string.IsNullOrWhiteSpace(model.NIN))
-                        updateUser.NIN = model.NIN;
+                //if (!string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
+                //{
+                //    if (!string.IsNullOrWhiteSpace(model.NIN))
+                //        updateUser.NIN = model.NIN;
 
-                    if (!string.IsNullOrWhiteSpace(model.Bvn))
-                        updateUser.Bvn = model.Bvn;
+                //    if (!string.IsNullOrWhiteSpace(model.Bvn))
+                //        updateUser.Bvn = model.Bvn;
 
-                    await _onboardingRepository.OnNINBVNUpdate(updateUser);
-                }
+                //    await _onboardingRepository.OnNINBVNUpdate(updateUser);
+                //}
                 await CreateUserCategory(model, args);
                 return (true, "User Profile Created");
             }
@@ -1184,7 +1184,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 IsExisting = createUser.IsExisting,
                 Message = createUser.IsExisting
                     ? createUser.message
-                    : "User created successfully."
+                    : "User created successfully.",
+                ShouldLogin=createUser.ShouldLogin
             };
         }
         private static void ValidateUserType(OnBoardingArgs args)
@@ -1295,32 +1296,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<bool> ConfirmOtp(ConfirmOtpRequest request)
         {
-            var isValid = await _otpService.VerifyOtpAsync(
+            var validate = await _otpService.VerifyOtpAsync(
                 request.UserId,
                 request.Code,
                 OtpPurpose.Onboarding);
-            if (!isValid)
+            if (validate == null)
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
                     "Invalid or expired OTP.");
 
-            await _onboardingRepository.ConfirmUserEmailOrPassword(request.UserId);
-            return isValid;
+            await _onboardingRepository.ConfirmUserEmailOrPassword(request.UserId, validate);
+            return validate.IsUsed;
         }
-        public async Task ConfirmOnboardingOtp(string userId, string code)
-        {
-            var isValid = await _otpService.VerifyOtpAsync(
-                userId,
-                code,
-                OtpPurpose.Onboarding);
-
-            if (!isValid)
-                throw new BaseException(
-                    Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Invalid or expired OTP.");
-
-            await _onboardingRepository.ConfirmUserEmailOrPassword(userId);
-        }
+      
         public async Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args)
         {
             try
@@ -1557,6 +1545,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "NIN");
+            var isExistingNin = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.NIN);
+            if (isExistingNin != null)
+            {
+                return true;
+            }
             NINDataVerificationResponse<NINData, Verification> verifyNin = null;
             if (args.Env == Env.Live.ToString())
             {
@@ -1581,12 +1574,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
+            kyc.Photourl = verifyNin.nin_data?.photo;
+            kyc.VerificationType = KYCVerificationType.NIN;
+            kyc.Number = verifyNin.nin_data?.nin;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {
                 Id = args.UserId,
                 NIN = number,
-            });
+            }, true);
             await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level4);
             return true;
         }
@@ -1671,6 +1667,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    "No number supplied.");
             }
             ValidateIdentifier(number, "BVN");
+            var isExistingBvn = await _onboardingRepository.GetKYCDetails(number, KYCVerificationType.BVN);
+            if (isExistingBvn != null)
+            {
+                return true;
+            }
             BVNVerificationResponse<BVN_data, Verification> verifyBvn = null;
             if(args.Env == Env.Live.ToString())
             {
@@ -1695,12 +1696,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             kyc.VerifiedBy = CurrentUserId;
             kyc.UserId = args.UserId;
             kyc.LoggedOn = DateTimeOffset.UtcNow;
+            kyc.Photourl = verifyBvn.data?.base64Image;
+            kyc.VerificationType = KYCVerificationType.BVN;
+            kyc.Number = verifyBvn.data?.bvn;
             await _onboardingRepository.OnCreateKYC(kyc);
             await _onboardingRepository.OnNINBVNUpdate(new UserModel
             {
                 Id = args.UserId,
                 Bvn = number,
-            });
+            }, true);
             await _farmerRepository.OnFarmerLevelUpdate(args.UserId, FarmerLevel.Level4);
             return true;
         }

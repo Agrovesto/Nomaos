@@ -80,11 +80,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Not Set")]
         NA = 0,
 
-        [Display(Name = "Weekly")]
-        Weekly = 1,
+        [Display(Name = "Daily")]
+        Daily = 1,
 
-        [Display(Name = "Bi Weekly")]
-        BiWeekly = 2,
+        [Display(Name = "Weekly")]
+        Weekly = 2,
 
         [Display(Name = "Monthly")]
         Monthly = 3,
@@ -92,8 +92,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Quarterly")]
         Quarterly = 4,
 
-        [Display(Name = "Annually")]
-        Annually = 5
+        [Display(Name = "Yearly")]
+        Yearly = 5
     }
 
     public enum RiskCategory
@@ -177,7 +177,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Partially Disbursed")]
         PartiallyDisbursed = 11,
         [Display(Name = "Pending Repayment")]
-        PendingRepayment = 12
+        PendingRepayment = 12,
+
+        [Display(Name = "Pending Release Approval")]
+        PendingReleaseApproval = 13, 
     }
 
     public enum DisbursementType
@@ -218,6 +221,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Display(Name = "Produce")]
         Produce = 2
+    }
+
+    public enum PaidBy
+    {
+        Subscriber=1,
+        CurrentUser=2
     }
 
     public enum PaymentChannel
@@ -301,7 +310,12 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Legal")]
         Legal = 3
     }
-
+    public enum SubscriptionRole
+    {
+        Agent = 1,
+        Farmer = 2,
+        Membership = 3
+    }
     public enum SubscriptionView
     {
         [Display(Name = "All")]
@@ -337,6 +351,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
         [Display(Name = "Input Released")]
         InputReleased = 10,
+        [Display(Name = "Input Release Request")]
+        InputReleaseRequest = 11,
     }
 
     public enum ExportFormat
