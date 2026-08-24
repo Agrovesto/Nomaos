@@ -576,8 +576,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         public async Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams request)
         {
-            var pageNumber = Math.Max(1, request.PageNumber);
-            var pageSize = Math.Max(1, request.PageSize);
+            if (request.PageNumber <= 0) request.PageNumber = 1;
+           request.PageSize = 10;
 
             var query = _context.InputPackages
                 .Include(x => x.RepaymentPlan)
@@ -591,8 +591,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var data = await query
                 .OrderByDescending(x => x.Id)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((request.PageNumber - 1) * request.PageSize)
+                .Take(request.PageSize)
                 .Select(x => new
                 {
                     x.Id,
@@ -3558,8 +3558,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     int pageNumber,
     int pageSize)
         {
-            pageNumber = pageNumber < 1 ? 1 : pageNumber;
-            pageSize = pageSize < 1 ? 10 : 10;
+            if (pageNumber <= 0) pageNumber = 1;
+           pageSize = 10;
 
             var query = await BuildSubscriptionQuery(filter);
             var count = await query.CountAsync();
