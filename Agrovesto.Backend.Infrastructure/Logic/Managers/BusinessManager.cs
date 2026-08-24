@@ -50,7 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAgentRepository _agentRepository;
         private readonly IMembershipRepository _cooperativeRepository;
         private readonly ILogger<BusinessManager> _log;
-        private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IIdentityVerificationService _identityVerificationManager;
         private readonly IFarmPlotDetailRepository _farmPlotDetailRepository;
         private readonly IAWSRekognitionManager _faceManager;
         private readonly INotificationService _whisperSMSService;
@@ -60,7 +60,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public BusinessManager(IBusinessRepository businessRepository, IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletManager walletManager, IFarmerRepository farmerRepository,
-            IIdentityVerificationManager identityVerificationManager,
+            IIdentityVerificationService identityVerificationManager,
             IFarmPlotDetailRepository farmPlotDetailRepository,
             IAgentRepository agentRepository, INotificationService whisperSMSService,
             IInputFinancingManagementRepository inputRepository,
