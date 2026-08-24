@@ -868,7 +868,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
                 Tier = Tier.Tier1.ToString(),
-
+                
 
                 Name = model.CooperativeName,
                 OnBoardedOn = model.CreatedOn,
