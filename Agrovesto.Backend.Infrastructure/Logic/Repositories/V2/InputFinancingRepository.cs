@@ -3065,13 +3065,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var query = _context.InputPackageSubscriptions
                 .Where(x => x.BusinessCode == filter.BusinessCode)
-                .Include(x => x.InputPackage)
-                .ThenInclude(x => x.CommitmentPlan)
-                .Include(x => x.InputPackage)
-                .ThenInclude(x => x.RepaymentPlan)
-                .Include(x => x.SubscriberUser)
-                .Include(x => x.AddedByUser)
-                .AsQueryable();
+                //.Include(x => x.InputPackage)
+                //.ThenInclude(x => x.CommitmentPlan)
+                //.Include(x => x.InputPackage)
+                //.ThenInclude(x => x.RepaymentPlan)
+                //.Include(x => x.SubscriberUser)
+                //.Include(x => x.AddedByUser)
+                .AsNoTracking()
+                .AsQueryable()
+                ;
 
             query = ApplyFilterIfPresent(filter, query);
 
@@ -3154,15 +3156,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 if (filter.HasPaidCommitment.Value)
                 {
-                    query = query.Where(x =>
-                    x.CommitmentValue > 0 &&
-                        _context.InputPackageSubscriptionPayments
-                        .Where(p =>
-                            p.SubscriptionId == x.Id &&
+                    var paidCommitmentIds = _context.InputPackageSubscriptionPayments
+    .Where(p => p.PaymentType == PaymentType.Commitment && p.Status == TransactionStatus.Successful)
+    .GroupBy(p => p.SubscriptionId)
+    .Select(g => new { SubscriptionId = g.Key, Total = g.Sum(p => p.AmountPaid) });
 
-                            p.PaymentType == PaymentType.Commitment &&
-                            p.Status == TransactionStatus.Successful)
-                        .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
+                    query = query.Join(paidCommitmentIds, x => x.Id, p => p.SubscriptionId, (x, p) => new { x, p })
+                        .Where(xp => xp.x.CommitmentValue > 0 && xp.p.Total >= xp.x.CommitmentValue)
+                        .Select(xp => xp.x);
                 }
                 else
                 {
@@ -3558,7 +3559,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     int pageSize)
         {
             pageNumber = pageNumber < 1 ? 1 : pageNumber;
-            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+            pageSize = pageSize < 1 ? 10 : 10;
 
             var query = await BuildSubscriptionQuery(filter);
             var count = await query.CountAsync();
@@ -3590,6 +3591,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var rawItems = await _context.InputPackageSubscriptions
                 .Where(x => subscriptionIds.Contains(x.Id))
+                .AsNoTracking()
                 .Include(x => x.InputPackage)
                     .ThenInclude(x => x.CommitmentPlan)
                 .Include(x => x.InputPackage)
@@ -3669,6 +3671,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             PaymentType paymentType)
         {
             return await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
                 .Where(p =>
                     subscriptionIds.Contains(p.SubscriptionId) &&
                     p.PaymentType == paymentType &&
@@ -3685,6 +3688,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private async Task<Dictionary<long, DateTimeOffset?>> GetDisbursedDatesAsync(List<long> subscriptionIds)
         {
             return await _context.InputSubscriptionDisbursements
+                .AsNoTracking()
                 .Where(p => subscriptionIds.Contains(p.SubscriptionId) &&
                             p.Status == DisbursementStatus.Disbursed)
                 .GroupBy(p => p.SubscriptionId)
@@ -3701,6 +3705,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var today = DateTimeOffset.UtcNow;
 
             return await _context.RepaymentSchedules
+                .AsNoTracking()
                 .Where(x => subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
                             !x.IsPaid &&
                             x.DueDate >= today)
