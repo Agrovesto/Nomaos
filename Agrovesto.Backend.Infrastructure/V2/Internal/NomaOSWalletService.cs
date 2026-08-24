@@ -52,7 +52,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<(bool status, string message, BankTransferReceipt? data)> TransferToBank(BankTransferRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
-        Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args);
+        Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(SendPinResetOtpRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args);
     }
 
@@ -71,6 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly ILogger<NomaOSWalletService> _logger;
         private readonly IOtpService _otpService;
         private readonly IAWSService _awsService;
+        private readonly INotificationService _smsService;
         private readonly IConfiguration _configuration;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
@@ -81,6 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             ILogger<NomaOSWalletService> logger,
             IOtpService otpService,
             IAWSService awsService,
+            INotificationService smsService,
             IConfiguration configuration)
         {
 
@@ -95,6 +97,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _logger = logger;
             _otpService = otpService;
             _awsService = awsService;
+            _smsService = smsService;
             _configuration = configuration;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
@@ -1331,10 +1334,13 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             return (true, "Wallet PIN updated successfully");
         }
 
-        public async Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args)
+        public async Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(SendPinResetOtpRequest request, WalletQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(args.UserId))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+
+            if (!Enum.IsDefined(typeof(Channel), request.Channel))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "A delivery channel of SMS or Email is required");
 
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (!user.status || user.model == null)
@@ -1343,51 +1349,81 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 throw new BaseException(ExceptionType.NOTFOUND, "User not found");
             }
 
-            var email = user.model.Email;
-            if (string.IsNullOrWhiteSpace(email))
+            var overSms = request.Channel == Channel.SMS;
+            var destination = overSms ? user.model.PhoneNumber : user.model.Email;
+
+            if (string.IsNullOrWhiteSpace(destination))
             {
-                _logger.LogWarning("Wallet PIN reset OTP requested but no email is on file for UserId: {UserId}", args.UserId);
-                return (false, "No email address is on file for this account", null);
+                _logger.LogWarning(
+                    "Wallet PIN reset OTP requested over {Channel} but no destination is on file for UserId: {UserId}",
+                    request.Channel, args.UserId);
+
+                return (false, overSms
+                    ? "No mobile number is on file for this account"
+                    : "No email address is on file for this account", null);
             }
+
+            var target = overSms ? OtpTarget.Phone : OtpTarget.Email;
 
             // Throws BAD_REQUEST if the user has burnt their 3-per-10-minutes OTP allowance.
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
                 UserId = args.UserId,
-                Target = OtpTarget.Email,
-                Destination = email,
+                Target = target,
+                Destination = destination,
                 Purpose = OtpPurpose.WalletPinReset,
                 ExpiryMinutes = PinResetOtpExpiryMinutes
             });
 
-            var body = $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
-                       "If you did not request this, ignore this email and your PIN stays unchanged.";
+            var body = overSms
+                ? $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
+                  "If you did not request this, ignore this message and your PIN stays unchanged."
+                : $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
+                  "If you did not request this, ignore this email and your PIN stays unchanged.";
 
-            var delivered = await _awsService.SendEmailAsync(
-                _configuration["Official:Email"],
-                email,
-                "Reset your wallet PIN",
-                body,
-                body);
+            var delivered = overSms
+                ? await SendPinResetSms(destination, body, args)
+                : await _awsService.SendEmailAsync(
+                    _configuration["Official:Email"],
+                    destination,
+                    "Reset your wallet PIN",
+                    body,
+                    body);
 
             if (!delivered)
             {
-                await _otpService.InvalidateActiveOtps(args.UserId, OtpTarget.Email);
+                await _otpService.InvalidateActiveOtps(args.UserId, target);
 
                 _logger.LogError(
-                    "Wallet PIN reset OTP could not be emailed for UserId: {UserId}. See the preceding SES error.",
-                    args.UserId);
+                    "Wallet PIN reset OTP could not be sent over {Channel} for UserId: {UserId}. See the preceding provider error.",
+                    request.Channel, args.UserId);
 
                 return (false, "We could not send the reset code right now. Please try again shortly.", null);
             }
 
-            _logger.LogInformation("Wallet PIN reset OTP sent for UserId: {UserId}", args.UserId);
+            _logger.LogInformation("Wallet PIN reset OTP sent over {Channel} for UserId: {UserId}", request.Channel, args.UserId);
 
-            return (true, "A reset code has been sent to your email address", new WalletPinResetOtpResult
+            return (true, overSms
+                ? "A reset code has been sent to your mobile number"
+                : "A reset code has been sent to your email address", new WalletPinResetOtpResult
+                {
+                    Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
+                    ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
+                });
+        }
+
+        private async Task<bool> SendPinResetSms(string phoneNumber, string message, WalletQueryParams args)
+        {
+            try
             {
-                Destination = MaskEmail(email),
-                ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
-            });
+                await _smsService.SendSmsAsync(phoneNumber, message, args.businessCode);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Wallet PIN reset OTP could not be texted for UserId: {UserId}", args.UserId);
+                return false;
+            }
         }
 
         public async Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args)
@@ -1672,6 +1708,15 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 return user.Name.Trim();
 
             return $"{user.FirstName} {user.LastName}".Trim();
+        }
+
+        private static string MaskPhoneNumber(string phoneNumber)
+        {
+            var trimmed = phoneNumber.Trim();
+
+            return trimmed.Length <= 4
+                ? trimmed
+                : $"{new string('*', trimmed.Length - 4)}{trimmed.Substring(trimmed.Length - 4)}";
         }
 
         private static string MaskEmail(string email)

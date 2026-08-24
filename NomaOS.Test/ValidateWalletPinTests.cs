@@ -1,5 +1,6 @@
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -85,6 +86,7 @@ public class ValidateWalletPinTests
             Mock.Of<ILogger<NomaOSWalletService>>(),
             otpService,
             Mock.Of<IAWSService>(),
+            Mock.Of<INotificationService>(),
             Mock.Of<IConfiguration>());
     }
 

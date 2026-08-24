@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -33,6 +34,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public bool IsValid { get; set; }
         public string? Token { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
+    }
+    public class SendPinResetOtpRequest
+    {
+        /// <summary>Where the code should go: SMS to the registered mobile number, or Email to the address on file.</summary>
+        [Required]
+        [EnumDataType(typeof(Channel))]
+        public Channel Channel { get; set; }
     }
     public class VerifyPinResetOtpRequest
     {

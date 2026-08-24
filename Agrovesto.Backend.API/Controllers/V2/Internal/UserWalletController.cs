@@ -424,11 +424,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         /// <summary>
-        /// Emails a one-time code to the signed-in user so they can reset a transaction PIN they have forgotten.
+        /// Sends a one-time code to the signed-in user, over the channel they asked for, so they can
+        /// reset a transaction PIN they have forgotten. SMS goes to the registered mobile number,
+        /// Email to the address on file.
         /// </summary>
         [HttpPost("send-pin-reset-otp")]
-        public async Task<IActionResult> SendWalletPinResetOtp([FromQuery] WalletQueryParams query)
+        public async Task<IActionResult> SendWalletPinResetOtp([FromBody] SendPinResetOtpRequest request, [FromQuery] WalletQueryParams query)
         {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
             query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
             if (string.IsNullOrEmpty(query.UserId))
             {
@@ -441,7 +446,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(query);
+                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(request, query);
 
                 return Ok(new Response<WalletPinResetOtpResult>()
                 {
