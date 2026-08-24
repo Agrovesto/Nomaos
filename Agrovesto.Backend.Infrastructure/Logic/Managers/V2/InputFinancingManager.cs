@@ -978,15 +978,15 @@ RepaymentFrequency frequency)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
             }
             //verify wallet pin
-            try
-            {
-                await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
-                request.WalletPin);
-            }
-            catch(Exception ex)
-            {
-                throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
-            }
+            //try
+            //{
+            //    await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
+            //    request.WalletPin);
+            //}
+            //catch(Exception ex)
+            //{
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
+            //}
             
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
