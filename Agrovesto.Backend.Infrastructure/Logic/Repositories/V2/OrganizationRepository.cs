@@ -3722,6 +3722,7 @@ SELECT
                     x.FarmerOnboardingStatus,
                     x.OrganizationIsActive
                 })
+                .OrderByDescending(x=>x.CreatedOn)
                 .ToListAsync();
 
             var data = pagedRows.Select(x => new OrganizationFarmerResponse

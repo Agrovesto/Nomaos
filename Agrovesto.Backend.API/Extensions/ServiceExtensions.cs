@@ -95,7 +95,7 @@ namespace Agrovesto.Backend.API.Extensions
 
 
             services.AddScoped<INotificationService, NotificationService>();
-            services.AddScoped<IIdentityVerificationManager, IdentityVerificationManager>();
+            services.AddScoped<IIdentityVerificationService, IdentityVerificationService>();
             services.AddScoped<IEncryptionService, EncryptionService>();
             services.AddScoped<IExcelConverterService, ExcelConverterService>();
             services.AddScoped<IFlutterwaveService, FlutterwavePaymentService>();

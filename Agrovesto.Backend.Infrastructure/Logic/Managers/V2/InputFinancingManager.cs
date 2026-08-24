@@ -837,7 +837,9 @@ RepaymentFrequency frequency)
         {
             return await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
-                .ThenInclude(x => x.Organization)
+                    .ThenInclude(x => x.Organization)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.CommitmentPlan)
                 .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x =>
                     x.Id == request.SubscriptionId &&

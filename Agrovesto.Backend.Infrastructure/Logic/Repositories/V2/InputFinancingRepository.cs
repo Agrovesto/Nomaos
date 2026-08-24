@@ -3006,8 +3006,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         SubscriptionQueryFilter filter)
         {
             var query = _context.InputPackageSubscriptions
-                .Where(x => x.BusinessCode == filter.BusinessCode)
                 .Include(x => x.InputPackage)
+                .Where(x => x.BusinessCode == filter.BusinessCode)
+             
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(filter.SubscriberUserId))
@@ -4554,19 +4555,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         int pageNumber,
         int pageSize)
         {
-            var query = BuildSubscriptionQueryObligation(filter);
+            var query = await BuildSubscriptionQuery(filter);
 
             var count = await query.CountAsync();
 
+            //var subscriptions = await query
+            //    .Include(x => x.InputPackage)
+            //    .Include(x => x.RepaymentSchedules)
+            //    .OrderByDescending(x => x.Id)
+            //    .Skip((pageNumber - 1) * pageSize)
+            //    .Take(pageSize)
+            //    .ToListAsync();
+
+            //var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
+
+
+
+            if (count == 0)
+            {
+                return new PagedResult<InputObligationDto>
+                {
+                    Data = [],
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+
             var subscriptions = await query
-                .Include(x => x.InputPackage)
-                .Include(x => x.RepaymentSchedules)
                 .OrderByDescending(x => x.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
+
 
 
             var paymentsLookup = await _context.InputPackageSubscriptionPayments

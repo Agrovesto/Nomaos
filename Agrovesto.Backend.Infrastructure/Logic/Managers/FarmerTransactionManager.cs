@@ -58,7 +58,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
                var filter = new SubscriptionQueryFilter
                 {
                     SubscriberUserId= args.UserId,
+                    ViewType = SubscriptionView.All
                 };
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+                if (hasOrg != null)
+                {
+                    filter.OrganizationId = hasOrg.OrganizaionId;
+                }
                 return await _inputFinancingRepository.GetSubscriptionObligationsAsync(filter, args.PageNumber, args.PageSize);
             }
             catch (Exception ex)

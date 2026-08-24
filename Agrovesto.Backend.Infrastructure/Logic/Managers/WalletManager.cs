@@ -27,9 +27,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         private readonly IAuthenticationRepository _authenticationRepository;
         private readonly IWalletRepository _walletRepository;
         private readonly DataContext _context;
-        private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IIdentityVerificationService _identityVerificationManager;
         public WalletManager(ICafeOneWalletService cafeOneWalletService, IBusinessRepository businessRepository,
-            IIdentityVerificationManager identityVerificationManager,
+            IIdentityVerificationService identityVerificationManager,
             IAuthenticationRepository authenticationRepository,
             DataContext context, IWalletRepository walletRepository)
         {
