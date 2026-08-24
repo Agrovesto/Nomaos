@@ -1,4 +1,5 @@
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
@@ -168,6 +169,7 @@ public class WalletWithdrawalTests
             Mock.Of<ILogger<NomaOSWalletService>>(),
             new OtpService(context),
             Mock.Of<IAWSService>(),
+            Mock.Of<INotificationService>(),
             Mock.Of<IConfiguration>());
     }
 

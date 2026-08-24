@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -33,6 +34,13 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public bool IsValid { get; set; }
         public string? Token { get; set; }
         public DateTimeOffset? ExpiresAt { get; set; }
+    }
+    public class SendPinResetOtpRequest
+    {
+        /// <summary>Where the code should go: SMS to the registered mobile number, or Email to the address on file.</summary>
+        [Required]
+        [EnumDataType(typeof(Channel))]
+        public Channel Channel { get; set; }
     }
     public class VerifyPinResetOtpRequest
     {
@@ -109,6 +117,64 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public decimal SourceBalanceAfter { get; set; }
 
         public string Status { get; set; }
+    }
+    public class WalletDisbursementRequest
+    {
+        [Required]
+        [MinLength(1, ErrorMessage = "At least one recipient is required")]
+        public List<string> RecipientUserIds { get; set; } = new();
+
+        [Required]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Amount must be greater than zero")]
+        public decimal Amount { get; set; }
+
+        [Required]
+        public string TransactionPin { get; set; }
+
+        public long? SourceWalletId { get; set; }
+
+        public string? Description { get; set; }
+
+        [MaxLength(40)]
+        public string? ClientReference { get; set; }
+    }
+    public class WalletDisbursementResult
+    {
+        public string BatchReference { get; set; }
+
+        public long SourceWalletId { get; set; }
+
+        public string SourceWalletNumber { get; set; }
+
+        public decimal AmountPerRecipient { get; set; }
+
+        public decimal TotalDisbursed { get; set; }
+
+        public int SuccessfulCount { get; set; }
+
+        public int FailedCount { get; set; }
+
+        public decimal SourceBalanceAfter { get; set; }
+
+        public List<WalletDisbursementItem> Recipients { get; set; } = new();
+    }
+    public class WalletDisbursementItem
+    {
+        public string RecipientUserId { get; set; }
+
+        public string? DestinationWalletNumber { get; set; }
+
+        public decimal Amount { get; set; }
+
+        public bool Succeeded { get; set; }
+
+        public string Message { get; set; }
+
+        public string? TransactionReference { get; set; }
+
+        public string? ProviderReference { get; set; }
+
+        public string? Status { get; set; }
     }
     public class BankTransferRequest
     {
@@ -283,6 +349,18 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public DateTimeOffset DateAdded { get; set; }
 
         public List<UserWalletContextModel> Contexts { get; set; } = new();
+    }
+    public class LinkedInputPackageDto
+    {
+        public long PackageId { get; set; }
+
+        public long WalletId { get; set; }
+
+        public string PackageName { get; set; }
+
+        public int ActiveLoans { get; set; }
+
+        public decimal OutstandingPortfolio { get; set; }
     }
     public class UserWalletContextModel
     {

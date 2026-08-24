@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets;
 using Agrovesto.Backend.Core.Models.Common;
@@ -88,13 +90,15 @@ public class WalletPinResetOtpTests
         DataContext context,
         Mock<IAWSService> awsService,
         string? userEmail,
-        bool userFound = true)
+        bool userFound = true,
+        Mock<INotificationService>? smsService = null,
+        string? userPhoneNumber = null)
     {
         var onboardingRepository = new Mock<IOnboardingRepository>();
         onboardingRepository
             .Setup(x => x.GetUserById(UserId))
             .ReturnsAsync((
-                userFound ? new UserModel { Id = UserId, Email = userEmail } : null!,
+                userFound ? new UserModel { Id = UserId, Email = userEmail, PhoneNumber = userPhoneNumber } : null!,
                 userFound,
                 userFound ? string.Empty : "User not found"));
 
@@ -113,8 +117,11 @@ public class WalletPinResetOtpTests
             Mock.Of<ILogger<NomaOSWalletService>>(),
             new OtpService(context),
             awsService.Object,
+            (smsService ?? new Mock<INotificationService>()).Object,
             configuration.Object);
     }
+
+    private static SendPinResetOtpRequest Request(Channel channel = Channel.Email) => new() { Channel = channel };
 
     private static WalletQueryParams Query() => new()
     {
@@ -138,7 +145,7 @@ public class WalletPinResetOtpTests
 
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        var (status, message, data) = await service.SendWalletPinResetOtp(Query());
+        var (status, message, data) = await service.SendWalletPinResetOtp(Request(), Query());
 
         status.Should().BeTrue();
         message.Should().Be("A reset code has been sent to your email address");
@@ -177,7 +184,7 @@ public class WalletPinResetOtpTests
 
         var service = CreateService(context, awsService, userEmail: null);
 
-        var (status, message, data) = await service.SendWalletPinResetOtp(Query());
+        var (status, message, data) = await service.SendWalletPinResetOtp(Request(), Query());
 
         status.Should().BeFalse();
         message.Should().Be("No email address is on file for this account");
@@ -200,7 +207,7 @@ public class WalletPinResetOtpTests
 
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        var (status, message, data) = await service.SendWalletPinResetOtp(Query());
+        var (status, message, data) = await service.SendWalletPinResetOtp(Request(), Query());
 
         status.Should().BeFalse();
         message.Should().Be("We could not send the reset code right now. Please try again shortly.");
@@ -218,7 +225,7 @@ public class WalletPinResetOtpTests
 
         var service = CreateService(context, awsService, userEmail: null, userFound: false);
 
-        var act = () => service.SendWalletPinResetOtp(Query());
+        var act = () => service.SendWalletPinResetOtp(Request(), Query());
 
         var ex = await act.Should().ThrowAsync<BaseException>();
         ex.Which.ExceptionMessage.Should().Be("User not found");
@@ -238,9 +245,9 @@ public class WalletPinResetOtpTests
         var service = CreateService(context, awsService, "farmer@example.com");
 
         for (var i = 0; i < 3; i++)
-            (await service.SendWalletPinResetOtp(Query())).status.Should().BeTrue();
+            (await service.SendWalletPinResetOtp(Request(), Query())).status.Should().BeTrue();
 
-        var act = () => service.SendWalletPinResetOtp(Query());
+        var act = () => service.SendWalletPinResetOtp(Request(), Query());
 
         var ex = await act.Should().ThrowAsync<BaseException>();
         ex.Which.ExceptionMessage.Should().Be("Too many OTP requests. Please try again later.");
@@ -266,8 +273,8 @@ public class WalletPinResetOtpTests
 
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        await service.SendWalletPinResetOtp(Query());
-        await service.SendWalletPinResetOtp(Query());
+        await service.SendWalletPinResetOtp(Request(), Query());
+        await service.SendWalletPinResetOtp(Request(), Query());
 
         var firstCode = Regex.Match(bodies[0], @"\b\d{6}\b").Value;
         var secondCode = Regex.Match(bodies[1], @"\b\d{6}\b").Value;
@@ -287,7 +294,7 @@ public class WalletPinResetOtpTests
         var awsService = CapturingMailer(bodies);
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        await service.SendWalletPinResetOtp(Query());
+        await service.SendWalletPinResetOtp(Request(), Query());
 
         var (status, message, token) = await service.VerifyWalletPinResetOtp(
             new VerifyPinResetOtpRequest { Code = CodeFrom(bodies.Single()) }, Query());
@@ -315,7 +322,7 @@ public class WalletPinResetOtpTests
         var awsService = CapturingMailer(bodies);
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        await service.SendWalletPinResetOtp(Query());
+        await service.SendWalletPinResetOtp(Request(), Query());
 
         var (status, message, token) = await service.VerifyWalletPinResetOtp(
             new VerifyPinResetOtpRequest { Code = "000000" }, Query());
@@ -340,7 +347,7 @@ public class WalletPinResetOtpTests
         var awsService = CapturingMailer(bodies);
         var service = CreateService(context, awsService, "farmer@example.com");
 
-        await service.SendWalletPinResetOtp(Query());
+        await service.SendWalletPinResetOtp(Request(), Query());
         var code = CodeFrom(bodies.Single());
 
         (await service.VerifyWalletPinResetOtp(new VerifyPinResetOtpRequest { Code = code }, Query()))
@@ -364,7 +371,7 @@ public class WalletPinResetOtpTests
         var service = CreateService(context, awsService, "farmer@example.com");
 
         // 1. The user has forgotten their PIN, so they ask for a code.
-        (await service.SendWalletPinResetOtp(Query())).status.Should().BeTrue();
+        (await service.SendWalletPinResetOtp(Request(), Query())).status.Should().BeTrue();
 
         // 2. They enter the code from their inbox and get a token back.
         var (verified, _, token) = await service.VerifyWalletPinResetOtp(
