@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<bool> GetRequestToPayStatus(string walletProviderCode, string transactionreference, string env,
             string businessCode);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args);
         Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<string> HandleTopUpWebhook(ProviderWebhookRequest request);
@@ -49,6 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
         Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args);
+        Task<(bool status, string message, WalletDisbursementResult? data)> DisburseToSubscribers(WalletDisbursementRequest request, WalletQueryParams args);
         Task<(bool status, string message, BankTransferReceipt? data)> TransferToBank(BankTransferRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
@@ -108,6 +110,14 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             return parameters;
 
         }
+        public async Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+            if (business == null) throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
+
+            return await _userWalletRepository.GetWalletLinkedPackages(args);
+        }
+
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
             try
@@ -742,6 +752,155 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             {
                 return new ProviderResponse { IsSuccess = false, Message = ex.Message };
             }
+        }
+
+        public async Task<(bool status, string message, WalletDisbursementResult? data)> DisburseToSubscribers(WalletDisbursementRequest request, WalletQueryParams args)
+        {
+            if (request.Amount <= 0)
+                return (false, "Disbursement amount must be greater than zero", null);
+
+            if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                return (false, "Transaction PIN is required", null);
+
+            var recipientUserIds = (request.RecipientUserIds ?? new List<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!recipientUserIds.Any())
+                return (false, "At least one recipient is required", null);
+
+            var sourceWalletId = request.SourceWalletId ?? 0;
+
+            if (sourceWalletId <= 0)
+            {
+                var activeWallet = await _userWalletRepository.GetActiveWalletForUser(args.UserId, args.businessCode);
+
+                if (activeWallet == null)
+                    return (false, "No active wallet was found for this agent", null);
+
+                sourceWalletId = activeWallet.Id;
+            }
+
+            var sourceWallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = sourceWalletId
+            });
+
+            if (sourceWallet == null)
+                return (false, "Source wallet not found", null);
+
+            if (!sourceWallet.IsActive)
+                return (false, "Source wallet is inactive", null);
+
+            var totalRequired = request.Amount * recipientUserIds.Count;
+
+            if (sourceWallet.WalletBalance < totalRequired)
+                return (false,
+                    $"Insufficient balance. Disbursing {request.Amount:N2} to {recipientUserIds.Count} recipient(s) requires {totalRequired:N2}",
+                    null);
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(sourceWallet.Id, request.TransactionPin);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message, null);
+            }
+
+            var batchReference = string.IsNullOrWhiteSpace(request.ClientReference)
+                ? $"{Guid.NewGuid():D}"
+                : request.ClientReference.Trim();
+
+            var description = string.IsNullOrWhiteSpace(request.Description) ? "Agent disbursement" : request.Description;
+
+            var recipients = new List<WalletDisbursementItem>();
+            var index = 0;
+
+            foreach (var recipientUserId in recipientUserIds)
+            {
+                index++;
+
+                var item = new WalletDisbursementItem
+                {
+                    RecipientUserId = recipientUserId,
+                    Amount = request.Amount
+                };
+
+                var destinationWallet = await _userWalletRepository.GetActiveWalletForUser(recipientUserId, args.businessCode);
+
+                if (destinationWallet == null)
+                {
+                    item.Succeeded = false;
+                    item.Message = "No active wallet was found for this recipient";
+                    recipients.Add(item);
+
+                    _logger.LogWarning(
+                        "Agent disbursement {Reference} skipped recipient {RecipientUserId}: no active wallet",
+                        batchReference, recipientUserId);
+
+                    continue;
+                }
+
+                item.DestinationWalletNumber = destinationWallet.WalletNumber;
+
+                var (status, message, receipt) = await TransferBetweenWallets(new WalletTransferRequest
+                {
+                    SourceWalletId = sourceWallet.Id,
+                    DestinationWalletNumber = destinationWallet.WalletNumber,
+                    Amount = request.Amount,
+                    TransactionPin = request.TransactionPin,
+                    Description = description,
+                    ClientReference = $"{batchReference}-{index}"
+                }, args);
+
+                item.Succeeded = status;
+                item.Message = message;
+                item.TransactionReference = receipt?.TransactionReference;
+                item.ProviderReference = receipt?.ProviderReference;
+                item.Status = receipt?.Status;
+
+                recipients.Add(item);
+            }
+
+            var successfulCount = recipients.Count(x => x.Succeeded);
+            var failedCount = recipients.Count - successfulCount;
+
+            var sourceAfter = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = sourceWallet.Id
+            });
+
+            var data = new WalletDisbursementResult
+            {
+                BatchReference = batchReference,
+                SourceWalletId = sourceWallet.Id,
+                SourceWalletNumber = sourceWallet.WalletNumber,
+                AmountPerRecipient = request.Amount,
+                TotalDisbursed = request.Amount * successfulCount,
+                SuccessfulCount = successfulCount,
+                FailedCount = failedCount,
+                SourceBalanceAfter = sourceAfter?.WalletBalance ?? sourceWallet.WalletBalance,
+                Recipients = recipients
+            };
+
+            _logger.LogInformation(
+                "Agent disbursement {Reference} by UserId: {UserId} paid {Successful} of {Total} recipient(s)",
+                batchReference, args.UserId, successfulCount, recipients.Count);
+
+            return (failedCount == 0,
+                failedCount == 0
+                    ? $"Disbursed {request.Amount:N2} to {successfulCount} recipient(s)"
+                    : $"{successfulCount} of {recipients.Count} disbursements were successful",
+                data);
         }
 
         public async Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args)
