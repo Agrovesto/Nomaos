@@ -3701,7 +3701,7 @@ SELECT
             }
 
             var pagedRows = await query
-                .OrderByDescending(x => x.CreatedOn)
+                .OrderByDescending(x=>x.CreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
                 .Select(x => new
@@ -3722,7 +3722,6 @@ SELECT
                     x.FarmerOnboardingStatus,
                     x.OrganizationIsActive
                 })
-                .OrderByDescending(x=>x.CreatedOn)
                 .ToListAsync();
 
             var data = pagedRows.Select(x => new OrganizationFarmerResponse
@@ -3863,7 +3862,7 @@ SELECT
                 PhoneNumber = farmer.PhoneNumber,
                 Email = farmer.Email,
                 Gender = farmer.Gender,
-                Dob = farmer.DateOfBirth,
+                Dob = user.DateOfBirth,
                 BVN = user?.BVN,
                 NIN = user?.NIN,
                 FarmerImage = farmerImage,

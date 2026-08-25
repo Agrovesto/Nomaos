@@ -525,6 +525,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (!string.IsNullOrWhiteSpace(update.BVN))
                 ValidateIdentifier(update.BVN, "BVN");
 
+            var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
+            {
+               
+                PhoneNumber = update.PhoneNumber,
+                Email = update.Email,
+                NIN = update.NIN,
+                DateOfBirth = update.DateOfBirth,
+               Bvn = update.BVN,
+            });
             var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
             if (updated == null)
             {
