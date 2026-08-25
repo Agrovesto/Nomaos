@@ -613,6 +613,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 IsPhoneVerified= user.IsPhoneVerified,
                 NIN = user.NIN,
                 BVN = user.BVN,
+                DateOfBirth= user.DateOfBirth,
                 IsBvnVerified=user.IsBvnVerified,
                 IsNinVerified=user.IsNinVerified,
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
@@ -1030,6 +1031,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
       OnBoardingArgs args,
       IdentityRole role)
         {
+
+            user.DateOfBirth ??= model.DateOfBirth;
             if (!string.IsNullOrWhiteSpace(model.PhoneNumber)
                 && !string.Equals(model.PhoneNumber, user.PhoneNumber, StringComparison.OrdinalIgnoreCase))
             {
@@ -1445,6 +1448,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return new User
             {
                 Id = GenerateUserId(args),
+                DateOfBirth=model.DateOfBirth,
                 UserName = model.Email ?? model.PhoneNumber,
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber,

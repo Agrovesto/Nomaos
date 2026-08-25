@@ -158,7 +158,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Pin = model.Pin,
                     FirstName = model.FirstName,
                     MiddleName = model.MiddleName,
-                    LastName = model.LastName
+                    LastName = model.LastName,
+                    DateOfBirth = model.DateOfBirth,
                 }, args);
 
             if (!result.status)

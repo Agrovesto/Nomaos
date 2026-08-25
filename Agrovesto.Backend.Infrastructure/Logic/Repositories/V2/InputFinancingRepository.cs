@@ -293,7 +293,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CommitmentType = commitmentType,
                 CommitmentValue = commitmentValue,
                 CommitmentPaymentStartDate = startDate,
-                CommitmentPaymentEndDate = endDate
+                CommitmentPaymentEndDate = endDate,
+                CommitmentPercentage =commitmentType == CommitmentType.PercentageOfTotalValue ? requestCommitmentValue : 0
             };
 
             ValidateCommitmentPlan(plan); // reused from AddSubscriberAsync
@@ -576,8 +577,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         public async Task<PagedResult<InputPackageListModel>> GetPackagesAsync(ListQueryParams request)
         {
-            var pageNumber = Math.Max(1, request.PageNumber);
-            var pageSize = Math.Max(1, request.PageSize);
+            if (request.PageNumber <= 0) request.PageNumber = 1;
+           request.PageSize = 10;
 
             var query = _context.InputPackages
                 .Include(x => x.RepaymentPlan)
@@ -591,8 +592,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var data = await query
                 .OrderByDescending(x => x.Id)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((request.PageNumber - 1) * request.PageSize)
+                .Take(request.PageSize)
                 .Select(x => new
                 {
                     x.Id,
@@ -627,8 +628,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }).ToList(),
 
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = request.PageNumber,
+                PageSize = request.PageSize
             };
         }
         private static DateTimeOffset GetDueDate(DateTimeOffset start, RepaymentFrequency frequency, int installmentNumber)
@@ -3006,8 +3007,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         SubscriptionQueryFilter filter)
         {
             var query = _context.InputPackageSubscriptions
-                .Where(x => x.BusinessCode == filter.BusinessCode)
                 .Include(x => x.InputPackage)
+                .Where(x => x.BusinessCode == filter.BusinessCode)
+             
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(filter.SubscriberUserId))
@@ -3064,13 +3066,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var query = _context.InputPackageSubscriptions
                 .Where(x => x.BusinessCode == filter.BusinessCode)
-                .Include(x => x.InputPackage)
-                .ThenInclude(x => x.CommitmentPlan)
-                .Include(x => x.InputPackage)
-                .ThenInclude(x => x.RepaymentPlan)
-                .Include(x => x.SubscriberUser)
-                .Include(x => x.AddedByUser)
-                .AsQueryable();
+                //.Include(x => x.InputPackage)
+                //.ThenInclude(x => x.CommitmentPlan)
+                //.Include(x => x.InputPackage)
+                //.ThenInclude(x => x.RepaymentPlan)
+                //.Include(x => x.SubscriberUser)
+                //.Include(x => x.AddedByUser)
+                .AsNoTracking()
+                .AsQueryable()
+                ;
 
             query = ApplyFilterIfPresent(filter, query);
 
@@ -3153,15 +3157,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 if (filter.HasPaidCommitment.Value)
                 {
-                    query = query.Where(x =>
-                    x.CommitmentValue > 0 &&
-                        _context.InputPackageSubscriptionPayments
-                        .Where(p =>
-                            p.SubscriptionId == x.Id &&
+                    var paidCommitmentIds = _context.InputPackageSubscriptionPayments
+    .Where(p => p.PaymentType == PaymentType.Commitment && p.Status == TransactionStatus.Successful)
+    .GroupBy(p => p.SubscriptionId)
+    .Select(g => new { SubscriptionId = g.Key, Total = g.Sum(p => p.AmountPaid) });
 
-                            p.PaymentType == PaymentType.Commitment &&
-                            p.Status == TransactionStatus.Successful)
-                        .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
+                    query = query.Join(paidCommitmentIds, x => x.Id, p => p.SubscriptionId, (x, p) => new { x, p })
+                        .Where(xp => xp.x.CommitmentValue > 0 && xp.p.Total >= xp.x.CommitmentValue)
+                        .Select(xp => xp.x);
                 }
                 else
                 {
@@ -3556,8 +3559,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     int pageNumber,
     int pageSize)
         {
-            pageNumber = pageNumber < 1 ? 1 : pageNumber;
-            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+            if (pageNumber <= 0) pageNumber = 1;
+           pageSize = 10;
 
             var query = await BuildSubscriptionQuery(filter);
             var count = await query.CountAsync();
@@ -3589,6 +3592,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var rawItems = await _context.InputPackageSubscriptions
                 .Where(x => subscriptionIds.Contains(x.Id))
+                .AsNoTracking()
                 .Include(x => x.InputPackage)
                     .ThenInclude(x => x.CommitmentPlan)
                 .Include(x => x.InputPackage)
@@ -3668,6 +3672,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             PaymentType paymentType)
         {
             return await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
                 .Where(p =>
                     subscriptionIds.Contains(p.SubscriptionId) &&
                     p.PaymentType == paymentType &&
@@ -3684,6 +3689,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private async Task<Dictionary<long, DateTimeOffset?>> GetDisbursedDatesAsync(List<long> subscriptionIds)
         {
             return await _context.InputSubscriptionDisbursements
+                .AsNoTracking()
                 .Where(p => subscriptionIds.Contains(p.SubscriptionId) &&
                             p.Status == DisbursementStatus.Disbursed)
                 .GroupBy(p => p.SubscriptionId)
@@ -3700,6 +3706,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var today = DateTimeOffset.UtcNow;
 
             return await _context.RepaymentSchedules
+                .AsNoTracking()
                 .Where(x => subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
                             !x.IsPaid &&
                             x.DueDate >= today)
@@ -4554,19 +4561,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         int pageNumber,
         int pageSize)
         {
-            var query = BuildSubscriptionQueryObligation(filter);
+            var query = await BuildSubscriptionQuery(filter);
 
             var count = await query.CountAsync();
 
+            //var subscriptions = await query
+            //    .Include(x => x.InputPackage)
+            //    .Include(x => x.RepaymentSchedules)
+            //    .OrderByDescending(x => x.Id)
+            //    .Skip((pageNumber - 1) * pageSize)
+            //    .Take(pageSize)
+            //    .ToListAsync();
+
+            //var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
+
+
+
+            if (count == 0)
+            {
+                return new PagedResult<InputObligationDto>
+                {
+                    Data = [],
+                    Count = 0,
+                    PageNumber = pageNumber,
+                    PageSize = pageSize
+                };
+            }
+
             var subscriptions = await query
-                .Include(x => x.InputPackage)
-                .Include(x => x.RepaymentSchedules)
                 .OrderByDescending(x => x.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
+
 
 
             var paymentsLookup = await _context.InputPackageSubscriptionPayments

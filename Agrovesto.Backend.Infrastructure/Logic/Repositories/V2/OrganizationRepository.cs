@@ -1883,13 +1883,13 @@ SELECT
             //}
             var totalCount = await baseQuery.CountAsync();
 
-            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+            if (query.PageNumber <= 0) query.PageNumber = 1;
+            if (query.PageSize <= 0) query.PageSize = 10;
 
             var data = await baseQuery
                 .OrderByDescending(x => x.CreatedOn)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((query.PageNumber - 1) * query.PageSize)
+                .Take(query.PageNumber)
                 .Select(x => new LocationListResponseDto
                 {
                     IsActive = !string.IsNullOrEmpty(x.LocationStatus)
@@ -1931,8 +1931,8 @@ SELECT
             {
                 Data = data,
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize
             };
         }
         public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
@@ -3722,6 +3722,7 @@ SELECT
                     x.FarmerOnboardingStatus,
                     x.OrganizationIsActive
                 })
+                .OrderByDescending(x=>x.CreatedOn)
                 .ToListAsync();
 
             var data = pagedRows.Select(x => new OrganizationFarmerResponse

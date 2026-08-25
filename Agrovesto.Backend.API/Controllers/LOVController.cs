@@ -27,7 +27,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly INigeriaStateImporterService _nigeriaStateImporterService;
       //  private readonly IFlutterwaveService _flutterwaveService;
        // private readonly IGoogleDriveService _googleDriveService;
-        private readonly IIdentityVerificationManager _verificationManager;
+        private readonly IIdentityVerificationService _verificationManager;
         private readonly IWalletProviderManager _walletProvider;
       //  private readonly IWebHostEnvironment _hostingEnvironment;
         private readonly INotificationService _smsService;
@@ -42,7 +42,7 @@ namespace Agrovesto.Backend.API.Controllers
         private readonly IInputFinancingRepository _inputFinancingRepository;
         public LOVController(ICafeOneWalletService cafeOneWalletService,
         //    IGoogleDriveService googleDriveService,
-            IIdentityVerificationManager verificationManager,
+            IIdentityVerificationService verificationManager,
             INigeriaStateImporterService nigeriaStateImporterService,
             // IFlutterwaveService flutterwaveService,
             // IWebHostEnvironment hostingEnvironment, 
