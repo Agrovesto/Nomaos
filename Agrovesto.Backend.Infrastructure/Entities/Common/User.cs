@@ -61,6 +61,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         { get; set; }
     = new HashSet<UserBusiness>();
 
+        public string? DateOfBirth { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }

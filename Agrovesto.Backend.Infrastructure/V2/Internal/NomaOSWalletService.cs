@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task<bool> GetRequestToPayStatus(string walletProviderCode, string transactionreference, string env,
             string businessCode);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args);
         Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<string> HandleTopUpWebhook(ProviderWebhookRequest request);
@@ -49,10 +50,11 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         Task UpdateOrganizationInputPackage(WalletQueryParams args, long providerId, UserWalletModel wallet);
         Task<ProviderResponse> WithdrawWallet(WithdrawWalletRequest request, WalletQueryParams args);
         Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args);
+        Task<(bool status, string message, WalletDisbursementResult? data)> DisburseToSubscribers(WalletDisbursementRequest request, WalletQueryParams args);
         Task<(bool status, string message, BankTransferReceipt? data)> TransferToBank(BankTransferRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> ValidateWalletPin(ValidateWalletPinRequest request, WalletQueryParams args);
         Task<(bool status, string message)> UpdateWalletPin(UpdateWalletPinRequest request, WalletQueryParams args);
-        Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args);
+        Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(SendPinResetOtpRequest request, WalletQueryParams args);
         Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args);
     }
 
@@ -71,6 +73,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
         private readonly ILogger<NomaOSWalletService> _logger;
         private readonly IOtpService _otpService;
         private readonly IAWSService _awsService;
+        private readonly INotificationService _smsService;
         private readonly IConfiguration _configuration;
         public NomaOSWalletService(IBusinessRepository businessRepository,
             IOnboardingRepository onboardingRepository,
@@ -81,6 +84,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             ILogger<NomaOSWalletService> logger,
             IOtpService otpService,
             IAWSService awsService,
+            INotificationService smsService,
             IConfiguration configuration)
         {
 
@@ -95,6 +99,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             _logger = logger;
             _otpService = otpService;
             _awsService = awsService;
+            _smsService = smsService;
             _configuration = configuration;
         }
         public async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
@@ -105,6 +110,14 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             return parameters;
 
         }
+        public async Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args)
+        {
+            var business = await _businessRepository.GetBusinessByCodeAsync(args.businessCode);
+            if (business == null) throw new BaseException(ExceptionType.NOTFOUND, "Business not found");
+
+            return await _userWalletRepository.GetWalletLinkedPackages(args);
+        }
+
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
             try
@@ -741,6 +754,155 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             }
         }
 
+        public async Task<(bool status, string message, WalletDisbursementResult? data)> DisburseToSubscribers(WalletDisbursementRequest request, WalletQueryParams args)
+        {
+            if (request.Amount <= 0)
+                return (false, "Disbursement amount must be greater than zero", null);
+
+            if (string.IsNullOrWhiteSpace(request.TransactionPin))
+                return (false, "Transaction PIN is required", null);
+
+            var recipientUserIds = (request.RecipientUserIds ?? new List<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!recipientUserIds.Any())
+                return (false, "At least one recipient is required", null);
+
+            var sourceWalletId = request.SourceWalletId ?? 0;
+
+            if (sourceWalletId <= 0)
+            {
+                var activeWallet = await _userWalletRepository.GetActiveWalletForUser(args.UserId, args.businessCode);
+
+                if (activeWallet == null)
+                    return (false, "No active wallet was found for this agent", null);
+
+                sourceWalletId = activeWallet.Id;
+            }
+
+            var sourceWallet = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = sourceWalletId
+            });
+
+            if (sourceWallet == null)
+                return (false, "Source wallet not found", null);
+
+            if (!sourceWallet.IsActive)
+                return (false, "Source wallet is inactive", null);
+
+            var totalRequired = request.Amount * recipientUserIds.Count;
+
+            if (sourceWallet.WalletBalance < totalRequired)
+                return (false,
+                    $"Insufficient balance. Disbursing {request.Amount:N2} to {recipientUserIds.Count} recipient(s) requires {totalRequired:N2}",
+                    null);
+
+            try
+            {
+                await _userWalletRepository.ValidateTransactionPin(sourceWallet.Id, request.TransactionPin);
+            }
+            catch (Exception ex)
+            {
+                return (false, ex.Message, null);
+            }
+
+            var batchReference = string.IsNullOrWhiteSpace(request.ClientReference)
+                ? $"{Guid.NewGuid():D}"
+                : request.ClientReference.Trim();
+
+            var description = string.IsNullOrWhiteSpace(request.Description) ? "Agent disbursement" : request.Description;
+
+            var recipients = new List<WalletDisbursementItem>();
+            var index = 0;
+
+            foreach (var recipientUserId in recipientUserIds)
+            {
+                index++;
+
+                var item = new WalletDisbursementItem
+                {
+                    RecipientUserId = recipientUserId,
+                    Amount = request.Amount
+                };
+
+                var destinationWallet = await _userWalletRepository.GetActiveWalletForUser(recipientUserId, args.businessCode);
+
+                if (destinationWallet == null)
+                {
+                    item.Succeeded = false;
+                    item.Message = "No active wallet was found for this recipient";
+                    recipients.Add(item);
+
+                    _logger.LogWarning(
+                        "Agent disbursement {Reference} skipped recipient {RecipientUserId}: no active wallet",
+                        batchReference, recipientUserId);
+
+                    continue;
+                }
+
+                item.DestinationWalletNumber = destinationWallet.WalletNumber;
+
+                var (status, message, receipt) = await TransferBetweenWallets(new WalletTransferRequest
+                {
+                    SourceWalletId = sourceWallet.Id,
+                    DestinationWalletNumber = destinationWallet.WalletNumber,
+                    Amount = request.Amount,
+                    TransactionPin = request.TransactionPin,
+                    Description = description,
+                    ClientReference = $"{batchReference}-{index}"
+                }, args);
+
+                item.Succeeded = status;
+                item.Message = message;
+                item.TransactionReference = receipt?.TransactionReference;
+                item.ProviderReference = receipt?.ProviderReference;
+                item.Status = receipt?.Status;
+
+                recipients.Add(item);
+            }
+
+            var successfulCount = recipients.Count(x => x.Succeeded);
+            var failedCount = recipients.Count - successfulCount;
+
+            var sourceAfter = await _userWalletRepository.GetWalletById(new UserWalletParams
+            {
+                UserId = args.UserId,
+                businessCode = args.businessCode,
+                Env = args.env,
+                Id = sourceWallet.Id
+            });
+
+            var data = new WalletDisbursementResult
+            {
+                BatchReference = batchReference,
+                SourceWalletId = sourceWallet.Id,
+                SourceWalletNumber = sourceWallet.WalletNumber,
+                AmountPerRecipient = request.Amount,
+                TotalDisbursed = request.Amount * successfulCount,
+                SuccessfulCount = successfulCount,
+                FailedCount = failedCount,
+                SourceBalanceAfter = sourceAfter?.WalletBalance ?? sourceWallet.WalletBalance,
+                Recipients = recipients
+            };
+
+            _logger.LogInformation(
+                "Agent disbursement {Reference} by UserId: {UserId} paid {Successful} of {Total} recipient(s)",
+                batchReference, args.UserId, successfulCount, recipients.Count);
+
+            return (failedCount == 0,
+                failedCount == 0
+                    ? $"Disbursed {request.Amount:N2} to {successfulCount} recipient(s)"
+                    : $"{successfulCount} of {recipients.Count} disbursements were successful",
+                data);
+        }
+
         public async Task<(bool status, string message, WalletTransferReceipt? data)> TransferBetweenWallets(WalletTransferRequest request, WalletQueryParams args)
         {
             if (request.Amount <= 0)
@@ -1331,10 +1493,13 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             return (true, "Wallet PIN updated successfully");
         }
 
-        public async Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(WalletQueryParams args)
+        public async Task<(bool status, string message, WalletPinResetOtpResult? data)> SendWalletPinResetOtp(SendPinResetOtpRequest request, WalletQueryParams args)
         {
             if (string.IsNullOrWhiteSpace(args.UserId))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+
+            if (!Enum.IsDefined(typeof(Channel), request.Channel))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "A delivery channel of SMS or Email is required");
 
             var user = await _onboardingRepository.GetUserById(args.UserId);
             if (!user.status || user.model == null)
@@ -1343,51 +1508,81 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 throw new BaseException(ExceptionType.NOTFOUND, "User not found");
             }
 
-            var email = user.model.Email;
-            if (string.IsNullOrWhiteSpace(email))
+            var overSms = request.Channel == Channel.SMS;
+            var destination = overSms ? user.model.PhoneNumber : user.model.Email;
+
+            if (string.IsNullOrWhiteSpace(destination))
             {
-                _logger.LogWarning("Wallet PIN reset OTP requested but no email is on file for UserId: {UserId}", args.UserId);
-                return (false, "No email address is on file for this account", null);
+                _logger.LogWarning(
+                    "Wallet PIN reset OTP requested over {Channel} but no destination is on file for UserId: {UserId}",
+                    request.Channel, args.UserId);
+
+                return (false, overSms
+                    ? "No mobile number is on file for this account"
+                    : "No email address is on file for this account", null);
             }
+
+            var target = overSms ? OtpTarget.Phone : OtpTarget.Email;
 
             // Throws BAD_REQUEST if the user has burnt their 3-per-10-minutes OTP allowance.
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
                 UserId = args.UserId,
-                Target = OtpTarget.Email,
-                Destination = email,
+                Target = target,
+                Destination = destination,
                 Purpose = OtpPurpose.WalletPinReset,
                 ExpiryMinutes = PinResetOtpExpiryMinutes
             });
 
-            var body = $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
-                       "If you did not request this, ignore this email and your PIN stays unchanged.";
+            var body = overSms
+                ? $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
+                  "If you did not request this, ignore this message and your PIN stays unchanged."
+                : $"Your wallet PIN reset code is {otp.Code}. It expires in {PinResetOtpExpiryMinutes} minutes. " +
+                  "If you did not request this, ignore this email and your PIN stays unchanged.";
 
-            var delivered = await _awsService.SendEmailAsync(
-                _configuration["Official:Email"],
-                email,
-                "Reset your wallet PIN",
-                body,
-                body);
+            var delivered = overSms
+                ? await SendPinResetSms(destination, body, args)
+                : await _awsService.SendEmailAsync(
+                    _configuration["Official:Email"],
+                    destination,
+                    "Reset your wallet PIN",
+                    body,
+                    body);
 
             if (!delivered)
             {
-                await _otpService.InvalidateActiveOtps(args.UserId, OtpTarget.Email);
+                await _otpService.InvalidateActiveOtps(args.UserId, target);
 
                 _logger.LogError(
-                    "Wallet PIN reset OTP could not be emailed for UserId: {UserId}. See the preceding SES error.",
-                    args.UserId);
+                    "Wallet PIN reset OTP could not be sent over {Channel} for UserId: {UserId}. See the preceding provider error.",
+                    request.Channel, args.UserId);
 
                 return (false, "We could not send the reset code right now. Please try again shortly.", null);
             }
 
-            _logger.LogInformation("Wallet PIN reset OTP sent for UserId: {UserId}", args.UserId);
+            _logger.LogInformation("Wallet PIN reset OTP sent over {Channel} for UserId: {UserId}", request.Channel, args.UserId);
 
-            return (true, "A reset code has been sent to your email address", new WalletPinResetOtpResult
+            return (true, overSms
+                ? "A reset code has been sent to your mobile number"
+                : "A reset code has been sent to your email address", new WalletPinResetOtpResult
+                {
+                    Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
+                    ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
+                });
+        }
+
+        private async Task<bool> SendPinResetSms(string phoneNumber, string message, WalletQueryParams args)
+        {
+            try
             {
-                Destination = MaskEmail(email),
-                ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
-            });
+                await _smsService.SendSmsAsync(phoneNumber, message, args.businessCode);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Wallet PIN reset OTP could not be texted for UserId: {UserId}", args.UserId);
+                return false;
+            }
         }
 
         public async Task<(bool status, string message, TokenResult? token)> VerifyWalletPinResetOtp(VerifyPinResetOtpRequest request, WalletQueryParams args)
@@ -1672,6 +1867,15 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 return user.Name.Trim();
 
             return $"{user.FirstName} {user.LastName}".Trim();
+        }
+
+        private static string MaskPhoneNumber(string phoneNumber)
+        {
+            var trimmed = phoneNumber.Trim();
+
+            return trimmed.Length <= 4
+                ? trimmed
+                : $"{new string('*', trimmed.Length - 4)}{trimmed.Substring(trimmed.Length - 4)}";
         }
 
         private static string MaskEmail(string email)

@@ -6085,6 +6085,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("DateModified")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("DateOfBirth")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");

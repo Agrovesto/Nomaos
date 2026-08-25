@@ -31,6 +31,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args);
+        Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode);
         Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
@@ -55,6 +57,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
     }
     public class UserWalletRepository : IUserWalletRepository
     {
+        private static readonly SubscriptionStatus[] ActiveLoanStatuses =
+        {
+            SubscriptionStatus.Active,
+            SubscriptionStatus.PendingDisbursement,
+            SubscriptionStatus.PendingCommitment,
+            SubscriptionStatus.PendingApproval
+        };
+
         private readonly DataContext _context;
         private readonly IAWSService _notificationService;
         public UserWalletRepository(DataContext context, IAWSService aWSService)
@@ -153,6 +163,96 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
        
         
+        public async Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return null;
+
+            return await _context.UserWallets
+                .Where(w =>
+                    w.UserId == userId &&
+                    w.BelongToBusinessCode == businessCode &&
+                    w.IsActive &&
+                    !w.IsDeleted)
+                .OrderByDescending(w => w.WalletContexts.Any(c => c.IsDefault))
+                .ThenBy(w => w.AddedOn)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args)
+        {
+            if (string.IsNullOrWhiteSpace(args.UserId))
+                throw new ArgumentException("UserId is required");
+
+            var walletIds = await _context.UserWallets
+                .AsNoTracking()
+                .Where(w =>
+                    w.UserId == args.UserId &&
+                    w.BelongToBusinessCode == args.businessCode &&
+                    !w.IsDeleted &&
+                    (args.Id <= 0 || w.Id == args.Id))
+                .Select(w => w.Id)
+                .ToListAsync();
+
+            if (!walletIds.Any())
+                return new List<LinkedInputPackageDto>();
+
+            var packages = await _context.InputPackages
+                .AsNoTracking()
+                .Where(p => p.UserWalletId.HasValue && walletIds.Contains(p.UserWalletId.Value))
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    WalletId = p.UserWalletId.Value
+                })
+                .ToListAsync();
+
+            if (!packages.Any())
+                return new List<LinkedInputPackageDto>();
+
+            var packageIds = packages.Select(p => p.Id).ToList();
+
+            var activeLoans = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s =>
+                    packageIds.Contains(s.InputPackageId) &&
+                    ActiveLoanStatuses.Contains(s.Status))
+                .GroupBy(s => s.InputPackageId)
+                .Select(g => new
+                {
+                    PackageId = g.Key,
+                    Count = g.Count()
+                })
+                .ToDictionaryAsync(x => x.PackageId, x => x.Count);
+
+            var outstanding = await _context.RepaymentSchedules
+                .AsNoTracking()
+                .Where(x =>
+                    packageIds.Contains(x.InputPackageSubscription.InputPackageId) &&
+                    !x.IsPaid &&
+                    !x.IsDeleted)
+                .GroupBy(x => x.InputPackageSubscription.InputPackageId)
+                .Select(g => new
+                {
+                    PackageId = g.Key,
+                    Amount = g.Sum(x => x.Amount - x.AmountPaid)
+                })
+                .ToDictionaryAsync(x => x.PackageId, x => x.Amount);
+
+            return packages
+                .Select(p => new LinkedInputPackageDto
+                {
+                    PackageId = p.Id,
+                    WalletId = p.WalletId,
+                    PackageName = p.Name,
+                    ActiveLoans = activeLoans.TryGetValue(p.Id, out var count) ? count : 0,
+                    OutstandingPortfolio = outstanding.TryGetValue(p.Id, out var amount) ? amount : 0
+                })
+                .OrderBy(p => p.PackageName)
+                .ToList();
+        }
+
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
             var subscriberUserId = args.UserId;

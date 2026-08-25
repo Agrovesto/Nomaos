@@ -28,28 +28,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         Task<SMSProviderParameterModel> GetParametersById(long parameterId);
         Task<SMSProviderParameterModel> EditParameterValue(SMSProviderParameterModel model);
 
-        // Kept with original signature for backward compatibility — returns GLOBAL defaults only,
-        // no business override applied. Existing callers keep working unchanged.
         Task<SMSProviderParameterModel[]> GetParametersByProvider(long providerId, string env);
 
-        // ===================== Business-scoped (multi-tenant) layer — new =====================
-
-        /// <summary>Providers a specific business has enabled.</summary>
         Task<BusinessSMSProviderModel[]> GetProvidersForBusiness(string businessCode);
 
-        /// <summary>Enables a provider for a business, optionally with tenant-specific credential overrides.</summary>
-        Task<BusinessSMSProviderModel> EnableProviderForBusiness(
+              Task<BusinessSMSProviderModel> EnableProviderForBusiness(
             string businessCode, long providerId, SMSProviderParameterModel[] overrideParameters, bool isDefault = false);
 
-        /// <summary>Disables (soft) a provider previously enabled for a business.</summary>
-        Task<bool> DisableProviderForBusiness(string businessCode, long providerId);
+           Task<bool> DisableProviderForBusiness(string businessCode, long providerId);
 
-        /// <summary>
-        /// Resolves EFFECTIVE parameters for a business calling a provider: global defaults merged
-        /// with business-level overrides (business value wins on matching Key). Use this one at
-        /// runtime when actually calling out to the provider on behalf of a tenant.
-        /// </summary>
-        Task<SMSProviderParameterModel[]> GetParametersByProvider(long providerId, string businessCode, string env);
+         Task<SMSProviderParameterModel[]> GetParametersByProvider(long providerId, string businessCode, string env);
 
         Task<BusinessSMSProviderParameterModel> EditBusinessParameterValue(BusinessSMSProviderParameterModel model);
     }
@@ -62,9 +50,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _context = context;
         }
 
-        // ============================= Global provider catalog =============================
-
-        public async Task<SMSProviderModel> ChangeStatus(long id, ProviderStatus providerStatus)
+           public async Task<SMSProviderModel> ChangeStatus(long id, ProviderStatus providerStatus)
         {
             SMSProvider provider = await _context.Set<SMSProvider>().FindAsync(id);
             if (provider == null)
@@ -229,9 +215,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
             });
         }
-
-        // Kept for backward compatibility — GLOBAL defaults only, no tenant override applied.
-        public async Task<SMSProviderParameterModel[]> GetParametersByProvider(long providerId, string env)
+  public async Task<SMSProviderParameterModel[]> GetParametersByProvider(long providerId, string env)
         {
             SMSProviderParameter[] entities = await _context.Set<SMSProviderParameter>()
                                    .Where(x => x.SMSProviderProviderId == providerId && x.Env == env)
@@ -240,8 +224,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entities.Select(c => c.Map()).ToArray();
         }
 
-        // ============================= Business-scoped (multi-tenant) layer =============================
-
+       
         public async Task<BusinessSMSProviderModel[]> GetProvidersForBusiness(string businessCode)
         {
             if (string.IsNullOrWhiteSpace(businessCode))

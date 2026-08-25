@@ -2745,5 +2745,63 @@ namespace Agrovesto.Backend.Infrastructure
         }
 
         #endregion SMS
+
+        #region IdentityPass
+        public static IdentityVerificationProvider Map(this IdentityVerificationProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new IdentityVerificationProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                Parameters = model.Parameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static IdentityVerificationProviderModel Map(this IdentityVerificationProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new IdentityVerificationProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                Parameters = entity.Parameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<ProviderStatus>()
+            };
+        }
+        public static IdentityVerificationProviderParameter Map(this IdentityVerificationProviderParameterModel model)
+        {
+            return new IdentityVerificationProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = Enum.GetName(typeof(Env), model.Env)//model.Env.ToString()
+            };
+        }
+        public static IdentityVerificationProviderParameterModel Map(this IdentityVerificationProviderParameter model)
+        {
+            return new IdentityVerificationProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+        #endregion
     }
 }

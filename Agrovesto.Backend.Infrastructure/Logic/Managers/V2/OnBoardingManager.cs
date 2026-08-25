@@ -104,7 +104,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IOtpService _otpService;
         private readonly ILogger<OnBoardingManager> _log;
         private readonly IFarmManager _farmManager;
-        private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IIdentityVerificationService _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
         private readonly IAWSService _awsService;
         private readonly IServiceScopeFactory _scopeFactory;
@@ -115,7 +115,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             DataContext context,
             INotificationService notificationService,
             IAWSRekognitionManager faceManager,
-            IIdentityVerificationManager identityVerificationManager,
+            IIdentityVerificationService identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
             , IExcelConverterService excelConverterService, IAWSService awsService)
@@ -868,7 +868,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
                 Tier = Tier.Tier1.ToString(),
-
+                
 
                 Name = model.CooperativeName,
                 OnBoardedOn = model.CreatedOn,

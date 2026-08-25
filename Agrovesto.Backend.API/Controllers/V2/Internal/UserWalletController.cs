@@ -215,6 +215,45 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+        [HttpPost("disburse")]
+        public async Task<IActionResult> DisburseToSubscribers([FromBody] WalletDisbursementRequest request, [FromQuery] WalletQueryParams args)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+
+            try
+            {
+                var (status, message, data) = await _walletManager.DisburseToSubscribers(request, args);
+
+                return Ok(new Response<WalletDisbursementResult>()
+                {
+                    Data = data,
+                    Message = message,
+                    Succeeded = status,
+                    Code = status ? Core.CoreUtils.Constants.ResponseCodes.Success : Core.CoreUtils.Constants.ResponseCodes.Failed
+                });
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
         [HttpPost("bank-transfer")]
         [Authorize]
         public async Task<IActionResult> TransferToBank([FromBody] BankTransferRequest request, [FromQuery] WalletQueryParams args)
@@ -424,11 +463,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         /// <summary>
-        /// Emails a one-time code to the signed-in user so they can reset a transaction PIN they have forgotten.
+        /// Sends a one-time code to the signed-in user, over the channel they asked for, so they can
+        /// reset a transaction PIN they have forgotten. SMS goes to the registered mobile number,
+        /// Email to the address on file.
         /// </summary>
         [HttpPost("send-pin-reset-otp")]
-        public async Task<IActionResult> SendWalletPinResetOtp([FromQuery] WalletQueryParams query)
+        public async Task<IActionResult> SendWalletPinResetOtp([FromBody] SendPinResetOtpRequest request, [FromQuery] WalletQueryParams query)
         {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
             query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
             if (string.IsNullOrEmpty(query.UserId))
             {
@@ -441,7 +485,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(query);
+                var (status, message, data) = await _walletManager.SendWalletPinResetOtp(request, query);
 
                 return Ok(new Response<WalletPinResetOtpResult>()
                 {
@@ -590,6 +634,50 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     TotalWalletBalance = userFinancialSummary.TotalWalletBalance
                 };
                 return Ok(dashboardResponse);
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,
+                    Succeeded = false,
+                });
+            }
+        }
+
+        [HttpGet("linked-packages")]
+        public async Task<IActionResult> GetWalletLinkedPackages([FromQuery] UserWalletParams query)
+        {
+            query.UserId = !string.IsNullOrWhiteSpace(query.UserId) ? query.UserId : CurrentUserId;
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "Your session has expired. Please sign in again and retry.",
+                    Succeeded = false
+                });
+            }
+
+            try
+            {
+                var packages = await _walletManager.GetWalletLinkedPackages(query);
+
+                return Ok(new Response<List<LinkedInputPackageDto>>()
+                {
+                    Data = packages,
+                    Message = packages.Any() ? "Record Retrieved" : "No Records Found",
+                    Succeeded = true,
+                    Code = Core.CoreUtils.Constants.ResponseCodes.Success
+                });
             }
             catch (BaseException ex)
             {

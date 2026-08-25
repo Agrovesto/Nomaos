@@ -837,7 +837,9 @@ RepaymentFrequency frequency)
         {
             return await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
-                .ThenInclude(x => x.Organization)
+                    .ThenInclude(x => x.Organization)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.CommitmentPlan)
                 .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x =>
                     x.Id == request.SubscriptionId &&
@@ -882,6 +884,10 @@ RepaymentFrequency frequency)
             RecordCommitmentPaymentRequest request,
             InputPackageSubscription subscription)
         {
+            //if(subscription.InputPackage.CommitmentPlan != null && subscription.InputPackage.CommitmentPlan.CommitmentType == CommitmentType.PercentageOfTotalValue)
+            //{
+            //    subscription.CommitmentValue = subscription.CommitmentValue * subscription.TotalFinancingValue;
+            //}
             var outstanding = subscription.CommitmentValue -
                 await _inputFinancingRepository.GetTotalCommitmentPaidAsync(subscription.Id);
 
@@ -976,15 +982,15 @@ RepaymentFrequency frequency)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
             }
             //verify wallet pin
-            try
-            {
-                await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
-                request.WalletPin);
-            }
-            catch(Exception ex)
-            {
-                throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
-            }
+            //try
+            //{
+            //    await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
+            //    request.WalletPin);
+            //}
+            //catch(Exception ex)
+            //{
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
+            //}
             
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
