@@ -2151,7 +2151,8 @@ DateTimeOffset dateTime)
             return new Response<OrganizationFarmerDetailResponse>
             {
                 Data = farmer,
-                Message = "Farmer detail retrieved successfully"
+                Message = "Farmer detail retrieved successfully",
+                Succeeded=true
             };
         }
         private async Task EnrichFarmerAsync(ListQueryParams args)
