@@ -1822,7 +1822,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var fullyPaid = totalPaid >= subscription.CommitmentValue;
 
-            if (fullyPaid && subscription.Status == SubscriptionStatus.PendingCommitment)
+            if (fullyPaid 
+                //&& subscription.Status == SubscriptionStatus.PendingCommitment
+                )
             {
                 subscription.Status = SubscriptionStatus.PendingDisbursement;
 
@@ -1879,8 +1881,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var fullyRepaid = !subscription.InputPackage.RepaymentRequired
          || subscription.RepaymentValue <= 0
          || totalRepaid >= subscription.RepaymentValue;
-            if (fullyRepaid && (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
-                SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active))
+            if (fullyRepaid 
+                //&& (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
+                //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)
+                )
             {
                 subscription.Status = SubscriptionStatus.Repaid;
 
@@ -2531,7 +2535,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (subscription == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Subscription not found");
 
-            var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement };
+            var allowedStatuses = new[] { SubscriptionStatus.PendingDisbursement, SubscriptionStatus.CommitmentPaid };
             if (!allowedStatuses.Contains(subscription.Status))
                 throw new Exception($"Current status does not allow for input release request. Current subscription status: {subscription.Status}");
 
@@ -3100,15 +3104,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
                     case SubscriptionView.PendingCommitment:
+                        query = query.Where(x =>
+                            x.Status == SubscriptionStatus.PendingCommitment );
+                        break;
+
                     case SubscriptionView.Approved:
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.PendingCommitment ||
                             x.Status == SubscriptionStatus.Approved);
                         break;
 
-
                     case SubscriptionView.CommitmentPaid:
                         filter.HasPaidCommitment ??= true;
+                        query = query.Where(x =>
+                           x.Status == SubscriptionStatus.CommitmentPaid);
                         break;
 
                     case SubscriptionView.InputReleaseRequest:
