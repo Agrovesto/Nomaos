@@ -1189,7 +1189,8 @@ RepaymentFrequency frequency)
                             .RecordSuccessfulPaymentAsync(paymentId, new PaymentConfirmationRequest
                             {
                                 ExternalReference = masterReference,
-                                Status = TransactionStatus.Successful
+                                Status = TransactionStatus.Successful,
+                                
                             }, args.UserId);
 
                         await dbTransaction.CommitAsync();
