@@ -293,7 +293,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CommitmentType = commitmentType,
                 CommitmentValue = commitmentValue,
                 CommitmentPaymentStartDate = startDate,
-                CommitmentPaymentEndDate = endDate
+                CommitmentPaymentEndDate = endDate,
+                CommitmentPercentage =commitmentType == CommitmentType.PercentageOfTotalValue ? requestCommitmentValue : 0
             };
 
             ValidateCommitmentPlan(plan); // reused from AddSubscriberAsync
@@ -627,8 +628,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }).ToList(),
 
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = request.PageNumber,
+                PageSize = request.PageSize
             };
         }
         private static DateTimeOffset GetDueDate(DateTimeOffset start, RepaymentFrequency frequency, int installmentNumber)

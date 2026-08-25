@@ -1931,8 +1931,8 @@ SELECT
             {
                 Data = data,
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize
             };
         }
         public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)

@@ -884,6 +884,10 @@ RepaymentFrequency frequency)
             RecordCommitmentPaymentRequest request,
             InputPackageSubscription subscription)
         {
+            //if(subscription.InputPackage.CommitmentPlan != null && subscription.InputPackage.CommitmentPlan.CommitmentType == CommitmentType.PercentageOfTotalValue)
+            //{
+            //    subscription.CommitmentValue = subscription.CommitmentValue * subscription.TotalFinancingValue;
+            //}
             var outstanding = subscription.CommitmentValue -
                 await _inputFinancingRepository.GetTotalCommitmentPaidAsync(subscription.Id);
 
