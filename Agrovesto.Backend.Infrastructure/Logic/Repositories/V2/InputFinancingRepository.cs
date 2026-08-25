@@ -1822,7 +1822,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             var fullyPaid = totalPaid >= subscription.CommitmentValue;
 
-            if (fullyPaid && subscription.Status == SubscriptionStatus.PendingCommitment)
+            if (fullyPaid 
+                //&& subscription.Status == SubscriptionStatus.PendingCommitment
+                )
             {
                 subscription.Status = SubscriptionStatus.PendingDisbursement;
 
@@ -1879,8 +1881,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var fullyRepaid = !subscription.InputPackage.RepaymentRequired
          || subscription.RepaymentValue <= 0
          || totalRepaid >= subscription.RepaymentValue;
-            if (fullyRepaid && (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
-                SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active))
+            if (fullyRepaid 
+                //&& (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
+                //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)
+                )
             {
                 subscription.Status = SubscriptionStatus.Repaid;
 
