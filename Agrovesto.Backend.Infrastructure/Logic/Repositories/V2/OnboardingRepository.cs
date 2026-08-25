@@ -899,7 +899,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     user.BVN = model.Bvn;
                 }
             }
-            user.DateOfBirth ?? = model.DateOfBirth;
+            user.DateOfBirth ??= model.DateOfBirth;
             user.ModifiedBy = userId;
             if(user.UserType ==  UserType.Farmer.ToString())
             {
