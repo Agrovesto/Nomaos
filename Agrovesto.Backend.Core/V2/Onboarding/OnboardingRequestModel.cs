@@ -42,11 +42,13 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string UserId { get; set; }
         public string UserType { get; set; }
         public string Name { get; set; }
+        public string Gender { get; set; }
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }
         public string NIN { get; set; }
         public string BVN { get; set; }
+        public string? DateOfBirth { get; set; }
         public bool IsPhoneVerified { get; set; }
         public bool IsEmailVerified { get; set; }
         public bool IsNinVerified { get; set; }
@@ -234,6 +236,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Email { get; set; }
         public string? Bvn { get; set; }
         public string? Nin { get; set; }
+        public string? DateOfBirth { get; set; }
         public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;    
     }

@@ -104,7 +104,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IOtpService _otpService;
         private readonly ILogger<OnBoardingManager> _log;
         private readonly IFarmManager _farmManager;
-        private readonly IIdentityVerificationManager _identityVerificationManager;
+        private readonly IIdentityVerificationService _identityVerificationManager;
         private readonly IExcelConverterService _excelConverterService;
         private readonly IAWSService _awsService;
         private readonly IServiceScopeFactory _scopeFactory;
@@ -115,7 +115,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             DataContext context,
             INotificationService notificationService,
             IAWSRekognitionManager faceManager,
-            IIdentityVerificationManager identityVerificationManager,
+            IIdentityVerificationService identityVerificationManager,
             IBusinessRepository businessRepository, IFarmerRepository farmerRepository, ILogger<OnBoardingManager> log, IMembershipRepository cooperativeRepository,
             IAgentRepository agentRepository, IOtpService otpService, IFarmManager farmManager, INotificationService sMSService, IOnboardingRepository onboardingRepository
             , IExcelConverterService excelConverterService, IAWSService awsService)
@@ -525,6 +525,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (!string.IsNullOrWhiteSpace(update.BVN))
                 ValidateIdentifier(update.BVN, "BVN");
 
+            var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
+            {
+               
+                PhoneNumber = update.PhoneNumber,
+                Email = update.Email,
+                NIN = update.NIN,
+                DateOfBirth = update.DateOfBirth,
+               Bvn = update.BVN,
+            });
             var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
             if (updated == null)
             {
@@ -837,7 +846,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 OrganizationId = model.OrganizationId
             });
         }
+        private async Task<CreateUserResult> UpdateUserProfile(
+       ProfileRequestModel model,
+       OnBoardingArgs args)
+        {
+            var result = await _onboardingRepository.RegisterUser(
+                new OnboardingRequestModel
+                {
+                    Email = model.Email,
+                    PhoneNumber = model.PhoneNumber,
+                    Password = model.Password,
+                    Pin = model.Pin,
+                    FirstName = model.FirstName,
+                    MiddleName = model.MiddleName,
+                    LastName = model.LastName,
+                    DateOfBirth = model.DateOfBirth,
+                }, args);
 
+            if (!result.status)
+                throw new BaseException(ExceptionType.BAD_REQUEST, result.message);
+
+            return result;
+        }
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
 
@@ -851,7 +881,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 isAssignedagent = true;
             }
-    
+            await UpdateUserProfile(model, args);
 
             await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
             {
@@ -868,7 +898,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
                 Tier = Tier.Tier1.ToString(),
-
+                
 
                 Name = model.CooperativeName,
                 OnBoardedOn = model.CreatedOn,

@@ -1159,31 +1159,34 @@ SELECT
             }
 
             var pagedMemberships = await baseQuery
-      .Join(_context.MemberShipTypes.AsNoTracking(),
-            m => m.MemberShipTypeId,   
-            mt => mt.Id,
-            (m, mt) => new { m, MembershipTypeName = mt.Name })
-      .OrderByDescending(x => x.m.OnBoardedOn)
-      .Skip((query.PageNumber - 1) * query.PageSize)
-      .Take(query.PageSize)
-      .Select(x => new
-      {
-          x.m.Id,
-          x.m.Name,
-          x.m.Location,
-          x.m.State,
-          x.m.Lga,
-          x.m.Ward,
-          x.m.OnBoardedOn,
-          x.m.MembershipLeaderLastName,
-          x.m.MembershipLeaderFirstName,
-          x.m.PhoneNumber,
-          x.m.UserId,
-          x.m.TierLevel,
-          x.m.IsActive,
-          MembershipType = x.MembershipTypeName
-      })
-      .ToListAsync();
+         .GroupJoin(_context.MemberShipTypes.AsNoTracking(),
+             m => m.MemberShipTypeId,
+             mt => mt.Id,
+             (m, mtGroup) => new { m, mtGroup })
+         .SelectMany(
+             x => x.mtGroup.DefaultIfEmpty(),
+             (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
+         .OrderByDescending(x => x.m.OnBoardedOn)
+         .Skip((query.PageNumber - 1) * query.PageSize)
+         .Take(query.PageSize)
+         .Select(x => new
+         {
+             x.m.Id,
+             x.m.Name,
+             x.m.Location,
+             x.m.State,
+             x.m.Lga,
+             x.m.Ward,
+             x.m.OnBoardedOn,
+             x.m.MembershipLeaderLastName,
+             x.m.MembershipLeaderFirstName,
+             x.m.PhoneNumber,
+             x.m.UserId,
+             x.m.TierLevel,
+             x.m.IsActive,
+             MembershipType = x.MembershipTypeName
+         })
+         .ToListAsync();
             var membershipIds = pagedMemberships.Select(m => m.Id).ToList();
 
             var farmerStats = await _context.FarmerCooperatives
@@ -1883,13 +1886,13 @@ SELECT
             //}
             var totalCount = await baseQuery.CountAsync();
 
-            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+            if (query.PageNumber <= 0) query.PageNumber = 1;
+            if (query.PageSize <= 0) query.PageSize = 10;
 
             var data = await baseQuery
                 .OrderByDescending(x => x.CreatedOn)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((query.PageNumber - 1) * query.PageSize)
+                .Take(query.PageNumber)
                 .Select(x => new LocationListResponseDto
                 {
                     IsActive = !string.IsNullOrEmpty(x.LocationStatus)
@@ -1931,8 +1934,8 @@ SELECT
             {
                 Data = data,
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize
             };
         }
         public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
@@ -3701,7 +3704,7 @@ SELECT
             }
 
             var pagedRows = await query
-                .OrderByDescending(x => x.CreatedOn)
+                .OrderByDescending(x=>x.CreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
                 .Select(x => new
@@ -3862,7 +3865,7 @@ SELECT
                 PhoneNumber = farmer.PhoneNumber,
                 Email = farmer.Email,
                 Gender = farmer.Gender,
-                Dob = farmer.DateOfBirth,
+                Dob = user.DateOfBirth,
                 BVN = user?.BVN,
                 NIN = user?.NIN,
                 FarmerImage = farmerImage,

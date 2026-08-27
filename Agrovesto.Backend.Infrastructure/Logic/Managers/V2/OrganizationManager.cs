@@ -2013,7 +2013,8 @@ DateTimeOffset dateTime)
                     FirstName = model.FirstName,
                     MiddleName = model.MiddleName,
                     LastName = model.LastName,
-                    FullName=model.FullName
+                    FullName=model.FullName,
+                    DateOfBirth=model.DateOfBirth
                 }, args);
 
             if (!result.status)
@@ -2151,7 +2152,8 @@ DateTimeOffset dateTime)
             return new Response<OrganizationFarmerDetailResponse>
             {
                 Data = farmer,
-                Message = "Farmer detail retrieved successfully"
+                Message = "Farmer detail retrieved successfully",
+                Succeeded=true
             };
         }
         private async Task EnrichFarmerAsync(ListQueryParams args)

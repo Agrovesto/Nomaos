@@ -251,7 +251,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (package.IsRepaymentWalletConfigured)
             {
                 if (package.WalletProviderId == null)
-                    throw new Exception("Wallet provider not configured for this package.");
+                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Wallet provider not configured for this package.");
 
                 var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
                 {
@@ -261,7 +261,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 });
 
                 if (userWallet == null)
-                    throw new Exception("User wallet not found for repayment configuration.");
+                    throw new BaseException(ExceptionType.OPERATION_FAILED, "User wallet not found for repayment configuration.");
 
                 package.RepaymentWallet = new InputPackageRepaymentWallet
                 {
@@ -819,16 +819,16 @@ RepaymentFrequency frequency)
         private static void ValidateRequest(RecordCommitmentPaymentRequest request)
         {
             if (request == null)
-                throw new Exception("Invalid request");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid request");
         }
 
         private static void ValidateArgs(RecordCommitmentPaymentRequest request)
         {
             if (request.SubscriptionId <= 0)
-                throw new Exception("Subscription Id required");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscription Id required");
 
             if (string.IsNullOrEmpty(request.SubscriberUserId))
-                throw new Exception("Subscriber User Id required");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber User Id required");
         }
 
         private async Task<InputPackageSubscription> GetSubscriptionAsync(
@@ -837,7 +837,9 @@ RepaymentFrequency frequency)
         {
             return await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
-                .ThenInclude(x => x.Organization)
+                    .ThenInclude(x => x.Organization)
+                .Include(x => x.InputPackage)
+                    .ThenInclude(x => x.CommitmentPlan)
                 .Include(x => x.SubscriberUser)
                 .FirstOrDefaultAsync(x =>
                     x.Id == request.SubscriptionId &&
@@ -849,50 +851,61 @@ RepaymentFrequency frequency)
             RecordCommitmentPaymentRequest request)
         {
             if (subscription == null)
-                throw new Exception("Subscription not found");
+                throw new BaseException(ExceptionType.OPERATION_FAILED,"Subscription not found");
 
             if (subscription.InputPackage == null)
-                throw new Exception("Cannot find input package");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot find input package");
 
             if (!subscription.InputPackage.CommitmentRequired)
-                throw new Exception("Commitment not required");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment not required");
 
 
             if (subscription.InputPackage.CommitmentPlan == null)
-                throw new Exception("Commitment plan not found for this input package");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment plan not found for this input package");
 
             if (subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow)
-                throw new Exception("Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
             
             
+            if (subscription.Status == SubscriptionStatus.PendingApproval)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Can only pay commitment fee after subscription is approved");
+
             if (subscription.Status == SubscriptionStatus.PendingDisbursement)
-                throw new Exception("Already completed commitment stage");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Already completed commitment stage");
+
+
+            if (subscription.Status != SubscriptionStatus.PendingCommitment)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Current state of subscription does not indicate pending commitment");
 
             if (subscription.InputPackage.WalletProviderId != request.WalletProviderId)
-                throw new Exception("Selected wallet does not match configured package wallet, please use the configured package wallet");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Selected wallet does not match configured package wallet, please use the configured package wallet");
 
             if (subscription.SubscriberUser == null)
-                throw new Exception("Subscriber not found. Please try again later.");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber not found. Please try again later.");
 
             if (subscription.InputPackage.Organization == null)
-                throw new Exception("Organization not found for this input package.");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Organization not found for this input package.");
         }
 
         private async Task<decimal> CalculateAmountToPayAsync(
             RecordCommitmentPaymentRequest request,
             InputPackageSubscription subscription)
         {
+            //if(subscription.InputPackage.CommitmentPlan != null && subscription.InputPackage.CommitmentPlan.CommitmentType == CommitmentType.PercentageOfTotalValue)
+            //{
+            //    subscription.CommitmentValue = subscription.CommitmentValue * subscription.TotalFinancingValue;
+            //}
             var outstanding = subscription.CommitmentValue -
                 await _inputFinancingRepository.GetTotalCommitmentPaidAsync(subscription.Id);
 
             if (outstanding <= 0)
-                throw new Exception("Already fully paid");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Already fully paid");
 
             var amountToPay = request.Amount > 0 ? request.Amount : outstanding;
             amountToPay = Math.Round(amountToPay, 2);
 
             if (amountToPay > outstanding)
-                throw new Exception("Amount exceeds outstanding balance");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Amount exceeds outstanding balance");
 
             return amountToPay;
         }
@@ -924,7 +937,7 @@ RepaymentFrequency frequency)
                 //     break;
 
                 default:
-                    throw new Exception("Channel Not supported");
+                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Channel Not supported");
             }
         }
         private async Task<WalletProviderParameterModel[]> RetrieveParams(string WalletProviderCode, string Env, string businessCode)
@@ -976,15 +989,15 @@ RepaymentFrequency frequency)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
             }
             //verify wallet pin
-            try
-            {
-                await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
-                request.WalletPin);
-            }
-            catch(Exception ex)
-            {
-                throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
-            }
+            //try
+            //{
+            //    await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
+            //    request.WalletPin);
+            //}
+            //catch(Exception ex)
+            //{
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
+            //}
             
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
@@ -1183,7 +1196,8 @@ RepaymentFrequency frequency)
                             .RecordSuccessfulPaymentAsync(paymentId, new PaymentConfirmationRequest
                             {
                                 ExternalReference = masterReference,
-                                Status = TransactionStatus.Successful
+                                Status = TransactionStatus.Successful,
+                                
                             }, args.UserId);
 
                         await dbTransaction.CommitAsync();
@@ -1350,13 +1364,13 @@ RepaymentFrequency frequency)
     InputSubscriptionRequestArgs args)
         {
             if (request == null)
-                throw new Exception("Invalid request");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid request");
 
             request.SubscriptionId = args.SubscriptionId;
             request.SubscriberUserId = args.SubscriberUserId;
 
-            if (request.SubscriptionId <= 0) throw new Exception("Subscription Id required");
-            if (string.IsNullOrEmpty(request.SubscriberUserId)) throw new Exception("Subscriber User Id required");
+            if (request.SubscriptionId <= 0) throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscription Id required");
+            if (string.IsNullOrEmpty(request.SubscriberUserId)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber User Id required");
 
             var subscription = await _context.InputPackageSubscriptions
                 .Include(x => x.InputPackage)
@@ -1367,10 +1381,10 @@ RepaymentFrequency frequency)
                     x.SubscriberUserId == args.SubscriberUserId);
 
             if (subscription == null)
-                throw new Exception("Subscription not found");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscription not found");
 
             if (subscription.InputPackage == null)
-                throw new Exception("Cannot find input package");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot find input package");
 
             var reference = !string.IsNullOrWhiteSpace(request.Reference)
                           ? request.Reference
@@ -1414,7 +1428,7 @@ RepaymentFrequency frequency)
             var outstanding = subscription.RepaymentValue - totalRepaid;
 
             if (outstanding <= 0)
-                throw new Exception("Repayment already fully completed");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment already fully completed");
 
 
             switch (request.PaymentChannel)
@@ -1425,7 +1439,7 @@ RepaymentFrequency frequency)
                         amountToPay = Math.Round(amountToPay, 2);
 
                         if (amountToPay > outstanding)
-                            throw new Exception("Amount exceeds outstanding repayment balance");
+                            throw new BaseException(ExceptionType.OPERATION_FAILED, "Amount exceeds outstanding repayment balance");
 
                         var walletRequest = new RecordCommitmentPaymentRequest
                         {
@@ -1453,7 +1467,7 @@ RepaymentFrequency frequency)
                 case PaymentChannel.Produce:
                     {
                         if (request.ProduceDetails == null)
-                            throw new Exception("Produce details are required for produce repayment");
+                            throw new BaseException(ExceptionType.OPERATION_FAILED, "Produce details are required for produce repayment");
 
                         var produceResult = await ProcessProduceRepaymentAsync(
                             subscription, request.ProduceDetails, args, outstanding, reference);
@@ -1469,7 +1483,7 @@ RepaymentFrequency frequency)
                     }
 
                 default:
-                    throw new Exception("Channel not supported");
+                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Channel not supported");
             }
         }
 
