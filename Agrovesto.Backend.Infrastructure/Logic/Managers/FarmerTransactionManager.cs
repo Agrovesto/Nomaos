@@ -53,29 +53,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
         public async Task<PagedResult<InputObligationDto>> GetFarmerInputObligations(
             ListQueryParams args)
         {
-            try
+            var filter = new SubscriptionQueryFilter
             {
-               var filter = new SubscriptionQueryFilter
+                SubscriberUserId = args.UserId,
+                BusinessCode = args.businessCode,
+                OrganizationCode = args.organizationCode,
+                ViewType = SubscriptionView.All
+            };
+
+            if (!string.IsNullOrEmpty(filter.OrganizationCode))
+            {
+                var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
+                if (hasOrg != null)
                 {
-                    SubscriberUserId= args.UserId,
-                    BusinessCode = args.businessCode,
-                    OrganizationCode = args.organizationCode,
-                    ViewType = SubscriptionView.All
-                };
-                if (!string.IsNullOrEmpty(filter.OrganizationCode))
-                {
-                    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(filter.OrganizationCode);
-                    if (hasOrg != null)
-                    {
-                        filter.OrganizationId = hasOrg.OrganizaionId;
-                    }
+                    filter.OrganizationId = hasOrg.OrganizaionId;
                 }
-                return await _inputFinancingRepository.GetSubscriptionObligationsAsync(filter, args.PageNumber, args.PageSize);
             }
-            catch (Exception ex)
-            {
-                throw;
-            }
+
+            return await _inputFinancingRepository.GetSubscriptionObligationsAsync(filter, args.PageNumber, args.PageSize);
         }
         public async Task<PagedListResponse<List<FarmerSalesTrackerModel>>> GetTransactionByFarmerByUserId(
          TransactionQueryParams query)
