@@ -42,6 +42,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string UserId { get; set; }
         public string UserType { get; set; }
         public string Name { get; set; }
+        public string Gender { get; set; }
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }

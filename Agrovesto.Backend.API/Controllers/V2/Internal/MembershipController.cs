@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         
 
         [HttpPut("update-farmer-profile")]
-        public async Task<IActionResult> UpdateFarmerProfile([FromBody] MemberShipModel model, [FromQuery] string? userId)
+        public async Task<IActionResult> UpdateFarmerProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -85,13 +85,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return StatusCode(400, new Response<string>
                     {
-                        Message = "The supplied user is not a Membership user.",
+                        Message = "The supplied user is not a Farmer.",
                         Succeeded = false
                     });
                 }
-                var result = await _onBoardingManager.UpdateMembershipProfile(targetUserId, model);
+                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
 
-                return Ok(new Response<MemberShipUpdateResultDto>()
+                return Ok(new Response<FarmerUpdateResultDto>()
                 {
                     Code = ResponseCodes.Success,
                     Succeeded = true,
@@ -463,7 +463,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             try
             {
-                args.UserId = !string.IsNullOrEmpty(CurrentUserId) ? CurrentUserId : args.UserId;
+                args.UserId =  !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
                 args.OnboardedByUserId = CurrentUserId;
                 var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
                 if (orgError != null) return orgError;
