@@ -1159,31 +1159,34 @@ SELECT
             }
 
             var pagedMemberships = await baseQuery
-      .Join(_context.MemberShipTypes.AsNoTracking(),
-            m => m.MemberShipTypeId,   
-            mt => mt.Id,
-            (m, mt) => new { m, MembershipTypeName = mt.Name })
-      .OrderByDescending(x => x.m.OnBoardedOn)
-      .Skip((query.PageNumber - 1) * query.PageSize)
-      .Take(query.PageSize)
-      .Select(x => new
-      {
-          x.m.Id,
-          x.m.Name,
-          x.m.Location,
-          x.m.State,
-          x.m.Lga,
-          x.m.Ward,
-          x.m.OnBoardedOn,
-          x.m.MembershipLeaderLastName,
-          x.m.MembershipLeaderFirstName,
-          x.m.PhoneNumber,
-          x.m.UserId,
-          x.m.TierLevel,
-          x.m.IsActive,
-          MembershipType = x.MembershipTypeName
-      })
-      .ToListAsync();
+         .GroupJoin(_context.MemberShipTypes.AsNoTracking(),
+             m => m.MemberShipTypeId,
+             mt => mt.Id,
+             (m, mtGroup) => new { m, mtGroup })
+         .SelectMany(
+             x => x.mtGroup.DefaultIfEmpty(),
+             (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
+         .OrderByDescending(x => x.m.OnBoardedOn)
+         .Skip((query.PageNumber - 1) * query.PageSize)
+         .Take(query.PageSize)
+         .Select(x => new
+         {
+             x.m.Id,
+             x.m.Name,
+             x.m.Location,
+             x.m.State,
+             x.m.Lga,
+             x.m.Ward,
+             x.m.OnBoardedOn,
+             x.m.MembershipLeaderLastName,
+             x.m.MembershipLeaderFirstName,
+             x.m.PhoneNumber,
+             x.m.UserId,
+             x.m.TierLevel,
+             x.m.IsActive,
+             MembershipType = x.MembershipTypeName
+         })
+         .ToListAsync();
             var membershipIds = pagedMemberships.Select(m => m.Id).ToList();
 
             var farmerStats = await _context.FarmerCooperatives
