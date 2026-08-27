@@ -846,7 +846,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 OrganizationId = model.OrganizationId
             });
         }
+        private async Task<CreateUserResult> UpdateUserProfile(
+       ProfileRequestModel model,
+       OnBoardingArgs args)
+        {
+            var result = await _onboardingRepository.RegisterUser(
+                new OnboardingRequestModel
+                {
+                    Email = model.Email,
+                    PhoneNumber = model.PhoneNumber,
+                    Password = model.Password,
+                    Pin = model.Pin,
+                    FirstName = model.FirstName,
+                    MiddleName = model.MiddleName,
+                    LastName = model.LastName,
+                    DateOfBirth = model.DateOfBirth,
+                }, args);
 
+            if (!result.status)
+                throw new BaseException(ExceptionType.BAD_REQUEST, result.message);
+
+            return result;
+        }
         public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
 
@@ -860,7 +881,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 isAssignedagent = true;
             }
-    
+            await UpdateUserProfile(model, args);
 
             await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
             {
