@@ -609,7 +609,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class InputObligationDto
     {
-        public DateTimeOffset Date { get; set; }
+        public DateTimeOffset? Date { get; set; }
 
         public decimal TotalCost { get; set; }
 

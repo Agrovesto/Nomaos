@@ -3006,9 +3006,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         SubscriptionQueryFilter filter)
         {
             var query = _context.InputPackageSubscriptions
-                .Where(x => x.BusinessCode == filter.BusinessCode)
                 .Include(x => x.InputPackage)
                 .AsQueryable();
+
+            if (!string.IsNullOrEmpty(filter.BusinessCode))
+            {
+                query = query.Where(x => x.BusinessCode == filter.BusinessCode);
+            }
 
             if (!string.IsNullOrEmpty(filter.SubscriberUserId))
             {
@@ -4554,6 +4558,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         int pageNumber,
         int pageSize)
         {
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+
             var query = BuildSubscriptionQueryObligation(filter);
 
             var count = await query.CountAsync();
@@ -4596,7 +4603,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var nextDueDate = sub.RepaymentSchedules
                 .Where(x => !x.IsPaid)
                 .OrderBy(x => x.DueDate)
-                .Select(x => x.DueDate)
+                .Select(x => (DateTimeOffset?)x.DueDate)
                 .FirstOrDefault();
 
             var progress = totalCost == 0
