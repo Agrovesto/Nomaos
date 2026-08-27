@@ -637,6 +637,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 case "Farmer":
                     response.Farmer = await GetFarmerProfile(userId);
                     response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
+                    response.Gender = response.Farmer?.PersonalInformation.Gender ?? "NA";
                     break;
 
                 case "Agent":
@@ -645,7 +646,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     break;
 
                 case "MemberShip":
-                    response.Membership = await GetCooperativeProfile(userId);
+                    response.Membership = await GetCooperativeProfile(userId); 
+                    response.Gender = response.Membership?.MembershipLeaderGender ?? "NA";
                     break;
 
                 case "Organization":
@@ -754,6 +756,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     BelongToBusinessCode=a.BelongToBusinessCode,
                     Email=a.Email,
                     Lga=a.Lga,
+                    
                     State=a.State,
                     Location=a.Location,
                     SupervisorUserId=a.SupervisorUserId,
@@ -946,6 +949,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             
             var role = await GetRoleAsync(args.userType);
 
+            model.Id = args.UserId;
+
             var existingUser = await FindExistingUserAsync(model);
 
             if (existingUser != null)
@@ -966,6 +971,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
         {
+            var userId = model.Id?.Trim();
+
+            if (!string.IsNullOrWhiteSpace(userId))
+            {
+                var userById = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+                if (userById != null)
+                    return userById;
+            }
+
             var phone = model.PhoneNumber?.Trim();
             var email = model.Email?.Trim();
             var normalizedEmail = email?.ToUpperInvariant();
@@ -1032,7 +1046,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
       IdentityRole role)
         {
 
-            user.DateOfBirth ??= model.DateOfBirth;
+            if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
+            {
+                user.DateOfBirth = model.DateOfBirth;
+            }
             if (!string.IsNullOrWhiteSpace(model.PhoneNumber)
                 && !string.Equals(model.PhoneNumber, user.PhoneNumber, StringComparison.OrdinalIgnoreCase))
             {
