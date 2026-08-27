@@ -26,7 +26,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Lga { get; set; }
         public string? Ward { get; set; }
         public string? ContactPerson { get; set; }
-        public string Email { get; set; }
+        public string? Email { get; set; }
         public long OrganizationId { get; set; }
         public string? PhoneNumber { get; set; }
         public string? MembershipLeaderFirstName { get; set; }

@@ -2013,7 +2013,8 @@ DateTimeOffset dateTime)
                     FirstName = model.FirstName,
                     MiddleName = model.MiddleName,
                     LastName = model.LastName,
-                    FullName=model.FullName
+                    FullName=model.FullName,
+                    DateOfBirth=model.DateOfBirth
                 }, args);
 
             if (!result.status)
