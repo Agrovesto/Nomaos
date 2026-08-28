@@ -197,9 +197,10 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         [Required]
         public string TransactionPin { get; set; }
 
+        [MaxLength(500)]
         public string? Description { get; set; }
 
-        [MaxLength(64)]
+        [MaxLength(40)]
         public string? ClientReference { get; set; }
     }
     public class BankTransferReceipt

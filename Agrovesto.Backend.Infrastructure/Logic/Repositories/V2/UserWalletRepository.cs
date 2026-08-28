@@ -949,8 +949,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {
@@ -1028,8 +1028,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {

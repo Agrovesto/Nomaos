@@ -715,12 +715,14 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
                 if (providerResponse == null || !providerResponse.IsSuccess)
                 {
-                    await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, false, providerResponse?.Data?.ToString(), providerResponse?.Message);
+                    var failedProviderReference = providerResponse?.Data?.ProviderReference ?? providerResponse?.Data?.Reference;
+
+                    await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, false, failedProviderReference, providerResponse?.Message);
                     return new ProviderResponse
                     {
                         IsSuccess = false,
                         Message = providerResponse?.Message ?? "Provider withdrawal failed",
-                        ProviderReference = providerResponse?.Data?.ToString()
+                        ProviderReference = failedProviderReference
                     };
                 }
 
@@ -741,7 +743,9 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     };
                 }
 
-                await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, true, providerResponse?.Data?.ToString(), providerResponse?.Message);
+                var settledProviderReference = providerResponse?.Data?.ProviderReference ?? providerResponse?.Data?.Reference;
+
+                await _userWalletRepository.CompleteWalletWithdrawal(transactionReference, true, settledProviderReference, providerResponse?.Message);
 
                 // TODO: send notification to user (SMS/Email)
 
@@ -749,7 +753,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 {
                     IsSuccess = true,
                     Message = providerResponse.Message ?? "Withdrawal initiated",
-                    ProviderReference = providerResponse?.Data?.ToString(),
+                    ProviderReference = settledProviderReference,
                     Data = new { TransactionReference = transactionReference }
                 };
             }

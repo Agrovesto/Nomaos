@@ -75,15 +75,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             var response = new ProviderParams();
 
-            var _params = parameters.ToDictionary(x => x.Key);
+            var _params = parameters.ToDictionary(x => x.Key, StringComparer.OrdinalIgnoreCase);
 
-            response.BaseUrl = _params["BaseUrl"].Value;
-            response.ClientSecret = _params["ClientSecret"].Value;
-            response.ClientId = _params["ClientId"].Value;
-            response.SchemeId = _params["SchemeId"].Value;
-            response.WalletShemeTierId = _params["WalletShemeTierId"].Value;
-            response.WalletFee = _params["Fee"].Value;
-            response.WalletStampDuty = _params["StampDuty"].Value;
+            response.BaseUrl = RequiredParam(_params, "BaseUrl", Env);
+            response.ClientSecret = RequiredParam(_params, "ClientSecret", Env);
+            response.ClientId = RequiredParam(_params, "ClientId", Env);
+            response.SchemeId = RequiredParam(_params, "SchemeId", Env);
+            response.WalletShemeTierId = RequiredParam(_params, "WalletShemeTierId", Env);
+            response.WalletFee = RequiredParam(_params, "Fee", Env);
+            response.WalletStampDuty = RequiredParam(_params, "StampDuty", Env);
 
             // Unlike the fields above, these don't throw when the key is absent -
             // FundTransferBaseUrl/TerminalId/Pin aren't provisioned for every
@@ -94,6 +94,16 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
             return response;
 
+        }
+
+        private static string RequiredParam(
+            IDictionary<string, WalletProviderParameterModel> parameters, string key, string env)
+        {
+            if (!parameters.TryGetValue(key, out var parameter) || string.IsNullOrWhiteSpace(parameter.Value))
+                throw new InvalidOperationException(
+                    $"Etransact parameter '{key}' is not configured for the '{env}' environment.");
+
+            return parameter.Value;
         }
 
         public async Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(
@@ -718,24 +728,36 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 System.Diagnostics.Debug.WriteLine(
                     $"[InitiateWalletTransfer] reference={request.Reference} payloadJson={payloadJson}");
 
-                using var client = new HttpClient { BaseAddress = new Uri(@params.FundTransferBaseUrl) };
+                var fundTransferUri = new Uri(
+                    new Uri(@params.FundTransferBaseUrl.TrimEnd('/') + "/"), "fund-transfer");
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
                 client.DefaultRequestHeaders.Clear();
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
 
                 var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
-                var httpResponse = await client.PostAsync("/fund-transfer", content);
+                var httpResponse = await client.PostAsync(fundTransferUri, content);
                 var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
                 System.Diagnostics.Debug.WriteLine(
                     $"[InitiateWalletTransfer] status={(int)httpResponse.StatusCode} body={responseContent}");
 
-                var transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
-                    responseContent,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                FundTransferEtransactResponse? transferResponse;
+
+                try
+                {
+                    transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
+                        responseContent,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (JsonException)
+                {
+                    transferResponse = null;
+                }
 
                 if (!httpResponse.IsSuccessStatusCode || transferResponse == null)
                 {
-                    return WalletResponseService<PaymentResponse>.Failed(
+                    return WalletResponseService<PaymentResponse>.Indeterminate(
                         $"Transfer outcome unknown ({HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}). " +
                         $"Reconcile using transaction status before retrying. Raw: {responseContent}",
                         (int)httpResponse.StatusCode);
@@ -747,7 +769,9 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     ResponseCode = transferResponse.Error,
                     ResponseDescription = transferResponse.Message,
                     Reference = transferResponse.Reference,
-                    ProviderReference = transferResponse.Reference,
+                    ProviderReference = string.IsNullOrWhiteSpace(transferResponse.OtherReference)
+                        ? transferResponse.Reference
+                        : transferResponse.OtherReference,
                     Status = transferResponse.Error switch
                     {
                         "0" => "Successful",
@@ -766,9 +790,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                         transferResponse.Message ?? "Transfer failed", (int)httpResponse.StatusCode)
                 };
             }
+            catch (TaskCanceledException ex)
+            {
+                return WalletResponseService<PaymentResponse>.Indeterminate(
+                    "Etransact did not answer before the timeout, transfer outcome unknown - reconcile via transaction status: "
+                    + ex.Message, 504);
+            }
             catch (HttpRequestException ex)
             {
-                return WalletResponseService<PaymentResponse>.Failed(
+                return WalletResponseService<PaymentResponse>.Indeterminate(
                     "Unable to reach Etransact service, transfer outcome unknown - reconcile via transaction status: "
                     + ex.Message, 503);
             }
