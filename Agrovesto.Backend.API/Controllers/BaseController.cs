@@ -377,6 +377,10 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
+        public string? CurrentPhoneNumber =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("PhoneNumber", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
      
         
         

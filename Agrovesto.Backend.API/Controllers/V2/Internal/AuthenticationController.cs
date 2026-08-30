@@ -334,6 +334,102 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ResponseCodes.Success
             ));
         }
+   
+        [HttpPost("forgot-pin")]
+        public async Task<IActionResult> ForgotPin([FromBody] ForgotPasswordModel model, [FromQuery] string businessCode, [FromQuery] string Env)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+                var request = await _onBoardingManager.ForgotPin(model.PhoneNumber, businessCode, Env);
+
+            return Ok(ApiResponse<string>.Success(
+                request.Message,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
+        [HttpPost("reset-pin")]
+        public async Task<IActionResult> ResetPin(ConfirmOtpRequest model)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            try
+            {
+
+                var request = await _onBoardingManager.ResetPin(model);
+
+
+                return Ok(new Response<bool>()
+                {
+                    Code = ResponseCodes.Success,
+                    Succeeded = true,
+                    Message = ResponseMessages.Successful,
+                    Data = request
+                });
+
+
+            }
+            catch (BaseException ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.ExceptionMessage,
+                    Succeeded = false,
+
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(400, new Response<string>
+                {
+                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
+                    Succeeded = false,
+                });
+            }
+
+        }
+        [HttpPost("change-pin")]
+        public async Task<IActionResult> ChangePin([FromBody] ChangePinModel model, [FromQuery]OnBoardingArgs args)
+        {
+            if (!ModelState.IsValid)
+            {
+
+                return BadRequest(new Response<Dictionary<string, string>>()
+                {
+                    Message = "Validation failed.",
+                    Succeeded = false,
+                    Data = ModelState
+                        .Where(ms => ms.Value.Errors.Any())
+                        .ToDictionary(
+                            ms => ms.Key,
+                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
+                        )
+                });
+            }
+
+                model.PhoneNumber = CurrentPhoneNumber;
+                var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
+
+            return Ok(ApiResponse<bool>.Success(
+                true,
+               ResponseMessages.Successful,
+                 ResponseCodes.Success
+            ));
+        }
 
 
 
