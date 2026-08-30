@@ -3007,64 +3007,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             });
         }
 
-        private IQueryable<InputPackageSubscription> BuildSubscriptionQueryObligation(
-        SubscriptionQueryFilter filter)
-        {
-            var query = _context.InputPackageSubscriptions
-                .Include(x => x.InputPackage)
-                .Where(x => x.BusinessCode == filter.BusinessCode)
-             
-                .AsQueryable();
-
-            if (!string.IsNullOrEmpty(filter.SubscriberUserId))
-            {
-                query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
-            }
-            if (filter.PackageId.HasValue)
-            {
-                query = query.Where(x => x.InputPackageId == filter.PackageId);
-            }
-            if (filter.OrganizationId.HasValue)
-            {
-                query = query.Where(x => x.OrganizationId == filter.OrganizationId.Value);
-            }
-
-            if (filter.Status.HasValue)
-            {
-                query = query.Where(x => x.Status == filter.Status);
-            }
-
-            if (filter.HasPaidCommitment.HasValue)
-            {
-                if (filter.HasPaidCommitment.Value)
-                {
-                    query = query.Where(x =>
-                        _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
-                }
-                else
-                {
-                    query = query.Where(x =>
-                        _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) < x.CommitmentValue);
-                }
-            }
-
-            if (filter.IsActiveOnly == true)
-            {
-                query = query.Where(x => x.Status == SubscriptionStatus.Active);
-            }
-
-            return query;
-        }
         private async Task<IQueryable<InputPackageSubscription>> BuildSubscriptionQuery(
         SubscriptionQueryFilter filter)
         {
@@ -4569,21 +4511,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         int pageNumber,
         int pageSize)
         {
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+
             var query = await BuildSubscriptionQuery(filter);
 
             var count = await query.CountAsync();
-
-            //var subscriptions = await query
-            //    .Include(x => x.InputPackage)
-            //    .Include(x => x.RepaymentSchedules)
-            //    .OrderByDescending(x => x.Id)
-            //    .Skip((pageNumber - 1) * pageSize)
-            //    .Take(pageSize)
-            //    .ToListAsync();
-
-            //var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
-
-
 
             if (count == 0)
             {
@@ -4597,14 +4530,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             var subscriptions = await query
+                .Include(x => x.InputPackage)
+                .Include(x => x.RepaymentSchedules)
                 .OrderByDescending(x => x.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
-
-
 
             var paymentsLookup = await _context.InputPackageSubscriptionPayments
                 .Where(p =>
@@ -4633,7 +4566,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var nextDueDate = sub.RepaymentSchedules
                 .Where(x => !x.IsPaid)
                 .OrderBy(x => x.DueDate)
-                .Select(x => x.DueDate)
+                .Select(x => (DateTimeOffset?)x.DueDate)
                 .FirstOrDefault();
 
             var progress = totalCost == 0
