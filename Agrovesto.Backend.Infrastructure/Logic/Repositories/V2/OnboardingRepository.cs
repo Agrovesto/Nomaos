@@ -60,16 +60,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task UpdateUserDetails(OnboardingRequestModel model, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUseridentity(string userId);
         Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType);
+        Task ResetPin(User user,  string newPin);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
         private readonly DataContext _context;
         private readonly RoleManager<Role> _roleManager;
         private readonly UserManager<User> _userManager;
+        private readonly SignInManager<User> _signInManager;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OnboardingRepository> _log;
         public OnboardingRepository(DataContext context,
-            IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
+            SignInManager<User> signInManager,
+
+        IConfiguration config, RoleManager<Role> roleManager, UserManager<User> userManager,
             ILogger<OnboardingRepository> log)
         {
             _userManager = userManager;
@@ -77,6 +81,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context = context;
             _configuration = config;
             _log = log;
+            _signInManager = signInManager;
         }
 
 
@@ -160,13 +165,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 || string.IsNullOrWhiteSpace(user.UserType);
         }
         private List<Claim> BuildClaims(
-    User user,
-    IList<string>? roles,
-    UserBusiness activeBusiness,
-    List<OrganizationDto>? organizations,
-    bool hasPendingOnboarding,
-    List<string>? modules = null,
-    bool requiresCredentialChange = false)
+        User user,
+        IList<string>? roles,
+        UserBusiness activeBusiness,
+        List<OrganizationDto>? organizations,
+        bool hasPendingOnboarding,
+        List<string>? modules = null,
+        bool requiresCredentialChange = false)
         {
             var claims = new List<Claim>
     {
@@ -356,7 +361,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (false, null);
         }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-      LoginModel model)
+        LoginModel model)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
@@ -461,8 +466,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return !string.IsNullOrWhiteSpace(user.PinEncrypt);
         }
         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
-   User user,
-   LoginModel model)
+        User user,
+        LoginModel model)
         {
             switch (model.LoginMethod)
             {
@@ -816,8 +821,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
        
         public async Task<UserModel> UpdateUserProfileAsync(
-    string userId,
-    ProfileRequestModel model)
+        string userId,
+        ProfileRequestModel model)
         {
             var user = await _userManager.FindByIdAsync(userId);
 
@@ -944,7 +949,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
            
         }
         public async Task<CreateUserResult> RegisterUser(
-    OnboardingRequestModel model, OnBoardingArgs args)
+        OnboardingRequestModel model, OnBoardingArgs args)
         {
             
             var role = await GetRoleAsync(args.userType);
@@ -1040,10 +1045,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
         private async Task<CreateUserResult> HandleExistingUser(
-      User user,
-      OnboardingRequestModel model,
-      OnBoardingArgs args,
-      IdentityRole role)
+        User user,
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
 
             if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
@@ -1267,9 +1272,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
         private async Task<CreateUserResult> CreateNewUser(
-     OnboardingRequestModel model,
-     OnBoardingArgs args,
-     IdentityRole role)
+        OnboardingRequestModel model,
+        OnBoardingArgs args,
+        IdentityRole role)
         {
             var salt = EncryptionUtil.GetSalt();
 
@@ -1665,7 +1670,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var userExist = await _userManager.FindByEmailAsync(model.Email);
             if (userExist != null)
             {
-                //TODO: rework such that if user is using pin, it should just go ahead and change pin instead of password
                 var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
                 if (resetPassword.Succeeded)
                 {
@@ -1677,7 +1681,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }
 
             }
-            return (false, "Invalid username");
+            if (string.IsNullOrEmpty(userExist.Email)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change password for an account with no email address, Kindly update your profile");
+
+            throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Email");
+         
         }
         public async Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName)
         {
@@ -1795,10 +1802,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return (entity.Map(), true, "User successfully registered and linked to organization if applicable.");
         }
         private async Task TrackDeviceAsync(
-    string userId,
-    string deviceId,
-    string deviceName,
-    string ip)
+        string userId,
+        string deviceId,
+        string deviceName,
+        string ip)
         {
             var device = await _context.UserDevices
                 .FirstOrDefaultAsync(x => x.UserId == userId && x.DeviceId == deviceId);
@@ -1888,7 +1895,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
 
-       
+
+        public async Task ResetPin(User user, string newPin)
+        {
+            var salt = EncryptionUtil.GetSalt();
+            user.Pin = newPin;
+            user.Salt = Convert.ToBase64String(salt);
+            user.PinEncrypt = newPin.EncryptTransactionPin(salt);
+            user.HasDefaultPin = false;
            
+            await _context.SaveChangesAsync();
+            await _signInManager.SignOutAsync();
+        }
+ 
+
     }
 }

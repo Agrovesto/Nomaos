@@ -19,6 +19,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Azure.Core;
 using CsvHelper;
 using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -87,6 +88,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
         Task<(bool Status, string Message)> ForgotPassword(string username);
+       
+        Task<bool> ResetPin(ConfirmOtpRequest request);
+        Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode,string env);
+        Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -1283,10 +1288,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ? model.Email
                 : model.PhoneNumber;
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
-
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
                 UserId = model.Id,
@@ -1380,8 +1381,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<OtpResult> ResendOtpAsync(string userId, OtpTarget target, OtpPurpose purpose)
         {
             var user = await _onboardingRepository.GetUserById(userId);
-            await _otpService.InvalidateActiveOtps(userId, target);
-            var destination = "";
+              var destination = "";
             if (target == OtpTarget.Email)
             {
                 destination = user.model.Email;
@@ -1443,7 +1443,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var profile = await _onboardingRepository.GetUserProfile(userId);
             if (profile == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
-
+            profile.BVN = EncryptionUtil.MaskSensitiveNumber(profile.BVN);
+            profile.NIN = EncryptionUtil.MaskSensitiveNumber(profile.NIN);
             return profile;
         }
         public async Task<UsersProfileResponse> GetUseridentity(string userId)
@@ -1484,9 +1485,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ? model.Email
                 : model.PhoneNumber;
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
+          
 
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
@@ -2325,6 +2324,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             var changePwd = await _onboardingRepository.ChangePassword(model);
             return changePwd;
+        }
+
+
+        public async Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode, string env)
+        {
+            if (string.IsNullOrEmpty(env)) throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required");
+            var userDetails = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber);
+            if (userDetails == null) { 
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the provided phone number.");
+            }
+            var generateOtp= await GenerateForgotPinOTP(userDetails, businessCode);
+            if(env == Env.Live.ToString())
+            {
+                await _sMSService.SendSmsAsync(
+                    generateOtp.Destination,
+                    $"Your verification code is {generateOtp.Code}. Expires in 5 minutes.",
+                    businessCode);
+            }
+           var msg = env == Env.Live.ToString() ? "A reset token has been sent" : $"Your verification code is {generateOtp.Code}. Expires in 5 minutes.";
+            return (true, msg);
+            
+        }
+        private async Task<OtpResult> GenerateForgotPinOTP(User user, string businessCode)
+        {
+            var otpTarget = OtpTarget.Phone;
+
+            var destination = user.PhoneNumber;
+
+        
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            {
+                UserId = user.Id,
+                Target = otpTarget,
+                Destination = destination,
+                Purpose = OtpPurpose.PhoneNumberPinReset,
+                ExpiryMinutes = 5
+            });
+
+            return otp;
+          
+        }
+        public async Task<bool> ResetPin(ConfirmOtpRequest request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == request.PhoneNumber);
+            if (user == null)
+            {
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
+            }
+            var validate = await _otpService.VerifyOtpAsync(
+                user.Id,
+                request.Code,
+                OtpPurpose.PhoneNumberPinReset);
+            if (validate == null)
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Invalid or expired OTP.");
+
+            await _onboardingRepository.ResetPin(user,  request.NewPin);
+
+            return validate.IsUsed;
+        }
+      
+        public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == args.UserId);
+            if (user == null)
+            {
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
+            }
+            if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
+
+            await _onboardingRepository.ResetPin(user, model.NewPin);
+            return (true, "Pin changed successfully");
         }
 
     }

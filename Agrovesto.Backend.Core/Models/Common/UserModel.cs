@@ -81,16 +81,26 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public IFormFile File { get; set; }
     }
-        public class ChnagePasswordModel
+    public class ChangePinModel
     {
-        public string? Email { get; set; }
-        public string OldPassword { get; set; }
-        public string NewPassword { get; set; }
-        public string ConfirmPassword { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string OldPin { get; set; }
+        public string NewPin { get; set; }
+        [Compare(nameof(NewPin), ErrorMessage = "Confirm PIN must match New PIN.")]
+        public string ConfirmPin { get; set; }
     }
-    public class ForgotPasswordModel
+        public class ChnagePasswordModel
+        {
+            public string Email { get; set; }
+            public string OldPassword { get; set; }
+            public string NewPassword { get; set; }
+            [Compare(nameof(NewPassword), ErrorMessage = "Confirm Password must match New Password.")]
+            public string ConfirmPassword { get; set; }
+        }
+      public class ForgotPasswordModel
     {
-        public string Username { get; set; }
+        public string? Username { get; set; }
+        public string? PhoneNumber { get; set; }
     }
     public class PasswordResetModel
     {
