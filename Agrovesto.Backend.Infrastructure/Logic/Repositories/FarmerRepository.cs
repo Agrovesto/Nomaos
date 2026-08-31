@@ -2302,7 +2302,7 @@ WHERE f.UserId = @userId
                 {
                     Timestamp = a.CreatedOn,
                     Description = a.Description,
-                    ActivityType = EnumExtensions.GetDisplayName(a.ActivityType),
+                    ActivityType = EnumExtensions.GetDisplayName(a.ModuleAccessed),
                     ActivityName = a.ActivityName
                 })
                 .ToListAsync();
