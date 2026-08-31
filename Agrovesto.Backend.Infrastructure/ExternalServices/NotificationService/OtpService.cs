@@ -97,7 +97,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
             if (recentCount >= 3)
                 throw new BaseException(
                     Core.Enums.ExceptionType.BAD_REQUEST,
-                    "Too many OTP requests. Please try again later.");
+                    $"Too many OTP requests. Please try again later.");
 
             // Invalidate existing
             await InvalidateActiveOtps(request.UserId, request.Target);
