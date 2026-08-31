@@ -44,6 +44,7 @@ namespace Agrovesto.Backend.API.Controllers
             if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.Agent.ToString());
 
+            
             if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase))
                 eligibleRoles.Add(UserType.MemberShip.ToString());
 
@@ -51,6 +52,8 @@ namespace Agrovesto.Backend.API.Controllers
                 eligibleRoles.Add(UserType.Farmer.ToString());
 
             var suppliedRole = filter.CurrentLoggedInUserRole;
+            if(suppliedRole == "Organization")
+                eligibleRoles.Add(UserType.Organization.ToString());
 
             // No eligible roles at all (e.g. pure Organization user, or no roles)
             if (eligibleRoles.Count == 0)

@@ -756,7 +756,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("subscription/documents")]
-        [Authorize(Roles = "Organization,Agent")]
+        //[Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionDocuments(
             [FromQuery] SubscriptionQueryFilter filter)
         {
