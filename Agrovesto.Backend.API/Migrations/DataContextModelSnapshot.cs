@@ -5305,12 +5305,21 @@ namespace Agrovesto.Backend.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("ActionPerformeed")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ActionType")
+                        .HasColumnType("int");
+
                     b.Property<string>("ActivityName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("ActivityType")
-                        .HasColumnType("int");
+                    b.Property<string>("AffectedRecord")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Browser")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("BusinessCode")
                         .IsRequired()
@@ -5323,12 +5332,24 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Device")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("IpAddress")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("ModuleAccessed")
+                        .HasColumnType("int");
+
                     b.Property<string>("OrganizationCode")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PerformedByUserId")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
 
                     b.HasKey("Id");
 

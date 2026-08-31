@@ -1786,7 +1786,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await _context.SaveChangesAsync();
                 return false;
             }
-
+            await _context.SaveChangesAsync();
             var subscription = payment.Subscription;
 
             switch (payment.PaymentType)
@@ -1803,7 +1803,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     throw new Exception($"Unhandled payment type '{payment.PaymentType}'");
             }
 
-            await _context.SaveChangesAsync();
+           
 
             return true;
         }
@@ -1826,7 +1826,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 //&& subscription.Status == SubscriptionStatus.PendingCommitment
                 )
             {
-                subscription.Status = SubscriptionStatus.PendingDisbursement;
+                subscription.Status = SubscriptionStatus.CommitmentPaid;
 
                 //await RequestInputDisbursementApprovalAsync(subscription.Id,
                 //    payment.ExternalReference, performedBy, subscription.SubscriberUserId);
@@ -1864,6 +1864,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         FullyPaid = fullyPaid
                     })
             });
+
+            await _context.SaveChangesAsync();
         }
 
         private async Task ApplyRepaymentEffectsAsync(
@@ -3056,7 +3058,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         break;
 
                     case SubscriptionView.CommitmentPaid:
-                        filter.HasPaidCommitment ??= true;
+
                         query = query.Where(x =>
                            x.Status == SubscriptionStatus.CommitmentPaid);
                         break;
