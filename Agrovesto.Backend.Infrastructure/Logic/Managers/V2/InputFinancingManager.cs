@@ -34,6 +34,7 @@ using Hangfire;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.VisualBasic;
 using PhoneNumbers;
 using StackExchange.Redis;
 using System;
@@ -46,6 +47,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
@@ -1376,10 +1378,12 @@ RepaymentFrequency frequency)
             if (subscription.InputPackage == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot find input package");
             var package = subscription.InputPackage;
-            if(package !=null && !package.RepaymentRequired)
+            if (package != null && !package.RepaymentRequired)
             {
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "This package was not configured for repayment, " +
-                    "reach out to your organization to complete the financing cycle obligations");
+                throw new BaseException(
+                    ExceptionType.OPERATION_FAILED,
+                    "This package does not require repayment. Please contact your organization to complete and close your subscription cycle."
+                );
             }
 
             var totalRepaid = await _inputFinancingRepository.GetTotalRepaymentPaidAsync(subscription.Id);
