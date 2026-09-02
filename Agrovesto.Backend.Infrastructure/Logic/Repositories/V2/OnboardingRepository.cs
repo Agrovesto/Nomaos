@@ -61,6 +61,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfileResponse> GetUseridentity(string userId);
         Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType);
         Task ResetPin(User user,  string newPin);
+        Task<bool> IsRevokedAsync(string jti);
+        Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -83,8 +85,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _log = log;
             _signInManager = signInManager;
         }
+        public async Task RevokeAsync(string jti, string userId, DateTime tokenExpiry)
+        {
+            var alreadyRevoked = await _context.RevokedTokens
+                .AnyAsync(x => x.Jti == jti);
 
+            if (alreadyRevoked) return;
 
+            _context.RevokedTokens.Add(new RevokedToken
+            {
+                Jti = jti,
+                UserId = userId,
+                ExpiresAt = tokenExpiry,
+                RevokedOn= DateTimeOffset.UtcNow
+            });
+
+            await _context.SaveChangesAsync();
+        }
+        public async Task<bool> IsRevokedAsync(string jti)
+        {
+            return await _context.RevokedTokens.AnyAsync(x => x.Jti == jti);
+        }
         public async Task<bool> IsUserInRoleAsync(string userId, string role)
         {
             var user = await _userManager.FindByIdAsync(userId);
@@ -118,18 +139,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
 
-         private RefreshToken CreateRefreshToken(string userId, string deviceId)
-        {
-            return new RefreshToken
-            {
-                UserId = userId,
-                Token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(64)),
-                ExpiresAt = DateTime.UtcNow.AddDays(30),
-                DeviceId = deviceId
-            };
-        }
-
-        private async Task<User?> ResolveUserAsync(LoginModel model)
+          private async Task<User?> ResolveUserAsync(LoginModel model)
         {
             User? user = null;
 
@@ -158,13 +168,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return user;
         }
 
-        private bool HasPendingOnboarding(User user)
-        {
-            return string.IsNullOrWhiteSpace(user.Email)
-                || string.IsNullOrWhiteSpace(user.PhoneNumber)
-                || string.IsNullOrWhiteSpace(user.UserType);
-        }
-        private List<Claim> BuildClaims(
+         private List<Claim> BuildClaims(
         User user,
         IList<string>? roles,
         UserBusiness activeBusiness,
@@ -255,24 +259,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return claims;
         }
       
-        private async Task<List<OrganizationDto>> GetUserOrganizationsAsync(string userId)
-        {
-            var orgCodes = await _context.UserOrganizations
-                .Where(x => x.UserId == userId)
-                .Select(x => x.OrganizationCode)
-                .Distinct()
-                .ToListAsync();
-
-            return await _context.Organizations
-                .Where(o => orgCodes.Contains(o.OrganizationCode))
-                .Select(o => new OrganizationDto
-                {
-                    OrganizationCode = o.OrganizationCode,
-                    OrganizationName = o.CompanyName
-                })
-                .ToListAsync();
-        }
-
+      
         private bool ValidateUserPin(User user, string plainPin)
         {
             var salt = Convert.FromBase64String(user.Salt);
@@ -281,67 +268,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return user.PinEncrypt == hashedPin;
         }
 
-        public async Task<TokenModel> SwitchBusiness(string userId, long businessId)
-        {
-            var user = await _userManager.FindByIdAsync(userId);
-
-            if (user == null)
-                throw new Exception("User not found");
-
-            var membership = await _context.UserBusinesses
-                .Include(x => x.Business)
-                .FirstOrDefaultAsync(x =>
-                    x.UserId == userId &&
-                    x.BusinessId == businessId);
-
-            if (membership == null)
-                throw new Exception("User not assigned to this business");
-
-            var roles = await _userManager.GetRolesAsync(user);
-            var organizations = await (from uo in _context.UserOrganizations
-                                       join bo in _context.Organizations
-                                       on uo.OrganizationCode equals bo.OrganizationCode
-                                       where uo.UserId == user.Id
-                                       select new OrganizationDto
-                                       {
-                                           OrganizationCode = bo.OrganizationCode,
-                                           OrganizationName = bo.CompanyName
-                                       }).ToListAsync();
-
-            var hasPendingOnboarding =
-                string.IsNullOrWhiteSpace(user.Email) ||
-                string.IsNullOrWhiteSpace(user.PhoneNumber) ||
-                string.IsNullOrWhiteSpace(user.UserType);
-
-            var modules = await _context.BusinessLicenseModules
-                .Where(x =>
-                    x.BusinessLicense.BusinessId == businessId &&
-                    x.IsEnabled)
-                .Select(x => x.SystemModule.Code)
-                .ToListAsync();
-
-            var claims = BuildClaims(
-                user,
-                roles,
-                membership,          
-                organizations,
-                hasPendingOnboarding,
-                modules
-            );
-
-            var token = GenerateJwtToken(claims);
-
-            return new TokenModel
-            {
-                Id = user.Id,
-                Token = token,
-                Email = user.Email,
-                Name = user.Name,
-                BusinessCode = membership.Business.BusinessCode,
-                Roles = roles.ToList()
-            };
-        }
-        private (bool IsWeak, string Message) CheckWeakCredentials(User user, LoginModel model)
+         private (bool IsWeak, string Message) CheckWeakCredentials(User user, LoginModel model)
         {
             switch (model.LoginMethod)
             {
@@ -456,16 +383,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             });
         } 
         
-        private bool HasPassword(User user)
-        {
-            return !string.IsNullOrWhiteSpace(user.PasswordHash);
-        }
-         
-        private bool HasPin(User user)
-        {
-            return !string.IsNullOrWhiteSpace(user.PinEncrypt);
-        }
-        private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
+         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
         User user,
         LoginModel model)
         {
@@ -1800,34 +1718,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
             return (entity.Map(), true, "User successfully registered and linked to organization if applicable.");
-        }
-        private async Task TrackDeviceAsync(
-        string userId,
-        string deviceId,
-        string deviceName,
-        string ip)
-        {
-            var device = await _context.UserDevices
-                .FirstOrDefaultAsync(x => x.UserId == userId && x.DeviceId == deviceId);
-
-            if (device == null)
-            {
-                _context.UserDevices.Add(new UserDevice
-                {
-                    UserId = userId,
-                    DeviceId = deviceId,
-                    DeviceName = deviceName,
-                    IPAddress = ip,
-                    LastSeen = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                device.LastSeen = DateTime.UtcNow;
-                device.IPAddress = ip;
-            }
-
-            await _context.SaveChangesAsync();
         }
         public async Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified)
         {

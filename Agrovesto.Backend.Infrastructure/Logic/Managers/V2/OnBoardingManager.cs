@@ -39,7 +39,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -92,6 +94,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<bool> ResetPin(ConfirmOtpRequest request);
         Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode,string env);
         Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args);
+        Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -145,6 +148,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _configuration = configuration;
             _awsService = awsService;
         }
+
+      
         public async Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(
          Stream excelStream,
          OnBoardingArgs args)
@@ -618,29 +623,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return login;
         }
-        private async Task SendDefaultCredentialNotification(User user, string businessCode)
+        public async Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal)
         {
-            var senderEmail = _configuration["Official:Email"];
-            if (!string.IsNullOrEmpty(user.Email))
-            {
-                await _awsService.SendEmailAsync(senderEmail,
-                    user.Email, 
-                    "Action Required: Change Your Default Password" ,
-                    $"You are currently using a default credential. Please log in and change it immediately.",
-                    $"You are currently using a default credential. Please log in and change it immediately."
-                );
-            }
+            var jti = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Jti);
+            var userId = userPrincipal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var expClaim = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Exp);
 
-            if (!string.IsNullOrEmpty(user.PhoneNumber))
-            {
-                await _sMSService.SendSmsAsync( 
-                    user.PhoneNumber,
-                    "You're using a default PIN/password. Please change it immediately.",
-                    businessCode
-                );
-            }
+            if (string.IsNullOrEmpty(jti) || string.IsNullOrEmpty(expClaim))
+                return (false, "Invalid token");
+
+            var expiry = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime;
+
+            await _onboardingRepository.RevokeAsync(jti, userId!, expiry);
+
+            return (true, "Logged out successfully");
         }
-
         private static void ValidateQuickOnboarding(OnboardingRequestModel model, string onboardedByUserid)
         {
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);

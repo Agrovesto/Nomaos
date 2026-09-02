@@ -780,7 +780,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public List<InputBreakdownDto> InputBreakdown { get; set; }
         public List<AdditionalCostDto> AdditionalCost { get; set; }
         public SubscriberInfoDto Subscriber { get; set; }
-
+        public DeliveryInformation DeliveryDetails { get; set; }
         public PackageInfoDto Package { get; set; }
 
         public FinancingSnapshotDto FinancingSnapshot { get; set; }
