@@ -34,6 +34,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
     public interface IOnboardingRepository
     {
+        Task<UserLookupResult?> FindExistingUserAsync(OnboardingRequestModel model);
+
+
         Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName);
         Task RemoveUserFromOrganization(string userId, string organizationCode);
         Task TrackUserRoleAssignment(string userId, string userType) ;
@@ -54,7 +57,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
-        Task<User?> FindExistingUserAsync(OnboardingRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
         Task UpdateUserDetails(OnboardingRequestModel model, OnBoardingArgs args);
@@ -63,6 +65,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task ResetPin(User user,  string newPin);
         Task<bool> IsRevokedAsync(string jti);
         Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
+        Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
+        Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
+        Task<IdentityRole> GetRoleAsync(string roleName);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -874,16 +879,35 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             model.Id = args.UserId;
 
-            var existingUser = await FindExistingUserAsync(model);
+            var lookup = await FindExistingUserAsync(model);
 
-            if (existingUser != null)
+            if (lookup == null)
             {
-                return await HandleExistingUser(existingUser, model, args, role);
+                return await CreateNewUser(model, args, role);
             }
-            return await CreateNewUser(model, args, role);
+            if (lookup.MatchedById)
+            {
+                return await HandleExistingUser(lookup.User, model, args, role);
+            }
+            var user = lookup.User;
+
+            bool submittedAsEmailAccount = !string.IsNullOrWhiteSpace(model.Email) && !string.IsNullOrWhiteSpace(model.Password);
+            bool submittedAsPhoneAccount = !string.IsNullOrWhiteSpace(model.PhoneNumber) && !string.IsNullOrWhiteSpace(model.Pin);
+
+            bool isGenuineOwner =
+                (user.SignupMethod == SignupMethod.Email && lookup.MatchedByEmail && submittedAsEmailAccount)
+                || (user.SignupMethod == SignupMethod.PhoneNumber && lookup.MatchedByPhone && submittedAsPhoneAccount);
+
+            if (!isGenuineOwner)
+            {
+                var field = lookup.MatchedByPhone ? "phone number" : "email";
+                throw new BaseException(ExceptionType.CONFLICT, $"This {field} is already linked to another account.");
+            }
+
+            return await HandleExistingUser(user, model, args, role);
         }
      
-        private async Task<IdentityRole> GetRoleAsync(string roleName)
+        public async Task<IdentityRole> GetRoleAsync(string roleName)
         {
             var role = await _roleManager.FindByNameAsync(roleName);
 
@@ -892,7 +916,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return role;
         }
-        public async Task<User?> FindExistingUserAsync(OnboardingRequestModel model)
+        public async Task<UserLookupResult?> FindExistingUserAsync(OnboardingRequestModel model)
         {
             var userId = model.Id?.Trim();
 
@@ -900,7 +924,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 var userById = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
                 if (userById != null)
-                    return userById;
+                    return new UserLookupResult { User = userById, MatchedById = true };
+
             }
 
             var phone = model.PhoneNumber?.Trim();
@@ -912,11 +937,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (string.IsNullOrWhiteSpace(phone) && string.IsNullOrWhiteSpace(email))
                 return null;
 
-            return await _context.Users.FirstOrDefaultAsync(u =>
+            var user = await _context.Users.FirstOrDefaultAsync(u =>
                 (!string.IsNullOrWhiteSpace(phone) && u.PhoneNumber == phone) ||
                 (!string.IsNullOrWhiteSpace(email) && u.Email == email) ||
                 (!string.IsNullOrWhiteSpace(normalizedEmail) && u.NormalizedEmail == normalizedEmail) ||
                 (!string.IsNullOrWhiteSpace(normalizedUserNameCandidate) && u.NormalizedUserName == normalizedUserNameCandidate));
+
+            if (user == null) return null;
+
+            return new UserLookupResult
+            {
+                User = user,
+                MatchedByPhone = !string.IsNullOrWhiteSpace(phone) && string.Equals(user.PhoneNumber, phone, StringComparison.OrdinalIgnoreCase),
+                MatchedByEmail = !string.IsNullOrWhiteSpace(email) && string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase)
+            };
         }
         public async Task UpdateUserDetails(
          OnboardingRequestModel model,
@@ -962,13 +996,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
-        private async Task<CreateUserResult> HandleExistingUser(
+        public async Task<CreateUserResult> HandleExistingUser(
         User user,
         OnboardingRequestModel model,
         OnBoardingArgs args,
         IdentityRole role)
         {
-
+     
             if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
             {
                 user.DateOfBirth = model.DateOfBirth;
@@ -981,14 +1015,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 if (phoneTakenByAnotherUser)
                 {
-                    return new CreateUserResult
-                    {
-                        model = model,
-                        status = false,
-                        IsExisting = true,
-                        message = "This phone number is already linked to a different account. Please contact support to merge your accounts.",
-                        ShouldLogin = true,
-                    };
+                    throw new BaseException(ExceptionType.CONFLICT, "This phone number is already linked to a different account. Please contact support to merge your accounts.");
+                    //return new CreateUserResult
+                    //{
+                    //    model = model,
+                    //    status = false,
+                    //    IsExisting = true,
+                    //    message = "This phone number is already linked to a different account. Please contact support to merge your accounts.",
+                    //    ShouldLogin = false,
+                    //};
                 }
 
                 user.PhoneNumber = model.PhoneNumber;
@@ -1002,29 +1037,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 if (emailTakenByAnotherUser)
                 {
-                    return new CreateUserResult
-                    {
-                        model = model,
-                        status = false,
-                        IsExisting = true,
-                        message = "This email is already linked to a different account. Please contact support to merge your accounts.",
-                        ShouldLogin = true,
-                    };
+                    throw new BaseException(ExceptionType.CONFLICT, "This email is already linked to a different account. Please contact support to merge your accounts.");
+                    //return new CreateUserResult
+                    //{
+                    //    model = model,
+                    //    status = false,
+                    //    IsExisting = true,
+                    //    message = "This email is already linked to a different account. Please contact support to merge your accounts.",
+                    //    ShouldLogin = false,
+                    //};
                 }
+                
 
                 user.Email = model.Email;
             }
-
+         
             if (string.IsNullOrWhiteSpace(args.businessCode))
             {
-                return new CreateUserResult
-                {
-                    model = model,
-                    status = false,
-                    IsExisting = true,
-                    message = "Business context is required.",
-                    ShouldLogin = true,
-                };
+                throw new BaseException(ExceptionType.ACCESS_DENIED, "Business context is required");
+                //return new CreateUserResult
+                //{
+                //    model = model,
+                //    status = false,
+                //    IsExisting = true,
+                //    message = "Business context is required.",
+                //    ShouldLogin = !requiresProfileCompletion,
+                //};
             }
 
             var business = await _context.Businesses
@@ -1032,14 +1070,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (business == null)
             {
-                return new CreateUserResult
-                {
-                    model = model,
-                    status = false,
-                    IsExisting = true,
-                    message = "Invalid business.",
-                    ShouldLogin = true,
-                };
+                throw new BaseException(ExceptionType.ACCESS_DENIED, "Invalid business");
+
+                //return new CreateUserResult
+                //{
+                //    model = model,
+                //    status = false,
+                //    IsExisting = true,
+                //    message = "Invalid business.",
+                //    ShouldLogin = !requiresProfileCompletion,
+                //};
             }
 
             var identityRoles = await (
@@ -1074,36 +1114,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (isOrganizationRequest && hasOtherRolesInBusiness)
             {
-                return new CreateUserResult
-                {
-                    model = model,
-                    status = false,
-                    IsExisting = true,
-                    message =
-                        "This account already exists under another role in this business. " +
-                        "Organization accounts must use a separate identity.",
-                    ShouldLogin = true
-                };
+                throw new BaseException (ExceptionType.OPERATION_FAILED, "This account already exists under another role in this business. Organization accounts must use a separate identity.");
+
+                //return new CreateUserResult
+                //{
+                //    model = model,
+                //    status = false,
+                //    IsExisting = true,
+                //    message =
+                //        "This account already exists under another role in this business. " +
+                //        "Organization accounts must use a separate identity.",
+                //    ShouldLogin = requiresProfileCompletion
+                //};
             }
 
             if (!isOrganizationRequest && alreadyOrganizationInBusiness)
             {
-                return new CreateUserResult
-                {
-                    model = model,
-                    status = false,
-                    IsExisting = true,
-                    message =
-                        "This account is registered as an Organization in this business and cannot be used for other roles.",
-                    ShouldLogin = true
-                };
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "This account is registered as an Organization in this business and cannot be used for other roles.");
+
+                //return new CreateUserResult
+                //{
+                //    model = model,
+                //    status = false,
+                //    IsExisting = true,
+                //    message =
+                //        "This account is registered as an Organization in this business and cannot be used for other roles.",
+                //    ShouldLogin = !requiresProfileCompletion
+                //};
             }
 
             await LinkUserToOrganizationIfNeeded(user.Id, args.organizationCode);
 
-            // Capture BEFORE mutating anything - tells us if this role is genuinely new to this user
             bool hasIdentityRole = identityRoles.Contains(role.Name);
-            bool isNewRoleForUser = !hasIdentityRole;
+             bool isNewRoleForUser = !hasIdentityRole;
+
+
+
 
             if (!hasIdentityRole)
             {
@@ -1111,14 +1157,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 if (!roleResult.Succeeded)
                 {
-                    return new CreateUserResult
-                    {
-                        model = model,
-                        status = false,
-                        IsExisting = true,
-                        message = string.Join(", ", roleResult.Errors.Select(e => e.Description)),
-                        ShouldLogin = true
-                    };
+                    throw new BaseException(ExceptionType.OPERATION_FAILED, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+
+                    //return new CreateUserResult
+                    //{
+                    //    model = model,
+                    //    status = false,
+                    //    IsExisting = true,
+                    //    message = string.Join(", ", roleResult.Errors.Select(e => e.Description)),
+                    //    ShouldLogin = !requiresProfileCompletion
+                    //};
                 }
             }
 
@@ -1148,14 +1196,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
             {
-                return new CreateUserResult
-                {
-                    model = model,
-                    status = false,
-                    IsExisting = true,
-                    message = $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.",
-                    ShouldLogin = true
-                };
+               throw new BaseException(ExceptionType.OPERATION_FAILED, $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.");
+
+                //return new CreateUserResult
+                //{
+                //    model = model,
+                //    status = false,
+                //    IsExisting = true,
+                //    message = $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.",
+                //    ShouldLogin = !requiresProfileCompletion
+                //};
             }
 
             bool isNewBusinessMembership = !businessMemberships.Any();
@@ -1165,19 +1215,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             // have, force them into profile completion instead of straight login.
             bool requiresProfileCompletion = isNewRoleForUser || isNewBusinessMembership;
 
-            var msg = "";
-            if (!hasOnboardedById)
-            {
-                msg = isNewBusinessMembership
-                ? "Welcome back. Continue onboarding to set up access for this business."
-                : "Welcome back. Continue onboarding to complete setup for your new role in this business.";
-            }
-            else
-            {
-                msg = isNewBusinessMembership
-                ? "User added successfully to this business"
-                : $"User added successfully as a {role.Name}.";
-            }
+            var msg = !hasOnboardedById
+         ? (isNewBusinessMembership
+             ? "Welcome back. Continue onboarding to set up access for this business."
+             : "Welcome back. Continue onboarding to complete setup for your new role in this business.")
+         : (isNewBusinessMembership
+             ? "User added successfully to this business"
+             : $"User added successfully as a {role.Name}.");
 
             return new CreateUserResult
             {
@@ -1189,13 +1233,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
-        private async Task<CreateUserResult> CreateNewUser(
+        public async Task<CreateUserResult> CreateNewUser(
         OnboardingRequestModel model,
         OnBoardingArgs args,
         IdentityRole role)
         {
             var salt = EncryptionUtil.GetSalt();
-
+            model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+    ? SignupMethod.Email
+    : SignupMethod.PhoneNumber;
             string defaultPin = "1234";
             string defaultPassword =string.IsNullOrEmpty(model.PhoneNumber) ? "P@55w0rd*" : model.PhoneNumber;
 
@@ -1213,7 +1259,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                                 !string.IsNullOrWhiteSpace(model.PhoneNumber);
 
             var user = BuildUserEntity(model, args, salt);
-
+            user.SignupMethod = model.SignupMethod;
             if (!string.IsNullOrEmpty(pinToUse))
             {
                 user.PinEncrypt = pinToUse.EncryptTransactionPin(salt);
@@ -1226,7 +1272,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             try
             {
-                createUser = await _userManager.CreateAsync(user, passwordToUse);
+                if (model.SignupMethod == SignupMethod.Email)
+                {
+                    createUser = await _userManager.CreateAsync(user, passwordToUse);
+                }
+                else
+                {
+                    createUser = await _userManager.CreateAsync(user);
+                }
             }
             catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex, out var conflictField))
             {
@@ -1239,7 +1292,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 if (conflictingUser != null)
                 {
-                    return await HandleExistingUser(conflictingUser, model, args, role);
+                    return await HandleExistingUser(conflictingUser.User, model, args, role);
                 }
 
                 _log.LogError(

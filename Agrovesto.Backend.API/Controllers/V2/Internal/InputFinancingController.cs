@@ -119,6 +119,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromBody] CreateInputPackageRequest model,
             [FromQuery] ListQueryParams args)
         {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
             args.organizationCode = resolvedOrgCode;

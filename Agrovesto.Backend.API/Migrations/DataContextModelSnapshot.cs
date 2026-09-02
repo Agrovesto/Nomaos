@@ -2696,9 +2696,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("ApprovedOn")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<decimal?>("DisbursedAmount")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<string>("DisbursedByUserId")
                         .HasColumnType("nvarchar(450)");
 
@@ -5844,13 +5841,13 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.RevokedToken", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTimeOffset?>("ExpiresAt")
+                    b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("Jti")
@@ -6228,6 +6225,9 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("SignupMethod")
+                        .HasColumnType("int");
 
                     b.Property<bool>("TwoFactorEnabled")
                         .HasColumnType("bit");

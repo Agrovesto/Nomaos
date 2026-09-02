@@ -4018,7 +4018,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     .FirstOrDefaultAsync();
                 if (disbursement != null)
                 {
-                    deliveryInfo.AmountDisbursed = disbursement.DisbursedAmount;
+                    deliveryInfo.AmountDisbursed = disbursement.ApprovedAmount;
                 }
             }
             string? agentName = null;
