@@ -76,7 +76,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 return await _onBoardingManager.CreateBusinessUser(model, args);
             },
-            request => Ok(Success(request, ResponseMessages.Successful)));
+            request => Ok(Success(request, request.Message, ResponseMessages.Successful)));
         }
 
         [HttpPost("verify-otp")]

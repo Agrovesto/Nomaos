@@ -643,18 +643,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
             var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
 
-            //if (!hasEmail && !hasPhone)
-            //{
-            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Either email or phone number must be provided.");
-            //}
-
-            //if (hasEmail && hasPhone)
-            //{
-            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Provide either email/password or phone/pin, not both.");
-            //}
-
             if (hasEmail)
             {
                 var emailValidator = new EmailAddressAttribute();
@@ -1041,8 +1029,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
             }
         }
+       
 
-        public async Task<OnboardingResponseModel> CreateBusinessUser(
+           public async Task<OnboardingResponseModel> CreateBusinessUser(
     OnboardingRequestModel model,
     OnBoardingArgs args)
         {
@@ -1050,10 +1039,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 ValidateRequest(model, args);
                 var env = ResolveEnvironment(args);
+                
                 var business = await GetBusinessOrThrow(args.businessCode);
-
+                var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
                 CreateUserResult createUserResult = null;
-
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+    ? SignupMethod.Email
+    : SignupMethod.PhoneNumber;
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -1062,7 +1054,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     try
                     {
-                        createUserResult = await RegisterUser(model, args);
+
+                        createUserResult = await _onboardingRepository.RegisterUser(model, args);
+
 
                         if (!createUserResult.status)
                         {
@@ -1132,12 +1126,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return business;
         }
-        private Task<CreateUserResult> RegisterUser(
-    OnboardingRequestModel model,
-    OnBoardingArgs args)
-        {
-            return _onboardingRepository.RegisterUser(model, args);
-        }
+   
 
         private async Task ExecutePostCreationStepsAsync(
     OnboardingRequestModel model,

@@ -222,6 +222,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Env { get; set; }
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
@@ -342,6 +343,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Env { get; set; }
         public string businessCode { get; set; }
     }
+   
     public class OnBoardingArgs
     {
 
@@ -420,4 +422,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool IsExisting { get; set; }
         public bool ShouldLogin { get; set; }
     }
+
+
 }
