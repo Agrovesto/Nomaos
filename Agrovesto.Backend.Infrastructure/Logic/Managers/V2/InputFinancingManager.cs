@@ -2081,7 +2081,10 @@ RepaymentFrequency frequency)
                         ? SubscriptionStatus.PartiallyDisbursed
                         : SubscriptionStatus.Active;
                     query.Subscription.DisbursedOn = DateTimeOffset.UtcNow;
-
+                    if (!query.Subscription.InputPackage.RepaymentRequired)
+                    {
+                        query.Subscription.Status = SubscriptionStatus.Completed;                      
+                    }
 
                     _context.OutboxMessages.Add(new OutboxMessage
                     {

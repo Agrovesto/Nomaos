@@ -165,8 +165,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         [Display(Name = "Active")]
         Active = 7,
 
-        [Display(Name = "Repaid")]
-        Repaid = 8,
+        [Display(Name = "Completed")]
+        Completed = 8,
 
         [Display(Name = "Defaulted")]
         Defaulted = 9,

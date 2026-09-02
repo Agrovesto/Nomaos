@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/input-financing")]
     [ApiController]
+    [Authorize]
     public class InputFinancingController : BaseController
     {
         private readonly IInputFinancingManager _inputFinancingManager;

@@ -16,6 +16,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/profile")]
     [ApiController]
+    [Authorize]
     public class ProfileController : BaseController
     {
         private readonly IOnBoardingManager _onBoardingManager;

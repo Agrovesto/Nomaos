@@ -8,7 +8,12 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
@@ -22,7 +27,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         private readonly ILogger<AuthenticationController> _logger;
-     
+        public record LogoutRequest(string RefreshToken);
         public AuthenticationController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
             IBusinessManager businessManager, IBulkFarmerUploadService bulkFarmerUploadService, 
@@ -431,7 +436,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
 
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var result = await _onBoardingManager.Logout(User);
 
+            if (!result.Status)
+                return BadRequest(new { message = result.Message });
 
+            return Ok(new { message = result.Message });
+        }
     }
 }
