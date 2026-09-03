@@ -249,6 +249,39 @@ bool exists = await _context.OrganizationAgentRoles.AnyAsync(x =>
             return Agent.Map();
         }
 
+        public async Task<AgentProfileDto> GetAgentProfile(string userId)
+        {
+            var agent = await _context.Agents
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (agent == null)
+                return null;
+
+            var image = await _context.FarmerImages
+                .AsNoTracking()
+                .Where(x => x.FarmerUserId == userId)
+                .Select(x => x.IMageKey)
+                .FirstOrDefaultAsync();
+
+            return new AgentProfileDto
+            {
+                AgentId = agent.Id,
+                UserId = agent.UserId,
+                Status = agent.IsActive ? "Active" : "Inactive",
+                DateRegistered = agent.OnBoardedOn,
+                Name = agent.Name,
+                AgentImage = image,
+                Location = new AgentProfileLocationDto
+                {
+                    State = agent.State,
+                    Lga = agent.Lga,
+                    Ward = agent.Ward,
+                    Community = agent.Location
+                }
+            };
+        }
+
         public async Task<AgentModel> GetAgentBySuperVisor(string userId)
         {
             var Agent = await _context.Agents.Where(x => x.SupervisorUserId == userId).FirstOrDefaultAsync();

@@ -19,6 +19,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/input-financing")]
     [ApiController]
+    [Authorize]
     public class InputFinancingController : BaseController
     {
         private readonly IInputFinancingManager _inputFinancingManager;
@@ -118,6 +119,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             [FromBody] CreateInputPackageRequest model,
             [FromQuery] ListQueryParams args)
         {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
             args.organizationCode = resolvedOrgCode;
@@ -756,7 +759,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("subscription/documents")]
-        [Authorize(Roles = "Organization,Agent")]
+        //[Authorize(Roles = "Organization,Agent")]
         public async Task<IActionResult> GetSubscriptionDocuments(
             [FromQuery] SubscriptionQueryFilter filter)
         {

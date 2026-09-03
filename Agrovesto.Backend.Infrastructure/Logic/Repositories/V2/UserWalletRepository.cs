@@ -41,6 +41,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             , string? reference = null);
         Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null);
         Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
+        Task<string> ReserveWalletWithdrawal(long userWalletId, decimal amount, string? description, string reference);
+        Task SettleWalletWithdrawal(string transactionReference, string? providerReference, string? providerStatus);
+        Task ReverseWalletWithdrawal(string transactionReference, string? providerReference, string? providerStatus);
+        Task MarkWithdrawalIndeterminate(string transactionReference, string? providerReference, string? providerStatus);
         Task ValidateTransactionPin(long walletId, string inputPin);
         Task UpdateTransactionPin(long walletId, string newPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
@@ -748,6 +752,135 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return transactionReference;
         }
 
+        private const int ProviderStatusMaxLength = 50;
+        private const int ProviderReferenceMaxLength = 100;
+        private const int TransactionReferenceMaxLength = 50;
+        private const int TransactionDescriptionMaxLength = 500;
+
+        private static string? Clip(string? value, int maxLength) =>
+            string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+
+        public async Task<string> ReserveWalletWithdrawal(
+            long userWalletId, decimal amount, string? description, string reference)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than zero");
+
+            if (string.IsNullOrWhiteSpace(reference))
+                throw new ArgumentException("A transaction reference is required");
+
+            if (reference.Length > TransactionReferenceMaxLength)
+                throw new ArgumentException(
+                    $"Transaction reference must be {TransactionReferenceMaxLength} characters or fewer");
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == userWalletId && !x.IsDeleted);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            if (wallet.WalletBalance < amount)
+                throw new Exception("Insufficient balance");
+
+            var balanceBefore = wallet.WalletBalance;
+            wallet.WalletBalance -= amount;
+
+            var transaction = new UserWalletTransactions
+            {
+                UserWalletId = wallet.Id,
+                WalletTransactionType = WalletTransactionType.Debit,
+                TransactionAmount = amount,
+                CommissionFee = 0,
+                TransactionFee = 0,
+                Currency = wallet.Currency,
+                TransactionDescription = Clip(description, TransactionDescriptionMaxLength),
+                TransactionDate = DateTimeOffset.UtcNow,
+                WalletTransactionStatus = WalletTransactionStatus.DebitPending,
+                TransactionReference = reference,
+                BalanceBefore = balanceBefore,
+                BalanceAfter = wallet.WalletBalance,
+                ProviderStatus = "RESERVED"
+            };
+
+            _context.UserWallets.Update(wallet);
+            _context.UserWalletTransactions.Add(transaction);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception(
+                    "This wallet was updated by another transaction. Please check your balance and try again.");
+            }
+
+            return reference;
+        }
+
+        private async Task<UserWalletTransactions> GetReservedWithdrawal(string transactionReference)
+        {
+            var transaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+            if (transaction == null)
+                throw new Exception("Transaction not found");
+
+            if (transaction.WalletTransactionStatus != WalletTransactionStatus.DebitPending)
+                throw new Exception("Transaction already processed");
+
+            return transaction;
+        }
+
+        public async Task SettleWalletWithdrawal(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.Completed;
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ReverseWalletWithdrawal(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == transaction.UserWalletId);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            wallet.WalletBalance += transaction.TransactionAmount;
+
+            transaction.BalanceAfter = wallet.WalletBalance;
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
+
+            _context.UserWallets.Update(wallet);
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task MarkWithdrawalIndeterminate(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.ReconciliationRequired;
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null)
         {
             if (amount <= 0)
@@ -816,13 +949,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                       // await _context.SaveChangesAsync();
+                        _context.UserWalletTransactions.Update(transaction);
+                        await _context.SaveChangesAsync();
                       //  await dbTransaction.CommitAsync();
                         return;
                     }
@@ -894,18 +1028,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                        //await _context.SaveChangesAsync();
+                        _context.UserWalletTransactions.Update(transaction);
+                        await _context.SaveChangesAsync();
                        // await dbTransaction.CommitAsync();
                         return;
                     }
 
-                 
+
                     var balanceBefore = wallet.WalletBalance;
                     var netAmount = transaction.TransactionAmount
                                     - transaction.TransactionFee
@@ -945,8 +1080,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (transaction == null)
                 return;
 
-            transaction.ProviderReference = providerReference;
-            transaction.ProviderStatus = providerStatus;
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
             transaction.TransactionDate = DateTimeOffset.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(rawPayload))
@@ -956,7 +1091,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             _context.UserWalletTransactions.Update(transaction);
-           // await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
         }
         public async Task UpdateTransactionStatus(
     string transactionReference,

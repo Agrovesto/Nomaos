@@ -1786,7 +1786,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await _context.SaveChangesAsync();
                 return false;
             }
-
+            await _context.SaveChangesAsync();
             var subscription = payment.Subscription;
 
             switch (payment.PaymentType)
@@ -1803,7 +1803,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     throw new Exception($"Unhandled payment type '{payment.PaymentType}'");
             }
 
-            await _context.SaveChangesAsync();
+           
 
             return true;
         }
@@ -1826,7 +1826,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 //&& subscription.Status == SubscriptionStatus.PendingCommitment
                 )
             {
-                subscription.Status = SubscriptionStatus.PendingDisbursement;
+                subscription.Status = SubscriptionStatus.CommitmentPaid;
 
                 //await RequestInputDisbursementApprovalAsync(subscription.Id,
                 //    payment.ExternalReference, performedBy, subscription.SubscriberUserId);
@@ -1864,6 +1864,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         FullyPaid = fullyPaid
                     })
             });
+
+            await _context.SaveChangesAsync();
         }
 
         private async Task ApplyRepaymentEffectsAsync(
@@ -1886,7 +1888,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)
                 )
             {
-                subscription.Status = SubscriptionStatus.Repaid;
+                subscription.Status = SubscriptionStatus.Completed;
 
                 _context.OutboxMessages.Add(new OutboxMessage
                 {
@@ -2968,7 +2970,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                     if (allPaid)
                     {
-                        subscription.Status = SubscriptionStatus.Repaid;
+                        subscription.Status = SubscriptionStatus.Completed;
                         subscription.CompletedOn = DateTimeOffset.UtcNow;
                     }
 
@@ -2987,7 +2989,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                             SubscriptionId = subscription.Id,
                             Amount = request.Amount,
                             RemainingAmount = remaining,
-                            IsCompleted = subscription.Status == SubscriptionStatus.Repaid
+                            IsCompleted = subscription.Status == SubscriptionStatus.Completed
                         })
                     };
 
@@ -3007,64 +3009,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             });
         }
 
-        private IQueryable<InputPackageSubscription> BuildSubscriptionQueryObligation(
-        SubscriptionQueryFilter filter)
-        {
-            var query = _context.InputPackageSubscriptions
-                .Include(x => x.InputPackage)
-                .Where(x => x.BusinessCode == filter.BusinessCode)
-             
-                .AsQueryable();
-
-            if (!string.IsNullOrEmpty(filter.SubscriberUserId))
-            {
-                query = query.Where(x => x.SubscriberUserId == filter.SubscriberUserId);
-            }
-            if (filter.PackageId.HasValue)
-            {
-                query = query.Where(x => x.InputPackageId == filter.PackageId);
-            }
-            if (filter.OrganizationId.HasValue)
-            {
-                query = query.Where(x => x.OrganizationId == filter.OrganizationId.Value);
-            }
-
-            if (filter.Status.HasValue)
-            {
-                query = query.Where(x => x.Status == filter.Status);
-            }
-
-            if (filter.HasPaidCommitment.HasValue)
-            {
-                if (filter.HasPaidCommitment.Value)
-                {
-                    query = query.Where(x =>
-                        _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) >= x.CommitmentValue);
-                }
-                else
-                {
-                    query = query.Where(x =>
-                        _context.InputPackageSubscriptionPayments
-                            .Where(p =>
-                                p.SubscriptionId == x.Id &&
-                                p.PaymentType == PaymentType.Commitment &&
-                                p.Status == TransactionStatus.Successful)
-                            .Sum(p => (decimal?)p.AmountPaid) < x.CommitmentValue);
-                }
-            }
-
-            if (filter.IsActiveOnly == true)
-            {
-                query = query.Where(x => x.Status == SubscriptionStatus.Active);
-            }
-
-            return query;
-        }
         private async Task<IQueryable<InputPackageSubscription>> BuildSubscriptionQuery(
         SubscriptionQueryFilter filter)
         {
@@ -3114,7 +3058,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         break;
 
                     case SubscriptionView.CommitmentPaid:
-                        filter.HasPaidCommitment ??= true;
+
                         query = query.Where(x =>
                            x.Status == SubscriptionStatus.CommitmentPaid);
                         break;
@@ -3141,7 +3085,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     case SubscriptionView.Completed:
 
                         query = query.Where(x =>
-                            x.Status == SubscriptionStatus.Repaid
+                            x.Status == SubscriptionStatus.Completed
                             || (!x.InputPackage.RepaymentRequired && x.Status == SubscriptionStatus.Disbursed)
                             || (!x.InputPackage.RepaymentRequired && x.Status == SubscriptionStatus.Active)
 
@@ -3869,219 +3813,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
 
-        //public async Task<PagedResult<SubscriptionDetailDto>> GetSubscriptionsAsync(
-        //SubscriptionQueryFilter filter,
-        //int pageNumber,
-        //int pageSize)
-        //{
-        //    pageNumber = pageNumber < 1 ? 1 : pageNumber;
-        //    pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
-
-        //    var query = await BuildSubscriptionQuery(filter);
-
-        //    var count = await query.CountAsync();
-
-        //    if (count == 0)
-        //    {
-        //        return new PagedResult<SubscriptionDetailDto>
-        //        {
-        //            Data = [],
-        //            Count = 0,
-        //            PageNumber = pageNumber,
-        //            PageSize = pageSize
-        //        };
-        //    }
-
-        //    var pagedIds = await query
-        //        .OrderByDescending(x => x.Id)
-        //        .Skip((pageNumber - 1) * pageSize)
-        //        .Take(pageSize)
-        //        .Select(x => new { x.Id, x.CommitmentRequired, x.CommitmentValue })
-        //        .ToListAsync();
-
-        //    var subscriptionIds = pagedIds.Select(x => x.Id).ToList();
-
-        //    var commitmentTotals = await _context.InputPackageSubscriptionPayments
-        //        .Where(p =>
-        //            subscriptionIds.Contains(p.SubscriptionId) &&
-        //            p.PaymentType == PaymentType.Commitment &&
-        //            p.Status == TransactionStatus.Successful)
-        //        .GroupBy(p => p.SubscriptionId)
-        //        .Select(g => new
-        //        {
-        //            SubscriptionId = g.Key,
-        //            Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
-        //        })
-        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
-
-        //    var repaymentTotals = await _context.InputPackageSubscriptionPayments
-        //        .Where(p =>
-        //            subscriptionIds.Contains(p.SubscriptionId) &&
-        //            p.PaymentType == PaymentType.Repayment &&
-        //            p.Status == TransactionStatus.Successful)
-        //        .GroupBy(p => p.SubscriptionId)
-        //        .Select(g => new
-        //        {
-        //            SubscriptionId = g.Key,
-        //            Total = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
-        //        })
-        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.Total);
-        //    var today = DateTimeOffset.UtcNow;
-
-        //    var inputreleasedDate = await _context.InputSubscriptionDisbursements
-        //        .Where(p => subscriptionIds.Contains(p.SubscriptionId) &&
-        //                    p.Status == DisbursementStatus.Disbursed)
-        //        .GroupBy(p => p.SubscriptionId)
-        //        .Select(g => new
-        //        {
-        //            SubscriptionId = g.Key,
-        //            DisbursedOn = (DateTimeOffset?)g.Max(x => x.DisbursedOn)
-        //        })
-        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.DisbursedOn);
-
-        //    var nextPaymentDate = await _context.RepaymentSchedules
-        //        .Where(x => subscriptionIds.Contains(x.InputPackageSubscriptionId) &&
-        //                    !x.IsPaid &&
-        //                    x.DueDate >= today)
-        //        .GroupBy(x => x.InputPackageSubscriptionId)
-        //        .Select(g => new
-        //        {
-        //            SubscriptionId = g.Key,
-        //            NextDueDate = (DateTimeOffset?)g.Min(x => x.DueDate)
-        //        })
-        //        .ToDictionaryAsync(x => x.SubscriptionId, x => x.NextDueDate);
-
-        //    var rawItems = await _context.InputPackageSubscriptions
-        //        .Where(x => subscriptionIds.Contains(x.Id))
-        //        .Include(x => x.InputPackage)
-        //            .ThenInclude(x => x.CommitmentPlan)
-        //        .Include(x => x.InputPackage)
-        //            .ThenInclude(x => x.RepaymentPlan)
-        //        .Include(x => x.SubscriberUser)
-        //        .Include(x => x.AddedByUser)
-        //        .Include(x => x.Organization)
-        //        .OrderByDescending(x => x.Id)
-        //        .Select(x => new
-        //        {
-        //            x.Id,
-        //            x.InputPackageId,
-        //            x.SubscriberUserId,
-        //            x.SubscriberType,
-        //            x.CommitmentRequired,
-        //            x.CommitmentValue,
-        //            x.TotalFinancingValue,
-        //            x.SubscribedOn,
-        //            x.Status,
-        //            SubscriberName = x.SubscriberUser == null
-        //                ? x.SubscriberUserId
-        //                : !string.IsNullOrWhiteSpace(x.SubscriberUser.Name)
-        //                    ? x.SubscriberUser.Name
-        //                    : !string.IsNullOrWhiteSpace(x.SubscriberUser.PhoneNumber)
-        //                        ? x.SubscriberUser.PhoneNumber
-        //                        : x.SubscriberUser.Email,
-        //            CreatedBy = x.AddedByUser == null
-        //                ? x.AddedByUserId
-        //                : !string.IsNullOrWhiteSpace(x.AddedByUser.Name)
-        //                    ? x.AddedByUser.Name
-        //                    : !string.IsNullOrWhiteSpace(x.AddedByUser.PhoneNumber)
-        //                        ? x.AddedByUser.PhoneNumber
-        //                        : x.AddedByUser.Email,
-        //            Location = x.Organization != null ? x.Organization.CompanyName : null,
-        //            PackageName = x.InputPackage.Name,
-        //            RejectedOn = x.RejectedOn,
-        //            TotalRepaid = x.InputPackage.RepaymentPlan != null
-        //                ? repaymentTotals.GetValueOrDefault(x.Id, 0m)
-        //                : 0m,
-        //            RepaymentMethod = x.InputPackage.RepaymentPlan != null
-        //                ? EnumExtensions.GetDisplayName(x.InputPackage.RepaymentPlan.RepaymentMode)
-        //                : null,
-        //            Duration = x.InputPackage.RepaymentPlan != null,
-        //            x.RiskLevel,
-
-        //            TotalRepaymentValue = x.InputPackage.RepaymentPlan != null
-        //                ? x.TotalFinancingValue
-        //                : 0m,
-        //            RepaymentRequired = x.InputPackage.RepaymentRequired,
-        //            CommitmentPaymentDeadline= x.InputPackage.CommitmentPlan != null
-        //            ? x.InputPackage.CommitmentPlan.CommitmentPaymentEndDate
-        //            : null,
-        //           RepaymentDuration = x.InputPackage.RepaymentPlan != null
-        //        ? GetRepaymentPeriod(
-        //            x.InputPackage.RepaymentPlan.RepaymentFrequency,
-        //            x.InputPackage.RepaymentPlan.RepaymentDuration)
-        //        : null,
-        //        ApprovedOn =x.ApprovedOn,
-        //        Season = x.InputPackage.InputSeason,
-        //            DisbursedOn = inputreleasedDate.GetValueOrDefault(x.Id),
-        //            NextDueDate = nextPaymentDate.GetValueOrDefault(x.Id)
-
-        //        })
-        //        .ToListAsync();
-
-        //    //TODO: improvment on query when viewtype is for release request, the request date from input disbursement table
-
-
-        //    var items = rawItems.Select(x =>
-        //    {
-        //        var commitmentPaid = commitmentTotals.GetValueOrDefault(x.Id, 0m);
-        //        var repaymentPaid = repaymentTotals.GetValueOrDefault(x.Id, 0m);
-        //        var commitmentStatus = !x.CommitmentRequired || x.CommitmentValue <= 0
-        //            ? "Not Required"
-        //            : commitmentPaid >= x.CommitmentValue
-        //                ? "Paid"
-        //                : "Pending";
-        //        var commitmentBalance = !x.CommitmentRequired || x.CommitmentValue <= 0
-        //            ? 0m
-        //            : Math.Max(x.CommitmentValue - commitmentPaid, 0m);
-        //        var repaymentBalance = x.TotalRepaymentValue <= 0
-        //            ? 0m
-        //            : Math.Max(x.TotalRepaymentValue - repaymentPaid, 0m);
-        //        var roi = !x.RepaymentRequired || x.TotalRepaymentValue <= 0
-        //            ? 0m
-        //            : Math.Max(x.TotalRepaymentValue - x.TotalFinancingValue, 0m);
-
-        //        return new SubscriptionDetailDto
-        //        {
-        //            PackageId = x.InputPackageId,
-        //            SubscriptionId = x.Id,
-        //            SubscriberUserId = x.SubscriberUserId,
-        //            SubscriberName = x.SubscriberName,
-        //            CreatedBy = x.CreatedBy,
-        //            SubscriptionType = x.SubscriberType,
-        //            Location = x.Location,
-        //            PackageName = x.PackageName,
-        //            CommitmentValue = x.CommitmentValue,
-        //            TotalFinancingValue = x.TotalFinancingValue,
-        //            SubscribedOn = x.SubscribedOn,
-        //            SubscriptionStatus = x.Status,
-        //            SubscriptionStatusName = EnumExtensions.GetDisplayName(x.Status),
-        //            CommitmentStatus = commitmentStatus,
-        //            RejectedOn = x.RejectedOn,
-        //            SubscriptionTypeName = EnumExtensions.GetDisplayName(x.SubscriberType),
-        //            CommitmentPaid = commitmentPaid,
-        //            CommitmentBalance = commitmentBalance,
-        //            RiskLevel = EnumExtensions.GetDisplayName(x.RiskLevel),
-        //            RepaymentBalance = repaymentBalance,
-        //            RepaymentMethod = x.RepaymentMethod,
-        //            ROI = roi,
-        //            RepaymentDuration =x.RepaymentDuration,
-        //            ApprovedOn=x.ApprovedOn,
-        //            CommitmentPaymentDeadline=x.CommitmentPaymentDeadline,
-        //            Season=x.Season,
-        //            DisbursedOn = x.DisbursedOn,
-        //            NextDueDate = x.NextDueDate,
-        //        };
-        //    }).ToList();
-
-        //    return new PagedResult<SubscriptionDetailDto>
-        //    {
-        //        Data = items,
-        //        Count = count,
-        //        PageNumber = pageNumber,
-        //        PageSize = pageSize
-        //    };
-        //}
-
+        
         public async Task<SubscriptionFullDetailDto> FetchSubscriptionForReview(SubscriptionQueryFilter filter)
         {
             var subscription = await _context.InputPackageSubscriptions
@@ -4191,6 +3923,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter)
         {
             //viewtype 5, 10, 6
+
+            var deliveryInfo = new DeliveryInformation();
             if (filter.SubscriptionId <= 0)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Invalid SubscriptionId provided");
 
@@ -4208,6 +3942,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (subscription == null)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Subscription not found");
 
+            if (filter.ViewType.HasValue &&
+        !SubscriptionViewValidator.Matches(filter.ViewType.Value, subscription))
+            {
+                throw new BaseException (ExceptionType.BAD_REQUEST,
+                    $"The supplied filter '{filter.ViewType.Value}' does not match this subscription's current status '{subscription.Status}'."
+                    );
+            }
             var package = subscription.InputPackage
                 ?? throw new Exception("Package not found for subscription");
 
@@ -4267,10 +4008,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         : memberOrg.IsActive ? "Verified" : "Inactive";
                 }
             }
-
+            var allowedStatuses = new[] { SubscriptionView.Active, SubscriptionView.InputReleased , 
+                SubscriptionView.Completed, SubscriptionView.Defaulted };
+            if (allowedStatuses.Contains(filter.ViewType.Value))
+            {
+                var disbursement = await _context.InputSubscriptionDisbursements
+                    .Where(x => x.SubscriptionId == subscription.Id)
+                    .OrderByDescending(x => x.DisbursedOn)
+                    .FirstOrDefaultAsync();
+                if (disbursement != null)
+                {
+                    deliveryInfo.AmountDisbursed = disbursement.ApprovedAmount;
+                }
+            }
             string? agentName = null;
             string? warehouseAssigned = null;
-
             if (subscription.SubscriberType == InputSubScriptionType.Individual)
             {
                 var agentInfo = await (
@@ -4287,16 +4039,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     select new
                     {
                         AgentName = u.Name ?? u.PhoneNumber ?? u.Email,
-                        WarehouseAssigned = oa != null
-                            ? oa.Location != null
-                                ? oa.Location.LocationName
-                                : null
-                            : null
+                        WarehouseAssigned = oa != null ? oa.Location != null ? oa.Location.LocationName: null : null,
+                        warehouseId = oa != null ? oa.LocationId : null,
+                        warehouseState = oa != null ? oa.Location != null ? oa.Location.State : null : null,
+                        warehouseLga = oa != null ? oa.Location != null ? oa.Location.LGA : null : null,
+                        warehouseWard = oa != null ? oa.Location != null ? oa.Location.Ward : null : null,
+                        warehouseLocation = oa != null ? oa.Location != null ? oa.Location.Address : null : null
+
                     }
                 ).FirstOrDefaultAsync();
 
                 agentName = agentInfo?.AgentName;
                 warehouseAssigned = agentInfo?.WarehouseAssigned;
+                deliveryInfo.Warehouse = agentInfo?.WarehouseAssigned;
+                deliveryInfo.Location = agentInfo?.warehouseLocation;
+                deliveryInfo.AgentName= agentInfo?.AgentName;
+
             }
             else if (subscription.SubscriberType == InputSubScriptionType.MemberShip)
             {
@@ -4318,12 +4076,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                             ? oa.Location != null
                                 ? oa.Location.LocationName
                                 : null
-                            : null
+                            : null,
+                        warehouseId = oa != null ? oa.LocationId : null,
+                        warehouseState = oa != null ? oa.Location != null ? oa.Location.State : null : null,
+                        warehouseLga = oa != null ? oa.Location != null ? oa.Location.LGA : null : null,
+                        warehouseWard = oa != null ? oa.Location != null ? oa.Location.Ward : null : null,
+                        warehouseLocation = oa != null ? oa.Location != null ? oa.Location.Address : null : null
                     }
                 ).FirstOrDefaultAsync();
 
                 agentName = agentInfo?.AgentName;
                 warehouseAssigned = agentInfo?.WarehouseAssigned;
+                deliveryInfo.Warehouse = agentInfo?.WarehouseAssigned;
+                deliveryInfo.Location = agentInfo?.warehouseLocation;
+                deliveryInfo.AgentName = agentInfo?.AgentName;
             }
 
             var paymentTotals = await _context.InputPackageSubscriptionPayments
@@ -4503,6 +4269,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     RiskCategory = riskCategoryDisplay
                 },
 
+                DeliveryDetails= deliveryInfo,
                 InputBreakdown = packageItems
                     .Select(x => new InputBreakdownDto
                     {
@@ -4569,21 +4336,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         int pageNumber,
         int pageSize)
         {
+            pageNumber = pageNumber < 1 ? 1 : pageNumber;
+            pageSize = pageSize < 1 ? 10 : Math.Min(pageSize, 100);
+
             var query = await BuildSubscriptionQuery(filter);
 
             var count = await query.CountAsync();
-
-            //var subscriptions = await query
-            //    .Include(x => x.InputPackage)
-            //    .Include(x => x.RepaymentSchedules)
-            //    .OrderByDescending(x => x.Id)
-            //    .Skip((pageNumber - 1) * pageSize)
-            //    .Take(pageSize)
-            //    .ToListAsync();
-
-            //var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
-
-
 
             if (count == 0)
             {
@@ -4597,14 +4355,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             var subscriptions = await query
+                .Include(x => x.InputPackage)
+                .Include(x => x.RepaymentSchedules)
                 .OrderByDescending(x => x.Id)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
 
             var subscriptionIds = subscriptions.Select(x => x.Id).ToList();
-
-
 
             var paymentsLookup = await _context.InputPackageSubscriptionPayments
                 .Where(p =>
@@ -4633,7 +4391,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var nextDueDate = sub.RepaymentSchedules
                 .Where(x => !x.IsPaid)
                 .OrderBy(x => x.DueDate)
-                .Select(x => x.DueDate)
+                .Select(x => (DateTimeOffset?)x.DueDate)
                 .FirstOrDefault();
 
             var progress = totalCost == 0
@@ -5158,7 +4916,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         break;
 
                     case SubscriptionView.Completed:
-                        query = query.Where(x => x.Status == SubscriptionStatus.Repaid);
+                        query = query.Where(x => x.Status == SubscriptionStatus.Completed);
                         break;
 
                     case SubscriptionView.Defaulted:
