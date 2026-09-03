@@ -66,6 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfileResponse> GetUseridentity(string userId);
         Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType);
         Task ResetPin(User user,  string newPin);
+        Task<bool> ValidateUserPinAsync(string userId, string plainPin);
         Task<bool> IsRevokedAsync(string jti);
         Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
         Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
@@ -1806,24 +1807,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
+            if (string.IsNullOrWhiteSpace(model.Email))
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change password for an account with no email address, Kindly update your profile");
+
             var userExist = await _userManager.FindByEmailAsync(model.Email);
-            if (userExist != null)
+
+            if (userExist == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Email");
+
+            if (string.IsNullOrWhiteSpace(model.OldPassword))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your current password is required.");
+
+            if (string.IsNullOrWhiteSpace(model.NewPassword))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new password is required.");
+
+            if (!string.Equals(model.NewPassword, model.ConfirmPassword, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Confirm Password must match New Password.");
+
+            if (string.Equals(model.OldPassword, model.NewPassword, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new password must be different from your current password.");
+
+            var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
+
+            if (!resetPassword.Succeeded)
             {
-                var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
-                if (resetPassword.Succeeded)
-                {
-                    return (true, resetPassword.Succeeded.ToString());
-                }
-                else
-                {
-                    return (false, resetPassword.Errors.ToString());
-                }
+                var reason = string.Join(" ", resetPassword.Errors.Select(x => x.Description));
 
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "The current password you entered is incorrect."
+                        : reason);
             }
-            if (string.IsNullOrEmpty(userExist.Email)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change password for an account with no email address, Kindly update your profile");
 
-            throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Email");
-         
+            userExist.HasDefaultPassword = false;
+            await _context.SaveChangesAsync();
+
+            return (true, "Password changed successfully");
         }
         public async Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName)
         {
@@ -2006,6 +2026,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
 
+
+        public async Task<bool> ValidateUserPinAsync(string userId, string plainPin)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user == null || string.IsNullOrWhiteSpace(user.Salt) || string.IsNullOrWhiteSpace(user.PinEncrypt))
+                return false;
+
+            return ValidateUserPin(user, plainPin);
+        }
 
         public async Task ResetPin(User user, string newPin)
         {

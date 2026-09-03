@@ -2433,6 +2433,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
 
+            if (string.IsNullOrWhiteSpace(model.OldPin))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your current PIN is required.");
+
+            if (!await _onboardingRepository.ValidateUserPinAsync(args.UserId, model.OldPin))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "The current PIN you entered is incorrect.");
+
+            if (string.IsNullOrWhiteSpace(model.NewPin) || !Regex.IsMatch(model.NewPin, @"^\d{4}$"))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "PIN must be exactly 4 digits.");
+
+            if (!string.Equals(model.NewPin, model.ConfirmPin, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Confirm PIN must match New PIN.");
+
+            if (string.Equals(model.OldPin, model.NewPin, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new PIN must be different from your current PIN.");
+
             await _onboardingRepository.ResetPin(user, model.NewPin);
             return (true, "Pin changed successfully");
         }
