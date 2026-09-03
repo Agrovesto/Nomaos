@@ -129,11 +129,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
+            var roleEmail = await ResolveRoleEmailAsync(userId);
+
             var response = new UsersProfile
             {
                 UserId = user.Id,
                 UserType = user.UserType,
-                Email = user.Email,
+                Email = !string.IsNullOrWhiteSpace(roleEmail) ? roleEmail : user.Email,
                 Phone = user.PhoneNumber,
                 Name=user.Name
             };
@@ -495,11 +497,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .AsNoTracking()
                 .ToListAsync();
 
+            var roleEmail = await ResolveRoleEmailAsync(userId);
+
             return new UsersProfileResponse
             {
                 UserId = userWithKyc.Id,
                 UserType = userWithKyc.UserType,
-                Email = userWithKyc.Email,
+                Email = !string.IsNullOrWhiteSpace(roleEmail) ? roleEmail : userWithKyc.Email,
                 Phone = userWithKyc.PhoneNumber,
                 Name = userWithKyc.Name,
                 NIN = userWithKyc.NIN,
@@ -556,7 +560,45 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await PopulateRoleProfile(response, roleType, userId);
             }
 
+            if (string.IsNullOrWhiteSpace(response.Email))
+                response.Email = await ResolveRoleEmailAsync(userId);
+
             return response;
+        }
+        private async Task<string?> ResolveRoleEmailAsync(string userId)
+        {
+            var farmerEmail = await _context.Farmers
+                .AsNoTracking()
+                .Where(f => f.UserId == userId)
+                .Select(f => f.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(farmerEmail))
+                return farmerEmail;
+
+            var agentEmail = await _context.Agents
+                .AsNoTracking()
+                .Where(a => a.UserId == userId)
+                .Select(a => a.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(agentEmail))
+                return agentEmail;
+
+            var membershipEmail = await _context.MemberShips
+                .AsNoTracking()
+                .Where(m => m.UserId == userId)
+                .Select(m => m.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(membershipEmail))
+                return membershipEmail;
+
+            return await _context.Organizations
+                .AsNoTracking()
+                .Where(o => o.UserId == userId)
+                .Select(o => o.OrganizationEmail)
+                .FirstOrDefaultAsync();
         }
         private async Task PopulateRoleProfile(UsersProfileResponse response, string roleType, string userId)
         {
@@ -566,21 +608,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     response.Farmer = await GetFarmerProfile(userId);
                     response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
                     response.Gender = response.Farmer?.PersonalInformation.Gender ?? "NA";
+                    response.Email = !string.IsNullOrWhiteSpace(response.Farmer?.PersonalInformation?.Email)
+                        ? response.Farmer.PersonalInformation.Email
+                        : response.Email;
                     break;
 
                 case "Agent":
                     response.Agent = await GetAgentProfile(userId);
                     response.Name = response.Agent?.Name ?? response.Name;
+                    response.Email = !string.IsNullOrWhiteSpace(response.Agent?.Email)
+                        ? response.Agent.Email
+                        : response.Email;
                     break;
 
                 case "MemberShip":
                     response.Membership = await GetCooperativeProfile(userId); 
                     response.Gender = response.Membership?.MembershipLeaderGender ?? "NA";
+                    response.Email = !string.IsNullOrWhiteSpace(response.Membership?.Email)
+                        ? response.Membership.Email
+                        : response.Email;
                     break;
 
                 case "Organization":
                     response.Organization = await GetOrganizationProfile(userId); // fixed: was overwriting Membership
                     response.Name = response.Organization?.OrganizationName ?? response.Name;
+                    response.Email = !string.IsNullOrWhiteSpace(response.Organization?.OrganizationEmail)
+                        ? response.Organization.OrganizationEmail
+                        : response.Email;
                     break;
 
                 default:
@@ -650,7 +704,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Gender = farmer.Gender,
                     DateOfBirth = farmer.DateOfBirth,
                     PhoneNumber = farmer.PhoneNumber,
-                    Email = user?.Email,
+                    Email = !string.IsNullOrWhiteSpace(farmer.Email) ? farmer.Email : user?.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
                     DateRegistered = farmer.OnBoardedOn,
