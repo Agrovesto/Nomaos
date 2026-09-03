@@ -334,7 +334,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     continue;
                 }
 
-                var currentRow = row;
+                BulkFarmerRowDto currentRow = row;
 
                 var rowSucceeded = false;
                 FarmerRowOutcome? outcome = null;
@@ -344,6 +344,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     await using var tx = await _db.Database.BeginTransactionAsync();
                     try
                     {
+                        currentRow.SignupMethod = !string.IsNullOrWhiteSpace(currentRow.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
                         outcome = await OnboardSingleFarmerWithDbChecksAsync(currentRow, args);
                         await _db.SaveChangesAsync();
                         await tx.CommitAsync();

@@ -55,28 +55,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                     .ToDictionaryAsync(o => o.OrganizationCode, o => o);
             }
 
-            // ── Pre-fetch existing users by phone (to REUSE, not reject) ──
             var incomingPhones = rows.Select(r => r.LeaderPhoneNumber).ToList();
             var existingUsersByPhone = (await _db.Users
                 .Where(u => incomingPhones.Contains(u.PhoneNumber))
                 .ToListAsync())
                 .ToDictionary(u => u.PhoneNumber, u => u, StringComparer.OrdinalIgnoreCase);
 
-            // ── Pre-fetch existing MemberShips by name (to REUSE, not reject) ──
+           
             var incomingNames = rows.Select(r => r.MembershipName).ToList();
             var existingMembershipsByName = (await _db.MemberShips
                 .Where(m => incomingNames.Contains(m.Name) && m.BelongToBusinessCode == args.businessCode)
                 .ToListAsync())
                 .ToDictionary(m => m.Name, m => m, StringComparer.OrdinalIgnoreCase);
 
-            // ── The ONLY real pre-check: a membership name collision with a
-            // DIFFERENT leader than what's in this row. Everything else -
-            // same leader re-uploading, same membership already linked to this
-            // org, etc. - is treated as idempotent reuse, not a failure.
-            // This is intentionally narrow: it's the one case where we genuinely
-            // can't tell if this is a duplicate name for a different group, or a
-            // leadership change, so it needs a human to confirm rather than us
-            // silently merging or silently rejecting.
             foreach (var row in rows)
             {
                 if (existingMembershipsByName.TryGetValue(row.MembershipName, out var existingMembership)
@@ -118,7 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
                         .BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted);
                     try
                     {
-                        foreach (var row in currentChunk)
+                        foreach (BulkMembershipRowDto? row in currentChunk)
                         {
                             var outcome = await ProcessSingleRowAsync(
                                 row, membershipTypeMap, businessMap, orgMap,
