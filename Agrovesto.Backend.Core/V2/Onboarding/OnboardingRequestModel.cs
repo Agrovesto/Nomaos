@@ -273,6 +273,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class ProfileRequestModel 
     {
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public bool IsLeaderAFarmer { get; set; } = false;
         public string? OnboardedByUserId { get; set; }
         //  public IFormFile? FarmerCapturedImage { get; set; }

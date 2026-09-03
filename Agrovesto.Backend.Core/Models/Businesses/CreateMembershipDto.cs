@@ -24,6 +24,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? DateOfBirth  { get; set; }
+        public SignupMethod SignupMethod = SignupMethod.PhoneNumber;
        // public Tier TierLevel { get; set; } = Tier.None;
 
         // At least one business code required

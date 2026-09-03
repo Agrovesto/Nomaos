@@ -202,62 +202,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             request => Ok(Success(request, ResponseMessages.Successful)));
         }
 
-        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
-        {
-            var roleHandlers = new Dictionary<string, Func<OnBoardingArgs, Task>>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Agent"] = EnrichAgentAsync,
-                ["MemberShip"] = EnrichCooperativeAsync,              
-                // ["Organization"] = EnrichOrganizationAsync,
-            };
-
-            foreach (var role in RolePriority)
-            {
-                if (CurrentUserRoles.Contains(role, StringComparer.OrdinalIgnoreCase)
-                    && roleHandlers.TryGetValue(role, out var handler))
-                {
-                    await handler(args);
-                    return; // highest-priority match wins
-                }
-            }
-        }
-
-        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
-        {
-            if (args.Id != 0) return;
-
-            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-            if (coop == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Cooperative not found for the specified user.");
-
-            args.Id = coop.Id;
-
-            args.CooperativeIds ??= new List<long?>();
-
-            if (!args.CooperativeIds.Contains(coop.Id))
-                args.CooperativeIds.Add(coop.Id);
-        }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
-        {
-            if (args.Id != 0) return;
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
-
-            if (agent == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Agent not found for the specified user.");
-
-            args.Id = agent.Id;
-
-            args.AgentIds ??= new List<long?>();
-
-            if (!args.AgentIds.Contains(agent.Id))
-                args.AgentIds.Add(agent.Id);
-        }
-
    
         [HttpPost("forgot-password")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
@@ -467,6 +411,63 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return BadRequest(new { message = result.Message });
 
             return Ok(new { message = result.Message });
+        }
+
+
+        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
+        {
+            var roleHandlers = new Dictionary<string, Func<OnBoardingArgs, Task>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Agent"] = EnrichAgentAsync,
+                ["MemberShip"] = EnrichCooperativeAsync,
+                // ["Organization"] = EnrichOrganizationAsync,
+            };
+
+            foreach (var role in RolePriority)
+            {
+                if (CurrentUserRoles.Contains(role, StringComparer.OrdinalIgnoreCase)
+                    && roleHandlers.TryGetValue(role, out var handler))
+                {
+                    await handler(args);
+                    return; // highest-priority match wins
+                }
+            }
+        }
+
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+            if (args.Id != 0) return;
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
         }
     }
 }

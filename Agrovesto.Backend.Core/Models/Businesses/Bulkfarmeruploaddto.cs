@@ -11,6 +11,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     // Input row parsed from each Excel row
     public class BulkMembershipRowDto
     {
+        public SignupMethod SignupMethod { get; set; }  = SignupMethod.PhoneNumber;
         public int RowNumber { get; set; }
         public string MembershipName { get; set; }
         public string MembershipType { get; set; }
@@ -88,6 +89,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         // ── Upload metadata ────────────────────────────────────────────
         /// <summary>1-based row number from the source file; used in error reporting.</summary>
         public int RowIndex { get; set; }
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
     }
 
     /// <summary>Aggregated result returned to the caller after a bulk upload attempt.</summary>

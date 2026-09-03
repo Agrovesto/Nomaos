@@ -90,13 +90,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     throw new ValidationException(
                         $"Agent {args.AgentIds} not found.");
             }
-
+            dto.SignupMethod = !string.IsNullOrWhiteSpace(dto.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
             await using var transaction = await _context.Database
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted);
             try
             {
-                // ── 1. Create stub User (leader details filled later) ──
-                var stubUser = new User
+                   var stubUser = new User
                 {
                     UserType = "MemberShip",
                     IsActive = false,          // inactive until leader is assigned
@@ -104,11 +105,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     CreatedOn = DateTimeOffset.UtcNow,
                     CreatedBy = args.UserId,
                     BusinessCode = args.businessCode, // primary business
-                };
+                    DateOfBirth = dto.DateOfBirth,
+                    SignupMethod = dto.SignupMethod
+                   };
                 await _context.Users.AddAsync(stubUser);
 
-                // ── 2. Create Membership ───────────────────────────────
-                var membership = new MemberShip
+               var membership = new MemberShip
                 {
                     Name = dto.Name,
                     State = dto.State,
@@ -128,7 +130,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 };
                 await _context.MemberShips.AddAsync(membership);
 
-                // ── 3. UserBusiness — one row per business (required) ──
                 
                     await _context.UserBusinesses.AddAsync(new UserBusiness
                     {
@@ -141,7 +142,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     });
                 
 
-                // ── 4. Organization links (conditional) ───────────────
                 if (organization is not null)
                 {
                     await _context.UserOrganizations.AddAsync(new UserOrganization
@@ -161,7 +161,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     });
                 }
 
-                // ── 5. Agent link (conditional) ───────────────────────
                 if (args.AgentIds.Any())
                 {
                     await _context.MemberShipAgents.AddAsync(new MemberShipAgent

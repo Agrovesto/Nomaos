@@ -1046,7 +1046,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             
             var role = await GetRoleAsync(args.userType);
 
-            model.Id = args.UserId;
+           
 
             var lookup = await FindExistingUserAsync(model);
 
@@ -1283,7 +1283,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (isOrganizationRequest && hasOtherRolesInBusiness)
             {
-                throw new BaseException (ExceptionType.OPERATION_FAILED, "This account already exists under another role in this business. Organization accounts must use a separate identity.");
+                throw new BaseException (ExceptionType.OPERATION_FAILED, $"This account {user.PhoneNumber} {user.Email} already exists under another role in this business. Organization accounts must use a separate identity.");
 
                 //return new CreateUserResult
                 //{
@@ -1299,7 +1299,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!isOrganizationRequest && alreadyOrganizationInBusiness)
             {
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "This account is registered as an Organization in this business and cannot be used for other roles.");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "This account {user.PhoneNumber} {user.Email} is registered as an Organization in this business and cannot be used for other roles.");
 
                 //return new CreateUserResult
                 //{
