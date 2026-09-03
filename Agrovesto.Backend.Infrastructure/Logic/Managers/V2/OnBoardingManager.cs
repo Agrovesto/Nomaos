@@ -19,6 +19,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Azure.Core;
 using CsvHelper;
 using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -38,7 +39,9 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -87,6 +90,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model);
         Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model);
         Task<(bool Status, string Message)> ForgotPassword(string username);
+       
+        Task<bool> ResetPin(ConfirmOtpRequest request);
+        Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode,string env);
+        Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args);
+        Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -140,6 +148,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             _configuration = configuration;
             _awsService = awsService;
         }
+
+      
         public async Task<BulkOnboardingQueueResponse> BulkOnboardFarmersBatchAsync(
          Stream excelStream,
          OnBoardingArgs args)
@@ -613,45 +623,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return login;
         }
-        private async Task SendDefaultCredentialNotification(User user, string businessCode)
+        public async Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal)
         {
-            var senderEmail = _configuration["Official:Email"];
-            if (!string.IsNullOrEmpty(user.Email))
-            {
-                await _awsService.SendEmailAsync(senderEmail,
-                    user.Email, 
-                    "Action Required: Change Your Default Password" ,
-                    $"You are currently using a default credential. Please log in and change it immediately.",
-                    $"You are currently using a default credential. Please log in and change it immediately."
-                );
-            }
+            var jti = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Jti);
+            var userId = userPrincipal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var expClaim = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Exp);
 
-            if (!string.IsNullOrEmpty(user.PhoneNumber))
-            {
-                await _sMSService.SendSmsAsync( 
-                    user.PhoneNumber,
-                    "You're using a default PIN/password. Please change it immediately.",
-                    businessCode
-                );
-            }
+            if (string.IsNullOrEmpty(jti) || string.IsNullOrEmpty(expClaim))
+                return (false, "Invalid token");
+
+            var expiry = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime;
+
+            await _onboardingRepository.RevokeAsync(jti, userId!, expiry);
+
+            return (true, "Logged out successfully");
         }
-
         private static void ValidateQuickOnboarding(OnboardingRequestModel model, string onboardedByUserid)
         {
             var hasEmail = !string.IsNullOrWhiteSpace(model.Email);
             var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
-
-            //if (!hasEmail && !hasPhone)
-            //{
-            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Either email or phone number must be provided.");
-            //}
-
-            //if (hasEmail && hasPhone)
-            //{
-            //    throw new BaseException(Core.Enums.ExceptionType.BAD_REQUEST,
-            //        "Provide either email/password or phone/pin, not both.");
-            //}
 
             if (hasEmail)
             {
@@ -1039,8 +1029,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new BaseException(ExceptionType.INTERNAL_SERVER_ERROR, "An unexpected error occurred while fetching farmer profile.");
             }
         }
+       
 
-        public async Task<OnboardingResponseModel> CreateBusinessUser(
+           public async Task<OnboardingResponseModel> CreateBusinessUser(
     OnboardingRequestModel model,
     OnBoardingArgs args)
         {
@@ -1048,10 +1039,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 ValidateRequest(model, args);
                 var env = ResolveEnvironment(args);
+                
                 var business = await GetBusinessOrThrow(args.businessCode);
-
+                var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
                 CreateUserResult createUserResult = null;
-
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+    ? SignupMethod.Email
+    : SignupMethod.PhoneNumber;
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -1060,7 +1054,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                     try
                     {
-                        createUserResult = await RegisterUser(model, args);
+
+                        createUserResult = await _onboardingRepository.RegisterUser(model, args);
+
 
                         if (!createUserResult.status)
                         {
@@ -1130,12 +1126,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return business;
         }
-        private Task<CreateUserResult> RegisterUser(
-    OnboardingRequestModel model,
-    OnBoardingArgs args)
-        {
-            return _onboardingRepository.RegisterUser(model, args);
-        }
+   
 
         private async Task ExecutePostCreationStepsAsync(
     OnboardingRequestModel model,
@@ -1283,10 +1274,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ? model.Email
                 : model.PhoneNumber;
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
-
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
                 UserId = model.Id,
@@ -1380,8 +1367,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public async Task<OtpResult> ResendOtpAsync(string userId, OtpTarget target, OtpPurpose purpose)
         {
             var user = await _onboardingRepository.GetUserById(userId);
-            await _otpService.InvalidateActiveOtps(userId, target);
-            var destination = "";
+              var destination = "";
             if (target == OtpTarget.Email)
             {
                 destination = user.model.Email;
@@ -1443,7 +1429,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var profile = await _onboardingRepository.GetUserProfile(userId);
             if (profile == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "User profile not found");
-
+            profile.BVN = EncryptionUtil.MaskSensitiveNumber(profile.BVN);
+            profile.NIN = EncryptionUtil.MaskSensitiveNumber(profile.NIN);
             return profile;
         }
         public async Task<UsersProfileResponse> GetUseridentity(string userId)
@@ -1484,9 +1471,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ? model.Email
                 : model.PhoneNumber;
 
-            await _otpService.InvalidateActiveOtps(
-                model.Id,
-                otpTarget);
+          
 
             var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
             {
@@ -2325,6 +2310,79 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             var changePwd = await _onboardingRepository.ChangePassword(model);
             return changePwd;
+        }
+
+
+        public async Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode, string env)
+        {
+            if (string.IsNullOrEmpty(env)) throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required");
+            var userDetails = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phoneNumber);
+            if (userDetails == null) { 
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the provided phone number.");
+            }
+            var generateOtp= await GenerateForgotPinOTP(userDetails, businessCode);
+            if(env == Env.Live.ToString())
+            {
+                await _sMSService.SendSmsAsync(
+                    generateOtp.Destination,
+                    $"Your verification code is {generateOtp.Code}. Expires in 5 minutes.",
+                    businessCode);
+            }
+           var msg = env == Env.Live.ToString() ? "A reset token has been sent" : $"Your verification code is {generateOtp.Code}. Expires in 5 minutes.";
+            return (true, msg);
+            
+        }
+        private async Task<OtpResult> GenerateForgotPinOTP(User user, string businessCode)
+        {
+            var otpTarget = OtpTarget.Phone;
+
+            var destination = user.PhoneNumber;
+
+        
+            var otp = await _otpService.GenerateOtpAsync(new GenerateOtpRequest
+            {
+                UserId = user.Id,
+                Target = otpTarget,
+                Destination = destination,
+                Purpose = OtpPurpose.PhoneNumberPinReset,
+                ExpiryMinutes = 5
+            });
+
+            return otp;
+          
+        }
+        public async Task<bool> ResetPin(ConfirmOtpRequest request)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.PhoneNumber == request.PhoneNumber);
+            if (user == null)
+            {
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
+            }
+            var validate = await _otpService.VerifyOtpAsync(
+                user.Id,
+                request.Code,
+                OtpPurpose.PhoneNumberPinReset);
+            if (validate == null)
+                throw new BaseException(
+                    Core.Enums.ExceptionType.BAD_REQUEST,
+                    "Invalid or expired OTP.");
+
+            await _onboardingRepository.ResetPin(user,  request.NewPin);
+
+            return validate.IsUsed;
+        }
+      
+        public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == args.UserId);
+            if (user == null)
+            {
+                throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
+            }
+            if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
+
+            await _onboardingRepository.ResetPin(user, model.NewPin);
+            return (true, "Pin changed successfully");
         }
 
     }

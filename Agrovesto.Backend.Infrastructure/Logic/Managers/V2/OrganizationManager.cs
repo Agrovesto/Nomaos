@@ -503,14 +503,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
           
 
             var existingUser = await _onboardingRepository.FindExistingUserAsync(model);
-            if (existingUser != null)
+            if (existingUser != null && existingUser.User !=null)
             {
-                bool hasRole = await _userManager.IsInRoleAsync(existingUser, role);
+                bool hasRole = await _userManager.IsInRoleAsync(existingUser.User, role);
                    
 
                 if (!hasRole)
                 {
-                    var result = await _userManager.AddToRoleAsync(existingUser, role);
+                    var result = await _userManager.AddToRoleAsync(existingUser.User, role);
 
                     if (!result.Succeeded)
                     {
@@ -538,26 +538,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 await _userManager.AddToRoleAsync(user, role);
 
-                existingUser = user;
+                existingUser.User = user;
             }
 
             bool exists = await _context.UserOrganizations
-               .AnyAsync(x => x.UserId == existingUser.Id && x.OrganizationCode == args.organizationCode);
+               .AnyAsync(x => x.UserId == existingUser.User.Id && x.OrganizationCode == args.organizationCode);
 
             if (!exists)
             {
                 _context.UserOrganizations.Add(new UserOrganization
                 {
-                    UserId = existingUser.Id,
+                    UserId = existingUser.User.Id,
                     OrganizationCode = args.organizationCode
                 });
             }
             return (
               new OnboardingRequestModel
               {
-                  Email = existingUser.Email,
-                  PhoneNumber = existingUser.PhoneNumber,
-                  Id = existingUser.Id
+                  Email = existingUser.User.Email,
+                  PhoneNumber = existingUser.User.PhoneNumber,
+                  Id = existingUser.User.Id
               },
                 true,
                 "Registration Successful.");
@@ -1906,7 +1906,7 @@ DateTimeOffset dateTime)
                                         PerformedByUserId = args.UserId,
                                         Description = $"{model.LogDescription}",
                                         ActivityName = $"{model.ActivityName}",
-                                        ActivityType = Entities.Common.ActivityType.Onboarding,
+                                        ModuleAccessed = Entities.Common.ModuleAccessed.Onboarding,
                                         BusinessCode = args.businessCode,
                                         OrganizationCode = args.organizationCode,
                                         CreatedOn = DateTimeOffset.Now,
