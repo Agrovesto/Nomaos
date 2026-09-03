@@ -56,6 +56,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreference(string userId);
+        Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
@@ -565,6 +567,82 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return response;
         }
+        public async Task<NotificationPreferenceResponse> GetNotificationPreference(string userId)
+        {
+            var preference = await _context.UserNotificationPreferences
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (preference == null)
+            {
+                return new NotificationPreferenceResponse
+                {
+                    UserId = userId,
+                    IsDefault = true,
+                    MappingStatusUpdates = false,
+                    AgentVisitReminders = false,
+                    MembershipAnnouncements = false,
+                    DocumentApprovalUpdates = false,
+                    GeneralPlatformUpdates = false,
+                    Sms = false,
+                    Email = false,
+                    InAppNotification = false
+                };
+            }
+
+            return MapNotificationPreference(preference);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model)
+        {
+            var preference = await _context.UserNotificationPreferences
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (preference == null)
+            {
+                preference = new UserNotificationPreference
+                {
+                    UserId = userId,
+                    CreatedOn = DateTimeOffset.UtcNow
+                };
+
+                await _context.UserNotificationPreferences.AddAsync(preference);
+            }
+            else
+            {
+                preference.DateModified = DateTimeOffset.UtcNow;
+            }
+
+            preference.MappingStatusUpdates = model.MappingStatusUpdates;
+            preference.AgentVisitReminders = model.AgentVisitReminders;
+            preference.MembershipAnnouncements = model.MembershipAnnouncements;
+            preference.DocumentApprovalUpdates = model.DocumentApprovalUpdates;
+            preference.GeneralPlatformUpdates = model.GeneralPlatformUpdates;
+            preference.Sms = model.Sms;
+            preference.Email = model.Email;
+            preference.InAppNotification = model.InAppNotification;
+
+            await _context.SaveChangesAsync();
+
+            return MapNotificationPreference(preference);
+        }
+
+        private static NotificationPreferenceResponse MapNotificationPreference(UserNotificationPreference preference) =>
+            new()
+            {
+                UserId = preference.UserId,
+                IsDefault = false,
+                MappingStatusUpdates = preference.MappingStatusUpdates,
+                AgentVisitReminders = preference.AgentVisitReminders,
+                MembershipAnnouncements = preference.MembershipAnnouncements,
+                DocumentApprovalUpdates = preference.DocumentApprovalUpdates,
+                GeneralPlatformUpdates = preference.GeneralPlatformUpdates,
+                Sms = preference.Sms,
+                Email = preference.Email,
+                InAppNotification = preference.InAppNotification,
+                LastUpdatedOn = preference.DateModified ?? preference.CreatedOn
+            };
+
         private async Task<string?> ResolveRoleEmailAsync(string userId)
         {
             var farmerEmail = await _context.Farmers

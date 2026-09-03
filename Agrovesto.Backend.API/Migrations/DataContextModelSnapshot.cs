@@ -5075,6 +5075,56 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("Traders");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.UserNotificationPreference", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("AgentVisitReminders")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CreatedOn")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("DateModified")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<bool>("DocumentApprovalUpdates")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Email")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("GeneralPlatformUpdates")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("InAppNotification")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("MappingStatusUpdates")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("MembershipAnnouncements")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("Sms")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserNotificationPreferences");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.WalletProviderConfiguration", b =>
                 {
                     b.Property<long>("Id")

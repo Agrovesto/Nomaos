@@ -72,6 +72,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
           Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId);
+        Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -1433,7 +1435,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             profile.NIN = EncryptionUtil.MaskSensitiveNumber(profile.NIN);
             return profile;
         }
-        public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        public async Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId)
+        {
+            await EnsureUserIsFarmerAsync(userId);
+
+            return await _onboardingRepository.GetNotificationPreference(userId);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model)
+        {
+            await EnsureUserIsFarmerAsync(userId);
+
+            return await _onboardingRepository.SaveNotificationPreference(userId, model);
+        }
+
+        private async Task EnsureUserIsFarmerAsync(string userId)
+        {
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Farmer"))
+                return;
+
+            throw new BaseException(
+                Core.Enums.ExceptionType.ACCESS_DENIED,
+                "Notification preferences are only available to farmers.");
+        }
+
+                public async Task<UsersProfileResponse> GetUseridentity(string userId)
         {
             var profile = await _onboardingRepository.GetUseridentity(userId);
             if (profile == null)
