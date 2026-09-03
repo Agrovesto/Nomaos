@@ -182,7 +182,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPost("transfer")]
         public async Task<IActionResult> TransferBetweenWallets([FromBody] WalletTransferRequest request, [FromQuery] WalletQueryParams args)
         {
-            args.UserId = !string.IsNullOrWhiteSpace(args.UserId) ? args.UserId : CurrentUserId;
+            if (string.IsNullOrWhiteSpace(CurrentUserId))
+                return Unauthorized(new Response<string> { Message = ResponseMessages.AccessDenied, Succeeded = false });
+
+            args.UserId = CurrentUserId;
 
             try
             {

@@ -54,6 +54,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             };
         }
 
+        public static WalletResponseService<T> Indeterminate(string message, int code = 502)
+        {
+            return new WalletResponseService<T>
+            {
+                IsSuccess = false,
+                StatusCode = code,
+                Status = "Unknown",
+                Message = message,
+                Data = default
+            };
+        }
+
         public static WalletResponseService<T> Failed(string message, int code = 400)
         {
             return new WalletResponseService<T>

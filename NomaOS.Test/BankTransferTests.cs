@@ -328,13 +328,90 @@ public class BankTransferTests
 
         status.Should().BeTrue();
         data!.Status.Should().Be("Pending");
+        data.SourceBalanceAfter.Should().Be(4500m);
 
         var wallet = await context.UserWallets.SingleAsync(x => x.Id == source.Id);
-        wallet.WalletBalance.Should().Be(5000m);
+        wallet.WalletBalance.Should().Be(4500m);
+
+        var rows = await context.UserWalletTransactions.ToListAsync();
+        rows.Single().WalletTransactionStatus.Should().Be(WalletTransactionStatus.DebitPending);
+        rows.Single().ProviderReference.Should().Be("PRV-2");
 
         var logs = await context.WalletReconciliationLogs.ToListAsync();
         logs.Should().ContainSingle();
         logs.Single().DebitReference.Should().Be($"{data.TransactionReference}-DB");
+    }
+
+    [Fact]
+    public async Task TransferToBank_WhenTheOutcomeIsUnknown_HoldsTheAmountAndFlagsForReconciliation()
+    {
+        using var context = CreateContext();
+        var (source, _) = await SeedWalletsAsync(context);
+
+        var provider = new StubBankService(
+            _ => WalletResponseService<PaymentResponse>.Indeterminate(
+                "Unable to reach Etransact service, transfer outcome unknown", 503));
+
+        var service = CreateService(context, provider);
+
+        var (status, message, data) = await service.TransferToBank(TransferOf(source.Id), Query());
+
+        status.Should().BeFalse();
+        message.Should().Contain("could not confirm");
+        data!.Status.Should().Be("ReconciliationRequired");
+
+        var wallet = await context.UserWallets.SingleAsync(x => x.Id == source.Id);
+        wallet.WalletBalance.Should().Be(4500m);
+
+        var rows = await context.UserWalletTransactions.ToListAsync();
+        rows.Single().WalletTransactionStatus.Should().Be(WalletTransactionStatus.ReconciliationRequired);
+
+        var logs = await context.WalletReconciliationLogs.ToListAsync();
+        logs.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task TransferToBank_WhenTheProviderThrows_HoldsTheAmountRatherThanFailing()
+    {
+        using var context = CreateContext();
+        var (source, _) = await SeedWalletsAsync(context);
+
+        var provider = new StubBankService(_ => throw new TimeoutException("socket closed"));
+
+        var service = CreateService(context, provider);
+
+        var (status, _, _) = await service.TransferToBank(TransferOf(source.Id), Query());
+
+        status.Should().BeFalse();
+
+        var wallet = await context.UserWallets.SingleAsync(x => x.Id == source.Id);
+        wallet.WalletBalance.Should().Be(4500m);
+
+        var rows = await context.UserWalletTransactions.ToListAsync();
+        rows.Single().WalletTransactionStatus.Should().Be(WalletTransactionStatus.ReconciliationRequired);
+    }
+
+    [Fact]
+    public async Task TransferToBank_WithAClientReferenceTooLongForTheColumn_IsRejected()
+    {
+        using var context = CreateContext();
+        var (source, _) = await SeedWalletsAsync(context);
+
+        var provider = new StubBankService();
+        var service = CreateService(context, provider);
+
+        var transfer = TransferOf(source.Id);
+        transfer.ClientReference = new string('r', 48);
+
+        var (status, message, _) = await service.TransferToBank(transfer, Query());
+
+        status.Should().BeFalse();
+        message.Should().Contain("50 characters or fewer");
+        provider.CallCount.Should().Be(0);
+
+        var wallet = await context.UserWallets.SingleAsync(x => x.Id == source.Id);
+        wallet.WalletBalance.Should().Be(5000m);
+        (await context.UserWalletTransactions.ToListAsync()).Should().BeEmpty();
     }
 
     [Fact]

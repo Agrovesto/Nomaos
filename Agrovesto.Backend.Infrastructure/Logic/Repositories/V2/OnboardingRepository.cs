@@ -56,6 +56,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role);
+        Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
@@ -63,6 +66,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UsersProfileResponse> GetUseridentity(string userId);
         Task<KYCDetails> GetKYCDetails(string userId, KYCVerificationType verificationType);
         Task ResetPin(User user,  string newPin);
+        Task<bool> ValidateUserPinAsync(string userId, string plainPin);
         Task<bool> IsRevokedAsync(string jti);
         Task RevokeAsync(string jti, string userId, DateTime tokenExpiry);
         Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
@@ -129,11 +133,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Profile not found");
 
+            var roleEmail = await ResolveRoleEmailAsync(userId);
+
             var response = new UsersProfile
             {
                 UserId = user.Id,
                 UserType = user.UserType,
-                Email = user.Email,
+                Email = !string.IsNullOrWhiteSpace(roleEmail) ? roleEmail : user.Email,
                 Phone = user.PhoneNumber,
                 Name=user.Name
             };
@@ -495,11 +501,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .AsNoTracking()
                 .ToListAsync();
 
+            var roleEmail = await ResolveRoleEmailAsync(userId);
+
             return new UsersProfileResponse
             {
                 UserId = userWithKyc.Id,
                 UserType = userWithKyc.UserType,
-                Email = userWithKyc.Email,
+                Email = !string.IsNullOrWhiteSpace(roleEmail) ? roleEmail : userWithKyc.Email,
                 Phone = userWithKyc.PhoneNumber,
                 Name = userWithKyc.Name,
                 NIN = userWithKyc.NIN,
@@ -556,7 +564,156 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 await PopulateRoleProfile(response, roleType, userId);
             }
 
+            if (string.IsNullOrWhiteSpace(response.Email))
+                response.Email = await ResolveRoleEmailAsync(userId);
+
             return response;
+        }
+        public async Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role)
+        {
+            var preference = await _context.UserNotificationPreferences
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.UserRole == role);
+
+            if (preference == null)
+            {
+                return new NotificationPreferenceResponse
+                {
+                    UserId = userId,
+                    UserRole = role,
+                    IsDefault = true,
+                    MappingStatusUpdates = false,
+                    AgentVisitReminders = false,
+                    MembershipAnnouncements = false,
+                    DocumentApprovalUpdates = false,
+                    GeneralPlatformUpdates = false,
+                    NewFarmerAssigned = false,
+                    NewFarmCreated = false,
+                    BulkUploadCompleted = false,
+                    WalletRepaymentDue = false,
+                    Sms = false,
+                    Email = false,
+                    InAppNotification = false
+                };
+            }
+
+            return MapNotificationPreference(preference);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model)
+        {
+            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Farmer);
+
+            preference.MappingStatusUpdates = model.MappingStatusUpdates;
+            preference.AgentVisitReminders = model.AgentVisitReminders;
+            preference.MembershipAnnouncements = model.MembershipAnnouncements;
+            preference.DocumentApprovalUpdates = model.DocumentApprovalUpdates;
+            preference.GeneralPlatformUpdates = model.GeneralPlatformUpdates;
+            preference.Sms = model.Sms;
+            preference.Email = model.Email;
+            preference.InAppNotification = model.InAppNotification;
+
+            await _context.SaveChangesAsync();
+
+            return MapNotificationPreference(preference);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model)
+        {
+            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Agent);
+
+            preference.NewFarmerAssigned = model.NewFarmerAssigned;
+            preference.NewFarmCreated = model.NewFarmCreated;
+            preference.BulkUploadCompleted = model.BulkUploadCompleted;
+            preference.WalletRepaymentDue = model.WalletRepaymentDue;
+            preference.Sms = model.Sms;
+            preference.Email = model.Email;
+            preference.InAppNotification = model.InAppNotification;
+
+            await _context.SaveChangesAsync();
+
+            return MapNotificationPreference(preference);
+        }
+
+        private async Task<UserNotificationPreference> ResolvePreferenceForWriteAsync(string userId, NotificationUserRole role)
+        {
+            var preference = await _context.UserNotificationPreferences
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.UserRole == role);
+
+            if (preference == null)
+            {
+                preference = new UserNotificationPreference
+                {
+                    UserId = userId,
+                    UserRole = role,
+                    CreatedOn = DateTimeOffset.UtcNow
+                };
+
+                await _context.UserNotificationPreferences.AddAsync(preference);
+            }
+            else
+            {
+                preference.DateModified = DateTimeOffset.UtcNow;
+            }
+
+            return preference;
+        }
+
+        private static NotificationPreferenceResponse MapNotificationPreference(UserNotificationPreference preference) =>
+            new()
+            {
+                UserId = preference.UserId,
+                UserRole = preference.UserRole,
+                IsDefault = false,
+                MappingStatusUpdates = preference.MappingStatusUpdates,
+                AgentVisitReminders = preference.AgentVisitReminders,
+                MembershipAnnouncements = preference.MembershipAnnouncements,
+                DocumentApprovalUpdates = preference.DocumentApprovalUpdates,
+                GeneralPlatformUpdates = preference.GeneralPlatformUpdates,
+                NewFarmerAssigned = preference.NewFarmerAssigned,
+                NewFarmCreated = preference.NewFarmCreated,
+                BulkUploadCompleted = preference.BulkUploadCompleted,
+                WalletRepaymentDue = preference.WalletRepaymentDue,
+                Sms = preference.Sms,
+                Email = preference.Email,
+                InAppNotification = preference.InAppNotification,
+                LastUpdatedOn = preference.DateModified ?? preference.CreatedOn
+            };
+
+        private async Task<string?> ResolveRoleEmailAsync(string userId)
+        {
+            var farmerEmail = await _context.Farmers
+                .AsNoTracking()
+                .Where(f => f.UserId == userId)
+                .Select(f => f.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(farmerEmail))
+                return farmerEmail;
+
+            var agentEmail = await _context.Agents
+                .AsNoTracking()
+                .Where(a => a.UserId == userId)
+                .Select(a => a.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(agentEmail))
+                return agentEmail;
+
+            var membershipEmail = await _context.MemberShips
+                .AsNoTracking()
+                .Where(m => m.UserId == userId)
+                .Select(m => m.Email)
+                .FirstOrDefaultAsync();
+
+            if (!string.IsNullOrWhiteSpace(membershipEmail))
+                return membershipEmail;
+
+            return await _context.Organizations
+                .AsNoTracking()
+                .Where(o => o.UserId == userId)
+                .Select(o => o.OrganizationEmail)
+                .FirstOrDefaultAsync();
         }
         private async Task PopulateRoleProfile(UsersProfileResponse response, string roleType, string userId)
         {
@@ -566,21 +723,33 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     response.Farmer = await GetFarmerProfile(userId);
                     response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
                     response.Gender = response.Farmer?.PersonalInformation.Gender ?? "NA";
+                    response.Email = !string.IsNullOrWhiteSpace(response.Farmer?.PersonalInformation?.Email)
+                        ? response.Farmer.PersonalInformation.Email
+                        : response.Email;
                     break;
 
                 case "Agent":
                     response.Agent = await GetAgentProfile(userId);
                     response.Name = response.Agent?.Name ?? response.Name;
+                    response.Email = !string.IsNullOrWhiteSpace(response.Agent?.Email)
+                        ? response.Agent.Email
+                        : response.Email;
                     break;
 
                 case "MemberShip":
                     response.Membership = await GetCooperativeProfile(userId); 
                     response.Gender = response.Membership?.MembershipLeaderGender ?? "NA";
+                    response.Email = !string.IsNullOrWhiteSpace(response.Membership?.Email)
+                        ? response.Membership.Email
+                        : response.Email;
                     break;
 
                 case "Organization":
                     response.Organization = await GetOrganizationProfile(userId); // fixed: was overwriting Membership
                     response.Name = response.Organization?.OrganizationName ?? response.Name;
+                    response.Email = !string.IsNullOrWhiteSpace(response.Organization?.OrganizationEmail)
+                        ? response.Organization.OrganizationEmail
+                        : response.Email;
                     break;
 
                 default:
@@ -650,7 +819,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     Gender = farmer.Gender,
                     DateOfBirth = farmer.DateOfBirth,
                     PhoneNumber = farmer.PhoneNumber,
-                    Email = user?.Email,
+                    Email = !string.IsNullOrWhiteSpace(farmer.Email) ? farmer.Email : user?.Email,
                     BVN = user?.BVN,
                     NIN = user?.NIN,
                     DateRegistered = farmer.OnBoardedOn,
@@ -1638,24 +1807,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
+            if (string.IsNullOrWhiteSpace(model.Email))
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change password for an account with no email address, Kindly update your profile");
+
             var userExist = await _userManager.FindByEmailAsync(model.Email);
-            if (userExist != null)
+
+            if (userExist == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Email");
+
+            if (string.IsNullOrWhiteSpace(model.OldPassword))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your current password is required.");
+
+            if (string.IsNullOrWhiteSpace(model.NewPassword))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new password is required.");
+
+            if (!string.Equals(model.NewPassword, model.ConfirmPassword, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Confirm Password must match New Password.");
+
+            if (string.Equals(model.OldPassword, model.NewPassword, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new password must be different from your current password.");
+
+            var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
+
+            if (!resetPassword.Succeeded)
             {
-                var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
-                if (resetPassword.Succeeded)
-                {
-                    return (true, resetPassword.Succeeded.ToString());
-                }
-                else
-                {
-                    return (false, resetPassword.Errors.ToString());
-                }
+                var reason = string.Join(" ", resetPassword.Errors.Select(x => x.Description));
 
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    string.IsNullOrWhiteSpace(reason)
+                        ? "The current password you entered is incorrect."
+                        : reason);
             }
-            if (string.IsNullOrEmpty(userExist.Email)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change password for an account with no email address, Kindly update your profile");
 
-            throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Email");
-         
+            userExist.HasDefaultPassword = false;
+            await _context.SaveChangesAsync();
+
+            return (true, "Password changed successfully");
         }
         public async Task<(UserModel model, bool status, string message)> OnRegistrationAsync(UserModel model, string roleName)
         {
@@ -1838,6 +2026,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
         }
 
+
+        public async Task<bool> ValidateUserPinAsync(string userId, string plainPin)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == userId);
+
+            if (user == null || string.IsNullOrWhiteSpace(user.Salt) || string.IsNullOrWhiteSpace(user.PinEncrypt))
+                return false;
+
+            return ValidateUserPin(user, plainPin);
+        }
 
         public async Task ResetPin(User user, string newPin)
         {
