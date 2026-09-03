@@ -18,6 +18,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
     public interface IAgentManager
     {
         Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query);
+        Task<AgentProfileDto> GetAgentProfile(string userId);
         Task<PagedListResponse<List<MemberShipResponseModel>>> GetMembershipsByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
         Task<PagedListResponse<List<FarmerModel>>> GetFarmersByCooperativeId(ListQueryParams query);
@@ -128,6 +129,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 throw new NotFoundException($"No Record Found");
             }
         }
+        public async Task<AgentProfileDto> GetAgentProfile(string userId)
+        {
+            var profile = await _agentRepository.GetAgentProfile(userId);
+
+            if (profile == null)
+                throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Agent profile not found");
+
+            return profile;
+        }
+
         public async Task<AgentDashboardDto> GetAgentDashboardData(ListQueryParams query)
         {
 
