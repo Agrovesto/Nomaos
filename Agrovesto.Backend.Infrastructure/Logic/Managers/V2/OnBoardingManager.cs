@@ -1934,7 +1934,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 ValidateCriticalInputs(model, args);
 
                 var dateTime = DateTimeOffset.UtcNow;
-
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
                 var business = await GetBusinessOrFail(args.businessCode);
 
                 var user = await RegisterMembershipLeaderOrFail(model, args);
@@ -2004,7 +2006,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Pin = model.Pin,
                     FirstName = model.MembershipLeaderFirstName,
                     MiddleName = model.MembershipLeaderMiddleName,
-                    LastName = model.MembershipLeaderLastName
+                    LastName = model.MembershipLeaderLastName,
+                    DateOfBirth=model.DateOfBirth,
+                    SignupMethod= model.SignupMethod,
                 }, args);
 
             if (!result.status)
@@ -2124,8 +2128,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
 
                 var business = await GetBusinessOrFail(args.businessCode);
-
-               var registerUser = await _onboardingRepository.RegisterUser(
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
+                var registerUser = await _onboardingRepository.RegisterUser(
                new OnboardingRequestModel
                {
                    Email = model.Email,
@@ -2134,7 +2140,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                    Pin = model.Pin,
                    FirstName = model.FirstName,
                    MiddleName = model.MiddleName,
-                   LastName = model.LastName
+                   LastName = model.LastName,
+                   SignupMethod=model.SignupMethod,
+                   DateOfBirth = model.DateOfBirth
                }, args);
 
 

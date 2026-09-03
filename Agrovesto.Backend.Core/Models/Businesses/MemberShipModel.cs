@@ -19,12 +19,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
         public string Name { get; set; }
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Password { get; set; }
         public string? Pin { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
         public string? Ward { get; set; }
+        public string? DateOfBirth { get; set; }
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public long OrganizationId { get; set; }
