@@ -8,7 +8,12 @@ using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
@@ -22,7 +27,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         
         private readonly IBulkFarmerUploadService _bulkFarmerUploadService;
         private readonly ILogger<AuthenticationController> _logger;
-     
+        public record LogoutRequest(string RefreshToken);
         public AuthenticationController(IHttpContextAccessor httpContextAccessor,
             IOnBoardingManager onBoardingManager,
             IBusinessManager businessManager, IBulkFarmerUploadService bulkFarmerUploadService, 
@@ -71,7 +76,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 return await _onBoardingManager.CreateBusinessUser(model, args);
             },
-            request => Ok(Success(request, ResponseMessages.Successful)));
+            request => Ok(Success(request, request.Message, ResponseMessages.Successful)));
         }
 
         [HttpPost("verify-otp")]
@@ -195,62 +200,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return _onBoardingManager.AssignFarmerToCooperatives(args);
             },
             request => Ok(Success(request, ResponseMessages.Successful)));
-        }
-
-        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
-        {
-            var roleHandlers = new Dictionary<string, Func<OnBoardingArgs, Task>>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["Agent"] = EnrichAgentAsync,
-                ["MemberShip"] = EnrichCooperativeAsync,              
-                // ["Organization"] = EnrichOrganizationAsync,
-            };
-
-            foreach (var role in RolePriority)
-            {
-                if (CurrentUserRoles.Contains(role, StringComparer.OrdinalIgnoreCase)
-                    && roleHandlers.TryGetValue(role, out var handler))
-                {
-                    await handler(args);
-                    return; // highest-priority match wins
-                }
-            }
-        }
-
-        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
-        {
-            if (args.Id != 0) return;
-
-            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
-
-            if (coop == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Cooperative not found for the specified user.");
-
-            args.Id = coop.Id;
-
-            args.CooperativeIds ??= new List<long?>();
-
-            if (!args.CooperativeIds.Contains(coop.Id))
-                args.CooperativeIds.Add(coop.Id);
-        }
-        private async Task EnrichAgentAsync(OnBoardingArgs args)
-        {
-            if (args.Id != 0) return;
-            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
-
-            if (agent == null)
-                throw new BaseException(
-                    ExceptionType.NOTFOUND,
-                    "Agent not found for the specified user.");
-
-            args.Id = agent.Id;
-
-            args.AgentIds ??= new List<long?>();
-
-            if (!args.AgentIds.Contains(agent.Id))
-                args.AgentIds.Add(agent.Id);
         }
 
    
@@ -431,7 +380,73 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             ));
         }
 
+        [Authorize]
+        [HttpPost("logout")]
+        public async Task<IActionResult> Logout()
+        {
+            var result = await _onBoardingManager.Logout(User);
+
+            if (!result.Status)
+                return BadRequest(new { message = result.Message });
+
+            return Ok(new { message = result.Message });
+        }
 
 
+        private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
+        {
+            var roleHandlers = new Dictionary<string, Func<OnBoardingArgs, Task>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Agent"] = EnrichAgentAsync,
+                ["MemberShip"] = EnrichCooperativeAsync,
+                // ["Organization"] = EnrichOrganizationAsync,
+            };
+
+            foreach (var role in RolePriority)
+            {
+                if (CurrentUserRoles.Contains(role, StringComparer.OrdinalIgnoreCase)
+                    && roleHandlers.TryGetValue(role, out var handler))
+                {
+                    await handler(args);
+                    return; // highest-priority match wins
+                }
+            }
+        }
+
+        private async Task EnrichCooperativeAsync(OnBoardingArgs args)
+        {
+            if (args.Id != 0) return;
+
+            var coop = await _businessManager.GetCooperativeDetailByUserId(CurrentUserId);
+
+            if (coop == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Cooperative not found for the specified user.");
+
+            args.Id = coop.Id;
+
+            args.CooperativeIds ??= new List<long?>();
+
+            if (!args.CooperativeIds.Contains(coop.Id))
+                args.CooperativeIds.Add(coop.Id);
+        }
+        private async Task EnrichAgentAsync(OnBoardingArgs args)
+        {
+            if (args.Id != 0) return;
+            var agent = await _businessManager.GetAgentDetailByUserId(CurrentUserId);
+
+            if (agent == null)
+                throw new BaseException(
+                    ExceptionType.NOTFOUND,
+                    "Agent not found for the specified user.");
+
+            args.Id = agent.Id;
+
+            args.AgentIds ??= new List<long?>();
+
+            if (!args.AgentIds.Contains(agent.Id))
+                args.AgentIds.Add(agent.Id);
+        }
     }
 }

@@ -160,6 +160,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     MiddleName = model.MiddleName,
                     LastName = model.LastName,
                     DateOfBirth = model.DateOfBirth,
+                    SignupMethod=model.SignupMethod
                 }, args);
 
             if (!result.status)
@@ -262,7 +263,7 @@ DateTimeOffset dateTime)
                                         PerformedByUserId = args.UserId,
                                         Description = $"{model.LogDescription}",
                                         ActivityName= $"{model.ActivityName}",
-                                        ActivityType= Entities.Common.ActivityType.Onboarding,
+                                        ModuleAccessed= Entities.Common.ModuleAccessed.Onboarding,
                                         BusinessCode=args.businessCode,
                                         OrganizationCode=args.organizationCode,
                                         CreatedOn= DateTimeOffset.Now,
@@ -349,7 +350,9 @@ OnboardingRequestModel user,
                 var dateTime = DateTimeOffset.UtcNow;
 
                 var business = await GetBusinessOrFail(args.businessCode);
-
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
                 var user = await RegisterFarmerOrFail(model, args);
 
                 var farmer = await CreateFarmerOrFails(

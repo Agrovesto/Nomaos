@@ -231,7 +231,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Pin { get; set; }
         public LoginType LoginMethod { get; set; }
     }
-
+  
     public class UserObject
     {
         public string Id { get; set; }

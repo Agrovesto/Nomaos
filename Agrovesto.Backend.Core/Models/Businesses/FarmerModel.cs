@@ -8,6 +8,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public enum SignupMethod
+    {
+        PhoneNumber = 1,
+        Email = 2
+    }
     public enum FarmerOnboardingStatus
     {
         Pending = 0,
@@ -18,7 +23,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public long Id { get; set; }
         public string? OnboardedByUserId { get; set; }
-
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? FirstName { get; set; }

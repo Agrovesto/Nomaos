@@ -120,11 +120,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class CreateInputPackageRequest
     {
+        [Required(ErrorMessage ="Package name is required")]
         public string Name { get; set; }
+
+        [Required(ErrorMessage = "Category must be selected")]
         public long InputFinancingCategoryId { get; set; }
+
+        [Required(ErrorMessage = "Subscription type is required")]
         public InputSubScriptionType SubScriptionType { get; set; }
+
+        [Required(ErrorMessage = "Package Target is required")]
         public string InputTarget { get; set; } // e.g. crop, livestock, fishery
+
+        [Required(ErrorMessage = "Package season is required")]
         public string InputSeason { get; set; } // e.g. 2024 wet season
+
+        [Required(ErrorMessage = "Package structured is required")]
         public InputPackageStructure PackageStructure { get; set; }
         public List<CreateInputPackageItemRequest> InputPackageItems { get; set; } = new();
         public decimal TotalPackageValue { get; set; } //calculate if structure is physical
@@ -146,24 +157,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public InputPackageRepaymentMode RepaymentModel { get; set; }
         public decimal RepaymentValue { get; set; } = 0;
         public RiskCategory RiskCategory { get; set; }
-
-
-
         public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; } = new();
 
         public decimal TotalFinancingValue { get; set; }
-
-
-
-
-
-
-
-
-
-
-        //public bool ApplyInterest { get; set; }
-        //public decimal InterestRate { get; set; }
 
         public string Currency { get; set; } = "NGN";
     }
@@ -780,7 +776,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public List<InputBreakdownDto> InputBreakdown { get; set; }
         public List<AdditionalCostDto> AdditionalCost { get; set; }
         public SubscriberInfoDto Subscriber { get; set; }
-
+        public DeliveryInformation DeliveryDetails { get; set; }
         public PackageInfoDto Package { get; set; }
 
         public FinancingSnapshotDto FinancingSnapshot { get; set; }

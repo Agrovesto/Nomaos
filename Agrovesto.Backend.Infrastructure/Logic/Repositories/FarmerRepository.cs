@@ -1437,12 +1437,7 @@ WHERE f.UserId = @userId
                 }
             ).ToListAsync();
 
-            //// Add Serial Numbers
-            //int serialStart = (query.PageNumber - 1) * query.PageSize;
-
-            ////for (int i = 0; i < result.Count; i++)
-            ////    result[i].SN = serialStart + i + 1;
-
+         
             return new PagedListResponse<List<AgentMembershipDto>>
             {
                 Data = result,
@@ -1453,8 +1448,8 @@ WHERE f.UserId = @userId
         }
 
         public async Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(
-    string agentUserId,
-    ListQueryParams query)
+      string agentUserId,
+      ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
@@ -1473,8 +1468,54 @@ WHERE f.UserId = @userId
                 };
             }
 
+            MappingStatus? mappingStatusFilter = null;
+            if (!string.IsNullOrWhiteSpace(query.MappingStatus))
+            {
+                if (!Enum.TryParse<MappingStatus>(query.MappingStatus, true, out var parsed))
+                {
+                    return new PagedListResponse<List<FarmerAgentDto>>
+                    {
+                        Message = $"Invalid mappingStatus value '{query.MappingStatus}'",
+                        Data = new List<FarmerAgentDto>(),
+                        Count = 0,
+                        PageNumber = query.PageNumber,
+                        PageSize = query.PageSize
+                    };
+                }
+                mappingStatusFilter = parsed;
+            }
+            bool? cooperativeLinkedFilter = null;
+            if (!string.IsNullOrWhiteSpace(query.CooperativeStatus))
+            {
+                if (string.Equals(query.CooperativeStatus, "Linked", StringComparison.OrdinalIgnoreCase))
+                    cooperativeLinkedFilter = true;
+                else if (string.Equals(query.CooperativeStatus, "Not Linked", StringComparison.OrdinalIgnoreCase))
+                    cooperativeLinkedFilter = false;
+                else
+                {
+                    return new PagedListResponse<List<FarmerAgentDto>>
+                    {
+                        Message = $"Invalid cooperativeStatus value '{query.CooperativeStatus}'. Expected 'Linked' or 'Not Linked'.",
+                        Data = new List<FarmerAgentDto>(),
+                        Count = 0,
+                        PageNumber = query.PageNumber,
+                        PageSize = query.PageSize
+                    };
+                }
+            }
             var queryable = BuildAgentFarmersQueryable(agentId, query);
 
+            if (mappingStatusFilter.HasValue)
+            {
+                queryable = queryable.Where(f =>
+                    _context.Farms.Any(farm => farm.FarmerId == f.Id && farm.MappingStatus == mappingStatusFilter.Value));
+            }
+            if (cooperativeLinkedFilter.HasValue)
+            {
+                queryable = cooperativeLinkedFilter.Value
+                    ? queryable.Where(f => _context.FarmerCooperatives.Any(fc => fc.FarmerId == f.Id))
+                    : queryable.Where(f => !_context.FarmerCooperatives.Any(fc => fc.FarmerId == f.Id));
+            }
             var totalCount = await queryable.CountAsync();
             if (totalCount == 0)
             {
@@ -1496,24 +1537,43 @@ WHERE f.UserId = @userId
 
             var farmerIds = farmers.Select(x => x.Id).ToList();
 
-            // one query instead of three (mappedLookup + farmStatsLookup + implicit totalMapped derivation)
             var farmStatsLookup = await _context.Farms
                 .AsNoTracking()
                 .Where(p => farmerIds.Contains(p.FarmerId))
                 .GroupBy(p => p.FarmerId)
                 .ToDictionaryAsync(
                     g => g.Key,
-                    g => new { Count = g.Count(), TotalSize = g.Sum(x => (decimal?)x.FarmSize) ?? 0m });
+                    g => new
+                    {
+                        Count = g.Count(),
+                        TotalSize = g.Sum(x => (decimal?)x.FarmSize) ?? 0m,
+                        IsMapped = g.Any(x => x.MappingStatus == MappingStatus.Mapped)
+                    });
 
-            // one query instead of two (coopLookup + totalLinked derivation)
             var coopLookup = await _context.FarmerCooperatives
                 .AsNoTracking()
                 .Where(fc => farmerIds.Contains(fc.FarmerId))
                 .GroupBy(fc => fc.FarmerId)
                 .ToDictionaryAsync(g => g.Key, g => true);
 
-            var totalLinked = coopLookup.Count;
-            var totalMapped = farmStatsLookup.Count(kv => kv.Value.Count > 0);
+            var allFarmerIdsForAgent = await queryable
+                //(agentId, query)
+                .Select(f => f.Id)
+                .ToListAsync();
+
+            var totalLinked = await _context.FarmerCooperatives
+                .AsNoTracking()
+                .Where(fc => allFarmerIdsForAgent.Contains(fc.FarmerId))
+                .Select(fc => fc.FarmerId)
+                .Distinct()
+                .CountAsync();
+
+            var totalMapped = await _context.Farms
+                .AsNoTracking()
+                .Where(f => allFarmerIdsForAgent.Contains(f.FarmerId) && f.MappingStatus == MappingStatus.Mapped)
+                .Select(f => f.FarmerId)
+                .Distinct()
+                .CountAsync();
 
             var result = farmers.Select(f => new FarmerAgentDto
             {
@@ -1523,7 +1583,7 @@ WHERE f.UserId = @userId
                 State = f.State,
                 Lga = f.Lga,
                 CooperativeStatus = coopLookup.ContainsKey(f.Id) ? "Linked" : "Not Linked",
-                MappingStatus = farmStatsLookup.GetValueOrDefault(f.Id)?.Count > 0 ? "Mapped" : "Unmapped",
+                MappingStatus = farmStatsLookup.TryGetValue(f.Id, out var s) && s.IsMapped ? "Mapped" : "Unmapped",
                 DateAdded = f.OnBoardedOn,
                 TotalLinkedFarmers = totalLinked,
                 TotalMappedFarms = totalMapped,
@@ -2302,7 +2362,7 @@ WHERE f.UserId = @userId
                 {
                     Timestamp = a.CreatedOn,
                     Description = a.Description,
-                    ActivityType = EnumExtensions.GetDisplayName(a.ActivityType),
+                    ActivityType = EnumExtensions.GetDisplayName(a.ModuleAccessed),
                     ActivityName = a.ActivityName
                 })
                 .ToListAsync();
