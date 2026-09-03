@@ -675,27 +675,36 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 if (string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) || string.IsNullOrWhiteSpace(@params.TerminalId) || string.IsNullOrWhiteSpace(@params.Pin))
                 {
+                    _log.LogError(
+                        "Fund transfer is not configured for {Env}. Missing: {Missing}",
+                        Env,
+                        string.Join(", ", new[]
+                        {
+                            string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) ? "FundTransferBaseUrl" : null,
+                            string.IsNullOrWhiteSpace(@params.TerminalId) ? "TerminalId" : null,
+                            string.IsNullOrWhiteSpace(@params.Pin) ? "Pin" : null
+                        }.Where(x => x != null)));
+
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "Etransact fund transfer is not configured for this environment. " +
-                        "FundTransferBaseUrl/TerminalId/Pin must be provisioned (Switch-IT Fund Transfer " +
-                        "activation and PIN encryption details come from your eTz business representative) " +
-                        "before transfers can be initiated.",
-                        501);
+                        "Transfers are temporarily unavailable. Please try again later.", 501);
                 }
 
                 if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 {
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "Destination account/wallet number (AccountNumber) is required.", 400);
+                        "A destination account number is required.", 400);
                 }
 
                 if (string.IsNullOrWhiteSpace(request.SenderName)
                     || string.IsNullOrWhiteSpace(request.SenderAccountNumber)
                     || string.IsNullOrWhiteSpace(request.RecipientName))
                 {
+                    _log.LogError(
+                        "Transfer {Reference} is missing sender or recipient details required by the provider.",
+                        request.Reference);
+
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "SenderName, SenderAccountNumber and RecipientName are required to build the fund transfer request.",
-                        400);
+                        "We could not process this transfer. Please try again.", 400);
                 }
 
                 // "700" = PocketMoni/wallet-to-wallet, otherwise a NUBAN bank account code.
@@ -757,9 +766,14 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 if (!httpResponse.IsSuccessStatusCode || transferResponse == null)
                 {
+                    _log.LogError(
+                        "Transfer {Reference} returned an unreadable provider response. Status: {Status}. Body: {Body}",
+                        request.Reference,
+                        HttpStatusCodeHelper.Describe(httpResponse.StatusCode),
+                        responseContent);
+
                     return WalletResponseService<PaymentResponse>.Indeterminate(
-                        $"Transfer outcome unknown ({HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}). " +
-                        $"Reconcile using transaction status before retrying. Raw: {responseContent}",
+                        "We could not confirm this transfer. Please check your transaction history before retrying.",
                         (int)httpResponse.StatusCode);
                 }
 
@@ -792,19 +806,24 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
             }
             catch (TaskCanceledException ex)
             {
+                _log.LogError(ex, "Transfer {Reference} timed out awaiting the provider.", request.Reference);
+
                 return WalletResponseService<PaymentResponse>.Indeterminate(
-                    "Etransact did not answer before the timeout, transfer outcome unknown - reconcile via transaction status: "
-                    + ex.Message, 504);
+                    "We could not confirm this transfer. Please check your transaction history before retrying.", 504);
             }
             catch (HttpRequestException ex)
             {
+                _log.LogError(ex, "Transfer {Reference} could not reach the provider.", request.Reference);
+
                 return WalletResponseService<PaymentResponse>.Indeterminate(
-                    "Unable to reach Etransact service, transfer outcome unknown - reconcile via transaction status: "
-                    + ex.Message, 503);
+                    "We could not confirm this transfer. Please check your transaction history before retrying.", 503);
             }
             catch (Exception ex)
             {
-                return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
+                _log.LogError(ex, "Transfer {Reference} failed unexpectedly.", request.Reference);
+
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Transfer failed. Please try again.", 500);
             }
         }
 
