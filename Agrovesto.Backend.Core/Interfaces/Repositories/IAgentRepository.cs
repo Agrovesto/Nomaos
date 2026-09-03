@@ -14,7 +14,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<AgentModel> GetAgentBySuperVisor(string userId);
         Task<AgentModel> GetAgentDetailById(long Id);
         Task<AgentModel> GetAgentDetailByUserId(string userId);
-        Task<AgentProfileDto> GetAgentProfile(string userId);
         Task<List<AgentModel>> GetAgents();
         Task<List<AgentModel>> GetAgentsByBusinessCode(string businessCode, ListQueryParams query);
         Task<bool> UpdateOrganizationAgentLocation(OrganizationAgentArgs data);

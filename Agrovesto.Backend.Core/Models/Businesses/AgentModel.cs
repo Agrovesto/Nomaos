@@ -25,25 +25,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long? OrganizationId { get; set; }
  
     }
-    public class AgentProfileDto
-    {
-        public long AgentId { get; set; }
-        public string UserId { get; set; }
-        public string Status { get; set; }
-        public DateTimeOffset DateRegistered { get; set; }
-        public string? Name { get; set; }
-        public string? AgentImage { get; set; }
-        public AgentProfileLocationDto Location { get; set; }
-    }
-
-    public class AgentProfileLocationDto
-    {
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public string? Ward { get; set; }
-        public string? Community { get; set; }
-    }
-
     public class OrganizationAgentAssignmArgs
     {
         public long LocationId { get; set; }

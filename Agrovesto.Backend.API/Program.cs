@@ -7,7 +7,6 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
-using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
@@ -32,7 +31,6 @@ using QuestPDF.Infrastructure;
 using Serilog;
 using SixLabors.ImageSharp;
 using System;
-using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
@@ -183,27 +181,6 @@ builder.Services.AddAuthentication(options =>
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
         RoleClaimType = "Roles"
-    }; 
-    opt.Events = new JwtBearerEvents
-    {
-        OnTokenValidated = async context =>
-        {
-            var jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
-
-            if (string.IsNullOrEmpty(jti))
-            {
-                context.Fail("Token missing jti claim.");
-                return;
-            }
-
-            var revocationService = context.HttpContext.RequestServices
-                .GetRequiredService<IOnboardingRepository>();
-
-            if (await revocationService.IsRevokedAsync(jti))
-            {
-                context.Fail("Token has been revoked.");
-            }
-        }
     };
 });
 

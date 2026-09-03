@@ -262,7 +262,7 @@ DateTimeOffset dateTime)
                                         PerformedByUserId = args.UserId,
                                         Description = $"{model.LogDescription}",
                                         ActivityName= $"{model.ActivityName}",
-                                        ModuleAccessed= Entities.Common.ModuleAccessed.Onboarding,
+                                        ActivityType= Entities.Common.ActivityType.Onboarding,
                                         BusinessCode=args.businessCode,
                                         OrganizationCode=args.organizationCode,
                                         CreatedOn= DateTimeOffset.Now,

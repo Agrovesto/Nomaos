@@ -490,6 +490,7 @@ public class SubscriptionDocument
         public DateTimeOffset? DisbursedOn { get; set; }
         public string? DisbursedByUserId { get; set; }
         public User DisbursedByUser { get; set; }
+        public decimal? DisbursedAmount { get; set; }
         public decimal? RemainingBalance { get; set; }
         public bool IsPartial { get; set; }
         public long? LocationId { get; set; }

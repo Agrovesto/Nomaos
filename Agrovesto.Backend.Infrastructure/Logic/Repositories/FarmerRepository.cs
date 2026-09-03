@@ -2302,7 +2302,7 @@ WHERE f.UserId = @userId
                 {
                     Timestamp = a.CreatedOn,
                     Description = a.Description,
-                    ActivityType = EnumExtensions.GetDisplayName(a.ModuleAccessed),
+                    ActivityType = EnumExtensions.GetDisplayName(a.ActivityType),
                     ActivityName = a.ActivityName
                 })
                 .ToListAsync();
@@ -2346,8 +2346,8 @@ WHERE f.UserId = @userId
                     DateOfBirth = farmer.DateOfBirth,
                     PhoneNumber = farmer.PhoneNumber,
                     Email = farmer.Email,
-                    BVN = EncryptionUtil.MaskSensitiveNumber(user?.BVN),
-                    NIN = EncryptionUtil.MaskSensitiveNumber(user?.NIN),
+                    BVN = user?.BVN,
+                    NIN = user?.NIN,
                     FarmerImage = farmerImage,
                     DateRegistered = farmer.OnBoardedOn,
                     FarmerLevel = EnumExtensions.GetDisplayName(farmer.Level),
@@ -2438,8 +2438,8 @@ WHERE f.UserId = @userId
 
             var mappedFarmer = farmer.Map();
             mappedFarmer.ValueChainItems = valueChainSelections;
-            mappedFarmer.NIN = EncryptionUtil.MaskSensitiveNumber(subAccount?.NIN);
-            mappedFarmer.BVN = EncryptionUtil.MaskSensitiveNumber(subAccount?.Bvn);
+            mappedFarmer.NIN = subAccount?.NIN;
+            mappedFarmer.BVN = subAccount?.Bvn;
             var result = new FarmerDetailDto
             {
                 Farmer = mappedFarmer,
@@ -2533,7 +2533,7 @@ WHERE f.UserId = @userId
             var farmerUserIds = farmers.Select(f => f.UserId).ToList();
 
             // ----------------------------------------------------
-            // 6. Load cooperatives per farmer
+            // 6. Load cooperatives (MANY per farmer)
             // ----------------------------------------------------
             var farmerCoops = await (
                 from fc in _context.FarmerCooperatives.AsNoTracking()
@@ -2555,7 +2555,7 @@ WHERE f.UserId = @userId
                 );
 
             // ----------------------------------------------------
-            // 7. Load agents per farmer
+            // 7. Load agents (MANY per farmer)
             // ----------------------------------------------------
             var farmerAgents = await (
                 from fa in _context.FarmerAgents.AsNoTracking()

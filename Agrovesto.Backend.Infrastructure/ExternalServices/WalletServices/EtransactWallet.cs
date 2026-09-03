@@ -75,15 +75,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             var response = new ProviderParams();
 
-            var _params = parameters.ToDictionary(x => x.Key, StringComparer.OrdinalIgnoreCase);
+            var _params = parameters.ToDictionary(x => x.Key);
 
-            response.BaseUrl = RequiredParam(_params, "BaseUrl", Env);
-            response.ClientSecret = RequiredParam(_params, "ClientSecret", Env);
-            response.ClientId = RequiredParam(_params, "ClientId", Env);
-            response.SchemeId = RequiredParam(_params, "SchemeId", Env);
-            response.WalletShemeTierId = RequiredParam(_params, "WalletShemeTierId", Env);
-            response.WalletFee = RequiredParam(_params, "Fee", Env);
-            response.WalletStampDuty = RequiredParam(_params, "StampDuty", Env);
+            response.BaseUrl = _params["BaseUrl"].Value;
+            response.ClientSecret = _params["ClientSecret"].Value;
+            response.ClientId = _params["ClientId"].Value;
+            response.SchemeId = _params["SchemeId"].Value;
+            response.WalletShemeTierId = _params["WalletShemeTierId"].Value;
+            response.WalletFee = _params["Fee"].Value;
+            response.WalletStampDuty = _params["StampDuty"].Value;
 
             // Unlike the fields above, these don't throw when the key is absent -
             // FundTransferBaseUrl/TerminalId/Pin aren't provisioned for every
@@ -94,16 +94,6 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
             return response;
 
-        }
-
-        private static string RequiredParam(
-            IDictionary<string, WalletProviderParameterModel> parameters, string key, string env)
-        {
-            if (!parameters.TryGetValue(key, out var parameter) || string.IsNullOrWhiteSpace(parameter.Value))
-                throw new InvalidOperationException(
-                    $"Etransact parameter '{key}' is not configured for the '{env}' environment.");
-
-            return parameter.Value;
         }
 
         public async Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(
@@ -675,36 +665,27 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
                 if (string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) || string.IsNullOrWhiteSpace(@params.TerminalId) || string.IsNullOrWhiteSpace(@params.Pin))
                 {
-                    _log.LogError(
-                        "Fund transfer is not configured for {Env}. Missing: {Missing}",
-                        Env,
-                        string.Join(", ", new[]
-                        {
-                            string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) ? "FundTransferBaseUrl" : null,
-                            string.IsNullOrWhiteSpace(@params.TerminalId) ? "TerminalId" : null,
-                            string.IsNullOrWhiteSpace(@params.Pin) ? "Pin" : null
-                        }.Where(x => x != null)));
-
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "Transfers are temporarily unavailable. Please try again later.", 501);
+                        "Etransact fund transfer is not configured for this environment. " +
+                        "FundTransferBaseUrl/TerminalId/Pin must be provisioned (Switch-IT Fund Transfer " +
+                        "activation and PIN encryption details come from your eTz business representative) " +
+                        "before transfers can be initiated.",
+                        501);
                 }
 
                 if (string.IsNullOrWhiteSpace(request.AccountNumber))
                 {
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "A destination account number is required.", 400);
+                        "Destination account/wallet number (AccountNumber) is required.", 400);
                 }
 
                 if (string.IsNullOrWhiteSpace(request.SenderName)
                     || string.IsNullOrWhiteSpace(request.SenderAccountNumber)
                     || string.IsNullOrWhiteSpace(request.RecipientName))
                 {
-                    _log.LogError(
-                        "Transfer {Reference} is missing sender or recipient details required by the provider.",
-                        request.Reference);
-
                     return WalletResponseService<PaymentResponse>.Failed(
-                        "We could not process this transfer. Please try again.", 400);
+                        "SenderName, SenderAccountNumber and RecipientName are required to build the fund transfer request.",
+                        400);
                 }
 
                 // "700" = PocketMoni/wallet-to-wallet, otherwise a NUBAN bank account code.
@@ -737,43 +718,26 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 System.Diagnostics.Debug.WriteLine(
                     $"[InitiateWalletTransfer] reference={request.Reference} payloadJson={payloadJson}");
 
-                var fundTransferUri = new Uri(
-                    new Uri(@params.FundTransferBaseUrl.TrimEnd('/') + "/"), "fund-transfer");
-
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+                using var client = new HttpClient { BaseAddress = new Uri(@params.FundTransferBaseUrl) };
                 client.DefaultRequestHeaders.Clear();
                 client.DefaultRequestHeaders.Add("Accept", "application/json");
 
                 var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
-                var httpResponse = await client.PostAsync(fundTransferUri, content);
+                var httpResponse = await client.PostAsync("/fund-transfer", content);
                 var responseContent = await httpResponse.Content.ReadAsStringAsync();
 
                 System.Diagnostics.Debug.WriteLine(
                     $"[InitiateWalletTransfer] status={(int)httpResponse.StatusCode} body={responseContent}");
 
-                FundTransferEtransactResponse? transferResponse;
-
-                try
-                {
-                    transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
-                        responseContent,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                }
-                catch (JsonException)
-                {
-                    transferResponse = null;
-                }
+                var transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
+                    responseContent,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 if (!httpResponse.IsSuccessStatusCode || transferResponse == null)
                 {
-                    _log.LogError(
-                        "Transfer {Reference} returned an unreadable provider response. Status: {Status}. Body: {Body}",
-                        request.Reference,
-                        HttpStatusCodeHelper.Describe(httpResponse.StatusCode),
-                        responseContent);
-
-                    return WalletResponseService<PaymentResponse>.Indeterminate(
-                        "We could not confirm this transfer. Please check your transaction history before retrying.",
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        $"Transfer outcome unknown ({HttpStatusCodeHelper.Describe(httpResponse.StatusCode)}). " +
+                        $"Reconcile using transaction status before retrying. Raw: {responseContent}",
                         (int)httpResponse.StatusCode);
                 }
 
@@ -783,9 +747,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     ResponseCode = transferResponse.Error,
                     ResponseDescription = transferResponse.Message,
                     Reference = transferResponse.Reference,
-                    ProviderReference = string.IsNullOrWhiteSpace(transferResponse.OtherReference)
-                        ? transferResponse.Reference
-                        : transferResponse.OtherReference,
+                    ProviderReference = transferResponse.Reference,
                     Status = transferResponse.Error switch
                     {
                         "0" => "Successful",
@@ -804,26 +766,15 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                         transferResponse.Message ?? "Transfer failed", (int)httpResponse.StatusCode)
                 };
             }
-            catch (TaskCanceledException ex)
-            {
-                _log.LogError(ex, "Transfer {Reference} timed out awaiting the provider.", request.Reference);
-
-                return WalletResponseService<PaymentResponse>.Indeterminate(
-                    "We could not confirm this transfer. Please check your transaction history before retrying.", 504);
-            }
             catch (HttpRequestException ex)
             {
-                _log.LogError(ex, "Transfer {Reference} could not reach the provider.", request.Reference);
-
-                return WalletResponseService<PaymentResponse>.Indeterminate(
-                    "We could not confirm this transfer. Please check your transaction history before retrying.", 503);
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Unable to reach Etransact service, transfer outcome unknown - reconcile via transaction status: "
+                    + ex.Message, 503);
             }
             catch (Exception ex)
             {
-                _log.LogError(ex, "Transfer {Reference} failed unexpectedly.", request.Reference);
-
-                return WalletResponseService<PaymentResponse>.Failed(
-                    "Transfer failed. Please try again.", 500);
+                return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
             }
         }
 

@@ -107,13 +107,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long RoleId { get; set; }
         public string RoleName { get; set; }
     }
-    public class DeliveryInformation
-    {
-        public string Warehouse { get; set; }
-        public string AgentName { get; set; }
-        public decimal? AmountDisbursed { get; set; }
-        public string Location { get; set; }
-    }
+
     public class OrganizationLocationDto
     {
         public long LocationId { get; set; }

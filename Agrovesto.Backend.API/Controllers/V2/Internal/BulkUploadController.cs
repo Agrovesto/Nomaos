@@ -1,14 +1,12 @@
 ﻿
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]
     public class BulkUploadController : BaseController
     {
         

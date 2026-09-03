@@ -147,7 +147,7 @@ public class WalletLinkedPackagesTests
         var wallet = await SeedWalletAsync(context, UserId);
         var package = await SeedPackageAsync(context, "Rice Dry Season", wallet.Id);
 
-        await SeedSubscriptionAsync(context, package.Id, SubscriptionStatus.Completed,
+        await SeedSubscriptionAsync(context, package.Id, SubscriptionStatus.Repaid,
             (30000, 30000, true, false));
 
         await SeedSubscriptionAsync(context, package.Id, SubscriptionStatus.Active,

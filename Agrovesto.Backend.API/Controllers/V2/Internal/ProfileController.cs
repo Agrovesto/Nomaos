@@ -16,7 +16,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/profile")]
     [ApiController]
-    [Authorize]
     public class ProfileController : BaseController
     {
         private readonly IOnBoardingManager _onBoardingManager;
@@ -334,18 +333,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// ///
         ////get current logged in user profile to include name, phone number, email, picture, id, level/tier
          [HttpGet("user-profile")]
-        [Authorize]
         public async Task<IActionResult> GetUserProfile([FromQuery] string? userId)
         {
             try
             {
-                var targetUserId = CurrentUserId;
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+            
 
                 if (string.IsNullOrEmpty(targetUserId))
                 {
-                    return Unauthorized(new Response<string>
+                    return BadRequest(new Response<string>
                     {
-                        Message = "User could not be resolved from the supplied token.",
+                        Message = "User Id is required.",
                         Succeeded = false
                     });
                 }
@@ -358,96 +357,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     Succeeded = true,
                     Message = ResponseMessages.Successful,
                     Data = profile
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-        }
-
-
-        [HttpGet("notification-preference")]
-        [Authorize]
-        public async Task<IActionResult> GetNotificationPreference()
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(CurrentUserId))
-                {
-                    return Unauthorized(new Response<string>
-                    {
-                        Message = "User could not be resolved from the supplied token.",
-                        Succeeded = false
-                    });
-                }
-
-                var preference = await _onBoardingManager.GetNotificationPreferenceAsync(CurrentUserId);
-
-                return Ok(new Response<NotificationPreferenceResponse>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = ResponseMessages.Successful,
-                    Data = preference
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-        }
-
-        [HttpPost("notification-preference")]
-        [Authorize]
-        public async Task<IActionResult> SaveNotificationPreference([FromBody] NotificationPreferenceRequest model)
-        {
-            if (!ModelState.IsValid)
-                return ValidationProblemResponse();
-
-            try
-            {
-                if (string.IsNullOrEmpty(CurrentUserId))
-                {
-                    return Unauthorized(new Response<string>
-                    {
-                        Message = "User could not be resolved from the supplied token.",
-                        Succeeded = false
-                    });
-                }
-
-                var preference = await _onBoardingManager.SaveNotificationPreferenceAsync(CurrentUserId, model);
-
-                return Ok(new Response<NotificationPreferenceResponse>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = ResponseMessages.Successful,
-                    Data = preference
                 });
             }
             catch (BaseException ex)

@@ -34,7 +34,6 @@ using Hangfire;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.VisualBasic;
 using PhoneNumbers;
 using StackExchange.Redis;
 using System;
@@ -47,7 +46,6 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using SubscriptionDocument = Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument;
 
@@ -990,6 +988,16 @@ RepaymentFrequency frequency)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
             }
+            //verify wallet pin
+            //try
+            //{
+            //    await _userWalletRepository.ValidateTransactionPin(debitFromUserWallet.Id,
+            //    request.WalletPin);
+            //}
+            //catch(Exception ex)
+            //{
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, ex.Message);
+            //}
             
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
@@ -1377,22 +1385,6 @@ RepaymentFrequency frequency)
 
             if (subscription.InputPackage == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot find input package");
-            var package = subscription.InputPackage;
-            if (package != null && !package.RepaymentRequired)
-            {
-                throw new BaseException(
-                    ExceptionType.OPERATION_FAILED,
-                    "This package does not require repayment. Please contact your organization to complete and close your subscription cycle."
-                );
-            }
-
-            var totalRepaid = await _inputFinancingRepository.GetTotalRepaymentPaidAsync(subscription.Id);
-            var outstanding = subscription.RepaymentValue - totalRepaid;
-
-            if (outstanding <= 0)
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment already fully completed");
-
-
 
             var reference = !string.IsNullOrWhiteSpace(request.Reference)
                           ? request.Reference
@@ -1432,7 +1424,13 @@ RepaymentFrequency frequency)
             }
 
             // ─── Outstanding must aggregate across BOTH cash and produce repayments already made ───
-         
+            var totalRepaid = await _inputFinancingRepository.GetTotalRepaymentPaidAsync(subscription.Id);
+            var outstanding = subscription.RepaymentValue - totalRepaid;
+
+            if (outstanding <= 0)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Repayment already fully completed");
+
+
             switch (request.PaymentChannel)
             {
                 case PaymentChannel.Wallet:
@@ -2081,10 +2079,7 @@ RepaymentFrequency frequency)
                         ? SubscriptionStatus.PartiallyDisbursed
                         : SubscriptionStatus.Active;
                     query.Subscription.DisbursedOn = DateTimeOffset.UtcNow;
-                    if (!query.Subscription.InputPackage.RepaymentRequired)
-                    {
-                        query.Subscription.Status = SubscriptionStatus.Completed;                      
-                    }
+
 
                     _context.OutboxMessages.Add(new OutboxMessage
                     {

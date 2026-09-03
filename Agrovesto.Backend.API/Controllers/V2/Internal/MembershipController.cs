@@ -17,7 +17,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/memberships")]
     [ApiController]
-    [Authorize]
     public class MembershipController : BaseController
     {
 

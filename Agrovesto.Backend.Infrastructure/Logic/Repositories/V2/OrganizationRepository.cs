@@ -3321,7 +3321,155 @@ SELECT
         {
             return ex.InnerException?.Message.Contains("IX_Farmers_UserId") == true;
         }
-  
+        //public async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(FarmerModel data)
+        //{
+        //    var strategy = _context.Database.CreateExecutionStrategy();
+
+        //    return await strategy.ExecuteAsync(async () =>
+        //    {
+        //        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        //        try
+        //        {
+        //            var farmer = await _context.Farmers
+        //                .FirstOrDefaultAsync(f => f.UserId == data.UserId);
+
+        //            if (farmer != null)
+        //            {
+        //                await UpdateFarmerProfileAsync(data.UserId, new FarmerUpdateModel
+        //                {
+        //                    DateOfBirth = data.DateOfBirth,
+        //                    State = data.State,
+        //                    Lga = data.Lga,
+        //                    Name = data.Name,
+        //                    PhoneNumber = data.PhoneNumber,
+        //                    Email = data.Email,
+        //                    Gender = data.Gender,
+        //                    Location = data.Location,
+        //                    Ward = data.Ward,
+        //                    BVN = data.BVN,
+        //                    NIN = data.NIN,
+        //                    IsNinVerified = data.IsNinVerified,
+        //                    FarmerCategory = data.FarmerCategory,
+        //                    FarmerImage = data.FarmerImage,
+        //                    HighestLevelOfEducation = data.HighestLevelOfEducation,
+        //                    YearsInAgric = data.YearsInAgric
+        //                });
+        //            }
+        //            else
+        //            {
+        //                farmer = data.Map();
+        //                await _context.Farmers.AddAsync(farmer);
+        //            }
+
+        //            await _context.SaveChangesAsync();
+
+        //            // ===========================
+        //            // ORGANIZATION LINK
+        //            // ===========================
+        //            if (!string.IsNullOrEmpty(data.OrganizationCode))
+        //            {
+        //                bool exists = await _context.FarmerOrganizations
+        //                    .AnyAsync(x => x.FarmerId == farmer.Id && x.OrganizationCode == data.OrganizationCode);
+
+        //                if (!exists)
+        //                {
+        //                    await _context.FarmerOrganizations.AddAsync(new FarmerOrganization
+        //                    {
+        //                        FarmerId = farmer.Id,
+        //                        OrganizationCode = data.OrganizationCode,
+        //                        OnboardedByUserId = data.OnboardedByUserId
+        //                    });
+        //                }
+        //            }
+
+        //            // ===========================
+        //            // COOPERATIVES
+        //            // ===========================
+        //            if (data.CooperativeIds != null)
+        //            {
+        //                var existing = await _context.FarmerCooperatives
+        //                    .Where(x => x.FarmerId == farmer.Id)
+        //                    .ToListAsync();
+
+        //                var incoming = data.CooperativeIds.Distinct().ToList();
+
+        //                var toAdd = incoming
+        //                    .Where(id => !existing.Any(e => e.CooperativeId == id))
+        //                    .ToList();
+
+        //                var toRemove = existing
+        //                    .Where(e => !incoming.Contains(e.CooperativeId))
+        //                    .ToList();
+
+        //                foreach (var id in toAdd)
+        //                {
+        //                    await _context.FarmerCooperatives.AddAsync(new FarmerCooperative
+        //                    {
+        //                        FarmerId = farmer.Id,
+        //                        CooperativeId = id,
+        //                        OnboardedByUserId = data.OnboardedByUserId,
+        //                        JoinedOn = DateTimeOffset.Now
+        //                    });
+        //                }
+
+        //                _context.FarmerCooperatives.RemoveRange(toRemove);
+        //            }
+
+        //            // ===========================
+        //            // AGENTS
+        //            // ===========================
+        //            if (data.AgentIds != null)
+        //            {
+        //                var existing = await _context.FarmerAgents
+        //                    .Where(x => x.FarmerId == farmer.Id)
+        //                    .ToListAsync();
+
+        //                var incoming = data.AgentIds.Distinct().ToList();
+
+        //                var toAdd = incoming
+        //                    .Where(id => !existing.Any(e => e.AgentId == id))
+        //                    .ToList();
+
+        //                var toRemove = existing
+        //                    .Where(e => !incoming.Contains(e.AgentId))
+        //                    .ToList();
+
+        //                foreach (var id in toAdd)
+        //                {
+        //                    await _context.FarmerAgents.AddAsync(new FarmerAgent
+        //                    {
+        //                        FarmerId = farmer.Id,
+        //                        AgentId = id,
+        //                        AssignedByUserId = data.OnboardedByUserId,
+        //                        AssignedOn = DateTimeOffset.Now
+        //                    });
+        //                }
+
+        //                _context.FarmerAgents.RemoveRange(toRemove);
+        //            }
+
+        //            // ===========================
+        //            // VALUE CHAIN
+        //            // ===========================
+        //            if (data.SelectedItems != null)
+        //            {
+        //                await UpdateFarmerValueChainItems(farmer.Id, data.SelectedItems);
+        //            }
+
+        //            await _context.SaveChangesAsync();
+        //            await transaction.CommitAsync();
+
+        //            return (true, farmer.Map());
+        //        }
+        //        catch
+        //        {
+        //            await transaction.RollbackAsync();
+        //            throw;
+        //        }
+        //    });
+        //}
+
         public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
         {
             if (string.IsNullOrWhiteSpace(userId) || update == null)
@@ -3718,8 +3866,8 @@ SELECT
                 Email = farmer.Email,
                 Gender = farmer.Gender,
                 Dob = user.DateOfBirth,
-                BVN = EncryptionUtil.MaskSensitiveNumber(user?.BVN),
-                NIN = EncryptionUtil.MaskSensitiveNumber(user?.NIN),
+                BVN = user?.BVN,
+                NIN = user?.NIN,
                 FarmerImage = farmerImage,
 
                 State = farmer.State,
@@ -3781,7 +3929,7 @@ SELECT
                     OrganizationIsActive = fo.IsActive,
                     Name = f.Name ?? u.Name,
                     PhoneNumber = u.PhoneNumber,
-                    Email = f.Email ?? u.Email,
+                    Email = u.Email,
                     Gender = f.Gender,
                     State = f.State,
                     Lga = f.Lga,

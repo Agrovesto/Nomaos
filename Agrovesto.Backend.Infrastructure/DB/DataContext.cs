@@ -1,5 +1,4 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
-using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -152,10 +151,6 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithMany(x => x.Parameters)
                 .HasForeignKey(x => x.BusinessSMSProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<UserNotificationPreference>()
-                .HasIndex(x => new { x.UserId, x.UserRole })
-                .IsUnique();
 
             modelBuilder.Entity<User>()
        .HasIndex(u => u.PhoneNumber)
@@ -544,7 +539,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmerSalesTracker> FarmerSalesTracker { get; set; }
         public DbSet<Trader> Traders { get; set; }
         public DbSet<Payout> Payouts { get; set; }
-        public DbSet<Entities.Common.States> States { get; set; }
+        public DbSet<States> States { get; set; }
         public DbSet<LGA> LGAs { get; set; }
         public DbSet<Ward> Wards { get; set; }
         public DbSet<FarmerCreditScore> FarmerCreditScores { get; set; }
@@ -627,8 +622,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<BusinessSMSProviderParameter> BusinessSMSProviderParameters { get; set; }
         public DbSet<SMSProviderParameter> SMSProviderParameters { get; set; }
         public DbSet<SMSProvider> SMSProvider { get; set; }
-        public DbSet<RevokedToken> RevokedTokens { get; set; }
-        public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
+    
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

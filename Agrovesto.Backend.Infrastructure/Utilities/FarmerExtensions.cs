@@ -13,8 +13,10 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
         public static FarmerModel ApplySubAccount(this FarmerModel farmer, SubAccount sub)
         {
             if (sub == null) return farmer;
-            farmer.NIN = EncryptionUtil.MaskSensitiveNumber(sub.NIN);
-            farmer.BVN = EncryptionUtil.MaskSensitiveNumber(sub.Bvn);
+           // farmer.SSN = sub.SSN;
+            farmer.NIN = sub.NIN;
+            farmer.BVN = sub.Bvn;
+           // farmer.AccountNumber = sub.AccountNumber;
             return farmer;
         }
     }

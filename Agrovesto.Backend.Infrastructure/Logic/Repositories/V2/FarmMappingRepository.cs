@@ -100,11 +100,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         public async Task<List<Farm>> FetchAllFarmsByFarmer(FarmMappingArgs args)
         {
             var query = _context.Farms
-          .Where(f => f.FarmerId == args.farmerId)
-          .Include(f => f.Coordinates)
-          .Include(f => f.FarmLandDocuments)
-          .OrderByDescending(f => f.CreatedAt)
-          .AsQueryable();
+                .Where(f => f.FarmerId == args.farmerId)
+                .Include(f => f.Coordinates)
+                .Include(f => f.FarmLandDocuments)
+                .AsQueryable();
 
             // ------------------ FILTER: Mapping Status ------------------
             if (!string.IsNullOrEmpty(args.MappingStatus))
@@ -141,7 +140,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return farms;
         }
 
-public async Task<Farm> FetchFarmsAsync(FarmMappingArgs args)
+        //public async Task<List<Farm>> FetchAllFarmsByFarmer(FarmMappingArgs args)
+        //{
+        //    var farms = await _context.Farms
+        //        .Where(f => f.FarmerId == args.farmerId)
+        //        .Include(f => f.Coordinates)
+        //        .Include(f => f.FarmLandDocuments)
+        //      //  .Include(f=>f.AuditTrails)
+        //       // .Include(f=>f.Allocations)
+        //        .ToListAsync(); 
+        //    if (farms.Count < 0 )
+        //        throw new BaseException(Core.Enums.ExceptionType.NO_RECORD_FOUND, "Farm not found.");
+        //    return farms;
+        //}
+        public async Task<Farm> FetchFarmsAsync(FarmMappingArgs args)
         {
             var farm = await _context.Farms
                 .Include(f => f.Coordinates)

@@ -161,11 +161,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class ConfirmOtpRequest
     {
-        public string? UserId { get; set; }
-        public string? PhoneNumber { get; set; }
+        [Required]
+        public string UserId { get; set; }
         [Required]
         public string Code { get; set; }
-        public string? NewPin { get; set; }
         public OtpPurpose Purpose { get; set; }
     }
 
@@ -191,8 +190,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         WalletPinUpdate,
         // Delivered to the user when they have forgotten their transaction PIN.
         // Deliberately distinct from WalletPinUpdate, which is a token bucket.
-        WalletPinReset,
-        PhoneNumberPinReset
+        WalletPinReset
     }
     public class CreateAgentResponseModel
     {
@@ -222,7 +220,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class OnboardingRequestModel
     {
-        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Env { get; set; }
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
@@ -343,7 +340,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Env { get; set; }
         public string businessCode { get; set; }
     }
-   
     public class OnBoardingArgs
     {
 
@@ -422,6 +418,4 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool IsExisting { get; set; }
         public bool ShouldLogin { get; set; }
     }
-
-
 }
