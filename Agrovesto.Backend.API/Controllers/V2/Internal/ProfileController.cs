@@ -333,18 +333,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// ///
         ////get current logged in user profile to include name, phone number, email, picture, id, level/tier
          [HttpGet("user-profile")]
+        [Authorize]
         public async Task<IActionResult> GetUserProfile([FromQuery] string? userId)
         {
             try
             {
-                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
-            
+                var targetUserId = CurrentUserId;
 
                 if (string.IsNullOrEmpty(targetUserId))
                 {
-                    return BadRequest(new Response<string>
+                    return Unauthorized(new Response<string>
                     {
-                        Message = "User Id is required.",
+                        Message = "User could not be resolved from the supplied token.",
                         Succeeded = false
                     });
                 }
