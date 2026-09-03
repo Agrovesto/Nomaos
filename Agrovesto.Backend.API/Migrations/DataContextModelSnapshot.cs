@@ -5086,6 +5086,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("AgentVisitReminders")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("BulkUploadCompleted")
+                        .HasColumnType("bit");
+
                     b.Property<DateTimeOffset>("CreatedOn")
                         .HasColumnType("datetimeoffset");
 
@@ -5110,6 +5113,12 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("MembershipAnnouncements")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("NewFarmCreated")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("NewFarmerAssigned")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("Sms")
                         .HasColumnType("bit");
 
@@ -5117,9 +5126,15 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("UserRole")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("WalletRepaymentDue")
+                        .HasColumnType("bit");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId")
+                    b.HasIndex("UserId", "UserRole")
                         .IsUnique();
 
                     b.ToTable("UserNotificationPreferences");

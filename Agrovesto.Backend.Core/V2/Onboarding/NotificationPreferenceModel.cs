@@ -1,5 +1,11 @@
 namespace Agrovesto.Backend.Core.V2.Onboarding
 {
+    public enum NotificationUserRole
+    {
+        Farmer = 1,
+        Agent = 2
+    }
+
     public class NotificationPreferenceRequest
     {
         public bool MappingStatusUpdates { get; set; }
@@ -19,9 +25,36 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool InAppNotification { get; set; }
     }
 
+    public class AgentNotificationPreferenceRequest
+    {
+        public bool NewFarmerAssigned { get; set; }
+
+        public bool NewFarmCreated { get; set; }
+
+        public bool BulkUploadCompleted { get; set; }
+
+        public bool WalletRepaymentDue { get; set; }
+
+        public bool Sms { get; set; }
+
+        public bool Email { get; set; }
+
+        public bool InAppNotification { get; set; }
+    }
+
     public class NotificationPreferenceResponse : NotificationPreferenceRequest
     {
+        public bool NewFarmerAssigned { get; set; }
+
+        public bool NewFarmCreated { get; set; }
+
+        public bool BulkUploadCompleted { get; set; }
+
+        public bool WalletRepaymentDue { get; set; }
+
         public string UserId { get; set; }
+
+        public NotificationUserRole UserRole { get; set; }
 
         public bool IsDefault { get; set; }
 

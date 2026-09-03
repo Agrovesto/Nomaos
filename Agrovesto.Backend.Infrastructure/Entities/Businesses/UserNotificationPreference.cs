@@ -1,3 +1,4 @@
+using Agrovesto.Backend.Core.V2.Onboarding;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -11,6 +12,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public string UserId { get; set; }
 
+        public NotificationUserRole UserRole { get; set; }
+
         public bool MappingStatusUpdates { get; set; }
 
         public bool AgentVisitReminders { get; set; }
@@ -20,6 +23,14 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public bool DocumentApprovalUpdates { get; set; }
 
         public bool GeneralPlatformUpdates { get; set; }
+
+        public bool NewFarmerAssigned { get; set; }
+
+        public bool NewFarmCreated { get; set; }
+
+        public bool BulkUploadCompleted { get; set; }
+
+        public bool WalletRepaymentDue { get; set; }
 
         public bool Sms { get; set; }
 

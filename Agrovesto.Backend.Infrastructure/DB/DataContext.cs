@@ -154,7 +154,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<UserNotificationPreference>()
-                .HasIndex(x => x.UserId)
+                .HasIndex(x => new { x.UserId, x.UserRole })
                 .IsUnique();
 
             modelBuilder.Entity<User>()

@@ -56,8 +56,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
-        Task<NotificationPreferenceResponse> GetNotificationPreference(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role);
         Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
@@ -567,23 +568,28 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return response;
         }
-        public async Task<NotificationPreferenceResponse> GetNotificationPreference(string userId)
+        public async Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role)
         {
             var preference = await _context.UserNotificationPreferences
                 .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.UserId == userId);
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.UserRole == role);
 
             if (preference == null)
             {
                 return new NotificationPreferenceResponse
                 {
                     UserId = userId,
+                    UserRole = role,
                     IsDefault = true,
                     MappingStatusUpdates = false,
                     AgentVisitReminders = false,
                     MembershipAnnouncements = false,
                     DocumentApprovalUpdates = false,
                     GeneralPlatformUpdates = false,
+                    NewFarmerAssigned = false,
+                    NewFarmCreated = false,
+                    BulkUploadCompleted = false,
+                    WalletRepaymentDue = false,
                     Sms = false,
                     Email = false,
                     InAppNotification = false
@@ -595,23 +601,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         public async Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model)
         {
-            var preference = await _context.UserNotificationPreferences
-                .FirstOrDefaultAsync(x => x.UserId == userId);
-
-            if (preference == null)
-            {
-                preference = new UserNotificationPreference
-                {
-                    UserId = userId,
-                    CreatedOn = DateTimeOffset.UtcNow
-                };
-
-                await _context.UserNotificationPreferences.AddAsync(preference);
-            }
-            else
-            {
-                preference.DateModified = DateTimeOffset.UtcNow;
-            }
+            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Farmer);
 
             preference.MappingStatusUpdates = model.MappingStatusUpdates;
             preference.AgentVisitReminders = model.AgentVisitReminders;
@@ -627,16 +617,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return MapNotificationPreference(preference);
         }
 
+        public async Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model)
+        {
+            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Agent);
+
+            preference.NewFarmerAssigned = model.NewFarmerAssigned;
+            preference.NewFarmCreated = model.NewFarmCreated;
+            preference.BulkUploadCompleted = model.BulkUploadCompleted;
+            preference.WalletRepaymentDue = model.WalletRepaymentDue;
+            preference.Sms = model.Sms;
+            preference.Email = model.Email;
+            preference.InAppNotification = model.InAppNotification;
+
+            await _context.SaveChangesAsync();
+
+            return MapNotificationPreference(preference);
+        }
+
+        private async Task<UserNotificationPreference> ResolvePreferenceForWriteAsync(string userId, NotificationUserRole role)
+        {
+            var preference = await _context.UserNotificationPreferences
+                .FirstOrDefaultAsync(x => x.UserId == userId && x.UserRole == role);
+
+            if (preference == null)
+            {
+                preference = new UserNotificationPreference
+                {
+                    UserId = userId,
+                    UserRole = role,
+                    CreatedOn = DateTimeOffset.UtcNow
+                };
+
+                await _context.UserNotificationPreferences.AddAsync(preference);
+            }
+            else
+            {
+                preference.DateModified = DateTimeOffset.UtcNow;
+            }
+
+            return preference;
+        }
+
         private static NotificationPreferenceResponse MapNotificationPreference(UserNotificationPreference preference) =>
             new()
             {
                 UserId = preference.UserId,
+                UserRole = preference.UserRole,
                 IsDefault = false,
                 MappingStatusUpdates = preference.MappingStatusUpdates,
                 AgentVisitReminders = preference.AgentVisitReminders,
                 MembershipAnnouncements = preference.MembershipAnnouncements,
                 DocumentApprovalUpdates = preference.DocumentApprovalUpdates,
                 GeneralPlatformUpdates = preference.GeneralPlatformUpdates,
+                NewFarmerAssigned = preference.NewFarmerAssigned,
+                NewFarmCreated = preference.NewFarmCreated,
+                BulkUploadCompleted = preference.BulkUploadCompleted,
+                WalletRepaymentDue = preference.WalletRepaymentDue,
                 Sms = preference.Sms,
                 Email = preference.Email,
                 InAppNotification = preference.InAppNotification,
