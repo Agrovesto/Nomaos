@@ -3781,7 +3781,7 @@ SELECT
                     OrganizationIsActive = fo.IsActive,
                     Name = f.Name ?? u.Name,
                     PhoneNumber = u.PhoneNumber,
-                    Email = u.Email,
+                    Email = f.Email ?? u.Email,
                     Gender = f.Gender,
                     State = f.State,
                     Lga = f.Lga,

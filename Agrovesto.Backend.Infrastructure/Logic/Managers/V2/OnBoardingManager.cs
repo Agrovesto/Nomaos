@@ -72,6 +72,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
           Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId);
+        Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> SaveAgentNotificationPreferenceAsync(string userId, AgentNotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -1433,7 +1437,55 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             profile.NIN = EncryptionUtil.MaskSensitiveNumber(profile.NIN);
             return profile;
         }
-        public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        public async Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId)
+        {
+            await EnsureUserIsFarmerAsync(userId);
+
+            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Farmer);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model)
+        {
+            await EnsureUserIsFarmerAsync(userId);
+
+            return await _onboardingRepository.SaveNotificationPreference(userId, model);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveAgentNotificationPreferenceAsync(string userId, AgentNotificationPreferenceRequest model)
+        {
+            await EnsureUserIsAgentAsync(userId);
+
+            return await _onboardingRepository.SaveAgentNotificationPreference(userId, model);
+        }
+
+        public async Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId)
+        {
+            await EnsureUserIsAgentAsync(userId);
+
+            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Agent);
+        }
+
+        private async Task EnsureUserIsAgentAsync(string userId)
+        {
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Agent"))
+                return;
+
+            throw new BaseException(
+                Core.Enums.ExceptionType.ACCESS_DENIED,
+                "The supplied user is not an Agent.");
+        }
+
+        private async Task EnsureUserIsFarmerAsync(string userId)
+        {
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Farmer"))
+                return;
+
+            throw new BaseException(
+                Core.Enums.ExceptionType.ACCESS_DENIED,
+                "Notification preferences are only available to farmers.");
+        }
+
+                public async Task<UsersProfileResponse> GetUseridentity(string userId)
         {
             var profile = await _onboardingRepository.GetUseridentity(userId);
             if (profile == null)
@@ -2395,12 +2447,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
             }
-            if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
+            
+            if (string.IsNullOrWhiteSpace(model.OldPin))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your current PIN is required.");
 
-            if(user.Pin != model.OldPin)
-            {
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Old pin is incorrect");
-            }
+            if (!await _onboardingRepository.ValidateUserPinAsync(args.UserId, model.OldPin))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "The current PIN you entered is incorrect.");
+
+            if (string.IsNullOrWhiteSpace(model.NewPin) || !Regex.IsMatch(model.NewPin, @"^\d{4}$"))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "PIN must be exactly 4 digits.");
+
+            if (!string.Equals(model.NewPin, model.ConfirmPin, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Confirm PIN must match New PIN.");
+
+            if (string.Equals(model.OldPin, model.NewPin, StringComparison.Ordinal))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Your new PIN must be different from your current PIN.");
+
             await _onboardingRepository.ResetPin(user, model.NewPin);
             return (true, "Pin changed successfully");
         }

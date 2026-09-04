@@ -153,6 +153,10 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasForeignKey(x => x.BusinessSMSProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<UserNotificationPreference>()
+                .HasIndex(x => new { x.UserId, x.UserRole })
+                .IsUnique();
+
             modelBuilder.Entity<User>()
        .HasIndex(u => u.PhoneNumber)
        .IsUnique()
@@ -624,6 +628,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<SMSProviderParameter> SMSProviderParameters { get; set; }
         public DbSet<SMSProvider> SMSProvider { get; set; }
         public DbSet<RevokedToken> RevokedTokens { get; set; }
+        public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

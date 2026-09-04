@@ -310,15 +310,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WalletProviderParameterModel[]> GetParametersByProvider(
             long providerId, string businessCode, string env)
         {
+            var normalisedEnv = (env ?? string.Empty).Trim().ToLower();
+
             WalletProviderParameter[] defaults = await _context.Set<WalletProviderParameter>()
-                .Where(x => x.WalletProviderProviderId == providerId && x.Env == env)
+                .Where(x => x.WalletProviderProviderId == providerId && x.Env.ToLower() == normalisedEnv)
                 .ToArrayAsync();
 
             BusinessWalletProviderParameter[] overrides = await _context.Set<BusinessWalletProviderParameter>()
                 .Include(x => x.BusinessWalletProvider)
                 .Where(x => x.BusinessWalletProvider.ProviderId == providerId
                          && x.BusinessWalletProvider.BusinessCode.ToLower() == businessCode.ToLower()
-                         && x.Env == env)
+                         && x.Env.ToLower() == normalisedEnv)
                 .ToArrayAsync();
 
             var merged = new Dictionary<string, WalletProviderParameterModel>(StringComparer.OrdinalIgnoreCase);

@@ -257,6 +257,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [Authorize]
         [HttpPost("change-password")]
+        [Authorize]
         public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
         {
             if (!ModelState.IsValid)
@@ -272,6 +273,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                             ms => ms.Key,
                             ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
                         )
+                });
+            }
+
+            if (string.IsNullOrEmpty(CurrentUserEmail))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
                 });
             }
 
@@ -354,6 +364,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
         [Authorize]
         [HttpPost("change-pin")]
+        [Authorize]
         public async Task<IActionResult> ChangePin([FromBody] ChangePinModel model, [FromQuery]OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -372,6 +383,16 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+                args.UserId = CurrentUserId;
                 model.PhoneNumber = CurrentPhoneNumber;
 
                 var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
