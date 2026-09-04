@@ -255,6 +255,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ResponseCodes.Success
             ));
         }
+        [Authorize]
         [HttpPost("change-password")]
         [Authorize]
         public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
@@ -361,6 +362,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+        [Authorize]
         [HttpPost("change-pin")]
         [Authorize]
         public async Task<IActionResult> ChangePin([FromBody] ChangePinModel model, [FromQuery]OnBoardingArgs args)
@@ -392,6 +394,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.UserId = CurrentUserId;
                 model.PhoneNumber = CurrentPhoneNumber;
+
                 var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
 
             return Ok(ApiResponse<bool>.Success(
