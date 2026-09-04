@@ -1641,6 +1641,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var userExist = await _userManager.FindByEmailAsync(model.Email);
             if (userExist != null)
             {
+
                 var resetPassword = await _userManager.ChangePasswordAsync(userExist, model.OldPassword, model.NewPassword);
                 if (resetPassword.Succeeded)
                 {
