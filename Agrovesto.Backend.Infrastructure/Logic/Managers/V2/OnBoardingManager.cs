@@ -2316,6 +2316,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
+            if (string.IsNullOrEmpty(model.Email))
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User not authorized for this action.");
+            }
             var changePwd = await _onboardingRepository.ChangePassword(model);
             return changePwd;
         }
@@ -2382,6 +2386,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
       
         public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args)
         {
+            if (string.IsNullOrEmpty(model.PhoneNumber))
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User not authorized for this action.");
+            }
             var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == args.UserId);
             if (user == null)
             {
@@ -2389,6 +2397,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             }
             if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
 
+            if(user.Pin != model.OldPin)
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Old pin is incorrect");
+            }
             await _onboardingRepository.ResetPin(user, model.NewPin);
             return (true, "Pin changed successfully");
         }
