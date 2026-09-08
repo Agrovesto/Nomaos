@@ -20,15 +20,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         public bool GeneralPlatformUpdates { get; set; }
 
-        public bool Sms { get; set; }
-
-        public bool Email { get; set; }
-
-        public bool PushNotification { get; set; }
-    }
-
-    public class AgentNotificationPreferenceRequest
-    {
         public bool NewFarmerAssigned { get; set; }
 
         public bool NewFarmCreated { get; set; }
@@ -42,36 +33,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool Email { get; set; }
 
         public bool PushNotification { get; set; }
-    }
-
-    public class OrganizationNotificationPreferenceRequest
-    {
-        public bool PushNotification { get; set; }
-
-        public bool Sms { get; set; }
-
-        public bool Email { get; set; }
-    }
-
-    public class MemberShipNotificationPreferenceRequest
-    {
-        public bool PushNotification { get; set; }
-
-        public bool Sms { get; set; }
-
-        public bool Email { get; set; }
     }
 
     public class NotificationPreferenceResponse : NotificationPreferenceRequest
     {
-        public bool NewFarmerAssigned { get; set; }
-
-        public bool NewFarmCreated { get; set; }
-
-        public bool BulkUploadCompleted { get; set; }
-
-        public bool WalletRepaymentDue { get; set; }
-
         public string UserId { get; set; }
 
         public NotificationUserRole UserRole { get; set; }
