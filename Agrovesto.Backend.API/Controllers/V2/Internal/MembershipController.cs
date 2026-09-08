@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -42,6 +42,56 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _bulkFarmerUploadService = bulkFarmerUploadService;
         }
 
+
+        [HttpGet("notification-preference")]
+        public async Task<IActionResult> GetMemberShipNotificationPreference()
+        {
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.GetMemberShipNotificationPreferenceAsync(CurrentUserId),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        [HttpPost("notification-preference")]
+        public async Task<IActionResult> SaveMemberShipNotificationPreference(
+            [FromBody] MemberShipNotificationPreferenceRequest model)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.SaveMemberShipNotificationPreferenceAsync(CurrentUserId, model),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
 
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]

@@ -78,6 +78,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId);
         Task<NotificationPreferenceResponse> SaveOrganizationNotificationPreferenceAsync(string userId, OrganizationNotificationPreferenceRequest model);
         Task<NotificationPreferenceResponse> GetOrganizationNotificationPreferenceAsync(string userId);
+        Task<NotificationPreferenceResponse> SaveMemberShipNotificationPreferenceAsync(string userId, MemberShipNotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> GetMemberShipNotificationPreferenceAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -1478,6 +1480,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Organization);
         }
+        public async Task<NotificationPreferenceResponse> SaveMemberShipNotificationPreferenceAsync(string userId, MemberShipNotificationPreferenceRequest model)
+        {
+            await EnsureUserIsMemberShipAsync(userId);
+
+            return await _onboardingRepository.SaveMemberShipNotificationPreference(userId, model);
+        }
+        public async Task<NotificationPreferenceResponse> GetMemberShipNotificationPreferenceAsync(string userId)
+        {
+            await EnsureUserIsMemberShipAsync(userId);
+
+            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.MemberShip);
+        }
 
         private async Task EnsureUserIsAgentAsync(string userId)
         {
@@ -1497,6 +1511,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             throw new BaseException(
                 Core.Enums.ExceptionType.ACCESS_DENIED,
                 "The supplied user is not an Organization.");
+        }
+
+        private async Task EnsureUserIsMemberShipAsync(string userId)
+        {
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, "MemberShip"))
+                return;
+
+            throw new BaseException(
+                Core.Enums.ExceptionType.ACCESS_DENIED,
+                "The supplied user is not a MemberShip.");
         }
 
         private async Task EnsureUserIsFarmerAsync(string userId)

@@ -4,7 +4,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         Farmer = 1,
         Agent = 2,
-        Organization = 3
+        Organization = 3,
+        MemberShip = 4
     }
 
     public class NotificationPreferenceRequest
@@ -44,6 +45,15 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
 
     public class OrganizationNotificationPreferenceRequest
+    {
+        public bool PushNotification { get; set; }
+
+        public bool Sms { get; set; }
+
+        public bool Email { get; set; }
+    }
+
+    public class MemberShipNotificationPreferenceRequest
     {
         public bool PushNotification { get; set; }
 
