@@ -1,4 +1,4 @@
-﻿using AfricasTalkingCS;
+using AfricasTalkingCS;
 using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
@@ -76,6 +76,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model);
         Task<NotificationPreferenceResponse> SaveAgentNotificationPreferenceAsync(string userId, AgentNotificationPreferenceRequest model);
         Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId);
+        Task<NotificationPreferenceResponse> SaveOrganizationNotificationPreferenceAsync(string userId, OrganizationNotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> GetOrganizationNotificationPreferenceAsync(string userId);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -1464,6 +1466,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Agent);
         }
+        public async Task<NotificationPreferenceResponse> SaveOrganizationNotificationPreferenceAsync(string userId, OrganizationNotificationPreferenceRequest model)
+        {
+            await EnsureUserIsOrganizationAsync(userId);
+
+            return await _onboardingRepository.SaveOrganizationNotificationPreference(userId, model);
+        }
+        public async Task<NotificationPreferenceResponse> GetOrganizationNotificationPreferenceAsync(string userId)
+        {
+            await EnsureUserIsOrganizationAsync(userId);
+
+            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Organization);
+        }
 
         private async Task EnsureUserIsAgentAsync(string userId)
         {
@@ -1473,6 +1487,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             throw new BaseException(
                 Core.Enums.ExceptionType.ACCESS_DENIED,
                 "The supplied user is not an Agent.");
+        }
+
+        private async Task EnsureUserIsOrganizationAsync(string userId)
+        {
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Organization"))
+                return;
+
+            throw new BaseException(
+                Core.Enums.ExceptionType.ACCESS_DENIED,
+                "The supplied user is not an Organization.");
         }
 
         private async Task EnsureUserIsFarmerAsync(string userId)

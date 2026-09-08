@@ -3,7 +3,8 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public enum NotificationUserRole
     {
         Farmer = 1,
-        Agent = 2
+        Agent = 2,
+        Organization = 3
     }
 
     public class NotificationPreferenceRequest
@@ -22,7 +23,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         public bool Email { get; set; }
 
-        public bool InAppNotification { get; set; }
+        public bool PushNotification { get; set; }
     }
 
     public class AgentNotificationPreferenceRequest
@@ -39,7 +40,16 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
         public bool Email { get; set; }
 
-        public bool InAppNotification { get; set; }
+        public bool PushNotification { get; set; }
+    }
+
+    public class OrganizationNotificationPreferenceRequest
+    {
+        public bool PushNotification { get; set; }
+
+        public bool Sms { get; set; }
+
+        public bool Email { get; set; }
     }
 
     public class NotificationPreferenceResponse : NotificationPreferenceRequest

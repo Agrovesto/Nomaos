@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -59,6 +59,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role);
         Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model);
         Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> SaveOrganizationNotificationPreference(string userId, OrganizationNotificationPreferenceRequest model);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
@@ -593,7 +594,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     WalletRepaymentDue = false,
                     Sms = false,
                     Email = false,
-                    InAppNotification = false
+                    PushNotification = false
                 };
             }
 
@@ -611,7 +612,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             preference.GeneralPlatformUpdates = model.GeneralPlatformUpdates;
             preference.Sms = model.Sms;
             preference.Email = model.Email;
-            preference.InAppNotification = model.InAppNotification;
+            preference.PushNotification = model.PushNotification;
 
             await _context.SaveChangesAsync();
 
@@ -628,7 +629,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             preference.WalletRepaymentDue = model.WalletRepaymentDue;
             preference.Sms = model.Sms;
             preference.Email = model.Email;
-            preference.InAppNotification = model.InAppNotification;
+            preference.PushNotification = model.PushNotification;
+
+            await _context.SaveChangesAsync();
+
+            return MapNotificationPreference(preference);
+        }
+
+        public async Task<NotificationPreferenceResponse> SaveOrganizationNotificationPreference(string userId, OrganizationNotificationPreferenceRequest model)
+        {
+            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Organization);
+
+            preference.PushNotification = model.PushNotification;
+            preference.Sms = model.Sms;
+            preference.Email = model.Email;
 
             await _context.SaveChangesAsync();
 
@@ -676,7 +690,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 WalletRepaymentDue = preference.WalletRepaymentDue,
                 Sms = preference.Sms,
                 Email = preference.Email,
-                InAppNotification = preference.InAppNotification,
+                PushNotification = preference.PushNotification,
                 LastUpdatedOn = preference.DateModified ?? preference.CreatedOn
             };
 

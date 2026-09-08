@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
@@ -72,6 +72,56 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _membershipManager = membershipManager;
          }
         #region settings
+
+        [HttpGet("notification-preference")]
+        public async Task<IActionResult> GetOrganizationNotificationPreference()
+        {
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            return await ExecuteAsync(
+                () => _onboardingManager.GetOrganizationNotificationPreferenceAsync(CurrentUserId),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        [HttpPost("notification-preference")]
+        public async Task<IActionResult> SaveOrganizationNotificationPreference(
+            [FromBody] OrganizationNotificationPreferenceRequest model)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            return await ExecuteAsync(
+                () => _onboardingManager.SaveOrganizationNotificationPreferenceAsync(CurrentUserId, model),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
 
      
         [HttpPost("create-location")]
