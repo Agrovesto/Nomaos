@@ -5104,9 +5104,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("GeneralPlatformUpdates")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("InAppNotification")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("MappingStatusUpdates")
                         .HasColumnType("bit");
 
@@ -5117,6 +5114,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("NewFarmerAssigned")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("PushNotification")
                         .HasColumnType("bit");
 
                     b.Property<bool>("Sms")
