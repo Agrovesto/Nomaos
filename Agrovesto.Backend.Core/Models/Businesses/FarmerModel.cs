@@ -410,7 +410,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? HighestLevelOfEducation { get; set; }
         public bool IsNinVerified { get; set; } = false;
         public string? OnboardedById { get; set; }
-        public List<ValueChainSelectionDto> SelectedItems { get; set; }
+        public List<ValueChainSelectionDto?> SelectedItems { get; set; }
         public List<FarmerValueChainsSelectionDto>? ValueChainItems { get; set; }
         public List<long>? CooperativeIds { get; set; }
         public List<long>? AgentIds { get; set; }
@@ -431,8 +431,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class ValueChainSelectionDto
     {
-        public string ValueChainType { get; set; }
-        public List<string> Items { get; set; }
+        public string? ValueChainType { get; set; }
+        public List<string?> Items { get; set; }
     }
     public class FarmerValueChainsSelectionDto
     {
