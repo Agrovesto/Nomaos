@@ -41,6 +41,68 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _logger = logger;
         }
 
+        public async Task<bool> DeactivateUser(AssignmentArgs args, TaskDescription model)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var farmerExists = await _context.Farmers
+                        .AnyAsync(f => f.Id == args.Id);
+
+                    if (!farmerExists)
+                        return false;
+
+                    var now = DateTimeOffset.UtcNow;
+
+                    var reason = !string.IsNullOrWhiteSpace(model.Message)
+                        ? model.Message
+                        : $"Deactivated by user {args.OnboardedByUserId}";
+
+                    if(model.User == Core.Models.Common.UserType.Agent)
+                    {
+                        var agent = await _context.MemberShipAgents
+                            .FirstOrDefaultAsync(x => x.Id == args.Id && x.IsActive);
+                        if (agent == null)
+                            return false;
+                        agent.IsActive = false;
+                        //agent.DeactivatedOn = now;
+                        agent.DeactivatedByUserId = args.OnboardedByUserId;
+                        agent.DeactivationReason = reason;
+
+                        //remove the agent from the 
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        return true;
+                    }
+                    if(model.User == Core.Models.Common.UserType.Farmer)
+                    {
+                        var agent = await _context.FarmerCooperatives
+                           .FirstOrDefaultAsync(x => x.Id == args.Id && x.IsActive);
+                        if (agent == null)
+                            return false;
+                        agent.IsActive = false;
+                        //agent.DeactivatedOn = now;
+                        agent.DeactivatedByUserId = args.OnboardedByUserId;
+                        agent.DeactivationReason = reason;
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        return true;
+                    }
+
+                    return true;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
+        }
 
 
         public async Task<MembershipResponse> CreateMembershipAsync(

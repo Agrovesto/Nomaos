@@ -1375,6 +1375,60 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
+        [HttpPut("membership/assign-farmers")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AssignMultipleFarmer([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
+        {
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            return await ExecuteAsync(async () =>
+            {
+                if (!model.FarmerIds.Any())
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "No farmer selected.");
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.FarmerIds = model.FarmerIds;
+                return await _organizationManager.AssignBulkFarmerToCooperative(args);
+            },
+                    request => Ok(Success(request, ResponseMessages.Successful)));
+        }
+        [HttpPut("membership/assign-agents")]
+        [AllowAnonymous]
+        public async Task<IActionResult> AssignBulkAgentToCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
+        {
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            return await ExecuteAsync(async () =>
+            {
+                if (!model.FarmerIds.Any())
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "No farmer selected.");
+
+                args.OnboardedByUserId = CurrentUserId;
+                args.AgentIds = model.AgentIds;
+                return await _organizationManager.AssignBulkAgentToCooperative(args);
+            },
+                    request => Ok(Success(request, ResponseMessages.Successful)));
+        }
+        [HttpPut("deactivate-user")]
+        [AllowAnonymous]
+        public async Task<IActionResult> DeactivateFarmerFromMembership([FromQuery] AssignmentArgs args,
+    [FromBody] TaskDescription model)
+        {
+            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+            if (orgError != null) return orgError;
+            args.organizationCode = resolvedOrgCode;
+            return await ExecuteAsync(async () =>
+            {
+                args.OnboardedByUserId = CurrentUserId;
+                return await _organizationManager.DeactivateUser(args, model);
+            },
+            request => Ok(Success(request, ResponseMessages.Successful)));
+
+        }
+
+
         #endregion Membership
 
         #region FarmerMgt
@@ -1601,6 +1655,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
                     request => Ok(Success(request, ResponseMessages.Successful)));
         }
+      
         [HttpPut("remove-farmer-from-cooperative")]
         public async Task<IActionResult> RemoveFarmerFromCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {

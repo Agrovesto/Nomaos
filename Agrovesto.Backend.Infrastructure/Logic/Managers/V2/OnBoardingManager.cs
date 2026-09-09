@@ -97,7 +97,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
        
         Task<bool> ResetPin(ConfirmOtpRequest request);
         Task<(bool Status, string Message)> ForgotPin(string phoneNumber, string businessCode,string env);
-        Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args);
+        Task<(bool Status, string Message)> ChangePin(ChangePinModel model);
         Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal);
     }
     public class OnBoardingManager : IOnBoardingManager
@@ -2341,12 +2341,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var fgPwd = await _onboardingRepository.ForgotPassword(username);
             if (fgPwd.Status && !string.IsNullOrEmpty(fgPwd.token))
             {
-                var tokenGeneratedByte = Encoding.UTF8.GetBytes(fgPwd.token);
-
-                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
-                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?email={username}&token={encodedToken}";
-
-                var message = $"Please have your password reset by <a href='{callbackUrl}'>clicking here</a>.";
+               
+                var message = $"Please have your password reset by <a href='{fgPwd.token}'>clicking here</a>.";
 
 
                 await _awsService.SendEmailAsync(
@@ -2436,13 +2432,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return validate.IsUsed;
         }
       
-        public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args)
+        public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model)
         {
             if (string.IsNullOrEmpty(model.PhoneNumber))
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "User not authorized for this action.");
             }
-            var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == args.UserId);
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == model.UserId);
             if (user == null)
             {
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
@@ -2451,7 +2447,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (string.IsNullOrWhiteSpace(model.OldPin))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Your current PIN is required.");
 
-            if (!await _onboardingRepository.ValidateUserPinAsync(args.UserId, model.OldPin))
+            if (!await _onboardingRepository.ValidateUserPinAsync(model.UserId, model.OldPin))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "The current PIN you entered is incorrect.");
 
             if (string.IsNullOrWhiteSpace(model.NewPin) || !Regex.IsMatch(model.NewPin, @"^\d{4}$"))
