@@ -1786,7 +1786,7 @@ RepaymentFrequency frequency)
             return await _inputFinancingRepository.RequestInputDisbursementApprovalAsync(args.SubscriptionId, reference, args.UserId
                 ,args.SubscriberUserId);
         }
-        private async Task<OrganizationAgent> ResolveOrganizationAgentLocation(long agentId, string? organizationCode)
+        private async Task<OrganizationAgent> ResolveOrganizationAgentLocation(long agentId, string? organizationCode, long locationId)
         {
             if (string.IsNullOrWhiteSpace(organizationCode))
                 throw new BaseException(ExceptionType.NOTFOUND, "Organization code is required");
@@ -1810,35 +1810,13 @@ RepaymentFrequency frequency)
                 .Where(x =>
                     x.AgentId == agentId &&
                     orgIds.Contains(x.OrganizationId) &&
-                    x.LocationId != null &&
+                    x.LocationId == locationId &&
                     x.IsActive)
-                .ToListAsync();
+                .FirstOrDefaultAsync();
 
-            OrganizationAgent selected;
+           
 
-            if (codes.Count == 1)
-            {
-                var requestedOrgId = organizations.First().OrganizationId;
-                selected = agentAssignments.FirstOrDefault(x => x.OrganizationId == requestedOrgId);
-
-                if (selected == null)
-                    throw new DisbursementException(
-                        "Agent does not have an active assignment within this organization " +
-                        "and cannot perform disbursements.");
-            }
-            else
-            {
-                selected = orgIds
-                    .Select(id => agentAssignments.FirstOrDefault(x => x.OrganizationId == id))
-                    .FirstOrDefault(x => x != null);
-
-                if (selected == null)
-                    throw new DisbursementException(
-                        "Agent does not have an active assignment within this organization " +
-                        "and cannot perform disbursements.");
-            }
-
-            return selected;
+            return agentAssignments;
         }
         
         private async Task<OrganizationLocation> ResolveOrganizationUserLocation(long organizationId, long locationId)
@@ -1952,7 +1930,7 @@ RepaymentFrequency frequency)
                         request.UserImage,
                         new ImageVerificationArgs
                         {
-                            OrganizationCode=args.OrganizationCode,
+                            OrganizationCode = args.OrganizationCode,
                             BusinessCode = args.BusinessCode,
                             FarmerUserId = query.RequestForUserId
                         });
@@ -1972,22 +1950,14 @@ RepaymentFrequency frequency)
 
                     if(args.CurrentLoggedInUserRole == UserType.Agent.ToString())
                     {
-                        var organizationAgent = await ResolveOrganizationAgentLocation(agent.Id, org.OrganizationCode);
+                        var organizationAgent = await ResolveOrganizationAgentLocation(agent.Id, org.OrganizationCode, request.WarehouseId);
 
                         if (organizationAgent == null)
                             throw new DisbursementException(
-                                "Agent does not have an active assignment within this organization " +
+                                "Agent does not have an active assignment within this organization tied to" +
+                                "the selected warehouse" +
                                 "and cannot perform disbursements.");
 
-                        if (organizationAgent.Location == null)
-                            throw new DisbursementException(
-                                "Agent's assigned location could not be resolved. " +
-                                "Contact an administrator to correct the assignment.");
-
-                        if (!organizationAgent.Location.IsActive)
-                            throw new DisbursementException(
-                                $"Location '{organizationAgent.Location.LocationName}' is currently " +
-                                "inactive and cannot be used for disbursements.");
 
                         if (organizationAgent.Location.Id != request.WarehouseId)
                             throw new DisbursementException(
@@ -2007,10 +1977,15 @@ RepaymentFrequency frequency)
                         lon2: disbursementLocation.Longitude);
 
                     if (distanceMetres > GeometryHelper.AllowedRadiusMetres)
+                    {
+                        double excessMetres = distanceMetres - GeometryHelper.AllowedRadiusMetres;
+
                         throw new DisbursementException(
-                            $"Your current location ({distanceMetres:F0} m away) does not match " +
-                            $"the assigned inventory location '{disbursementLocation.LocationName}'. " +
-                            "Move to the correct location and try again.");
+                            $"Location check failed for '{disbursementLocation.LocationName}'.\n" +
+                            $"• Your distance from this location: {distanceMetres:N0} m\n" +
+                            $"• Allowed range: {GeometryHelper.AllowedRadiusMetres:N0} m\n" +
+                            $"• You need to move {excessMetres:N0} m closer to proceed.");
+                    }
 
 
                     if (query.Status == DisbursementStatus.Disbursed)
