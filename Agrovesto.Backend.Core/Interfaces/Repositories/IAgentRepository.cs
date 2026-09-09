@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,6 +10,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
 {
     public interface IAgentRepository
     {
+        Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args, long membershipId);
         Task<(bool status, AgentModel data)> CreateAgent(AgentModel data);
         Task<(bool status, AgentModel data)> CreateUpdateAgent(AgentModel data);
         Task<AgentModel> GetAgentBySuperVisor(string userId);

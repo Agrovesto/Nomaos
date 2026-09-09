@@ -499,10 +499,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
 
-                args.UserId = CurrentUserId;
+                model.UserId = CurrentUserId;
                 model.PhoneNumber = CurrentPhoneNumber;
 
-                var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
+                var resetPasswordRequest = await _onBoardingManager.ChangePin(model);
 
             return Ok(ApiResponse<bool>.Success(
                 true,

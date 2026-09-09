@@ -1,6 +1,7 @@
 ﻿using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using DocumentFormat.OpenXml.Wordprocessing;
@@ -23,6 +24,58 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public AgentRepository(DataContext context)
         {
             _context = context;
+        }
+        public async Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args, long membershipId)
+        {
+            if (args.AgentIds == null || !args.AgentIds.Any())
+                return null;
+
+            var membership = await _context.MemberShips
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            if (membership == null)
+                return null;
+
+            var incomingAgentIds = args.AgentIds
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList();
+
+            // Scope the "already assigned" check to THIS organization only
+            var existingAgentIdsInThisOrg = await _context.MemberShipAgents
+                .Where(fa => fa.MemberShipId == membershipId
+                          && incomingAgentIds.Contains(fa.AgentId)
+                          //&& fa.OrganizationCode == args.organizationCode
+                          )
+                .Select(fa => fa.AgentId)
+                .ToListAsync();
+
+            var newAgentIds = incomingAgentIds
+                .Except(existingAgentIdsInThisOrg)
+                .ToList();
+
+            if (newAgentIds.Any())
+            {
+                var newAssignments = newAgentIds.Select(agentId => new MemberShipAgent
+                {
+                    AgentId = agentId,
+                    MemberShipId = membershipId,
+                    OnboardedByUserId = args.OnboardedByUserId,
+                    AssignedOn = DateTimeOffset.UtcNow,
+                    IsActive = true,
+                    
+                   // OrganizationCode = args.organizationCode
+                }).ToList();
+
+                await _context.MemberShipAgents.AddRangeAsync(newAssignments);
+                await _context.SaveChangesAsync();
+            }
+
+            var updatedCooperative = await _context.MemberShips
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            return updatedCooperative.Map();
         }
 
         public async Task<bool> UpdateOrganizationAgentLocation(OrganizationAgentArgs data)

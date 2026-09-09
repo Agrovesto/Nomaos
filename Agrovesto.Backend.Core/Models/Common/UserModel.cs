@@ -84,6 +84,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class ChangePinModel
     {
         public string? PhoneNumber { get; set; }
+        public string? UserId { get; set; }
         public string OldPin { get; set; }
         public string NewPin { get; set; }
         [Compare(nameof(NewPin), ErrorMessage = "Confirm PIN must match New PIN.")]
@@ -105,7 +106,8 @@ namespace Agrovesto.Backend.Core.Models.Common
     public class PasswordResetModel
     {
         public string Token { get; set; }
-        public string Username { get; set; }
+        public string? Username { get; set; }
+        public string? UserId { get; set; }
         public string Password { get; set; }
     }
     public class UserViewModel

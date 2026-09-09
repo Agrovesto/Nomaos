@@ -384,7 +384,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 BusinessCode = activeBusiness.Business.BusinessCode,
                 Businesses = userBusinesses.Select(b => new BusinessClaimModel
                 {
-                  BusinessId=  b.BusinessId,
+                   BusinessId=  b.BusinessId,
                    BusinessCode= b.Business.BusinessCode,
                    BusinessName= b.Business.BusinessName
                 }).ToList(),
@@ -434,7 +434,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 audience: _configuration["JWT:Audience"],
                 claims: claims,
                 notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddDays(1),
+                expires: DateTime.UtcNow.AddHours(1),
                 signingCredentials: new SigningCredentials(
                     signingKey,
                     SecurityAlgorithms.HmacSha256)
@@ -767,9 +767,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 OrganizationCode = organization.OrganizationCode,
                 OrganizationEmail = organization.OrganizationEmail,
                 PhoneNumber = organization.PhoneNumber,
-                State = organization.State.State,
-                Lga = organization.LGA.Name,
+                State = organization.State?.State,
+                Lga = organization.LGA?.Name,
                 Location = organization.CompanyAddress,
+                OnboardedOn=organization.OnboardedOn
              
             };
             return profile;
@@ -1775,14 +1776,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user != null)
             {
                 var generatedToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-                
-                return (true, "User Found", generatedToken);
+                var tokenGeneratedByte = Encoding.UTF8.GetBytes(generatedToken);
+
+                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
+                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?t={encodedToken}&u={user.Id}";
+
+                return (true, "User Found", callbackUrl);
             }
             return (false, "User Not found", null);
         }
         public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
         {
-            var userExist = await _userManager.FindByEmailAsync(model.Username);
+            var userExist = await _userManager.FindByIdAsync(model.UserId);
             if (userExist != null)
             {
                 var decodedBytes = WebEncoders.Base64UrlDecode(model.Token);

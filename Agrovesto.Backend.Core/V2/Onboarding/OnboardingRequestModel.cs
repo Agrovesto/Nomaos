@@ -376,6 +376,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public class TaskDescription
     {
         public string? Message { get; set; }
+        public UserType User { get; set; } = UserType.Farmer;
     }
     public class AssignmentArgs
     {
@@ -388,6 +389,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? businessCode { get; set; }
         public string? organizationCode { get; set; }
         public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? FarmerIds { get; set; }
         public List<long?>? MembershipIds { get; set; }
         public List<long?>? AgentIds { get; set; }
 

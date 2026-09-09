@@ -239,6 +239,58 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 }
             });
         }
+
+        public async Task<MemberShipModel> AssignBulkFarmerToCooperative(AssignmentArgs args, long membershipId)
+        {
+            if (args.FarmerIds == null || !args.FarmerIds.Any())
+                return null;
+
+            var membership = await _context.MemberShips
+                .AsNoTracking()
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            if (membership == null)
+                return null;
+
+            var incomingFarmerIds = args.FarmerIds
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToList();
+
+            // Scope the "already assigned" check to THIS organization only
+            var existingFarmerIdsInThisOrg = await _context.FarmerCooperatives
+                .Where(fa => fa.CooperativeId == membershipId
+                          && incomingFarmerIds.Contains(fa.FarmerId)
+                          && fa.OrganizationCode == args.organizationCode)
+                .Select(fa => fa.FarmerId)
+                .ToListAsync();
+
+            var newFarmerIds = incomingFarmerIds
+                .Except(existingFarmerIdsInThisOrg)
+                .ToList();
+
+            if (newFarmerIds.Any())
+            {
+                var newAssignments = newFarmerIds.Select(farmerId => new FarmerCooperative
+                {
+                    FarmerId = farmerId,
+                    CooperativeId = membershipId,
+                    OnboardedByUserId = args.OnboardedByUserId,
+                    JoinedOn = DateTimeOffset.UtcNow,
+                    IsActive = true,
+                    OrganizationCode = args.organizationCode
+                }).ToList();
+
+                await _context.FarmerCooperatives.AddRangeAsync(newAssignments);
+                await _context.SaveChangesAsync();
+            }
+
+            var updatedCooperative = await _context.MemberShips
+                .FirstOrDefaultAsync(f => f.Id == membershipId);
+
+            return updatedCooperative.Map();
+        }
+
         public async Task<FarmerModel> AssignFarmerToCooperatives(AssignmentArgs args, long farmerId)
         {
             if (args.CooperativeIds == null || !args.CooperativeIds.Any())

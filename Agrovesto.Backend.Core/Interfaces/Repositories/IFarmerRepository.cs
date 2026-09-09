@@ -60,5 +60,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<bool> RemoveFarmerFromAgent(long farmerId, List<long> agentIds);
         Task<bool> RemoveFarmerFromCooperative(long farmerId, long cooperativeId);
         Task<FarmerModel?> ChangeFarmerAgents(AssignmentArgs args, long farmerId);
+        Task<MemberShipModel> AssignBulkFarmerToCooperative(AssignmentArgs args, long membershipId);
     }
 }

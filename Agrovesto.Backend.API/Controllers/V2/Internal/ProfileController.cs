@@ -194,7 +194,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return StatusCode(400, new Response<string>
                     {
-                        Message = "The supplied user is not a Farmer.",
+                        Message = "The user is not a Farmer.",
                         Succeeded = false
                     });
                 }
@@ -334,12 +334,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// ///
         ////get current logged in user profile to include name, phone number, email, picture, id, level/tier
          [HttpGet("user-profile")]
-        [Authorize]
+        [AllowAnonymous]
         public async Task<IActionResult> GetUserProfile([FromQuery] string? userId)
         {
             try
             {
-                var targetUserId = CurrentUserId;
+                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
 
                 if (string.IsNullOrEmpty(targetUserId))
                 {
