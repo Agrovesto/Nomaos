@@ -36,5 +36,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<MembershipResponse> AssignLeaderAsync(AssignLeaderDto dto, string updatedById);
         Task<MembershipResponse> CreateMembershipAsync(CreateMembershipDto dto, OnBoardingArgs args);
         Task<bool> DeactivateUser(AssignmentArgs args, TaskDescription model);
+        Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(string membershipUserId, ListQueryParams query);
     }
 }

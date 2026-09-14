@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal.Util;
 using Amazon.S3;
+using Amazon.SimpleNotificationService.Model;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
@@ -25,6 +26,8 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using NotFoundException = Agrovesto.Backend.Core.Exceptions.NotFoundException;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -1074,9 +1077,27 @@ SELECT
                 Roles = roles
             };
         }
-        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(
-      ListQueryParams query)
+
+        private static readonly SubscriptionStatus[] DisbursedOrBeyondStatuses =
+   {
+    SubscriptionStatus.Disbursed,
+    SubscriptionStatus.PartiallyDisbursed,
+    SubscriptionStatus.Active,
+    SubscriptionStatus.PendingRepayment,
+    SubscriptionStatus.Completed,
+    SubscriptionStatus.Defaulted
+};
+
+        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams query)
         {
+            var organization = await _context.Organizations
+                .AsNoTracking()
+                .Where(o => o.OrganizationCode == query.organizationCode)
+                .FirstOrDefaultAsync();
+
+            if (organization == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
+
             var membershipIdsQuery = _context.OrganizationMemberships
                 .AsNoTracking()
                 .Where(om => om.Organization.OrganizationCode == query.organizationCode)
@@ -1087,6 +1108,12 @@ SELECT
 
             if (totalMemberships == 0)
                 return new OrganizationMembershipDashboardResponse();
+
+            // Active memberships among the ones belonging to this organization.
+            var totalActiveMemberships = await _context.MemberShips
+                .AsNoTracking()
+                .Where(m => membershipIdsQuery.Contains(m.Id) && m.IsActive)
+                .CountAsync();
 
             var farmerStats = await _context.FarmerCooperatives
                 .AsNoTracking()
@@ -1106,23 +1133,61 @@ SELECT
                 })
                 .FirstOrDefaultAsync();
 
+            // Subscriptions that reached Disbursed or a later lifecycle stage.
+            // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
+            // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
+            // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
+            //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
+            //                            were financed more than once).
+            var disbursedStats = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s => s.OrganizationId == organization.OrganizationId
+                         && s.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(s.Status))
+                .GroupBy(s => 1)
+                .Select(g => new
+                {
+                    Count = g.Count(),
+                    TotalFinanced = g.Sum(s => (decimal?)s.TotalFinancingValue) ?? 0m,
+                    DistinctMemberships = g.Select(s => s.SubscriberUserId).Distinct().Count()
+                })
+                .FirstOrDefaultAsync();
+
+            // Total recovered from those memberships — actual payments made, via the subscription's org link.
+            var totalRecoveryAmount = await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.Subscription.OrganizationId == organization.OrganizationId
+                         && p.Subscription.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(p.Subscription.Status))
+                .SumAsync(p => (decimal?)p.AmountPaid) ?? 0m;
+
             return new OrganizationMembershipDashboardResponse
             {
                 TotalMemberships = totalMemberships,
+                ActiveMemberships = totalActiveMemberships,
                 TotalFarmers = farmerStats?.TotalFarmers ?? 0,
                 TotalVerifiedFarmers = farmerStats?.TotalVerifiedFarmers ?? 0,
                 TotalUnverifiedFarmers = farmerStats?.TotalUnverifiedFarmers ?? 0,
-                TotalInputDisbursed = 0,
-                TotalRecoveryAmount = 0
+                TotalInputDisbursed = disbursedStats?.Count ?? 0,
+                TotalFinanced = disbursedStats?.TotalFinanced ?? 0m,
+                TotalFinancedMemberships = disbursedStats?.DistinctMemberships ?? 0,
+                TotalRecoveryAmount = totalRecoveryAmount
             };
         }
+
         public async Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetCooperativesByOrganization(
-     string organizationCode,
-     ListQueryParams query)
+            string organizationCode,
+            ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
             if (query.PageSize <= 0 || query.PageSize > 10) query.PageSize = 10;
+
+            var organization = await _context.Organizations.Where(x => x.OrganizationCode == organizationCode).FirstOrDefaultAsync();
+            if (organization == null)
+            {
+                throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
+            }
 
             var baseQuery =
                 from m in _context.MemberShips.AsNoTracking()
@@ -1158,35 +1223,84 @@ SELECT
                 };
             }
 
+            // BUG FIX: TotalInputReceived should only reflect subscriptions that actually reached Disbursed
+            // or a later lifecycle stage — pending/approved/rejected subscriptions haven't actually paid out
+            // anything yet, so they shouldn't count toward "received." Also fixed `query.businessCode`
+            // (no such property) → use the resolved `organization`.
+            var inputPackageSubscriptions = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s => s.OrganizationId == organization.OrganizationId
+                         && s.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(s.Status))
+                .GroupBy(s => s.SubscriberUserId)
+                .Select(g => new
+                {
+                    SubscriberUserId = g.Key,
+                    TotalInputReceived = g.Sum(s => (long?)s.TotalFinancingValue) ?? 0,
+                })
+                .ToDictionaryAsync(x => x.SubscriberUserId, x => new
+                {
+                    x.TotalInputReceived,
+                });
+
+            // Recovery amounts are actual payments made against those disbursed-or-beyond subscriptions.
+            var totalRepayment = await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.Subscription.OrganizationId == organization.OrganizationId
+                         && p.Subscription.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(p.Subscription.Status))
+                .GroupBy(p => p.Subscription.SubscriberUserId)
+                .Select(g => new
+                {
+                    SubscriberUserId = g.Key,
+                    TotalRecoveryAmount = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.SubscriberUserId, x => x.TotalRecoveryAmount);
+
+            // BUG FIX: was `query.businessCode` (no such property) — use the resolved organization's BusinessCode.
+            var walletBalancePerMembership = await _context.UserWallets
+                .AsNoTracking()
+                .Where(w =>
+                    w.BelongToBusinessCode == organization.BusinessCode
+                    && !w.IsDeleted)
+                .GroupBy(s => s.UserId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    WalletBalance = g.Sum(s => (decimal?)s.WalletBalance) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.UserId, x => x.WalletBalance);
+
             var pagedMemberships = await baseQuery
-         .GroupJoin(_context.MemberShipTypes.AsNoTracking(),
-             m => m.MemberShipTypeId,
-             mt => mt.Id,
-             (m, mtGroup) => new { m, mtGroup })
-         .SelectMany(
-             x => x.mtGroup.DefaultIfEmpty(),
-             (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
-         .OrderByDescending(x => x.m.OnBoardedOn)
-         .Skip((query.PageNumber - 1) * query.PageSize)
-         .Take(query.PageSize)
-         .Select(x => new
-         {
-             x.m.Id,
-             x.m.Name,
-             x.m.Location,
-             x.m.State,
-             x.m.Lga,
-             x.m.Ward,
-             x.m.OnBoardedOn,
-             x.m.MembershipLeaderLastName,
-             x.m.MembershipLeaderFirstName,
-             x.m.PhoneNumber,
-             x.m.UserId,
-             x.m.TierLevel,
-             x.m.IsActive,
-             MembershipType = x.MembershipTypeName
-         })
-         .ToListAsync();
+                .GroupJoin(_context.MemberShipTypes.AsNoTracking(),
+                    m => m.MemberShipTypeId,
+                    mt => mt.Id,
+                    (m, mtGroup) => new { m, mtGroup })
+                .SelectMany(
+                    x => x.mtGroup.DefaultIfEmpty(),
+                    (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
+                .OrderByDescending(x => x.m.OnBoardedOn)
+                .Skip((query.PageNumber - 1) * query.PageSize)
+                .Take(query.PageSize)
+                .Select(x => new
+                {
+                    x.m.Id,
+                    x.m.Name,
+                    x.m.Location,
+                    x.m.State,
+                    x.m.Lga,
+                    x.m.Ward,
+                    x.m.OnBoardedOn,
+                    x.m.MembershipLeaderLastName,
+                    x.m.MembershipLeaderFirstName,
+                    x.m.PhoneNumber,
+                    x.m.UserId,
+                    x.m.TierLevel,
+                    x.m.IsActive,
+                    MembershipType = x.MembershipTypeName
+                })
+                .ToListAsync();
+
             var membershipIds = pagedMemberships.Select(m => m.Id).ToList();
 
             var farmerStats = await _context.FarmerCooperatives
@@ -1199,7 +1313,7 @@ SELECT
                       x => x.CooperativeId,
                       id => id,
                       (x, id) => x)
-                .Distinct() 
+                .Distinct()
                 .GroupBy(x => x.CooperativeId)
                 .Select(g => new
                 {
@@ -1225,11 +1339,15 @@ SELECT
                 var totalFarmers = stats?.TotalFarmers ?? 0;
                 var totalVerified = stats?.TotalVerified ?? 0;
 
+                var inputStats = inputPackageSubscriptions.GetValueOrDefault(m.UserId);
+                var totalRecovery = totalRepayment.GetValueOrDefault(m.UserId);
+                var walletBalance = walletBalancePerMembership.GetValueOrDefault(m.UserId);
+
                 return new OrganizationMemberShipResponseModel
                 {
                     Status = m.IsActive,
                     Id = m.Id,
-                    Name = m.Name,
+                    MembershipName = m.Name,
                     Location = m.Location,
                     State = m.State,
                     Lga = m.Lga,
@@ -1244,8 +1362,9 @@ SELECT
                     TotalVerifiedFarmers = totalVerified,
                     TotalUnverifiedFarmers = totalFarmers - totalVerified,
                     HasbeenAssignedAgent = assignedAgentSet.Contains(m.Id),
-                    TotalInputReceived = 0,
-                    RecoveryAmount = 0
+                    TotalInputReceived = inputStats?.TotalInputReceived ?? 0,
+                    RecoveryAmount = totalRecovery,
+                    WalletBalance = walletBalance
                 };
             }).ToList();
 
@@ -1257,8 +1376,7 @@ SELECT
                 PageSize = query.PageSize
             };
         }
-        
-        
+
         public async Task<PagedListResponse<List<OrganizationAgentResponse>>> GetOrganizationAgents(ListQueryParams args)
         {
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;

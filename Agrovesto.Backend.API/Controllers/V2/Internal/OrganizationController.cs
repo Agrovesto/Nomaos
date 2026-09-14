@@ -1289,16 +1289,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         }
 
-        [HttpGet("membership-mgt-overview")]
-        public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
-        {
-            return await ExecuteAsync(async () =>
-            {
-                query.organizationCode = RequireOrganizationCode(query.organizationCode);
-                return await _organizationManager.GetOrganizationMembershipDashboard(query);
-            },
-                    overview => Ok(Wrap(overview)));
-        }
 
         [HttpPost("create-membership")]
 
@@ -1318,6 +1308,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 request => Ok(Success(request, request.Message)));
         }
 
+
+        [HttpGet("membership-mgt-overview")]
+        public async Task<IActionResult> GetOrganizationMembershipDashboard([FromQuery] ListQueryParams query)
+        {
+            return await ExecuteAsync(async () =>
+            {
+                query.organizationCode = RequireOrganizationCode(query.organizationCode);
+                return await _organizationManager.GetOrganizationMembershipDashboard(query);
+            },
+                    overview => Ok(Wrap(overview)));
+        }
+
         [HttpGet("memberships")]
         public async Task<IActionResult> GetCooperativesByOrganization([FromQuery] ListQueryParams query)
         {
@@ -1329,19 +1331,61 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
         }
 
-        [HttpGet("membership/farmers")]
-        public async Task<IActionResult> GetFarmersByCooperativeId([FromQuery] ListQueryParams query)
+        [HttpGet("membership-detail")]
+        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
         {
-            var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
-            if (orgError != null) return orgError;
-            query.organizationCode = resolvedOrgCode;
             if (RequireField(query.UserId, "UserId") is { } error) return error;
 
             return await ExecuteAsync(
-                () => _membershipManager.GetMembershipFarmers(query),
-                result => Ok(BuildPagedResponse(result, query.PageNumber, 10)));
+                () =>
+                {
+                    return _membershipManager.GetMembershipDetailAsync(query);
+                },
+                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
+        [HttpGet("membership-agents")]
+        public async Task<IActionResult> GetMembershipAgentsAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipAgentsAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+        [HttpGet("membership-farmers")]
+        public async Task<IActionResult> GetMembershipFarmersAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipFarmersAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+        [HttpGet("membership-financing-breakdown")]
+        public async Task<IActionResult> GetMembershipFinancingBreakdownAsync([FromQuery] ListQueryParams query)
+        {
+            if (RequireField(query.UserId, "UserId") is { } error) return error;
+
+            return await ExecuteAsync(
+                () =>
+                {
+                    return _membershipManager.GetMembershipFinancingBreakdownAsync(query.UserId, query);
+                },
+                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+
+        }
+
+
+
         [HttpPost("membership/create-farmer")]
         public async Task<IActionResult> CreateMembershipFarmer([FromBody] CreateFarmerRequest model, [FromQuery] OnBoardingArgs args)
         {
@@ -1361,21 +1405,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             request => Ok(Success(request, request.Message)));
         }
 
-        [HttpGet("membership-detail")]
-        public async Task<IActionResult> GetMembershipDashboardData([FromQuery] ListQueryParams query)
-        {
-            if (RequireField(query.UserId, "UserId") is { } error) return error;
-
-            return await ExecuteAsync(
-                () =>
-                {
-                    return _membershipManager.GetMembershipDetailAsync(query);
-                },
-                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
-
-        }
-
-        [HttpPut("membership/assign-farmers")]
+         [HttpPut("membership/assign-farmers")]
         [AllowAnonymous]
         public async Task<IActionResult> AssignMultipleFarmer([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {
@@ -1414,7 +1444,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [HttpPut("deactivate-user")]
         [AllowAnonymous]
         public async Task<IActionResult> DeactivateFarmerFromMembership([FromQuery] AssignmentArgs args,
-    [FromBody] TaskDescription model)
+        [FromBody] TaskDescription model)
         {
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
             if (orgError != null) return orgError;
