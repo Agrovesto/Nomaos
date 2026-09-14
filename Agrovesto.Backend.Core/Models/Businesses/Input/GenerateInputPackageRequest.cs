@@ -580,6 +580,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
 
     public class SubscriptionQueryFilter
     {
+        public InputSubScriptionType? SubscriptionType { get; set; } 
         public long? PackageId { get; set; }
         public string? UserId { get; set; }
 
@@ -631,6 +632,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal TotalOutstanding { get; set; }
         public string NextDueDate { get; set; }
         public decimal TotalRepaid { get; set; }
+    }
+    public class PerUserTypeFinancingOverviewCountDto
+    {
+        public decimal TotalFinancedValue { get; set; }
+        public long TotalFinance { get; set; }
     }
     public class InputFinancingDashboardDto
     {

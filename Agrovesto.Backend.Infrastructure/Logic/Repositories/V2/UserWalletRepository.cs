@@ -76,6 +76,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context = context;
             _notificationService = aWSService;
         }
+        public async Task<decimal> TotalUserWalletsBalance(string userId, string businessCode)
+        {
+            var totalBalance = await _context.UserWallets
+                .Where(w =>
+                    w.UserId == userId &&
+                    w.BelongToBusinessCode == businessCode &&
+                    !w.IsDeleted)
+                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+            return totalBalance;
+        }
         public async Task AdjustWalletBalanceAsync(long walletId, decimal delta)
         {
             var wallet = await _context.UserWallets.FirstOrDefaultAsync(x => x.Id == walletId);

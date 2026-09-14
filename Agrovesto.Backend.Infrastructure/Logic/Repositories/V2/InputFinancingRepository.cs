@@ -81,6 +81,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs args, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
+        Task<PerUserTypeFinancingOverviewCountDto> GetFinancingOverViewPerSubscriptionType(SubscriptionQueryFilter filter);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -3751,6 +3752,64 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 NextDueDate = nextDueDates.GetValueOrDefault(id)
             };
         }
+
+        public async Task<PerUserTypeFinancingOverviewCountDto> GetFinancingOverViewPerSubscriptionType(
+       SubscriptionQueryFilter filter)
+        {
+            var totalFinancedValue = 0m;
+            var totalSubscription = 0;
+            var subscriptionsQuery = _context.InputPackageSubscriptions
+            
+                .Where(x => x.BusinessCode == filter.BusinessCode);
+
+            if (filter.OrganizationId.HasValue)
+            {
+                subscriptionsQuery = subscriptionsQuery
+                    .Where(x => x.OrganizationId == filter.OrganizationId.Value);
+            }
+            if(filter.SubscriptionType.HasValue)
+            {
+                subscriptionsQuery = subscriptionsQuery
+                    .Where(x => x.SubscriberType == filter.SubscriptionType.Value);
+                if(filter.SubscriptionType.Value == InputSubScriptionType.Individual)
+                {
+                    totalFinancedValue = await subscriptionsQuery
+                        .Where(x=>x.SubscriberType == InputSubScriptionType.Individual)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+
+                    totalSubscription = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.Individual)
+                        .CountAsync();
+                }
+                else if (filter.SubscriptionType.Value == InputSubScriptionType.MemberShip)
+                {
+                    totalFinancedValue = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.MemberShip)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+                    totalSubscription = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.MemberShip)
+                        .CountAsync();
+                }
+            }
+            else
+            {
+                totalFinancedValue = await subscriptionsQuery
+                      .Where(x => x.SubscriberType == InputSubScriptionType.Individual)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+                totalSubscription = await subscriptionsQuery
+                          .CountAsync();
+
+            }
+
+
+            return new PerUserTypeFinancingOverviewCountDto
+            {
+                TotalFinancedValue = totalFinancedValue,
+                TotalFinance= totalSubscription
+            };
+        }
+
+
         public async Task<InputFinancingDashboardDto> GetInputFinancingOverviewAsync(
         SubscriptionQueryFilter filter)
         {
