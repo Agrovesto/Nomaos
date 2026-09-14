@@ -8,6 +8,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum MembershipParticipantType
+    {
+        Farmer=1,
+        Agent=2
+    }
+
     public enum KYCVerificationType
     {
         NIN,

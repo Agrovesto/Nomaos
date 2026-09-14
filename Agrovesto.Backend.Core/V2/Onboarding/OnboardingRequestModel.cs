@@ -376,7 +376,6 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     public class TaskDescription
     {
         public string? Message { get; set; }
-        public UserType User { get; set; } = UserType.Farmer;
     }
     public class AssignmentArgs
     {
