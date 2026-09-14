@@ -108,7 +108,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query);
         Task<MemberShipModel> AssignBulkFarmerToCooperative(AssignmentArgs args);
         Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args);
-        Task<bool> DeactivateUser(AssignmentArgs args, TaskDescription model);
+        Task<bool> DeactivateUser(
+             string membershipUserId,
+             string participantUserId,
+             MembershipParticipantType participantType,
+             string deactivatedByUserId,
+             string? reason);
     }
     public class OrganizationManager : IOrganizationManager
     {
@@ -1946,10 +1951,18 @@ DateTimeOffset dateTime)
 
             return await _farmerRepository.DeactivateFarmerFromOrganization(args, message);
         }
-        public async Task<bool> DeactivateUser(AssignmentArgs args, TaskDescription model)
+        public async Task<bool> DeactivateUser(
+             string membershipUserId,
+             string participantUserId,
+             MembershipParticipantType participantType,
+             string deactivatedByUserId,
+             string? reason)
         {
 
-            return await _membershipRepository.DeactivateUser(args, model);
+             await _membershipRepository.DeactivateUser(membershipUserId, participantUserId, participantType,
+                deactivatedByUserId, reason);
+
+            return true;
         }
 
         #endregion FarmerMgt

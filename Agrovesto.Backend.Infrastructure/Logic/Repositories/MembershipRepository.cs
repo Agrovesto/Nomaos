@@ -42,70 +42,83 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             _logger = logger;
         }
 
-        public async Task<bool> DeactivateUser(AssignmentArgs args, TaskDescription model)
+       
+       
+        public async Task DeactivateUser(
+            string membershipUserId,
+            string participantUserId,
+            MembershipParticipantType participantType,
+            string deactivatedByUserId,
+            string? reason)
         {
-            var strategy = _context.Database.CreateExecutionStrategy();
+            var membership = await _context.MemberShips
+                .Where(m => m.UserId == membershipUserId)
+                .Select(m => new { m.Id })
+                .FirstOrDefaultAsync();
 
-            return await strategy.ExecuteAsync(async () =>
+            if (membership == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Membership not found");
+
+            switch (participantType)
             {
-                using var transaction = await _context.Database.BeginTransactionAsync();
-
-                try
-                {
-                    var farmerExists = await _context.Farmers
-                        .AnyAsync(f => f.Id == args.Id);
-
-                    if (!farmerExists)
-                        return false;
-
-                    var now = DateTimeOffset.UtcNow;
-
-                    var reason = !string.IsNullOrWhiteSpace(model.Message)
-                        ? model.Message
-                        : $"Deactivated by user {args.OnboardedByUserId}";
-
-                    if (model.User == Core.Models.Common.UserType.Agent)
+                case MembershipParticipantType.Farmer:
                     {
-                        var agent = await _context.MemberShipAgents
-                            .FirstOrDefaultAsync(x => x.Id == args.Id && x.IsActive);
-                        if (agent == null)
-                            return false;
-                        agent.IsActive = false;
-                        //agent.DeactivatedOn = now;
-                        agent.DeactivatedByUserId = args.OnboardedByUserId;
-                        agent.DeactivationReason = reason;
+                        var farmer = await _context.Farmers
+                            .Where(f => f.UserId == participantUserId)
+                            .Select(f => new { f.Id })
+                            .FirstOrDefaultAsync();
 
-                        //remove the agent from the 
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                        return true;
-                    }
-                    if (model.User == Core.Models.Common.UserType.Farmer)
-                    {
-                        var agent = await _context.FarmerCooperatives
-                           .FirstOrDefaultAsync(x => x.Id == args.Id && x.IsActive);
-                        if (agent == null)
-                            return false;
-                        agent.IsActive = false;
-                        //agent.DeactivatedOn = now;
-                        agent.DeactivatedByUserId = args.OnboardedByUserId;
-                        agent.DeactivationReason = reason;
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                        return true;
+                        if (farmer == null)
+                            throw new BaseException(ExceptionType.NOTFOUND, "Farmer not found");
+
+                        var farmerCooperative = await _context.FarmerCooperatives
+                            .Where(fc => fc.CooperativeId == membership.Id
+                                      && fc.FarmerId == farmer.Id
+                                      && fc.IsActive)
+                            .FirstOrDefaultAsync();
+
+                        if (farmerCooperative == null)
+                            throw new BaseException(ExceptionType.NOTFOUND, "Farmer is not an active member of this membership");
+
+                        farmerCooperative.IsActive = false;
+                        farmerCooperative.DeactivationReason = reason;
+                        farmerCooperative.DeactivatedByUserId = deactivatedByUserId;
+                        farmerCooperative.DeactivatedOn = DateTimeOffset.Now;
+                        break;
                     }
 
-                    return true;
-                }
-                catch
-                {
-                    await transaction.RollbackAsync();
-                    throw;
-                }
-            });
+                case MembershipParticipantType.Agent:
+                    {
+                        var agent = await _context.Agents
+                            .Where(a => a.UserId == participantUserId)
+                            .Select(a => new { a.Id })
+                            .FirstOrDefaultAsync();
+
+                        if (agent == null)
+                            throw new BaseException(ExceptionType.NOTFOUND, "Agent not found");
+
+                        var membershipAgent = await _context.MemberShipAgents
+                            .Where(ma => ma.MemberShipId == membership.Id
+                                      && ma.AgentId == agent.Id
+                                      && ma.IsActive)
+                            .FirstOrDefaultAsync();
+
+                        if (membershipAgent == null)
+                            throw new BaseException(ExceptionType.NOTFOUND, "Agent is not actively assigned to this membership");
+
+                        membershipAgent.IsActive = false;
+                        membershipAgent.DeactivationReason = reason;
+                        membershipAgent.DeactivatedByUserId = deactivatedByUserId;
+                        // Note: MemberShipAgent has no DeactivatedOn field (unlike FarmerCooperative) — nothing to set here.
+                        break;
+                    }
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(participantType));
+            }
+
+            await _context.SaveChangesAsync();
         }
-
-
         public async Task<MembershipResponse> CreateMembershipAsync(
         CreateMembershipDto dto,
        OnBoardingArgs args
@@ -552,12 +565,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .Distinct()
                 .CountAsync();
 
-            // Financing subscriptions for this membership — optionally scoped to the given org.
+            // Farmers currently active in this cooperative — needed to also pull in Individual-type
+            // subscriptions issued directly to this membership's farmers (not just MemberShip-type
+            // subscriptions issued to the coop as a whole).
+            var farmerUserIdsQuery = _context.FarmerCooperatives
+                .AsNoTracking()
+                .Where(fc => fc.CooperativeId == membership.MembershipId && fc.IsActive)
+                .Join(_context.Farmers.AsNoTracking(),
+                      fc => fc.FarmerId,
+                      f => f.Id,
+                      (fc, f) => f.UserId);
+
+            // BUG FIX: previously only counted MemberShip-type subscriptions belonging to the coop itself.
+            // Now also includes Individual-type subscriptions belonging to this membership's active farmers —
+            // financing given directly to a member farmer should still count toward this membership's totals.
             var financingQuery = _context.InputPackageSubscriptions
                 .AsNoTracking()
-                .Where(s => s.SubscriberUserId == membership.UserId
-                         && s.SubscriberType == InputSubScriptionType.MemberShip
-                         && (organizationCode == null || s.Organization.OrganizationCode == organizationCode));
+                .Where(s =>
+                    ((s.SubscriberType == InputSubScriptionType.MemberShip && s.SubscriberUserId == membership.UserId) ||
+                     (s.SubscriberType == InputSubScriptionType.Individual && farmerUserIdsQuery.Contains(s.SubscriberUserId)))
+                    && (organizationCode == null || s.Organization.OrganizationCode == organizationCode));
 
             // Total value of everything actually disbursed to this membership (disbursed-or-beyond, same
             // convention used elsewhere — excludes pending/approved/rejected subscriptions that never paid out).
@@ -775,8 +802,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         }
 
         public async Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(
-    string membershipUserId,
-    ListQueryParams query)
+       string membershipUserId,
+       ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
@@ -873,7 +900,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 PageSize = query.PageSize
             };
         }
-
         public async Task<MemberShipTypeModel?> GetMemberShipTypeById(long id)
         {
             var type = await _context.MemberShipTypes

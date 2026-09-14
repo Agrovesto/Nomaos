@@ -1354,7 +1354,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return _membershipManager.GetMembershipAgentsAsync(query.UserId, query);
                 },
-                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
         [HttpGet("membership-farmers")]
@@ -1367,7 +1367,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return _membershipManager.GetMembershipFarmersAsync(query.UserId, query);
                 },
-                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
         [HttpGet("membership-financing-breakdown")]
@@ -1380,7 +1380,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return _membershipManager.GetMembershipFinancingBreakdownAsync(query.UserId, query);
                 },
-                result => Ok(Wrap(result, ResponseMessages.Successful, ResponseMessages.NotFound)));
+                result => Ok(Wrap(result.Data, ResponseMessages.Successful, ResponseMessages.NotFound)));
 
         }
 
@@ -1406,7 +1406,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
          [HttpPut("membership/assign-farmers")]
-        [AllowAnonymous]
+       
         public async Task<IActionResult> AssignMultipleFarmer([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
@@ -1424,7 +1424,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     request => Ok(Success(request, ResponseMessages.Successful)));
         }
         [HttpPut("membership/assign-agents")]
-        [AllowAnonymous]
+      
         public async Task<IActionResult> AssignBulkAgentToCooperative([FromQuery] AssignmentArgs args, [FromBody] AssignmentArgs model)
         {
             var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
@@ -1441,18 +1441,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
                     request => Ok(Success(request, ResponseMessages.Successful)));
         }
-        [HttpPut("deactivate-user")]
-        [AllowAnonymous]
-        public async Task<IActionResult> DeactivateFarmerFromMembership([FromQuery] AssignmentArgs args,
+        [HttpDelete("membership/deactivate-user")]
+        
+        public async Task<IActionResult> DeactivateUserFromMembership([FromQuery] MembershipParticipantType userType,
+            [FromQuery] string deactivatedUserId,
+            [FromQuery] string membershipUserId,
         [FromBody] TaskDescription model)
         {
-            var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
-            if (orgError != null) return orgError;
-            args.organizationCode = resolvedOrgCode;
+            
             return await ExecuteAsync(async () =>
             {
-                args.OnboardedByUserId = CurrentUserId;
-                return await _organizationManager.DeactivateUser(args, model);
+               
+                return await _organizationManager.DeactivateUser(membershipUserId, deactivatedUserId, userType, CurrentUserId, model.Message);
             },
             request => Ok(Success(request, ResponseMessages.Successful)));
 
