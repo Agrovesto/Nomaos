@@ -597,7 +597,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPut("update-agent-profile")]
-        public async Task<IActionResult> UpdateAgentProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
+        public async Task<IActionResult> UpdateAgentProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -606,7 +606,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+                var targetUserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
                  if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "Farmer"))
                 {
@@ -616,7 +616,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
+                var result = await _onBoardingManager.EditAgentUser(model, args);
 
                 return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
                 {

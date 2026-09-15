@@ -79,7 +79,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
         Task<string> RequestEmailOrPhoneVerification(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
-        Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
+        Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args);
         Task<CreateAgentResponseModel> CreateAgentUser(ProfileRequestModel model, OnBoardingArgs args);
         Task<FarmerModel> RemoveFarmerToAgents(AssignmentArgs args);
         Task<bool> RemoveFarmerFromCooperative(string userId, long cooperativeId, string? organizationCode);
@@ -784,7 +784,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
 
                 case UserType.MemberShip:
-                    await CreateCooperativeProfileAsync(model, args);
+                    await UpdateCooperativeProfileAsync(model, args);
                     break;
 
                 case UserType.Farmer:
@@ -847,29 +847,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 OrganizationId = model.OrganizationId
             });
         }
-        private async Task<CreateUserResult> UpdateUserProfile(
+        private async Task<UserModel> UpdateUserProfile(
        ProfileRequestModel model,
        OnBoardingArgs args)
         {
-            var result = await _onboardingRepository.RegisterUser(
-                new OnboardingRequestModel
-                {
-                    Email = model.Email,
-                    PhoneNumber = model.PhoneNumber,
-                    Password = model.Password,
-                    Pin = model.Pin,
-                    FirstName = model.FirstName,
-                    MiddleName = model.MiddleName,
-                    LastName = model.LastName,
-                    DateOfBirth = model.DateOfBirth,
-                }, args);
+            if (!string.IsNullOrWhiteSpace(model.NIN))
+                ValidateIdentifier(model.NIN, "NIN");
 
-            if (!result.status)
-                throw new BaseException(ExceptionType.BAD_REQUEST, result.message);
+            if (!string.IsNullOrWhiteSpace(model.Bvn))
+                ValidateIdentifier(model.Bvn, "BVN");
+            var userId = !string.IsNullOrEmpty(args.UserId)
+                ? args.UserId
+                : model?.Id;
+            var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
+            {
 
-            return result;
+                PhoneNumber = model.PhoneNumber,
+                Email = model.Email,
+                NIN = model.NIN,
+                DateOfBirth = model.DateOfBirth,
+                Bvn = model.Bvn,
+                Location = model.Location,
+                Password = model.Password,
+                Pin = model.Pin,
+                FirstName = model.FirstName,
+                MiddleName = model.MiddleName,
+                LastName = model.LastName,
+            });
+
+
+            return updateUser;
         }
-        public async Task CreateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
+        public async Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
 
             var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
@@ -2253,9 +2262,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 if (organization != null)
                     model.OrganizationId = organization.OrganizaionId;
 
-                var onboardingRequest = BuildOnboardingRequest(model);
+                if (!string.IsNullOrWhiteSpace(model.NIN))
+                    ValidateIdentifier(model.NIN, "NIN");
 
-                await _onboardingRepository.UpdateUserDetails(onboardingRequest, args);
+                if (!string.IsNullOrWhiteSpace(model.Bvn))
+                    ValidateIdentifier(model.Bvn, "BVN");
+
+                var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, new ProfileRequestModel
+                {
+
+                    PhoneNumber = model.PhoneNumber,
+                    Email = model.Email,
+                    NIN = model.NIN,
+                    DateOfBirth = model.DateOfBirth,
+                    Bvn = model.Bvn,
+                    Location = model.Location,
+                });
+
 
                 var updateprofile = await _agentRepository.CreateUpdateAgent(new AgentModel
                 {

@@ -478,7 +478,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     });
                 }
                 model.Id = args.UserId;
-                 await _onBoardingManager.CreateCooperativeProfileAsync(model, args);
+                 await _onBoardingManager.UpdateCooperativeProfileAsync(model, args);
 
 
                 return Ok(new Response<CreateMembershipResponseModel>()
