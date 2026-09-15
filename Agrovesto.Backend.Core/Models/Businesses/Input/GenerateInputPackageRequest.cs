@@ -141,21 +141,22 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public decimal TotalPackageValue { get; set; } //calculate if structure is physical
         public bool CommitmentRequired { get; set; }
         public bool RepaymentRequired { get; set; }
-        public CommitmentType CommitmentType { get; set; }
-        public decimal CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
+        public CommitmentType? CommitmentType { get; set; }
+        public decimal? CommitmentValue { get; set; } //if %, commitmentvalue = % of total package value, if fixed, commitmentvalue = fixed amount
 
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
 
         public long? PaybackWalletId { get; set; } // wallet provider type, e.g etransact, momo, etc
         public long? UserWalletId { get; set; }
-        public RepaymentFrequency RepaymentFrequency { get; set; }
-        public int RepaymentDuration { get; set; } //e.g 1 week, 4 month, 1 day etc
+        public RepaymentFrequency? RepaymentFrequency { get; set; }
+        public int? RepaymentDuration { get; set; } //e.g 1 week, 4 month, 1 day etc
         public DateTimeOffset? RepaymentStartDate { get; set; }
         public DateTimeOffset? RepaymentEndDate { get; set; }
         public DateTimeOffset? RepaymentGracePeriod { get; set; }
-        public InputPackageRepaymentMode RepaymentModel { get; set; }
-        public decimal RepaymentValue { get; set; } = 0;
+        public InputPackageRepaymentMode? RepaymentModel { get; set; }
+        public decimal? RepaymentValue { get; set; }
+        [Required]
         public RiskCategory RiskCategory { get; set; }
         public List<CreateAdditionalCostRequest> AdditionalCosts { get; set; } = new();
 
