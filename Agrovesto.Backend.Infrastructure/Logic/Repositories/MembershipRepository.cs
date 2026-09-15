@@ -673,6 +673,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 .Take(query.PageSize)
                 .Select(x => new MembershipAgentDto
                 {
+                    AgentId= x.a.Id,
                     UserId = x.a.UserId,
                     AgentName = x.a.Name,
                     Location = x.a.Location,
@@ -783,6 +784,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
                 return new MembershipFarmerDto
                 {
+                    FarmerId=f.Id,
                     UserId = f.FarmerUserId,
                     FarmerName = f.FarmerName,
                     Level = EnumExtensions.GetDisplayName(f.Level),

@@ -83,6 +83,7 @@ namespace Agrovesto.Backend.Core.Models.Payment
     }
     public class MembershipFarmerDto
     {
+        public long FarmerId { get; set; }
         public string UserId { get; set; }
         public string FarmerName { get; set; }
         public string Level { get; set; }
@@ -92,6 +93,7 @@ namespace Agrovesto.Backend.Core.Models.Payment
     }
     public class MembershipAgentDto
     {
+        public long AgentId { get; set; }
         public string UserId { get; set; }
         public string AgentName { get; set; }
         public string Location { get; set; }

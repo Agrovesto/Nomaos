@@ -217,6 +217,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
                 claims.Add(new Claim("PhoneNumber", user.PhoneNumber));
 
+            if (!string.IsNullOrWhiteSpace(user.Email))
+                claims.Add(new Claim(ClaimTypes.Email, user.Email));
+
+            if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
+                claims.Add(new Claim(ClaimTypes.MobilePhone, user.PhoneNumber));
             claims.Add(new Claim(
                 "DisplayName",
                 user.Name ??
@@ -369,26 +374,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 weakCredentialResult.IsWeak
             );
 
-            var token = GenerateJwtToken(claims);
-
+            var expiration = DateTime.UtcNow.AddHours(1);
+            var token = GenerateJwtToken(claims, expiration);
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
+                ExpiresOn= expiration,
                 Token = token,
                 Roles = roles.ToList(),
                 Organizations= organizations,
                 phone_number = user.PhoneNumber,
                 TokenType =TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                Businesses = userBusinesses.Select(b => new BusinessClaimModel
-                {
-                   BusinessId=  b.BusinessId,
-                   BusinessCode= b.Business.BusinessCode,
-                   BusinessName= b.Business.BusinessName
-                }).ToList(),
-                RequiresCredentialChange = weakCredentialResult.IsWeak,
                 SecurityNotice = weakCredentialResult.Message
             });
         } 
@@ -402,7 +401,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 case LoginType.Password:
                     //if (!HasPassword(user))
                     //    return (false, "Password login is not enabled for this account");
-
                     if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
@@ -421,7 +419,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return (true, "OK");
         }
-        private string GenerateJwtToken(IEnumerable<Claim> claims)
+        private string GenerateJwtToken(IEnumerable<Claim> claims, DateTime validity)
         {
             var key = _configuration["JWT:Key"];
             if (string.IsNullOrWhiteSpace(key))
@@ -434,7 +432,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 audience: _configuration["JWT:Audience"],
                 claims: claims,
                 notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddHours(1),
+                expires: validity,
                 signingCredentials: new SigningCredentials(
                     signingKey,
                     SecurityAlgorithms.HmacSha256)
@@ -928,21 +926,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                      .Where(x => !string.IsNullOrWhiteSpace(x)));
 
                 if (!string.IsNullOrWhiteSpace(resolvedName) && string.IsNullOrEmpty(user.Name))
-                    user.Name = resolvedName;
+                    
+                user.Name = resolvedName;
         
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
-               {
-                    user.PhoneNumber = model.PhoneNumber;
+            {
+                if(user.PhoneNumber != model.PhoneNumber)
+                {
+                    //add to error to be displayed to user
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "Phone number cannot be changed. Please contact support if you believe this is an error.");
+                }
             }
        
 
             if (!string.IsNullOrWhiteSpace(model.Email))
-                user.Email = model.Email;
+            //check first if this email is not tied to any other user on the system
+            {
+                var existingEmailUser = await _userManager.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id != user.Id && x.Email == model.Email);
+                if (existingEmailUser != null)
+                {
+                    throw new BaseException(
+                        ExceptionType.ALREADY_EXIST,
+                        "This email is unavailable, use another email or contact support if you believe this is an error.");
+                }
+            }
+            user.Email = model.Email;
 
             if (!string.IsNullOrWhiteSpace(model.NIN))
             {
-                if (!string.IsNullOrWhiteSpace(user.NIN))
+                if (!string.IsNullOrWhiteSpace(user.NIN) && user.IsNinVerified)
                 {
                     if (!string.Equals(user.NIN, model.NIN, StringComparison.Ordinal))
                     {
@@ -970,7 +987,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!string.IsNullOrWhiteSpace(model.Bvn))
             {
-                if (!string.IsNullOrWhiteSpace(user.BVN))
+                if (!string.IsNullOrWhiteSpace(user.BVN) && user.IsBvnVerified)
                 {
                     if (!string.Equals(user.BVN, model.Bvn, StringComparison.Ordinal))
                     {

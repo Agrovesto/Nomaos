@@ -1432,8 +1432,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             args.organizationCode = resolvedOrgCode;
             return await ExecuteAsync(async () =>
             {
-                if (!model.FarmerIds.Any())
-                    throw new BaseException(ExceptionType.BAD_REQUEST, "No farmer selected.");
+                if (!model.AgentIds.Any())
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "No agent selected.");
 
                 args.OnboardedByUserId = CurrentUserId;
                 args.AgentIds = model.AgentIds;

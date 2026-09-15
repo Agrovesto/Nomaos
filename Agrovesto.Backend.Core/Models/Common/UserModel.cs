@@ -81,6 +81,78 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public IFormFile File { get; set; }
     }
+    public enum CredentialType
+    {
+        Password =1,
+        Pin =2
+    }
+    public class ForgotCredentialModel
+    {
+        public CredentialType Type { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public string? BusinessCode { get; set; }
+        public string Env { get; set; } = default!;
+    }
+
+    public class ResetArtifact
+    {
+        public string Value { get; set; } = default!; // OTP code, or the reset callback URL
+        public DateTime ExpiresAt { get; set; }
+    }
+    public class ConfirmCredentialResetRequest
+    {
+        public CredentialType Type { get; set; }
+
+        // Pin path
+        public string? PhoneNumber { get; set; }
+        public string? Code { get; set; }
+
+        // Password path
+        public string? UserId { get; set; }
+        public string? Token { get; set; }
+
+        public string NewValue { get; set; } = default!;
+        public string ConfirmValue { get; set; } = default!;
+    }
+    public class ForgotCredentialRequest
+    {
+        public CredentialType Type { get; set; }
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+    }
+        public class ChangeCredentialRequest
+    {
+        public CredentialType Type { get; set; }
+        public string OldValue { get; set; } = default!;
+        public string NewValue { get; set; } = default!;
+        public string ConfirmValue { get; set; } = default!;
+    }
+    public class ChangeCredentialModel
+    {
+        public CredentialType Type { get; set; }
+        public string? Email { get; set; }        // required when Type == Password
+        public string? PhoneNumber { get; set; }  // required when Type == Pin
+        public string OldValue { get; set; } = default!;
+        public string NewValue { get; set; } = default!;
+        public string ConfirmValue { get; set; } = default!;
+    }
+
+    public class ConfirmCredentialResetModel
+    {
+        public CredentialType Type { get; set; }
+
+        // Pin path
+        public string? PhoneNumber { get; set; }
+        public string? Code { get; set; }
+
+        // Password path
+        public string? UserId { get; set; }
+        public string? Token { get; set; }
+
+        public string NewValue { get; set; } = default!;
+        public string ConfirmValue { get; set; } = default!;
+    }
     public class ChangePinModel
     {
         public string? PhoneNumber { get; set; }
@@ -253,9 +325,9 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Name { get; set; }
         public string Email { get; set; }
         public List<OrganizationDto> Organizations { get; set; }
-        public List<BusinessClaimModel> Businesses { get; set; }
+      //  public List<BusinessClaimModel> Businesses { get; set; }
         public bool TwoFactorEnabled { get; set; }
-        public double ExpiresIn {  get; set; }
+       // public double ExpiresIn {  get; set; }
         public List<string> Roles { get; set; }
         public string BusinessCode { get; set; }
         public bool RequiresCredentialChange { get; set; }
