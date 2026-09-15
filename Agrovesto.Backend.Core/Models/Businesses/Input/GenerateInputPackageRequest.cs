@@ -147,7 +147,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public DateTimeOffset? CommitmentPaymentStartDate { get; set; }
         public DateTimeOffset? CommitmentPaymentEndDate { get; set; }
 
-        public long PaybackWalletId { get; set; } // wallet provider type, e.g etransact, momo, etc
+        public long? PaybackWalletId { get; set; } // wallet provider type, e.g etransact, momo, etc
         public long? UserWalletId { get; set; }
         public RepaymentFrequency RepaymentFrequency { get; set; }
         public int RepaymentDuration { get; set; } //e.g 1 week, 4 month, 1 day etc

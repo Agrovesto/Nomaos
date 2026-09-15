@@ -1626,16 +1626,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         private string GenerateUserId(OnBoardingArgs args)
         {
+            string prefix = !string.IsNullOrEmpty(args.businessCode)
+                ? args.businessCode
+                : !string.IsNullOrEmpty(args.organizationCode)
+                    ? args.organizationCode
+                    : "USR";
+
             var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
-            var randomDigits = new Random().Next(100, 999);
+            var randomPart = GenerateSecureRandomString(16); // ~96 bits of entropy
 
-            if (!string.IsNullOrEmpty(args.businessCode))
-                return $"{args.businessCode}{datePart}{randomDigits}";
-
-            if (!string.IsNullOrEmpty(args.organizationCode))
-                return $"{args.organizationCode}{datePart}{randomDigits}";
-
-            return Guid.NewGuid().ToString();
+            return $"{prefix}{datePart}{randomPart}";
+        }
+        private static string GenerateSecureRandomString(int length)
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; // no ambiguous chars
+            var bytes = RandomNumberGenerator.GetBytes(length);
+            var result = new char[length];
+            for (int i = 0; i < length; i++)
+                result[i] = chars[bytes[i] % chars.Length];
+            return new string(result);
         }
         private async Task LinkUserToOrganizationIfNeeded(string userId, string organizationCode)
         {
