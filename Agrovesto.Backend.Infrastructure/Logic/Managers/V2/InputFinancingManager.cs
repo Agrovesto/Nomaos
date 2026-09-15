@@ -195,19 +195,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             args.organizationId = organization.OrganizaionId;
 
-            if (request.PaybackWalletId <= 0)
+            if(request.PaybackWalletId.HasValue && request.PaybackWalletId.Value <= 0)
+            {
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Payback Wallet Selected");
+            }
+            if (!request.PaybackWalletId.HasValue)
             {
                 return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
             }
 
-            var provider = await _walletproviderRepo.Get(request.PaybackWalletId);
+            var provider = await _walletproviderRepo.Get(request.PaybackWalletId.Value);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
 
             var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
             {
-                Id = request.PaybackWalletId,
+                Id = request.PaybackWalletId.Value,
                 UserId = query.UserId,
                 businessCode = query.businessCode
             });
