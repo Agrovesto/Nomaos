@@ -2118,7 +2118,7 @@ DateTimeOffset dateTime)
                     ExceptionType.NOTFOUND,
                     "Membership not found for the specified user.");
 
-            return await _farmerRepository.AssignBulkFarmerToCooperative(args, args.Id);
+            return await _farmerRepository.AssignBulkFarmerToCooperative(args, coop.Id);
         }
         public async Task<MemberShipModel> AssignBulkAgentToCooperative(AssignmentArgs args)
         {
@@ -2129,7 +2129,7 @@ DateTimeOffset dateTime)
                     ExceptionType.NOTFOUND,
                     "Membership not found for the specified user.");
 
-            return await _agentRepository.AssignBulkAgentToCooperative(args, args.Id);
+            return await _agentRepository.AssignBulkAgentToCooperative(args, coop.Id);
         }
         public async Task<bool> RemoveFarmerFromCooperative(string userId, List<long> cooperativeId, string? organizationCode)
         {

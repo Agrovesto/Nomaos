@@ -190,6 +190,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<IUserRoleReconciliationService, UserRoleReconciliationService>();
 
 
+            services.AddScoped<IResetRateLimiter, ResetRateLimiter>();
+            services.AddScoped<ICredentialChangeHandler, PasswordChangeHandler>();
+            services.AddScoped<ICredentialChangeHandler, PinChangeHandler>();
+            services.AddScoped<CredentialChangeService>();
+
         }
     }
 }
