@@ -618,11 +618,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 }
                 var result = await _onBoardingManager.EditAgentUser(model, args);
 
-                return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
+                return Ok(new Response<bool>()
                 {
                     Code = ResponseCodes.Success,
-                    Succeeded = result.Success,
-                    Message = result.Message,
+                    Succeeded = result,
+                    Message = ResponseCodes.Success,
                     Data = result
                 });
             }
