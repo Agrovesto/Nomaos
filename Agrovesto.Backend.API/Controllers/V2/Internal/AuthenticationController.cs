@@ -308,14 +308,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
             request => Ok(Success(request, ResponseMessages.Successful)));
         }
-
- 
-       
-        
-       
-     
-     
-        
+                
         [Authorize]
         [HttpPost("logout")]
         public async Task<IActionResult> Logout()
@@ -327,7 +320,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new { message = result.Message });
         }
-
 
         private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
         {

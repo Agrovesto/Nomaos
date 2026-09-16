@@ -318,7 +318,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     {
         public string Token { get; set; }
         public TokenType TokenType { get; set; }
-
+        public string Authmethod { get; set; }
         public DateTimeOffset ExpiresOn { get; set; }
         public string Id { get; set; }
         public string phone_number { get; set; }

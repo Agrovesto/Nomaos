@@ -200,6 +200,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
         new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
         new Claim("BusinessRole", activeBusiness.Role ?? ""),
+        new Claim("AuthMethod", user.SignupMethod.ToString()),
 
         new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString())
     };
@@ -388,7 +389,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 phone_number = user.PhoneNumber,
                 TokenType =TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                SecurityNotice = weakCredentialResult.Message
+                SecurityNotice = weakCredentialResult.Message,
+                Authmethod=user.SignupMethod.ToString(),
+                RequiresCredentialChange= weakCredentialResult.IsWeak,
+                TwoFactorEnabled= false
             });
         } 
         
