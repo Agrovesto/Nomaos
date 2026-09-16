@@ -1970,6 +1970,11 @@ RepaymentFrequency frequency)
                         disbursementLocation = organizationAgent.Location;
 
                     }
+                    else if(args.CurrentLoggedInUserRole == UserType.MemberShip.ToString())
+                    {
+                        throw new BaseException(ExceptionType.OPERATION_FAILED, "Disbursement is not allowed for this user role at the moment.");
+                        //disbursementLocation = await ResolveOrganizationUserLocation(org.OrganizationId, request.WarehouseId);
+                    }
                     else
                     {
                         disbursementLocation = await ResolveOrganizationUserLocation(org.OrganizationId, request.WarehouseId);
@@ -2060,6 +2065,7 @@ RepaymentFrequency frequency)
                         ? SubscriptionStatus.PartiallyDisbursed
                         : SubscriptionStatus.Active;
                     query.Subscription.DisbursedOn = DateTimeOffset.UtcNow;
+
                     if (!query.Subscription.InputPackage.RepaymentRequired)
                     {
                         query.Subscription.Status = SubscriptionStatus.Completed;                      

@@ -677,7 +677,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var schedule = new List<RepaymentScheduleDto>();
 
-            if (plan.RepaymentDuration <= 0 || plan.RepaymentStartDate == null)
+            if (plan ==null)
                 return schedule;
 
             int duration = plan.RepaymentDuration;
