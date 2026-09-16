@@ -36,7 +36,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
 
         public bool Email { get; set; }
 
-        public bool InAppNotification { get; set; }
+        public bool PushNotification { get; set; }
 
         public DateTimeOffset CreatedOn { get; set; } = DateTimeOffset.UtcNow;
 

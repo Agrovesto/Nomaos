@@ -217,7 +217,12 @@ builder.Services.Configure<FormOptions>(o =>
 QuestPDF.Settings.License = LicenseType.Community;
 
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(opts =>
+{
+    opts.JsonSerializerOptions.Converters.Add(new EmptyStringToNullDateTimeOffsetConverter());
+    opts.JsonSerializerOptions.Converters.Add(new EmptyStringToNullStringConverter());
+
+});
 
 builder.Services.AddHttpClient();
 builder.Services.AddHealthChecks()

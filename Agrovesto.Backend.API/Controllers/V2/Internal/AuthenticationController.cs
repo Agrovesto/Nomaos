@@ -39,6 +39,113 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _logger = logger;
         }
 
+        [Authorize]
+        [HttpGet("notification-preference")]
+        public async Task<IActionResult> GetNotificationPreference([FromQuery] string? role = null)
+        {
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            var resolutionError = TryResolveNotificationRole(role, out var resolvedRole);
+            if (resolutionError != null) return resolutionError;
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.GetNotificationPreferenceAsync(CurrentUserId, resolvedRole),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        [Authorize]
+        [HttpPost("notification-preference")]
+        public async Task<IActionResult> SaveNotificationPreference(
+            [FromBody] NotificationPreferenceRequest model,
+            [FromQuery] string? role = null)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            var resolutionError = TryResolveNotificationRole(role, out var resolvedRole);
+            if (resolutionError != null) return resolutionError;
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.SaveNotificationPreferenceAsync(CurrentUserId, resolvedRole, model),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        private IActionResult? TryResolveNotificationRole(string? suppliedRole, out NotificationUserRole resolvedRole)
+        {
+            resolvedRole = default;
+
+            var eligibleRoles = Enum.GetValues<NotificationUserRole>()
+                .Where(r => CurrentUserRoles.Contains(r.ToString(), StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                if (!Enum.TryParse<NotificationUserRole>(suppliedRole, ignoreCase: true, out var parsedRole))
+                {
+                    return BadRequest(ApiResponse<List<string>>.Fail(
+                        $"'{suppliedRole}' is not a notification role. Use one of: {string.Join(", ", Enum.GetNames<NotificationUserRole>())}.",
+                        ResponseCodes.Failed));
+                }
+
+                if (!eligibleRoles.Contains(parsedRole))
+                {
+                    return Unauthorized(ApiResponse<object>.Fail(
+                        ResponseMessages.AccessDenied,
+                        ResponseCodes.AccessDenied));
+                }
+
+                resolvedRole = parsedRole;
+                return null;
+            }
+
+            if (eligibleRoles.Count == 0)
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied));
+            }
+
+            if (eligibleRoles.Count > 1)
+            {
+                var response = ApiResponse<List<string>>.Fail(
+                    "You belong to multiple roles. Please specify a role to continue.",
+                    ResponseCodes.RoleSelectionRequired);
+                response.Data = eligibleRoles.Select(r => r.ToString()).ToList();
+                return Unauthorized(response);
+            }
+
+            resolvedRole = eligibleRoles[0];
+            return null;
+        }
+
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkOnboard(IFormFile file, [FromQuery] OnBoardingArgs args)
@@ -255,6 +362,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                  ResponseCodes.Success
             ));
         }
+        [Authorize]
         [HttpPost("change-password")]
         [Authorize]
         public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
@@ -361,6 +469,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
         }
+        [Authorize]
         [HttpPost("change-pin")]
         [Authorize]
         public async Task<IActionResult> ChangePin([FromBody] ChangePinModel model, [FromQuery]OnBoardingArgs args)
@@ -392,6 +501,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
                 args.UserId = CurrentUserId;
                 model.PhoneNumber = CurrentPhoneNumber;
+
                 var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
 
             return Ok(ApiResponse<bool>.Success(

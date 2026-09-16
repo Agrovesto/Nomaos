@@ -1,4 +1,4 @@
-using Agrovesto.Backend.Core.V2.Onboarding;
+﻿using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
@@ -33,7 +33,7 @@ public class NotificationPreferenceTests
         GeneralPlatformUpdates = true,
         Sms = true,
         Email = true,
-        InAppNotification = true
+        PushNotification = true
     };
 
     [Fact]
@@ -53,7 +53,7 @@ public class NotificationPreferenceTests
         preference.GeneralPlatformUpdates.Should().BeFalse();
         preference.Sms.Should().BeFalse();
         preference.Email.Should().BeFalse();
-        preference.InAppNotification.Should().BeFalse();
+        preference.PushNotification.Should().BeFalse();
         preference.LastUpdatedOn.Should().BeNull();
     }
 
@@ -71,7 +71,7 @@ public class NotificationPreferenceTests
         entity.GeneralPlatformUpdates.Should().BeFalse();
         entity.Sms.Should().BeFalse();
         entity.Email.Should().BeFalse();
-        entity.InAppNotification.Should().BeFalse();
+        entity.PushNotification.Should().BeFalse();
     }
 
     [Fact]
@@ -89,10 +89,10 @@ public class NotificationPreferenceTests
             GeneralPlatformUpdates = true,
             Sms = false,
             Email = true,
-            InAppNotification = false
+            PushNotification = false
         };
 
-        var saved = await repository.SaveNotificationPreference(UserId, model);
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, model);
 
         saved.IsDefault.Should().BeFalse();
         saved.MappingStatusUpdates.Should().BeTrue();
@@ -102,12 +102,12 @@ public class NotificationPreferenceTests
         saved.GeneralPlatformUpdates.Should().BeTrue();
         saved.Sms.Should().BeFalse();
         saved.Email.Should().BeTrue();
-        saved.InAppNotification.Should().BeFalse();
+        saved.PushNotification.Should().BeFalse();
 
         var stored = await context.UserNotificationPreferences.SingleAsync(x => x.UserId == UserId);
         stored.AgentVisitReminders.Should().BeFalse();
         stored.Sms.Should().BeFalse();
-        stored.InAppNotification.Should().BeFalse();
+        stored.PushNotification.Should().BeFalse();
     }
 
     [Fact]
@@ -121,7 +121,7 @@ public class NotificationPreferenceTests
             model.Sms = false;
             model.GeneralPlatformUpdates = false;
 
-            await CreateRepository(context).SaveNotificationPreference(UserId, model);
+            await CreateRepository(context).SaveNotificationPreference(UserId, NotificationUserRole.Farmer, model);
         }
 
         using (var context = CreateContext(databaseName))
@@ -142,13 +142,13 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
 
         var second = AllEnabled();
         second.Email = false;
         second.MappingStatusUpdates = false;
 
-        var updated = await repository.SaveNotificationPreference(UserId, second);
+        var updated = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, second);
 
         updated.Email.Should().BeFalse();
         updated.MappingStatusUpdates.Should().BeFalse();
@@ -163,13 +163,13 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
 
         var afterCreate = await context.UserNotificationPreferences.AsNoTracking()
             .SingleAsync(x => x.UserId == UserId);
         afterCreate.DateModified.Should().BeNull();
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
 
         var afterUpdate = await context.UserNotificationPreferences.AsNoTracking()
             .SingleAsync(x => x.UserId == UserId);
@@ -189,8 +189,8 @@ public class NotificationPreferenceTests
         var second = AllEnabled();
         second.Email = false;
 
-        await repository.SaveNotificationPreference(UserId, first);
-        await repository.SaveNotificationPreference("FARMER-2", second);
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, first);
+        await repository.SaveNotificationPreference("FARMER-2", NotificationUserRole.Farmer, second);
 
         var one = await repository.GetNotificationPreference(UserId, NotificationUserRole.Farmer);
         var two = await repository.GetNotificationPreference("FARMER-2", NotificationUserRole.Farmer);
@@ -201,7 +201,7 @@ public class NotificationPreferenceTests
         two.Email.Should().BeFalse();
     }
 
-    private static AgentNotificationPreferenceRequest AgentAllEnabled() => new()
+    private static NotificationPreferenceRequest AgentAllEnabled() => new()
     {
         NewFarmerAssigned = true,
         NewFarmCreated = true,
@@ -209,7 +209,7 @@ public class NotificationPreferenceTests
         WalletRepaymentDue = true,
         Sms = true,
         Email = true,
-        InAppNotification = true
+        PushNotification = true
     };
 
     [Fact]
@@ -218,7 +218,7 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        var saved = await repository.SaveAgentNotificationPreference(UserId, new AgentNotificationPreferenceRequest
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, new NotificationPreferenceRequest
         {
             NewFarmerAssigned = true,
             NewFarmCreated = false,
@@ -242,8 +242,8 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
-        await repository.SaveAgentNotificationPreference(UserId, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
 
         var farmerRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Farmer);
         var agentRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Agent);
@@ -266,8 +266,8 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
-        await repository.SaveAgentNotificationPreference(UserId, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
 
         var roles = await context.UserNotificationPreferences
             .Where(x => x.UserId == UserId)
@@ -298,10 +298,10 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveAgentNotificationPreference(UserId, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
 
         var farmerOnly = new NotificationPreferenceRequest { MappingStatusUpdates = true };
-        await repository.SaveNotificationPreference(UserId, farmerOnly);
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, farmerOnly);
 
         var agentRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Agent);
 
@@ -317,14 +317,14 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
 
-        await repository.SaveAgentNotificationPreference(UserId, new AgentNotificationPreferenceRequest
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, new NotificationPreferenceRequest
         {
             NewFarmerAssigned = true,
             Sms = true,
             Email = true,
-            InAppNotification = true
+            PushNotification = true
         });
 
         var farmerRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Farmer);
@@ -342,22 +342,22 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        var saved = await repository.SaveAgentNotificationPreference(UserId, new AgentNotificationPreferenceRequest
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, new NotificationPreferenceRequest
         {
             NewFarmerAssigned = true,
             Sms = true,
             Email = false,
-            InAppNotification = true
+            PushNotification = true
         });
 
         saved.Sms.Should().BeTrue();
         saved.Email.Should().BeFalse();
-        saved.InAppNotification.Should().BeTrue();
+        saved.PushNotification.Should().BeTrue();
 
         var stored = await context.UserNotificationPreferences.SingleAsync(x => x.UserId == UserId);
         stored.Sms.Should().BeTrue();
         stored.Email.Should().BeFalse();
-        stored.InAppNotification.Should().BeTrue();
+        stored.PushNotification.Should().BeTrue();
     }
 
     [Fact]
@@ -369,23 +369,23 @@ public class NotificationPreferenceTests
         var farmer = AllEnabled();
         farmer.Sms = true;
         farmer.Email = true;
-        farmer.InAppNotification = true;
-        await repository.SaveNotificationPreference(UserId, farmer);
+        farmer.PushNotification = true;
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, farmer);
 
         var agent = AgentAllEnabled();
         agent.Sms = false;
         agent.Email = true;
-        agent.InAppNotification = false;
-        await repository.SaveAgentNotificationPreference(UserId, agent);
+        agent.PushNotification = false;
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, agent);
 
         var farmerRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Farmer);
         var agentRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Agent);
 
         farmerRow.Sms.Should().BeTrue();
-        farmerRow.InAppNotification.Should().BeTrue();
+        farmerRow.PushNotification.Should().BeTrue();
         agentRow.Sms.Should().BeFalse();
         agentRow.Email.Should().BeTrue();
-        agentRow.InAppNotification.Should().BeFalse();
+        agentRow.PushNotification.Should().BeFalse();
     }
 
     [Fact]
@@ -394,10 +394,10 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveAgentNotificationPreference(UserId, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
 
-        var off = new AgentNotificationPreferenceRequest();
-        var updated = await repository.SaveAgentNotificationPreference(UserId, off);
+        var off = new NotificationPreferenceRequest();
+        var updated = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, off);
 
         updated.NewFarmerAssigned.Should().BeFalse();
         updated.NewFarmCreated.Should().BeFalse();
@@ -428,7 +428,7 @@ public class NotificationPreferenceTests
         using var context = CreateContext();
         var repository = CreateRepository(context);
 
-        await repository.SaveNotificationPreference(UserId, new NotificationPreferenceRequest());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, new NotificationPreferenceRequest());
 
         var preference = await repository.GetNotificationPreference(UserId, NotificationUserRole.Farmer);
 
@@ -440,6 +440,335 @@ public class NotificationPreferenceTests
         preference.GeneralPlatformUpdates.Should().BeFalse();
         preference.Sms.Should().BeFalse();
         preference.Email.Should().BeFalse();
-        preference.InAppNotification.Should().BeFalse();
+        preference.PushNotification.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GetReturnsEverythingDisabledWhenTheOrganizationHasNeverSetAPreference()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var preference = await repository.GetNotificationPreference(UserId, NotificationUserRole.Organization);
+
+        preference.UserId.Should().Be(UserId);
+        preference.UserRole.Should().Be(NotificationUserRole.Organization);
+        preference.IsDefault.Should().BeTrue();
+        preference.PushNotification.Should().BeFalse();
+        preference.Sms.Should().BeFalse();
+        preference.Email.Should().BeFalse();
+        preference.LastUpdatedOn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task OrganizationSaveStoresEveryChannelExactlyAsSupplied()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = true
+        });
+
+        saved.PushNotification.Should().BeTrue();
+        saved.Sms.Should().BeFalse();
+        saved.Email.Should().BeTrue();
+        saved.IsDefault.Should().BeFalse();
+
+        var stored = await context.UserNotificationPreferences.SingleAsync(x => x.UserId == UserId);
+        stored.UserRole.Should().Be(NotificationUserRole.Organization);
+        stored.PushNotification.Should().BeTrue();
+        stored.Sms.Should().BeFalse();
+        stored.Email.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SavingAnOrganizationPreferenceTwiceUpdatesTheSameRow()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = true,
+            Email = true
+        });
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = false,
+            Sms = false,
+            Email = false
+        });
+
+        var rows = await context.UserNotificationPreferences.CountAsync(x => x.UserId == UserId);
+        rows.Should().Be(1);
+
+        var preference = await repository.GetNotificationPreference(UserId, NotificationUserRole.Organization);
+        preference.IsDefault.Should().BeFalse();
+        preference.PushNotification.Should().BeFalse();
+        preference.Sms.Should().BeFalse();
+        preference.Email.Should().BeFalse();
+        preference.LastUpdatedOn.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task OrganizationPreferencesAreIsolatedFromFarmerAndAgentRows()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = false
+        });
+
+        var rows = await context.UserNotificationPreferences.CountAsync(x => x.UserId == UserId);
+        rows.Should().Be(3);
+
+        var organizationRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Organization);
+        organizationRow.PushNotification.Should().BeTrue();
+        organizationRow.Sms.Should().BeFalse();
+        organizationRow.MappingStatusUpdates.Should().BeFalse();
+        organizationRow.NewFarmerAssigned.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OrganizationPreferencesAreScopedPerUser()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = true
+        });
+
+        await repository.SaveNotificationPreference("ORGANIZATION-2", NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = false,
+            Sms = true,
+            Email = false
+        });
+
+        var one = await repository.GetNotificationPreference(UserId, NotificationUserRole.Organization);
+        var two = await repository.GetNotificationPreference("ORGANIZATION-2", NotificationUserRole.Organization);
+
+        one.PushNotification.Should().BeTrue();
+        one.Email.Should().BeTrue();
+        two.PushNotification.Should().BeFalse();
+        two.Sms.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GetReturnsEverythingDisabledWhenTheMemberShipHasNeverSetAPreference()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var preference = await repository.GetNotificationPreference(UserId, NotificationUserRole.MemberShip);
+
+        preference.UserId.Should().Be(UserId);
+        preference.UserRole.Should().Be(NotificationUserRole.MemberShip);
+        preference.IsDefault.Should().BeTrue();
+        preference.PushNotification.Should().BeFalse();
+        preference.Sms.Should().BeFalse();
+        preference.Email.Should().BeFalse();
+        preference.LastUpdatedOn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MemberShipSaveStoresEveryChannelExactlyAsSupplied()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = true
+        });
+
+        saved.PushNotification.Should().BeTrue();
+        saved.Sms.Should().BeFalse();
+        saved.Email.Should().BeTrue();
+        saved.IsDefault.Should().BeFalse();
+
+        var stored = await context.UserNotificationPreferences.SingleAsync(x => x.UserId == UserId);
+        stored.UserRole.Should().Be(NotificationUserRole.MemberShip);
+        stored.PushNotification.Should().BeTrue();
+        stored.Sms.Should().BeFalse();
+        stored.Email.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SavingAMemberShipPreferenceTwiceUpdatesTheSameRow()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = true,
+            Email = true
+        });
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = false,
+            Sms = false,
+            Email = false
+        });
+
+        var rows = await context.UserNotificationPreferences.CountAsync(x => x.UserId == UserId);
+        rows.Should().Be(1);
+
+        var preference = await repository.GetNotificationPreference(UserId, NotificationUserRole.MemberShip);
+        preference.IsDefault.Should().BeFalse();
+        preference.PushNotification.Should().BeFalse();
+        preference.Sms.Should().BeFalse();
+        preference.Email.Should().BeFalse();
+        preference.LastUpdatedOn.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task MemberShipPreferencesAreIsolatedFromTheOtherRoles()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, AllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, AgentAllEnabled());
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.Organization, new NotificationPreferenceRequest
+        {
+            PushNotification = false,
+            Sms = true,
+            Email = false
+        });
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = false
+        });
+
+        var rows = await context.UserNotificationPreferences.CountAsync(x => x.UserId == UserId);
+        rows.Should().Be(4);
+
+        var memberShipRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.MemberShip);
+        memberShipRow.PushNotification.Should().BeTrue();
+        memberShipRow.Sms.Should().BeFalse();
+        memberShipRow.MappingStatusUpdates.Should().BeFalse();
+        memberShipRow.NewFarmerAssigned.Should().BeFalse();
+
+        var organizationRow = await repository.GetNotificationPreference(UserId, NotificationUserRole.Organization);
+        organizationRow.PushNotification.Should().BeFalse();
+        organizationRow.Sms.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task MemberShipPreferencesAreScopedPerUser()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        await repository.SaveNotificationPreference(UserId, NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = true,
+            Sms = false,
+            Email = true
+        });
+
+        await repository.SaveNotificationPreference("MEMBERSHIP-2", NotificationUserRole.MemberShip, new NotificationPreferenceRequest
+        {
+            PushNotification = false,
+            Sms = true,
+            Email = false
+        });
+
+        var one = await repository.GetNotificationPreference(UserId, NotificationUserRole.MemberShip);
+        var two = await repository.GetNotificationPreference("MEMBERSHIP-2", NotificationUserRole.MemberShip);
+
+        one.PushNotification.Should().BeTrue();
+        one.Email.Should().BeTrue();
+        two.PushNotification.Should().BeFalse();
+        two.Sms.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SavingAsAFarmerIgnoresTheAgentCategoryFields()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Farmer, new NotificationPreferenceRequest
+        {
+            MappingStatusUpdates = true,
+            NewFarmerAssigned = true,
+            BulkUploadCompleted = true,
+            Sms = true
+        });
+
+        saved.MappingStatusUpdates.Should().BeTrue();
+        saved.NewFarmerAssigned.Should().BeFalse();
+        saved.BulkUploadCompleted.Should().BeFalse();
+        saved.Sms.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SavingAsAnAgentIgnoresTheFarmerCategoryFields()
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var saved = await repository.SaveNotificationPreference(UserId, NotificationUserRole.Agent, new NotificationPreferenceRequest
+        {
+            NewFarmerAssigned = true,
+            MappingStatusUpdates = true,
+            AgentVisitReminders = true,
+            Email = true
+        });
+
+        saved.NewFarmerAssigned.Should().BeTrue();
+        saved.MappingStatusUpdates.Should().BeFalse();
+        saved.AgentVisitReminders.Should().BeFalse();
+        saved.Email.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(NotificationUserRole.Organization)]
+    [InlineData(NotificationUserRole.MemberShip)]
+    public async Task SavingAsAChannelOnlyRoleWritesNoCategoryFields(NotificationUserRole role)
+    {
+        using var context = CreateContext();
+        var repository = CreateRepository(context);
+
+        var saved = await repository.SaveNotificationPreference(UserId, role, new NotificationPreferenceRequest
+        {
+            MappingStatusUpdates = true,
+            NewFarmerAssigned = true,
+            GeneralPlatformUpdates = true,
+            WalletRepaymentDue = true,
+            PushNotification = true
+        });
+
+        saved.UserRole.Should().Be(role);
+        saved.PushNotification.Should().BeTrue();
+        saved.MappingStatusUpdates.Should().BeFalse();
+        saved.NewFarmerAssigned.Should().BeFalse();
+        saved.GeneralPlatformUpdates.Should().BeFalse();
+        saved.WalletRepaymentDue.Should().BeFalse();
     }
 }

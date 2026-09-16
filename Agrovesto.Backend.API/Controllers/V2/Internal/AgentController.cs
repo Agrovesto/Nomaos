@@ -285,61 +285,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Code = result != null ? ResponseCodes.Success : ResponseCodes.Failed
             }));
         }
-        [HttpGet("notification-preference")]
-        public async Task<IActionResult> GetAgentNotificationPreference([FromQuery] ListQueryParams query)
-        {
-            ResolveAgentQueryContext(query);
-
-            if (string.IsNullOrEmpty(query.UserId))
-            {
-                return Unauthorized(new Response<string>
-                {
-                    Message = "User could not be resolved from the supplied token.",
-                    Succeeded = false
-                });
-            }
-
-            return await ExecuteAsync(
-                () => _onBoardingManager.GetAgentNotificationPreferenceAsync(query.UserId),
-                result => Ok(new Response<NotificationPreferenceResponse>
-                {
-                    Data = result,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Code = ResponseCodes.Success
-                }));
-        }
-
-        [HttpPost("notification-preference")]
-        public async Task<IActionResult> SaveAgentNotificationPreference(
-            [FromBody] AgentNotificationPreferenceRequest model,
-            [FromQuery] ListQueryParams query)
-        {
-            if (!ModelState.IsValid)
-                return ValidationProblemResponse();
-
-            ResolveAgentQueryContext(query);
-
-            if (string.IsNullOrEmpty(query.UserId))
-            {
-                return Unauthorized(new Response<string>
-                {
-                    Message = "User could not be resolved from the supplied token.",
-                    Succeeded = false
-                });
-            }
-
-            return await ExecuteAsync(
-                () => _onBoardingManager.SaveAgentNotificationPreferenceAsync(query.UserId, model),
-                result => Ok(new Response<NotificationPreferenceResponse>
-                {
-                    Data = result,
-                    Message = ResponseMessages.Successful,
-                    Succeeded = true,
-                    Code = ResponseCodes.Success
-                }));
-        }
-
         [HttpPost("update-profile")]
         [AllowAnonymous]
         public async Task<IActionResult> EditAgentUser([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)

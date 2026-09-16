@@ -1,4 +1,4 @@
-﻿using AfricasTalkingCS;
+using AfricasTalkingCS;
 using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
@@ -72,10 +72,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
           Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
-        Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId);
-        Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model);
-        Task<NotificationPreferenceResponse> SaveAgentNotificationPreferenceAsync(string userId, AgentNotificationPreferenceRequest model);
-        Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId);
+        Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId, NotificationUserRole role);
+        Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationUserRole role, NotificationPreferenceRequest model);
         Task<CreateMembershipResponseModel> CreateMembershipUser(MemberShipRequestModel model, OnBoardingArgs args);
         Task<OrganizationResponseModel> CreateOrganization(OrganizationOnboardingModel model, OrganizationOnboardingArgs args);
         Task<bool> VerifyBvn(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
@@ -1437,55 +1435,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             profile.NIN = EncryptionUtil.MaskSensitiveNumber(profile.NIN);
             return profile;
         }
-        public async Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId)
+        public async Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId, NotificationUserRole role)
         {
-            await EnsureUserIsFarmerAsync(userId);
+            await EnsureUserIsInRoleAsync(userId, role);
 
-            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Farmer);
+            return await _onboardingRepository.GetNotificationPreference(userId, role);
         }
 
-        public async Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationPreferenceRequest model)
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreferenceAsync(string userId, NotificationUserRole role, NotificationPreferenceRequest model)
         {
-            await EnsureUserIsFarmerAsync(userId);
+            await EnsureUserIsInRoleAsync(userId, role);
 
-            return await _onboardingRepository.SaveNotificationPreference(userId, model);
+            return await _onboardingRepository.SaveNotificationPreference(userId, role, model);
         }
 
-        public async Task<NotificationPreferenceResponse> SaveAgentNotificationPreferenceAsync(string userId, AgentNotificationPreferenceRequest model)
+        private async Task EnsureUserIsInRoleAsync(string userId, NotificationUserRole role)
         {
-            await EnsureUserIsAgentAsync(userId);
-
-            return await _onboardingRepository.SaveAgentNotificationPreference(userId, model);
-        }
-
-        public async Task<NotificationPreferenceResponse> GetAgentNotificationPreferenceAsync(string userId)
-        {
-            await EnsureUserIsAgentAsync(userId);
-
-            return await _onboardingRepository.GetNotificationPreference(userId, NotificationUserRole.Agent);
-        }
-
-        private async Task EnsureUserIsAgentAsync(string userId)
-        {
-            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Agent"))
+            if (await _onboardingRepository.IsUserInRoleAsync(userId, role.ToString()))
                 return;
 
             throw new BaseException(
                 Core.Enums.ExceptionType.ACCESS_DENIED,
-                "The supplied user is not an Agent.");
+                $"The supplied user is not a {role}.");
         }
 
-        private async Task EnsureUserIsFarmerAsync(string userId)
-        {
-            if (await _onboardingRepository.IsUserInRoleAsync(userId, "Farmer"))
-                return;
-
-            throw new BaseException(
-                Core.Enums.ExceptionType.ACCESS_DENIED,
-                "Notification preferences are only available to farmers.");
-        }
-
-                public async Task<UsersProfileResponse> GetUseridentity(string userId)
+        public async Task<UsersProfileResponse> GetUseridentity(string userId)
         {
             var profile = await _onboardingRepository.GetUseridentity(userId);
             if (profile == null)
@@ -2368,6 +2342,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<(bool Status, string Message)> ChangePassword(ChnagePasswordModel model)
         {
+            if (string.IsNullOrEmpty(model.Email))
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User not authorized for this action.");
+            }
             var changePwd = await _onboardingRepository.ChangePassword(model);
             return changePwd;
         }
@@ -2434,13 +2412,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
       
         public async Task<(bool Status, string Message)> ChangePin(ChangePinModel model, OnBoardingArgs args)
         {
+            if (string.IsNullOrEmpty(model.PhoneNumber))
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User not authorized for this action.");
+            }
             var user = await _context.Users.FirstOrDefaultAsync(x => x.Id == args.UserId);
             if (user == null)
             {
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "No record found for the user.");
             }
-            if (string.IsNullOrEmpty(user.PhoneNumber)) throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot change pin for an account with no phonenumer, Kindly update your profile");
-
+            
             if (string.IsNullOrWhiteSpace(model.OldPin))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Your current PIN is required.");
 
