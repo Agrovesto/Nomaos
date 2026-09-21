@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -33,7 +34,8 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<FarmerModel> AssignFarmerToAgent(string agentuserId, long farmerId);
         Task<List<FarmerModel>> FilterFarmerForDownload(string? businessCode,
    string? organizationCode, string? cooperativeName, string? state, DateTime? startDate, DateTime? endDate);
-        Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update);
+        // Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update);
+        Task<ProfileChange<FarmerModel>> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update);
         Task<FarmerProfileDto> GetFarmerProfileAsync(string userId);
         Task<FarmerDetailDto> GetFarmerDetails(string userId);
         Task<PagedListResponse<List<FarmerDetailDto>>> GetAllFarmerDetails(string businessCode,

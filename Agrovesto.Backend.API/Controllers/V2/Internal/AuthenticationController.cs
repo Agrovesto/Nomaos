@@ -163,8 +163,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
         }
+       
+        
         [HttpPost("create-account")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Register([FromBody] OnboardingRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -186,8 +189,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             request => Ok(Success(request, request.Message, ResponseMessages.Successful)));
         }
 
+       
         [HttpPost("verify-otp")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> VerifyOtp([FromBody] ConfirmOtpRequest model)
         {
             if (!ModelState.IsValid)
@@ -200,6 +205,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("resend-otp")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -215,6 +221,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-profile")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -242,6 +249,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-organization-profile")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> CreateOrganization([FromBody] OrganizationOnboardingModel model, [FromQuery] OrganizationOnboardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -257,6 +265,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("login")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string businessCode)
         {
             if (!ModelState.IsValid)
@@ -311,6 +320,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 
         [Authorize]
         [HttpPost("logout")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Logout()
         {
             var result = await _onBoardingManager.Logout(User);
@@ -378,6 +388,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("change-credential")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> ChangeCredential([FromBody] ChangeCredentialRequest request)
         {
             var model = new ChangeCredentialModel
@@ -398,6 +409,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPost("forgot-credential")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> ForgotCredential([FromBody] ForgotCredentialRequest request,
             [FromQuery] string businessCode,
             [FromQuery] string env)
@@ -415,6 +427,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             return Ok(new { status, message });
         }
         [HttpPost("reset-credential")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> ResetCredential([FromBody] ConfirmCredentialResetRequest request)
         {
             var model = new ConfirmCredentialResetModel

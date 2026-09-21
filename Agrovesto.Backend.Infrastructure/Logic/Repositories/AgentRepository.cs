@@ -1,9 +1,12 @@
-﻿using Agrovesto.Backend.Core.Exceptions;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -173,94 +176,153 @@ bool exists = await _context.OrganizationAgentRoles.AnyAsync(x =>
 
             return true;
         }
+
+        public async Task<ProfileChange<AgentModel>> UpsertAgentAsync(AgentModel data)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.UserId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User id is required to save agent details.");
+
+            var entity = await _context.Agents.FirstOrDefaultAsync(x => x.UserId == data.UserId);
+            var isNew = entity == null;
+            var changed = new List<string>();
+
+            if (isNew)
+            {
+                entity = data.Map();
+                _context.Agents.Add(entity);
+            }
+            else
+            {
+                // PATCH: BelongToBusinessCode is intentionally not touched, so a profile edit can't move an agent between businesses.
+                PatchHelper.Patch(changed, nameof(AgentModel.Name), data.Name, entity.Name, v => entity.Name = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.State), data.State, entity.State, v => entity.State = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.Lga), data.Lga, entity.Lga, v => entity.Lga = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.Ward), data.Ward, entity.Ward, v => entity.Ward = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.Location), data.Location, entity.Location, v => entity.Location = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.Email), data.Email, entity.Email, v => entity.Email = v);
+                PatchHelper.Patch(changed, nameof(AgentModel.PhoneNumber), data.PhoneNumber, entity.PhoneNumber, v => entity.PhoneNumber = v);
+            }
+
+            await _context.SaveChangesAsync(); // assigns entity.Id for new agents
+
+            // One organization-link path for BOTH create and update
+            if (data.OrganizationId.HasValue && data.OrganizationId.Value > 0)
+            {
+                var orgId = data.OrganizationId.Value;
+                var linked = await _context.OrganizationAgents
+                    .AnyAsync(x => x.AgentId == entity.Id && x.OrganizationId == orgId);
+
+                if (!linked)
+                {
+                    _context.OrganizationAgents.Add(new OrganizationAgent
+                    {
+                        AgentId = entity.Id,
+                        OrganizationId = orgId,
+                        AssignedByUserId = data.OnboardedById,
+                        AssignedOn = DateTimeOffset.UtcNow
+                    });
+                    await _context.SaveChangesAsync();
+                    changed.Add(nameof(AgentModel.OrganizationId));
+                }
+            }
+
+            return new ProfileChange<AgentModel>(entity.Map(), changed, isNew);
+        }
+
+        // Backwards-compatible wrapper so existing create flows keep compiling.
         public async Task<(bool status, AgentModel data)> CreateUpdateAgent(AgentModel data)
         {
-            try
-            {
-                var existingAgent = await _context.Agents
-                    .FirstOrDefaultAsync(x => x.UserId == data.UserId);
-
-                if (existingAgent != null)
-                {
-                    // PATCH: update only fields that have values
-                    if (!string.IsNullOrWhiteSpace(data.State))
-                        existingAgent.State = data.State;
-
-                    if (!string.IsNullOrWhiteSpace(data.Lga))
-                        existingAgent.Lga = data.Lga;
-
-                    if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
-                        existingAgent.PhoneNumber = data.PhoneNumber;
-
-                    if (!string.IsNullOrWhiteSpace(data.Email))
-                        existingAgent.Email = data.Email;
-
-                    if (!string.IsNullOrWhiteSpace(data.Location))
-                        existingAgent.Location = data.Location;
-
-                    if (!string.IsNullOrWhiteSpace(data.Name))
-                        existingAgent.Name = data.Name;
-                    if (!string.IsNullOrWhiteSpace(data.Ward))
-                        existingAgent.Ward = data.Ward;
-
-                    if (data.OrganizationId.HasValue)
-                    {
-                        bool exists = await _context.OrganizationAgents.AnyAsync(x =>
-                            x.AgentId == existingAgent.Id &&
-                            x.OrganizationId == data.OrganizationId.Value);
-
-                        if (!exists)
-                        {
-                            await _context.OrganizationAgents.AddAsync(new OrganizationAgent
-                            {
-                                AgentId = existingAgent.Id,
-                                OrganizationId = data.OrganizationId.Value,
-                                AssignedByUserId = data.OnboardedById,
-                                AssignedOn= DateTimeOffset.Now
-                            });
-                        }
-                    }
-                
-                    _context.Agents.Update(existingAgent);
-                    await _context.SaveChangesAsync();
-
-                    return (true, existingAgent.Map());
-                }
-
-                var entity = data.Map();
-                 await _context.Agents.AddAsync(entity);
-                await _context.SaveChangesAsync();
-                if (data.OrganizationId.HasValue)
-                {
-                    bool alreadyLinked = await _context.OrganizationAgents
-                        .AnyAsync(fo => fo.AgentId == entity.Id && fo.OrganizationId == data.OrganizationId.Value);
-
-                    if (!alreadyLinked)
-                    {
-                        await _context.OrganizationAgents.AddAsync(new OrganizationAgent
-                        {
-                            AgentId = entity.Id,
-                            OrganizationId = data.OrganizationId.Value,
-                            AssignedByUserId = data.OnboardedById,
-                            AssignedOn = DateTimeOffset.Now
-                        });
-                        await _context.SaveChangesAsync();
-                    }
-                }
-                return (true, entity.Map());
-            }
-            catch (BaseException ex)
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.OPERATION_FAILED,
-                    ex.Message);
-            }
-            catch (Exception ex)
-            {
-                throw new NotSuccessfulException(
-                    $"Could not save agent details: {ex.Message}");
-            }
+            var result = await UpsertAgentAsync(data);
+            return (true, result.Data);
         }
+        //public async Task<(bool status, AgentModel data)> CreateUpdateAgent(AgentModel data)
+        //{
+        //    try
+        //    {
+        //        var existingAgent = await _context.Agents
+        //            .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+        //        if (existingAgent != null)
+        //        {
+        //            // PATCH: update only fields that have values
+        //            if (!string.IsNullOrWhiteSpace(data.State))
+        //                existingAgent.State = data.State;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Lga))
+        //                existingAgent.Lga = data.Lga;
+
+        //            if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
+        //                existingAgent.PhoneNumber = data.PhoneNumber;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Email))
+        //                existingAgent.Email = data.Email;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Location))
+        //                existingAgent.Location = data.Location;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Name))
+        //                existingAgent.Name = data.Name;
+        //            if (!string.IsNullOrWhiteSpace(data.Ward))
+        //                existingAgent.Ward = data.Ward;
+
+        //            if (data.OrganizationId.HasValue)
+        //            {
+        //                bool exists = await _context.OrganizationAgents.AnyAsync(x =>
+        //                    x.AgentId == existingAgent.Id &&
+        //                    x.OrganizationId == data.OrganizationId.Value);
+
+        //                if (!exists)
+        //                {
+        //                    await _context.OrganizationAgents.AddAsync(new OrganizationAgent
+        //                    {
+        //                        AgentId = existingAgent.Id,
+        //                        OrganizationId = data.OrganizationId.Value,
+        //                        AssignedByUserId = data.OnboardedById,
+        //                        AssignedOn= DateTimeOffset.Now
+        //                    });
+        //                }
+        //            }
+
+        //            _context.Agents.Update(existingAgent);
+        //            await _context.SaveChangesAsync();
+
+        //            return (true, existingAgent.Map());
+        //        }
+
+        //        var entity = data.Map();
+        //         await _context.Agents.AddAsync(entity);
+        //        await _context.SaveChangesAsync();
+        //        if (data.OrganizationId.HasValue)
+        //        {
+        //            bool alreadyLinked = await _context.OrganizationAgents
+        //                .AnyAsync(fo => fo.AgentId == entity.Id && fo.OrganizationId == data.OrganizationId.Value);
+
+        //            if (!alreadyLinked)
+        //            {
+        //                await _context.OrganizationAgents.AddAsync(new OrganizationAgent
+        //                {
+        //                    AgentId = entity.Id,
+        //                    OrganizationId = data.OrganizationId.Value,
+        //                    AssignedByUserId = data.OnboardedById,
+        //                    AssignedOn = DateTimeOffset.Now
+        //                });
+        //                await _context.SaveChangesAsync();
+        //            }
+        //        }
+        //        return (true, entity.Map());
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        throw new BaseException(
+        //            Core.Enums.ExceptionType.OPERATION_FAILED,
+        //            ex.Message);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new NotSuccessfulException(
+        //            $"Could not save agent details: {ex.Message}");
+        //    }
+        //}
 
         public async Task<(bool status, AgentModel data)> CreateAgent(AgentModel data)
         {

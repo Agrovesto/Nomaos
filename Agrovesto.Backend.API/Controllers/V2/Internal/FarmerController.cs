@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("dashboard")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
             var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);

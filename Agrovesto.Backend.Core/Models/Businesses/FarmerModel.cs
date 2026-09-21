@@ -340,30 +340,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public string Tier { get; set; }
     }
-    public class FarmerUpdateModel
-    {
-        public string? Name { get; set; }
-        public string? Location { get; set; }
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public string? Ward { get; set; }
-        public string? PhoneNumber { get; set; }
-        public string? Email { get; set; }
-        public string? Gender { get; set; }
-        public string? DateOfBirth { get; set; }
-        public string? FarmerImage { get; set; }
-        public string? OrganizationCode { get; set; }
-        public string? NIN { get; set; }
-        public string? BVN { get; set; }
-        public string? FarmerCategory { get; set; }
-        public long? YearsInAgric { get; set; }
-        public string? HighestLevelOfEducation { get; set; }
-        public bool? IsNinVerified { get; set; }
-        public List<ValueChainSelectionDto>? SelectedItems { get; set; }
-        public List<long>? CooperativeIds { get; set; }
-        public List<long>? AgentIds { get; set; }
-    }
-
 
     public class AgentUpdateModel
     {

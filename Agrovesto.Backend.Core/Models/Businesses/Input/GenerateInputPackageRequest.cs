@@ -200,6 +200,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
         public InputPackageRepaymentMode? RepaymentModel { get; set; }
         public decimal? RepaymentValue { get; set; }
         public RiskCategory? RiskCategory { get; set; }
+        public long? PaybackWalletId { get; set; } // wallet provider type, e.g etransact, momo, etc
+        public long? UserWalletId { get; set; }
     }//views
     public class EopDto
     {

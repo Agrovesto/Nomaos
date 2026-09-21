@@ -2,6 +2,7 @@
 using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Payment;
@@ -33,6 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         private readonly DataContext _context;
         private readonly IDistributedCache _cache;
         private readonly ILogger<MembershipRepository> _logger;
+        private const int DefaultMembershipTypeId = 1;
         public MembershipRepository(DataContext context,
             IDistributedCache cache,
             ILogger<MembershipRepository> logger)
@@ -975,140 +977,226 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     $"Could not save agent details: {ex.Message}");
             }
         }
+
+        public async Task<ProfileChange<MemberShipModel>> UpsertMembershipAsync(MemberShipModel data)
+        {
+            if (data == null || string.IsNullOrWhiteSpace(data.UserId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User id is required to save membership details.");
+
+            var entity = await _context.MemberShips.FirstOrDefaultAsync(x => x.UserId == data.UserId);
+            var isNew = entity == null;
+            var changed = new List<string>();
+
+            if (isNew)
+            {
+                // The default type applies ONLY on create; on update 0 means "not provided".
+                if (data.MemberShipTypeId == 0) data.MemberShipTypeId = DefaultMembershipTypeId;
+
+                entity = data.Map();
+                _context.MemberShips.Add(entity);
+            }
+            else
+            {
+                // IsLeaderAFarmer is a plain bool, so "false" can't be told apart from "not sent".
+                // It can therefore only be turned ON here. Make the DTO property bool? if it must be reversible.
+                if (data.IsLeaderAFarmer && !entity.IsLeaderAFarmer)
+                {
+                    entity.IsLeaderAFarmer = true;
+                    changed.Add(nameof(MemberShipModel.IsLeaderAFarmer));
+                }
+
+                PatchHelper.Patch(changed, nameof(MemberShipModel.Name), data.Name, entity.Name, v => entity.Name = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.Location), data.Location, entity.Location, v => entity.Location = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.State), data.State, entity.State, v => entity.State = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.Lga), data.Lga, entity.Lga, v => entity.Lga = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.Ward), data.Ward, entity.Ward, v => entity.Ward = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.ContactPerson), data.ContactPerson, entity.ContactPerson, v => entity.ContactPerson = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.Email), data.Email, entity.Email, v => entity.Email = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.PhoneNumber), data.PhoneNumber, entity.PhoneNumber, v => entity.PhoneNumber = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderFirstName), data.MembershipLeaderFirstName, entity.MembershipLeaderFirstName, v => entity.MembershipLeaderFirstName = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderMiddleName), data.MembershipLeaderMiddleName, entity.MembershipLeaderMiddleName, v => entity.MembershipLeaderMiddleName = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderLastName), data.MembershipLeaderLastName, entity.MembershipLeaderLastName, v => entity.MembershipLeaderLastName = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderGender), data.MembershipLeaderGender, entity.MembershipLeaderGender, v => entity.MembershipLeaderGender = v);
+
+                if (data.MemberShipTypeId != 0 && data.MemberShipTypeId != entity.MemberShipTypeId)
+                {
+                    entity.MemberShipTypeId = data.MemberShipTypeId;
+                    changed.Add(nameof(MemberShipModel.MemberShipTypeId));
+                }
+            }
+
+            await _context.SaveChangesAsync(); // assigns entity.Id for new memberships
+
+            if (data.OrganizationId.HasValue && data.OrganizationId.Value > 0)
+            {
+                var orgId = data.OrganizationId.Value;
+                var linked = await _context.OrganizationMemberships
+                    .AnyAsync(x => x.MembershipId == entity.Id && x.OrganizationId == orgId);
+
+                if (!linked)
+                {
+                    _context.OrganizationMemberships.Add(new OrganizationMembership
+                    {
+                        MembershipId = entity.Id,
+                        OrganizationId = orgId,
+                        AssignedByUserId = data.OnboardedById,
+                        AssignedOn = DateTimeOffset.UtcNow,
+                        IsActive = true
+                    });
+                    changed.Add(nameof(MemberShipModel.OrganizationId));
+                }
+            }
+
+            // NIN/BVN are NOT copied to the user here any more: UpdateUserProfileAsync owns that (with its checks).
+
+            // Existing helper (unchanged, not shown in your snippet)
+            await AssignAgentToMembership(data, entity, changed.Count > 0);
+
+            await _context.SaveChangesAsync();
+
+            return new ProfileChange<MemberShipModel>(entity.Map(), changed, isNew);
+        }
+
+        // Backwards-compatible wrapper so existing create flows keep compiling.
         public async Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data)
         {
-            try
-            {
-                var existingCooperative = await _context.MemberShips
-                    .FirstOrDefaultAsync(x => x.UserId == data.UserId);
-
-                bool isNew = existingCooperative == null;
-
-                MemberShip entity;
-
-                if (isNew)
-                {
-                    entity = data.Map();
-                    await _context.MemberShips.AddAsync(entity);
-                }
-                else
-                {
-                    entity = existingCooperative;
-
-                    if (data.IsLeaderAFarmer)
-                        entity.IsLeaderAFarmer = data.IsLeaderAFarmer;
-
-                    if (!string.IsNullOrWhiteSpace(data.Name))
-                        entity.Name = data.Name;
-
-                    if (!string.IsNullOrWhiteSpace(data.Location))
-                        entity.Location = data.Location;
-
-                    if (!string.IsNullOrWhiteSpace(data.State))
-                        entity.State = data.State;
-
-                    if (!string.IsNullOrWhiteSpace(data.Lga))
-                        entity.Lga = data.Lga;
-
-                    if (!string.IsNullOrWhiteSpace(data.ContactPerson))
-                        entity.ContactPerson = data.ContactPerson;
-
-                    if (!string.IsNullOrWhiteSpace(data.Ward))
-                        entity.Ward = data.Ward;
-
-                    if (!string.IsNullOrWhiteSpace(data.Email))
-                        entity.Email = data.Email;
-
-                    if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
-                        entity.PhoneNumber = data.PhoneNumber;
-
-                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderFirstName))
-                        entity.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
-
-                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderGender))
-                        entity.MembershipLeaderGender = data.MembershipLeaderGender;
-
-                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderMiddleName))
-                        entity.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
-
-                    if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
-                        entity.MembershipLeaderLastName = data.MembershipLeaderLastName;
-
-                    if (data.MemberShipTypeId != 0)
-                        entity.MemberShipTypeId = data.MemberShipTypeId;
-                }
-
-                await _context.SaveChangesAsync();
-
-                var membershipId = entity.Id;
-
-                if (data.OrganizationId.HasValue)
-                {
-                    if (data.OrganizationId.Value > 0)
-                    {
-                        var exists = await _context.OrganizationMemberships
-                            .AnyAsync(x =>
-                                x.MembershipId == membershipId &&
-                                x.OrganizationId == data.OrganizationId.Value);
-
-                        if (!exists)
-                        {
-                            await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
-                            {
-                                MembershipId = membershipId,
-                                OrganizationId = data.OrganizationId.Value,
-                                AssignedByUserId = data.OnboardedById,
-                                AssignedOn = DateTimeOffset.UtcNow,
-                                IsActive = true
-                            });
-
-                            await _context.SaveChangesAsync();
-                        }
-                    }
-
-                }
-                var isModified = false;
-                if (!string.IsNullOrWhiteSpace(data.NIN) || !string.IsNullOrWhiteSpace(data.BVN))
-                {
-
-                    var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == entity.UserId);
-                    if (user != null)
-                    {
-                        if (!string.IsNullOrWhiteSpace(data.NIN) && data.NIN != user.NIN)
-                        {
-                            user.NIN = data.NIN;
-                            _context.Users.Update(user);
-                            isModified = true;
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(data.BVN) && data.BVN != user.BVN)
-                        {
-                            user.BVN = data.BVN;
-                            _context.Users.Update(user);
-                            isModified = true;
-                        }
-                    }
-                }
-
-
-                isModified = await AssignAgentToMembership(data, entity, isModified);
-
-                await _context.SaveChangesAsync();
-
-                return (true, entity.Map());
-            }
-            catch (BaseException ex)
-            {
-                throw new BaseException(
-                    Core.Enums.ExceptionType.OPERATION_FAILED,
-                    ex.Message);
-            }
-            catch (Exception ex)
-            {
-                throw new NotSuccessfulException(
-                    $"Could not save membership details: {ex.Message}");
-            }
+            var result = await UpsertMembershipAsync(data);
+            return (true, result.Data);
         }
+        //public async Task<(bool status, MemberShipModel data)> CreateUpdateMembership(MemberShipModel data)
+        //{
+        //    try
+        //    {
+        //        var existingCooperative = await _context.MemberShips
+        //            .FirstOrDefaultAsync(x => x.UserId == data.UserId);
+
+        //        bool isNew = existingCooperative == null;
+
+        //        MemberShip entity;
+
+        //        if (isNew)
+        //        {
+        //            entity = data.Map();
+        //            await _context.MemberShips.AddAsync(entity);
+        //        }
+        //        else
+        //        {
+        //            entity = existingCooperative;
+
+        //            if (data.IsLeaderAFarmer)
+        //                entity.IsLeaderAFarmer = data.IsLeaderAFarmer;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Name))
+        //                entity.Name = data.Name;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Location))
+        //                entity.Location = data.Location;
+
+        //            if (!string.IsNullOrWhiteSpace(data.State))
+        //                entity.State = data.State;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Lga))
+        //                entity.Lga = data.Lga;
+
+        //            if (!string.IsNullOrWhiteSpace(data.ContactPerson))
+        //                entity.ContactPerson = data.ContactPerson;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Ward))
+        //                entity.Ward = data.Ward;
+
+        //            if (!string.IsNullOrWhiteSpace(data.Email))
+        //                entity.Email = data.Email;
+
+        //            if (!string.IsNullOrWhiteSpace(data.PhoneNumber))
+        //                entity.PhoneNumber = data.PhoneNumber;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderFirstName))
+        //                entity.MembershipLeaderFirstName = data.MembershipLeaderFirstName;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderGender))
+        //                entity.MembershipLeaderGender = data.MembershipLeaderGender;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderMiddleName))
+        //                entity.MembershipLeaderMiddleName = data.MembershipLeaderMiddleName;
+
+        //            if (!string.IsNullOrWhiteSpace(data.MembershipLeaderLastName))
+        //                entity.MembershipLeaderLastName = data.MembershipLeaderLastName;
+
+        //            if (data.MemberShipTypeId != 0)
+        //                entity.MemberShipTypeId = data.MemberShipTypeId;
+        //        }
+
+        //        await _context.SaveChangesAsync();
+
+        //        var membershipId = entity.Id;
+
+        //        if (data.OrganizationId.HasValue)
+        //        {
+        //            if (data.OrganizationId.Value > 0)
+        //            {
+        //                var exists = await _context.OrganizationMemberships
+        //                    .AnyAsync(x =>
+        //                        x.MembershipId == membershipId &&
+        //                        x.OrganizationId == data.OrganizationId.Value);
+
+        //                if (!exists)
+        //                {
+        //                    await _context.OrganizationMemberships.AddAsync(new OrganizationMembership
+        //                    {
+        //                        MembershipId = membershipId,
+        //                        OrganizationId = data.OrganizationId.Value,
+        //                        AssignedByUserId = data.OnboardedById,
+        //                        AssignedOn = DateTimeOffset.UtcNow,
+        //                        IsActive = true
+        //                    });
+
+        //                    await _context.SaveChangesAsync();
+        //                }
+        //            }
+
+        //        }
+        //        var isModified = false;
+        //        if (!string.IsNullOrWhiteSpace(data.NIN) || !string.IsNullOrWhiteSpace(data.BVN))
+        //        {
+
+        //            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == entity.UserId);
+        //            if (user != null)
+        //            {
+        //                if (!string.IsNullOrWhiteSpace(data.NIN) && data.NIN != user.NIN)
+        //                {
+        //                    user.NIN = data.NIN;
+        //                    _context.Users.Update(user);
+        //                    isModified = true;
+        //                }
+
+        //                if (!string.IsNullOrWhiteSpace(data.BVN) && data.BVN != user.BVN)
+        //                {
+        //                    user.BVN = data.BVN;
+        //                    _context.Users.Update(user);
+        //                    isModified = true;
+        //                }
+        //            }
+        //        }
+
+
+        //        isModified = await AssignAgentToMembership(data, entity, isModified);
+
+        //        await _context.SaveChangesAsync();
+
+        //        return (true, entity.Map());
+        //    }
+        //    catch (BaseException ex)
+        //    {
+        //        throw new BaseException(
+        //            Core.Enums.ExceptionType.OPERATION_FAILED,
+        //            ex.Message);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new NotSuccessfulException(
+        //            $"Could not save membership details: {ex.Message}");
+        //    }
+        //}
         private async Task<bool> AssignAgentToMembership(MemberShipModel data, MemberShip existingCooperative, bool isModified)
         {
             if (data.AgentIds != null && data.AgentIds.Any())
