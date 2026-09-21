@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Models;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using System;
 using System.Collections.Generic;
@@ -21,5 +22,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<AgentModel>> GetAgentsByBusinessCode(string businessCode, ListQueryParams query);
         Task<bool> UpdateOrganizationAgentLocation(OrganizationAgentArgs data);
         Task<bool> UpdateOrganizationAgentRole(OrganizationAgentArgs data);
+        Task<ProfileChange<AgentModel>> UpsertAgentAsync(AgentModel data);
     }
 }

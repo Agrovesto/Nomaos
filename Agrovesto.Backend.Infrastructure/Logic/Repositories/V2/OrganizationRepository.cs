@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -3440,7 +3441,7 @@ SELECT
             return ex.InnerException?.Message.Contains("IX_Farmers_UserId") == true;
         }
   
-        public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
+        public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update)
         {
             if (string.IsNullOrWhiteSpace(userId) || update == null)
                 return null;

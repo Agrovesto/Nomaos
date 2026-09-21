@@ -546,6 +546,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         _context.CommitmentPlans.Remove(package.CommitmentPlan);
                         package.CommitmentPlan = null;
                     }
+                    ApplyIfPresent(request.UserWalletId, v => package.UserWalletId = v);
+                    if (args.isSelectedWalletProvisioned)
+                    {
+                        package.IsSelectedWalletProvisioned = true;
+                    }
 
                     if (package.RepaymentRequired)
                     {
@@ -559,6 +564,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         ApplyIfPresent(request.RepaymentModel, v => plan.RepaymentMode = v);
                         ApplyIfPresent(request.RepaymentValue, v => plan.RepaymentValue = v);
                         ApplyIfPresent(request.RiskCategory, v => plan.RiskCategory = v);
+                       
 
                         ValidateRepaymentPlan(plan);
                         package.RepaymentPlan = plan;

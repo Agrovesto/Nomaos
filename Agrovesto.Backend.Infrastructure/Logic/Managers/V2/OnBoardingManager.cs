@@ -70,7 +70,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
         Task<CreateFarmDto> UpdateFarmDetails(CreateFarmDto model, BusinessRegistrationArgs args);
         Task<bool> VerifyNIN(VerificationArgs args, KYCVerificationDto model, string CurrentUserId);
-        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update);
+        Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update);
         Task<BulkOnboardingResult> BulkOnboardFarmers(Stream excelStream, OnBoardingArgs args);
         Task<UsersProfileResponse> GetUserProfileAsync(string userId);
         Task<NotificationPreferenceResponse> GetNotificationPreferenceAsync(string userId, NotificationUserRole role);
@@ -101,6 +101,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ChangeCredential(ChangeCredentialModel model);
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
+        Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -265,7 +266,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                             LastName = model.LastName?.Trim(),
                             PhoneNumber = model.PhoneNumber?.Trim(),
                             Email = model.ContactEmail?.Trim(),
-                            organizationCode = newOrganization.OrganizationCode
+                            OrganizationCode = newOrganization.OrganizationCode
                         });
                     args.userType ??= updatedUser.UserType;
                     await _context.SaveChangesAsync();
@@ -513,7 +514,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 };
             }
             var updatedFields = new List<string>();
-            foreach (var prop in typeof(Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel).GetProperties())
+            foreach (var prop in typeof(FarmerUpdateModel).GetProperties())
             {
                 var val = prop.GetValue(update);
                 if (val != null)
@@ -534,56 +535,57 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
-        {
-            if (string.IsNullOrWhiteSpace(userId) || update == null)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
+        //public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId,FarmerUpdateModel update)
+        //{
+        //    if (string.IsNullOrWhiteSpace(userId) || update == null)
+        //        throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
 
-            if (!string.IsNullOrWhiteSpace(update.NIN))
-                ValidateIdentifier(update.NIN, "NIN");
+        //    if (!string.IsNullOrWhiteSpace(update.NIN))
+        //        ValidateIdentifier(update.NIN, "NIN");
 
-            if (!string.IsNullOrWhiteSpace(update.BVN))
-                ValidateIdentifier(update.BVN, "BVN");
+        //    if (!string.IsNullOrWhiteSpace(update.BVN))
+        //        ValidateIdentifier(update.BVN, "BVN");
 
-            var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
-            {
+        //    var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
+        //    {
 
-                PhoneNumber = update.PhoneNumber,
-                Email = update.Email,
-                NIN = update.NIN,
-                DateOfBirth = update.DateOfBirth,
-                Bvn = update.BVN,
-                Location = update.Location,
-            });
-            var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
-            if (updated == null)
-            {
-                return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
-                {
-                    Success = false,
-                    Message = "Farmer not found or update failed."
-                };
-            }
+        //        PhoneNumber = update.PhoneNumber,
+        //        Email = update.Email,
+        //        NIN = update.NIN,
+        //        DateOfBirth = update.DateOfBirth,
+        //        BVN = update.BVN,
+        //        Location = update.Location,
+        //    });
+        //    var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
+        //    if (updated == null)
+        //    {
+        //        return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
+        //        {
+        //            Success = false,
+        //            Message = "Farmer not found or update failed."
+        //        };
+        //    }
 
-            var updatedFields = new List<string>();
-            foreach (var prop in typeof(Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel).GetProperties())
-            {
-                var val = prop.GetValue(update);
-                if (val != null)
-                {
-                    if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
-                    updatedFields.Add(prop.Name);
-                }
-            }
+        //    var updatedFields = new List<string>();
+        //    foreach (var prop in typeof(FarmerUpdateModel).GetProperties())
+        //    {
+        //        var val = prop.GetValue(update);
+        //        if (val != null)
+        //        {
+        //            if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
+        //            updatedFields.Add(prop.Name);
+        //        }
+        //    }
 
-            return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
-            {
-                Success = true,
-                UpdatedFields = updatedFields,
-                UpdatedFarmer = updated,
-                Message = "Farmer profile updated successfully."
-            };
-        }
+        //    return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
+        //    {
+        //        Success = true,
+        //        UpdatedFields = updatedFields,
+        //        UpdatedFarmer = updated,
+        //        Message = "Farmer profile updated successfully."
+        //    };
+        //}
+        
         private static void ValidateLoginModel(LoginModel model)
         {
             switch (model.LoginMethod)
@@ -712,13 +714,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         Core.Enums.ExceptionType.BAD_REQUEST,
                         "User Id missing.");
                 }
-                if (!string.IsNullOrEmpty(model.PhoneNumber) || !string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.Bvn))
+                if (!string.IsNullOrEmpty(model.PhoneNumber) || !string.IsNullOrWhiteSpace(model.NIN) || !string.IsNullOrWhiteSpace(model.BVN))
                 {
                     ValidateIdentifier(model.NIN, "NIN");
-                    ValidateIdentifier(model.Bvn, "BVN");
+                    ValidateIdentifier(model.BVN, "BVN");
                     ValidateIdentifier(model.PhoneNumber, "Phonenumber");
                 }
-                model.organizationCode = args.organizationCode;
+                model.OrganizationCode = args.organizationCode;
                 var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
                 if (hasOrg != null)
                 {
@@ -854,8 +856,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (!string.IsNullOrWhiteSpace(model.NIN))
                 ValidateIdentifier(model.NIN, "NIN");
 
-            if (!string.IsNullOrWhiteSpace(model.Bvn))
-                ValidateIdentifier(model.Bvn, "BVN");
+            if (!string.IsNullOrWhiteSpace(model.BVN))
+                ValidateIdentifier(model.BVN, "BVN");
             var userId = !string.IsNullOrEmpty(args.UserId)
                 ? args.UserId
                 : model?.Id;
@@ -866,7 +868,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Email = model.Email,
                 NIN = model.NIN,
                 DateOfBirth = model.DateOfBirth,
-                Bvn = model.Bvn,
+                BVN = model.BVN,
                 Location = model.Location,
                 Password = model.Password,
                 Pin = model.Pin,
@@ -878,56 +880,56 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return updateUser;
         }
-        public async Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
-        {
+        //public async Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
+        //{
 
-            var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
-            if (hasOrg != null)
-            {
-                model.OrganizationId = hasOrg.OrganizaionId;
-            }
-            var isAssignedagent = false;
-            if (args.OnboardedByUserId != null)
-            {
-                isAssignedagent = true;
-            }
-            await UpdateUserProfile(model, args);
+        //    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+        //    if (hasOrg != null)
+        //    {
+        //        model.OrganizationId = hasOrg.OrganizaionId;
+        //    }
+        //    var isAssignedagent = false;
+        //    if (args.OnboardedByUserId != null)
+        //    {
+        //        isAssignedagent = true;
+        //    }
+        //    await UpdateUserProfile(model, args);
 
-            await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
-            {
-                BelongToBusinessCode = args.businessCode,
-                IsLeaderAFarmer = model.IsLeaderAFarmer,
-                State = model.State,
-                Lga = model.Lga,
-                ContactPerson = model.FirstName,
-                Email = model.Email,
-                Location = model.Location,
-                MembershipLeaderFirstName = model.FirstName,
-                MembershipLeaderGender = model.Gender,
-                MembershipLeaderLastName = model.LastName,
-                MembershipLeaderMiddleName = model.MiddleName,
-                MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
-                Tier = Tier.Tier1.ToString(),
+        //    await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
+        //    {
+        //        BelongToBusinessCode = args.businessCode,
+        //        IsLeaderAFarmer = model.IsLeaderAFarmer,
+        //        State = model.State,
+        //        Lga = model.Lga,
+        //        ContactPerson = model.FirstName,
+        //        Email = model.Email,
+        //        Location = model.Location,
+        //        MembershipLeaderFirstName = model.FirstName,
+        //        MembershipLeaderGender = model.Gender,
+        //        MembershipLeaderLastName = model.LastName,
+        //        MembershipLeaderMiddleName = model.MiddleName,
+        //        MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
+        //        Tier = Tier.Tier1.ToString(),
 
 
-                Name = model.CooperativeName,
-                OnBoardedOn = model.CreatedOn,
-                PhoneNumber = model.PhoneNumber,
-                UserId = model.Id,
-                OnboardedById = args.OnboardedByUserId,
+        //        Name = model.CooperativeName,
+        //        OnBoardedOn = model.CreatedOn,
+        //        PhoneNumber = model.PhoneNumber,
+        //        UserId = model.Id,
+        //        OnboardedById = args.OnboardedByUserId,
 
-                IsAssignedToAgentId = args.OnboardedByUserId,
-                HasbeenAssignedAgent = isAssignedagent,
-                Ward = model.Ward,
+        //        IsAssignedToAgentId = args.OnboardedByUserId,
+        //        HasbeenAssignedAgent = isAssignedagent,
+        //        Ward = model.Ward,
 
-            });
+        //    });
 
-            if (model.IsLeaderAFarmer)
-            {
-                await CreateFarmerProfileAsync(model, args);
-            }
+        //    if (model.IsLeaderAFarmer)
+        //    {
+        //        await CreateFarmerProfileAsync(model, args);
+        //    }
 
-        }
+        //}
 
 
         private async Task CreateFarmerProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
@@ -1064,8 +1066,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 var hasPhone = !string.IsNullOrWhiteSpace(model.PhoneNumber);
                 CreateUserResult createUserResult = null;
                 model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
-    ? SignupMethod.Email
-    : SignupMethod.PhoneNumber;
+                                        ? SignupMethod.Email
+                                        : SignupMethod.PhoneNumber;
                 var strategy = _context.Database.CreateExecutionStrategy();
 
                 await strategy.ExecuteAsync(async () =>
@@ -2246,69 +2248,69 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Unable to complete onboarding at the moment.");
             }
         }
-        public async Task<bool> EditAgentUser(
-            ProfileRequestModel model,
-            OnBoardingArgs args)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(args.UserId))
-                    throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
-                ValidateRequest(model, args);
+        //public async Task<bool> EditAgentUser(
+        //    ProfileRequestModel model,
+        //    OnBoardingArgs args)
+        //{
+        //    try
+        //    {
+        //        if (string.IsNullOrEmpty(args.UserId))
+        //            throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
+        //        ValidateRequest(model, args);
 
-                var business = await GetBusinessOrFail(args.businessCode);
+        //        var business = await GetBusinessOrFail(args.businessCode);
 
-                var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
-                if (organization != null)
-                    model.OrganizationId = organization.OrganizaionId;
+        //        var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
+        //        if (organization != null)
+        //            model.OrganizationId = organization.OrganizaionId;
 
-                if (!string.IsNullOrWhiteSpace(model.NIN))
-                    ValidateIdentifier(model.NIN, "NIN");
+        //        if (!string.IsNullOrWhiteSpace(model.NIN))
+        //            ValidateIdentifier(model.NIN, "NIN");
 
-                if (!string.IsNullOrWhiteSpace(model.Bvn))
-                    ValidateIdentifier(model.Bvn, "BVN");
+        //        if (!string.IsNullOrWhiteSpace(model.BVN))
+        //            ValidateIdentifier(model.BVN, "BVN");
 
-                var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, new ProfileRequestModel
-                {
+        //        var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, new ProfileRequestModel
+        //        {
 
-                    PhoneNumber = model.PhoneNumber,
-                    Email = model.Email,
-                    NIN = model.NIN,
-                    DateOfBirth = model.DateOfBirth,
-                    Bvn = model.Bvn,
-                    Location = model.Location,
-                });
+        //            PhoneNumber = model.PhoneNumber,
+        //            Email = model.Email,
+        //            NIN = model.NIN,
+        //            DateOfBirth = model.DateOfBirth,
+        //            BVN = model.BVN,
+        //            Location = model.Location,
+        //        });
 
 
-                var updateprofile = await _agentRepository.CreateUpdateAgent(new AgentModel
-                {
-                    BelongToBusinessCode = args.businessCode,
-                    State = model.State,
-                    Lga = model.Lga,
-                    Email = model.Email,
-                    Location = model.Location,
-                    Name = BuildFullName(model),
-                    OnBoardedOn = DateTimeOffset.Now,
-                    PhoneNumber = model.PhoneNumber,
-                    UserId = args.UserId,
-                    Ward = model.Ward,
-                    OnboardedById = args.OnboardedByUserId,
-                    OrganizationId = model.OrganizationId
-                });
+        //        var updateprofile = await _agentRepository.CreateUpdateAgent(new AgentModel
+        //        {
+        //            BelongToBusinessCode = args.businessCode,
+        //            State = model.State,
+        //            Lga = model.Lga,
+        //            Email = model.Email,
+        //            Location = model.Location,
+        //            Name = BuildFullName(model),
+        //            OnBoardedOn = DateTimeOffset.Now,
+        //            PhoneNumber = model.PhoneNumber,
+        //            UserId = args.UserId,
+        //            Ward = model.Ward,
+        //            OnboardedById = args.OnboardedByUserId,
+        //            OrganizationId = model.OrganizationId
+        //        });
 
-                return true;
-            }
-            catch (BaseException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new BaseException(
-                    ExceptionType.INTERNAL_SERVER_ERROR,
-                    "Unable to complete profile.");
-            }
-        }
+        //        return true;
+        //    }
+        //    catch (BaseException)
+        //    {
+        //        throw;
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        throw new BaseException(
+        //            ExceptionType.INTERNAL_SERVER_ERROR,
+        //            "Unable to complete profile.");
+        //    }
+        //}
         private string BuildFullName(ProfileRequestModel model)
         {
             if (!string.IsNullOrWhiteSpace(model.FullName))
@@ -2477,6 +2479,248 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return (true, "Pin changed successfully");
         }
 
+
+
+        public async Task<ProfileUpdateResult> UpdateProfileAsync(
+        ProfileRole role,
+        OnBoardingArgs args,
+        ProfileRequestModel model = null,
+        FarmerUpdateModel farmerUpdate = null)
+        {
+            // 1. Normalise input ------------------------------------------------
+            if (args == null || string.IsNullOrWhiteSpace(args.UserId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required.");
+
+            if (role == ProfileRole.Farmer)
+            {
+                if (farmerUpdate == null)
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "Farmer update payload is required.");
+
+                // Farmers can send just FarmerUpdateModel; identity fields are derived from it.
+                model ??= BuildProfileFromFarmerUpdate(farmerUpdate);
+            }
+            else if (model == null)
+            {
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Profile details are required.");
+            }
+
+            // 2. Validate BEFORE opening a transaction ---------------------------
+            if (!string.IsNullOrWhiteSpace(model.NIN)) ValidateIdentifier(model.NIN, "NIN");
+            if (!string.IsNullOrWhiteSpace(model.BVN)) ValidateIdentifier(model.BVN, "BVN");
+
+            await ValidateForRoleAsync(role, model, args);
+            await ApplyOrganizationAsync(model, args);
+
+            // 3. Apply everything atomically: user identity first (source of truth), then the role profile
+            try
+            {
+                return await _onboardingRepository.ExecuteInTransactionAsync(async () =>
+                {
+                    
+                    var user = await _onboardingRepository.UpdateUserProfileAsync(
+                        args.UserId, model);
+
+                    return role switch
+                    {
+                        ProfileRole.Farmer => await ApplyFarmerAsync(user, args, farmerUpdate),
+                        ProfileRole.Agent => await ApplyAgentAsync(user, model, args),
+                        ProfileRole.MemberShip => await ApplyCooperativeAsync(user, model, args),
+                       // ProfileRole.Organization => await ApplyCooperativeAsync(user, model, args),
+                        _ => throw new BaseException(
+                            ExceptionType.BAD_REQUEST,
+                            $"Profile updates are not supported for role '{role}'.")
+                    };
+                });
+            }
+            catch (BaseException)
+            {
+                throw; // already a meaningful, client-safe error
+            }
+            catch (DbUpdateException ex) when (DbErrors.IsDuplicateKey(ex, out var field))
+            {
+                throw new BaseException(
+                    ExceptionType.ALREADY_EXIST,
+                    $"This {field} is already linked to a different account. Please contact support to merge your accounts.");
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Profile update failed for user {UserId} as {Role}", args.UserId, role);
+                throw new BaseException(
+                    ExceptionType.INTERNAL_SERVER_ERROR,
+                    "Unable to update the profile. Please try again."); // never leak ex.Message
+            }
+        }
+
+        /// <summary>Maps the stored UserType string ("Farmer", "Agent", "Cooperative") to a role, if you don't pass one explicitly.</summary>
+        public static ProfileRole ResolveRole(string userType)
+        {
+            if (Enum.TryParse<ProfileRole>(userType, ignoreCase: true, out var role) && Enum.IsDefined(role))
+                return role;
+
+            throw new BaseException(ExceptionType.BAD_REQUEST, $"Unsupported user type '{userType}'.");
+        }
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Reusable per-role pieces
+        // ═════════════════════════════════════════════════════════════════════
+
+        // Role-specific pre-checks (no DB writes)
+        private async Task ValidateForRoleAsync(ProfileRole role, ProfileRequestModel model, OnBoardingArgs args)
+        {
+            switch (role)
+            {
+                case ProfileRole.Agent:
+                    ValidateRequest(model, args);
+                    await GetBusinessOrFail(args.businessCode);
+                    break;
+
+                case ProfileRole.Farmer:
+                case ProfileRole.MemberShip:
+                    break;
+            }
+        }
+
+        // Resolves args.organizationCode -> model.OrganizationId. A supplied but unknown code is now an error, not silently ignored.
+        private async Task ApplyOrganizationAsync(ProfileRequestModel model, OnBoardingArgs args)
+        {
+            if (string.IsNullOrWhiteSpace(args.organizationCode)) return;
+
+            var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode)
+                ?? throw new BaseException(ExceptionType.NOTFOUND, "Organization not found for the supplied code.");
+
+            model.OrganizationId = organization.OrganizaionId;
+        }
+
+        private async Task<ProfileUpdateResult> ApplyFarmerAsync(UserModel user, OnBoardingArgs args, FarmerUpdateModel update)
+        {
+            var change = await _farmerRepository.UpdateFarmerProfileAsync(args.UserId, update);
+
+            return new ProfileUpdateResult
+            {
+                Success = true,
+                Role = ProfileRole.Farmer,
+                User = user,
+                Farmer = change.Data,
+                UpdatedFields = change.ChangedFields,
+                Message = "Farmer profile updated successfully."
+            };
+        }
+
+        private async Task<ProfileUpdateResult> ApplyAgentAsync(UserModel user, ProfileRequestModel model, OnBoardingArgs args)
+        {
+            var change = await _agentRepository.UpsertAgentAsync(new AgentModel
+            {
+                BelongToBusinessCode = args.businessCode,
+                State = model.State,
+                Lga = model.Lga,
+                Email = model.Email,
+                Location = model.Location,
+                Name = BuildFullName(model),
+                OnBoardedOn = DateTimeOffset.UtcNow,
+                PhoneNumber = model.PhoneNumber,
+                UserId = args.UserId,
+                Ward = model.Ward,
+                OnboardedById = args.OnboardedByUserId,
+                OrganizationId = model.OrganizationId
+            });
+
+            return new ProfileUpdateResult
+            {
+                Success = true,
+                Role = ProfileRole.Agent,
+                User = user,
+                Agent = change.Data,
+                UpdatedFields = change.ChangedFields,
+                Message = change.Created ? "Agent profile created successfully." : "Agent profile updated successfully."
+            };
+        }
+
+        private async Task<ProfileUpdateResult> ApplyCooperativeAsync(UserModel user, ProfileRequestModel model, OnBoardingArgs args)
+        {
+            var assignedByAgent = !string.IsNullOrWhiteSpace(args.OnboardedByUserId);
+
+            var change = await _cooperativeRepository.UpsertMembershipAsync(new MemberShipModel
+            {
+                BelongToBusinessCode = args.businessCode,
+                UserId = args.UserId,                       // the target user (was model.Id)
+                Name = model.CooperativeName,
+                IsLeaderAFarmer = model.IsLeaderAFarmer,
+                State = model.State,
+                Lga = model.Lga,
+                Ward = model.Ward,
+                Location = model.Location,
+                Email = model.Email,
+                PhoneNumber = model.PhoneNumber,
+                ContactPerson = model.FirstName,
+                MembershipLeaderFirstName = model.FirstName,
+                MembershipLeaderMiddleName = model.MiddleName,
+                MembershipLeaderLastName = model.LastName,
+                MembershipLeaderGender = model.Gender,
+
+                // 0 = "not provided": the repository applies the default type ONLY on create.
+                // (Defaulting to 1 here used to reset an existing cooperative's type on every update.)
+                MemberShipTypeId = model.MembershipTypeId ?? 0,
+                Tier = Tier.Tier1.ToString(),               // only used when the membership is created
+
+                OnBoardedOn = model.CreatedOn,
+                OnboardedById = args.OnboardedByUserId,
+                IsAssignedToAgentId = args.OnboardedByUserId,
+                HasbeenAssignedAgent = assignedByAgent,
+
+                OrganizationId = model.OrganizationId       // was never passed before, so the org link was never created
+            });
+
+            // Must be idempotent (create-if-missing), because it now runs on every cooperative update.
+            if (model.IsLeaderAFarmer)
+                await CreateFarmerProfileAsync(model, args);
+
+            return new ProfileUpdateResult
+            {
+                Success = true,
+                Role = ProfileRole.MemberShip,
+                User = user,
+                Membership = change.Data,
+                UpdatedFields = change.ChangedFields,
+                Message = change.Created ? "Cooperative profile created successfully." : "Cooperative profile updated successfully."
+            };
+        }
+
+        private static ProfileRequestModel BuildProfileFromFarmerUpdate(FarmerUpdateModel u) => new()
+        {
+            FullName = u.Name,
+            PhoneNumber = u.PhoneNumber,
+            Email = u.Email,
+            NIN = u.NIN,
+            BVN = u.BVN,
+            DateOfBirth = u.DateOfBirth,
+            Location = u.Location
+        };
+
+        // ═════════════════════════════════════════════════════════════════════
+        // Thin wrappers so existing controllers keep working unchanged
+        // ═════════════════════════════════════════════════════════════════════
+
+        public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update)
+        {
+            var r = await UpdateProfileAsync(ProfileRole.Farmer, new OnBoardingArgs { UserId = userId }, farmerUpdate: update);
+
+            return new FarmerUpdateResultDto
+            {
+                Success = r.Success,
+                Message = r.Message,
+                UpdatedFields = r.UpdatedFields.ToList(),
+                UpdatedFarmer = r.Farmer
+            };
+        }
+
+        public async Task<bool> EditAgentUser(ProfileRequestModel model, OnBoardingArgs args)
+        {
+            await UpdateProfileAsync(ProfileRole.Agent, args, model);
+            return true;
+        }
+
+        public Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
+            => UpdateProfileAsync(ProfileRole.MemberShip, args, model);
     }
 
 }

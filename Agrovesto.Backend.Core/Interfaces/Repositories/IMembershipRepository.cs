@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -45,5 +46,6 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(string membershipUserId, ListQueryParams query);
         Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(string membershipUserId, ListQueryParams query);
         Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(string membershipUserId, ListQueryParams query);
+        Task<ProfileChange<MemberShipModel>> UpsertMembershipAsync(MemberShipModel data);
     }
 }
