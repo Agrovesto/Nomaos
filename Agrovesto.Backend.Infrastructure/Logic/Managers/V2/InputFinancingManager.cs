@@ -199,15 +199,41 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (request.PaybackWalletId.HasValue && request.PaybackWalletId.Value <= 0)
             {
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Payback Wallet Selected");
+
+            }
+            if (request.CommitmentRequired &&
+  (!request.PaybackWalletId.HasValue ||
+   request.PaybackWalletId.Value == 0))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A wallet provider must be selected when commitment is required."
+                );
+            }
+
+            if (!request.CommitmentRequired &&
+   !request.RepaymentRequired &&
+   request.PaybackWalletId.HasValue)
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A payback wallet cannot be selected when neither commitment nor repayment is required. Please remove the payback wallet or enable commitment or repayment."
+                );
+            }
+            if (request.RepaymentRequired &&
+(!request.PaybackWalletId.HasValue ||
+request.PaybackWalletId.Value == 0))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A wallet provider must be selected when repayment is required."
+                );
             }
             if (!request.PaybackWalletId.HasValue)
             {
                 return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
             }
-            if (!request.RepaymentRequired && request.PaybackWalletId.HasValue)
-            {
-                throw new BaseException(ExceptionType.BAD_REQUEST, "A payback wallet cannot be selected when repayment is not required.Please remove the payback wallet or enable repayment.");
-            }
+          
             var provider = await _walletproviderRepo.GetById(request.PaybackWalletId.Value);
 
             if (provider == null)
@@ -849,9 +875,16 @@ RepaymentFrequency frequency)
             ValidateArgs(request);
 
             var subscription = await GetSubscriptionAsync(request, args);
-            if(subscription.InputPackage.WalletProviderId == null)
+            if(subscription.InputPackage.CommitmentRequired && (!subscription.InputPackage.WalletProviderId.HasValue || subscription.InputPackage.WalletProviderId == null || subscription.InputPackage.WalletProviderId == 0))
             {
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "The configured package wallet provider is not set. Please contact support.");
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "No wallet provider was configured for payment for this package.");
+            }
+          
+            if (subscription.InputPackage.WalletProviderId == null || !subscription.InputPackage.WalletProviderId.HasValue)
+            {
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "This package has no wallet configuration. Please contact support.");
             }
             var configredProvider = await _providerRepo.GetById(subscription.InputPackage.WalletProviderId.Value);
 
