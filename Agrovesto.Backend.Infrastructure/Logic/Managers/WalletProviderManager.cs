@@ -62,7 +62,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 
         public async Task<WalletProviderModel> Get(long providerId)
         {
-            var res = await _providerRepo.Get(providerId);
+            var res = await _providerRepo.GetById(providerId);
             if (res == null) throw new NotFoundException("Provider has no parameter");
             return res;
         }
@@ -141,7 +141,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             // Confirms the provider exists and is active before letting a tenant opt into it —
             // repo also checks existence, but this gives a clearer "not available" message and
             // stops a business enabling a Disabled/Suspended provider.
-            var provider = await _providerRepo.Get(providerId);
+            var provider = await _providerRepo.GetById(providerId);
             if (provider == null)
                 throw new NotFoundException("Provider can not be found");
             if (provider.Status != ProviderStatus.Active)
