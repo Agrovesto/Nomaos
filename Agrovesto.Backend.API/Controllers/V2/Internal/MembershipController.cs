@@ -18,6 +18,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/memberships")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class MembershipController : BaseController
     {
 

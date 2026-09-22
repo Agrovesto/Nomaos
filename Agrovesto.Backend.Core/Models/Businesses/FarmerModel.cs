@@ -10,8 +10,8 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 {
     public enum SignupMethod
     {
-        PhoneNumber = 1,
-        Email = 2
+        PhoneNumber = 2,
+        Email = 1
     }
     public enum FarmerOnboardingStatus
     {

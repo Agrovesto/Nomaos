@@ -17,6 +17,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/agent")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class AgentController : BaseController
     {
 
