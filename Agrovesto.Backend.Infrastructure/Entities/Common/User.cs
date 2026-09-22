@@ -82,7 +82,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsLeaderProfileComplete { get; set; } = false;
         public bool IsNinVerified { get; set; } = false;
         public bool IsBvnVerified { get; set; } = false;
-        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
+        public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
     }
 
     public class UserOrganization

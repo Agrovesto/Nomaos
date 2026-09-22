@@ -17,6 +17,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/farmer")]
     [ApiController]
+
+    [AllowPendingCredentialChange]
     public class FarmerController : BaseController
     {
         private readonly IBusinessManager _businessManager;

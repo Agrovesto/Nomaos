@@ -25,6 +25,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/organization")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class OrganizationController : BaseController
     {
        private readonly IBusinessManager _businessManager;

@@ -14,6 +14,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     [Route("api/v2/farms")]
     [ApiController]
     [Authorize]
+
+    [AllowPendingCredentialChange]
     public class FarmMappingController : BaseController
     {
         private readonly IFarmMappingManager _farmMappingManager;

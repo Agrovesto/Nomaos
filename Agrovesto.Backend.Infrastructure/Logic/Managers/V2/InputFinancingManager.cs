@@ -208,7 +208,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "A payback wallet cannot be selected when repayment is not required.Please remove the payback wallet or enable repayment.");
             }
-            var provider = await _walletproviderRepo.Get(request.PaybackWalletId.Value);
+            var provider = await _walletproviderRepo.GetById(request.PaybackWalletId.Value);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
@@ -316,7 +316,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             if (request.PaybackWalletId.HasValue)
             {
-                var provider = await _walletproviderRepo.Get(request.PaybackWalletId.Value);
+                var provider = await _walletproviderRepo.GetById(request.PaybackWalletId.Value);
 
                 if (provider == null)
                     throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
@@ -849,7 +849,15 @@ RepaymentFrequency frequency)
             ValidateArgs(request);
 
             var subscription = await GetSubscriptionAsync(request, args);
-            ValidateSubscription(subscription, request);
+            if(subscription.InputPackage.WalletProviderId == null)
+            {
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "The configured package wallet provider is not set. Please contact support.");
+            }
+            var configredProvider = await _providerRepo.GetById(subscription.InputPackage.WalletProviderId.Value);
+
+            var requestProvider = await _providerRepo.GetById(request.WalletProviderId);
+
+            ValidateSubscription(subscription, request, configredProvider, requestProvider);
 
             var amountToPay = await CalculateAmountToPayAsync(request, subscription);
 
@@ -888,10 +896,16 @@ RepaymentFrequency frequency)
                     x.SubscriberUserId == args.SubscriberUserId);
         }
 
-        private static void ValidateSubscription(
+        private static async Task ValidateSubscription(
             InputPackageSubscription subscription,
-            RecordCommitmentPaymentRequest request)
+            RecordCommitmentPaymentRequest request, WalletProviderModel configuredProvider, WalletProviderModel requestProvider)
         {
+            
+            if(configuredProvider == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Configured package wallet provider not found");
+            if(requestProvider == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Request wallet provider not found");
+
             if (subscription == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscription not found");
 
@@ -919,8 +933,11 @@ RepaymentFrequency frequency)
             if (subscription.Status != SubscriptionStatus.PendingCommitment)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Current state of subscription does not indicate pending commitment");
 
+            
+
             if (subscription.InputPackage.WalletProviderId != request.WalletProviderId)
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "Selected wallet does not match configured package wallet, please use the configured package wallet");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, 
+                    $"Selected wallet {requestProvider.Name} does not match configured package wallet {configuredProvider.Name}, please use the configured package wallet");
 
             if (subscription.SubscriberUser == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber not found. Please try again later.");
@@ -1067,7 +1084,7 @@ RepaymentFrequency frequency)
 
             // ─── Step 4: Resolve provider ───
 
-            var provider = await _providerRepo.Get(debitFromUserWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(debitFromUserWallet.WalletProviderId);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
@@ -2447,7 +2464,7 @@ RepaymentFrequency frequency)
             var debitReference = $"{masterReference}-DB";
             var creditReference = $"{Guid.NewGuid():D}-CR";
 
-            var provider = await _providerRepo.Get(organizationWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(organizationWallet.WalletProviderId);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
