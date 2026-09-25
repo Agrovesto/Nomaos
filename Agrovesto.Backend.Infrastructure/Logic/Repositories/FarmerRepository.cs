@@ -1984,7 +1984,14 @@ WHERE f.UserId = @userId
             }
             if (!string.IsNullOrWhiteSpace(filter.SearchParam))
             {
-                var pattern = $"%{filter.SearchParam.Trim()}%";
+                var searchTerm = filter.SearchParam.Trim();
+                var pattern = $"%{searchTerm}%";
+
+                var matchedLevels = Enum.GetValues<FarmerLevel>()
+                    .Where(l => EnumExtensions.GetDisplayName(l)
+                        .Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
                 query = query.Where(f =>
                     EF.Functions.Like(f.Name, pattern) ||
                     EF.Functions.Like(f.State, pattern) ||
@@ -1993,8 +2000,7 @@ WHERE f.UserId = @userId
                     EF.Functions.Like(f.Location, pattern) ||
                     EF.Functions.Like(f.PhoneNumber, pattern) ||
                     EF.Functions.Like(f.Email, pattern) ||
-                    EF.Functions.Like(f.Level, pattern)
-                    );
+                    matchedLevels.Contains(f.Level));
             }
 
             return query.Distinct();

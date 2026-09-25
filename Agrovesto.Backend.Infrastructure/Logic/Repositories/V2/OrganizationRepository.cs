@@ -1285,6 +1285,7 @@ SELECT
                 .Take(query.PageSize)
                 .Select(x => new
                 {
+                    x.m.Email,
                     x.m.Id,
                     x.m.Name,
                     x.m.Location,
@@ -1298,7 +1299,8 @@ SELECT
                     x.m.UserId,
                     x.m.TierLevel,
                     x.m.IsActive,
-                    MembershipType = x.MembershipTypeName
+                    MembershipType = x.MembershipTypeName,
+                    
                 })
                 .ToListAsync();
 
