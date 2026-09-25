@@ -43,3 +43,7 @@ Agrovesto.Backend.Tests
 
 README.md
 HealthCheck-README.md
+# Deployment tooling — never needed inside the image
+deploy
+scripts
+*.md
