@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core;
+using Agrovesto.Backend.Core;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
@@ -34,7 +34,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddDataProtection();
 
 
-            services.AddLogging(config => config.AddConsole());
+            // Logging providers are configured once in Program.cs: Serilog owns
+            // stdout (JSON lines) and OpenTelemetry owns OTLP export. Re-adding
+            // the plain-text console provider here would duplicate every line in
+            // a format Loki cannot parse.
+            services.AddLogging();
 
             services.AddHttpContextAccessor();
 

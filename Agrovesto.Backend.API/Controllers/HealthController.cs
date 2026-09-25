@@ -20,9 +20,17 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
         /// <summary>
-        /// Basic health check - accessible at /health
+        /// Legacy summary, kept for back-compat consumers that still call
+        /// /health/summary.
+        ///
+        /// NOTE: this action used to be mapped on "/health". That route is now
+        /// served by MapHealthChecks (see Health/HealthCheckExtensions.cs),
+        /// which returns the same shape from the health-check pipeline with the
+        /// live+ready predicate. Two endpoints on one route produced an
+        /// AmbiguousMatchException at request time, so the controller moved out
+        /// of the way rather than the probe endpoint.
         /// </summary>
-        [HttpGet("/health")]
+        [HttpGet("/health/summary")]
         public async Task<IActionResult> Health()
         {
             try

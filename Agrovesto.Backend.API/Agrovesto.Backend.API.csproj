@@ -56,6 +56,19 @@
     </PackageReference>
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="8.0.1" />
 
+    <!-- OpenTelemetry — traces/metrics/logs over OTLP to Grafana Alloy.
+         Versions pinned to the coordinated 1.12.0 release train (core 1.12.0,
+         contrib 1.12.0-beta.1) so the SDK and the instrumentations agree on the
+         same OpenTelemetry.Api surface. -->
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.12.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.SqlClient" Version="1.12.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.StackExchangeRedis" Version="1.12.0-beta.1" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Process" Version="1.12.0-beta.1" />
+
     <!-- Miscellaneous -->
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
@@ -64,6 +77,14 @@
 
   <ItemGroup>
     <Folder Include="Extensions\JSONs\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The observability and health modules expose a few internal seams
+         (clock, file reader, propagator factory, request filters) purely so the
+         suite can reach 95%+ branch coverage without a collector, a Vault or a
+         Redis. They stay internal so they are not part of the public API. -->
+    <InternalsVisibleTo Include="NomaOS.Test" />
   </ItemGroup>
 
   <ItemGroup>

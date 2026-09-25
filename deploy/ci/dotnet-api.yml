@@ -1,0 +1,615 @@
+name: API — build, test, scan, deploy (EC2 + Docker Compose)
+
+# One pipeline for the Onboarding API: git metadata -> tests + 95% coverage
+# gate -> SonarQube -> Checkov/Trivy -> container smoke test -> ECR push ->
+# EC2 Docker Compose deploy with rollback.
+#
+# There is no ECS anywhere in here on purpose: deployment is "push an image to
+# ECR, then make the EC2 host pull it and `docker compose up -d`".
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy after the gates pass
+        type: boolean
+        default: false
+      environment:
+        description: Target environment
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+concurrency:
+  # Never let two deploys race for the same host; PR runs just supersede
+  # themselves.
+  group: dotnet-api-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  id-token: write        # OIDC -> AWS, no long-lived keys
+  pull-requests: write   # coverage comment
+  security-events: write # SARIF upload
+
+env:
+  DOTNET_VERSION: '8.0.423'
+  API_PROJECT: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+  TEST_PROJECT: NomaOS.Test/NomaOS.Test.csproj
+  DOCKERFILE: Agrovesto.Backend.API/Dockerfile
+  COVERAGE_THRESHOLD: '95'
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Git metadata — every downstream job (and the image labels, and /status)
+  #    reads the build identity from here so it is computed exactly once.
+  # ---------------------------------------------------------------------------
+  metadata:
+    name: Git metadata
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+      branch: ${{ steps.meta.outputs.branch }}
+      branch_slug: ${{ steps.meta.outputs.branch_slug }}
+      tag: ${{ steps.meta.outputs.tag }}
+      pr_number: ${{ steps.meta.outputs.pr_number }}
+      author: ${{ steps.meta.outputs.author }}
+      commit_message: ${{ steps.meta.outputs.commit_message }}
+      run_url: ${{ steps.meta.outputs.run_url }}
+      built_at: ${{ steps.meta.outputs.built_at }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image_tags: ${{ steps.meta.outputs.image_tags }}
+      floating_tag: ${{ steps.meta.outputs.floating_tag }}
+      environment: ${{ steps.meta.outputs.environment }}
+      should_deploy: ${{ steps.meta.outputs.should_deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: meta
+        name: Derive build identity
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          REF_NAME: ${{ github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISPATCH_DEPLOY: ${{ inputs.deploy }}
+          DISPATCH_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -Eeuo pipefail
+
+          # On a pull_request event GITHUB_SHA points at the ephemeral merge
+          # commit, which exists nowhere else. The source commit is what belongs
+          # in an image tag.
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            SHA="${{ github.event.pull_request.head.sha }}"
+            BRANCH="${HEAD_REF}"
+          else
+            SHA="${GITHUB_SHA}"
+            BRANCH="${REF_NAME}"
+          fi
+
+          SHORT_SHA="${SHA:0:7}"
+          BRANCH_SLUG="$(printf '%s' "${BRANCH}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//' | cut -c1-40)"
+
+          case "${BRANCH}" in
+            main) ENVIRONMENT=prod ;;
+            dev)  ENVIRONMENT=dev ;;
+            *)    ENVIRONMENT="${DISPATCH_ENVIRONMENT:-dev}" ;;
+          esac
+
+          FLOATING_TAG="${ENVIRONMENT}"
+
+          SHOULD_DEPLOY=false
+          if [[ "${EVENT_NAME}" == "push" && ( "${BRANCH}" == "dev" || "${BRANCH}" == "main" ) ]]; then
+            SHOULD_DEPLOY=true
+          elif [[ "${EVENT_NAME}" == "workflow_dispatch" && "${DISPATCH_DEPLOY}" == "true" ]]; then
+            SHOULD_DEPLOY=true
+          fi
+
+          # Immutable first — that is the tag the deploy and any rollback pin to.
+          IMAGE_TAG="sha-${SHORT_SHA}"
+          IMAGE_TAGS="${IMAGE_TAG},branch-${BRANCH_SLUG},build-${GITHUB_RUN_NUMBER}"
+          if [[ "${SHOULD_DEPLOY}" == "true" ]]; then
+            IMAGE_TAGS="${IMAGE_TAGS},${FLOATING_TAG},latest"
+          fi
+
+          {
+            echo "sha=${SHA}"
+            echo "short_sha=${SHORT_SHA}"
+            echo "branch=${BRANCH}"
+            echo "branch_slug=${BRANCH_SLUG}"
+            echo "tag=$([[ "${GITHUB_REF_TYPE}" == "tag" ]] && echo "${GITHUB_REF_NAME}" || echo "")"
+            echo "pr_number=${PR_NUMBER:-}"
+            echo "author=$(git log -1 --pretty=format:'%an <%ae>' "${SHA}" 2>/dev/null || echo unknown)"
+            echo "commit_message=$(git log -1 --pretty=format:'%s' "${SHA}" 2>/dev/null | tr -d '\r' | cut -c1-120 || echo '')"
+            echo "run_url=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "built_at=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo "image_tag=${IMAGE_TAG}"
+            echo "image_tags=${IMAGE_TAGS}"
+            echo "floating_tag=${FLOATING_TAG}"
+            echo "environment=${ENVIRONMENT}"
+            echo "should_deploy=${SHOULD_DEPLOY}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Build identity"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Commit | \`${{ steps.meta.outputs.sha }}\` |"
+            echo "| Short SHA | \`${{ steps.meta.outputs.short_sha }}\` |"
+            echo "| Branch | \`${{ steps.meta.outputs.branch }}\` |"
+            echo "| PR | ${{ steps.meta.outputs.pr_number || '—' }} |"
+            echo "| Author | ${{ steps.meta.outputs.author }} |"
+            echo "| Image tags | \`${{ steps.meta.outputs.image_tags }}\` |"
+            echo "| Environment | ${{ steps.meta.outputs.environment }} |"
+            echo "| Deploy | ${{ steps.meta.outputs.should_deploy }} |"
+            echo "| Built at | ${{ steps.meta.outputs.built_at }} |"
+            echo "| Run | ${{ steps.meta.outputs.run_url }} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # ---------------------------------------------------------------------------
+  # 2. Tests + coverage gate (fails the build below 95% line AND branch).
+  # ---------------------------------------------------------------------------
+  test:
+    name: Tests & coverage gate
+    runs-on: ubuntu-latest
+    needs: metadata
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore ${{ env.TEST_PROJECT }}
+
+      - name: Build
+        run: dotnet build ${{ env.TEST_PROJECT }} --configuration Release --no-restore
+
+      - name: Test + coverage gate
+        env:
+          CONFIGURATION: Release
+        run: ./NomaOS.Test/run-tests-with-coverage.sh
+
+      - name: Upload coverage + test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ needs.metadata.outputs.short_sha }}
+          path: |
+            NomaOS.Test/TestResults/coverage/
+            NomaOS.Test/TestResults/**/*.trx
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # 3. SonarQube. Runs after the tests so it can ingest the Cobertura report.
+  # ---------------------------------------------------------------------------
+  sonarqube:
+    name: SonarQube
+    runs-on: ubuntu-latest
+    needs: [metadata, test]
+    # Job-level env, because the `secrets` context is not available in a step's
+    # `if:` expression — only `env` is.
+    env:
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-${{ needs.metadata.outputs.short_sha }}
+          path: coverage-artifact
+
+      - name: SonarQube scan
+        if: env.SONAR_HOST_URL != '' && env.SONAR_TOKEN != ''
+        uses: sonarsource/sonarqube-scan-action@v4
+        with:
+          args: >
+            -Dsonar.projectKey=Agrovesto.Backend.API
+            -Dsonar.projectVersion=${{ needs.metadata.outputs.short_sha }}
+            -Dsonar.sources=Agrovesto.Backend.API,Agrovesto.Backend.Core,Agrovesto.Backend.Infrastructure
+            -Dsonar.tests=NomaOS.Test
+            -Dsonar.exclusions=**/Migrations/**,**/bin/**,**/obj/**,**/wwwroot/**
+            -Dsonar.cs.opencover.reportsPaths=coverage-artifact/coverage/coverage.opencover.xml
+            -Dsonar.scm.revision=${{ needs.metadata.outputs.sha }}
+
+      - name: Skip notice
+        if: env.SONAR_HOST_URL == '' || env.SONAR_TOKEN == ''
+        run: echo "::warning::SONAR_HOST_URL/SONAR_TOKEN not configured — SonarQube scan skipped."
+
+  # ---------------------------------------------------------------------------
+  # 4. Static security: Checkov on the Dockerfile, Trivy on the filesystem.
+  # ---------------------------------------------------------------------------
+  security:
+    name: Checkov & Trivy (filesystem)
+    runs-on: ubuntu-latest
+    needs: metadata
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov — Dockerfile
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          file: ${{ env.DOCKERFILE }}
+          framework: dockerfile
+          quiet: true
+          soft_fail: false
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov-dockerfile
+        continue-on-error: true
+
+      - name: Trivy — filesystem (HIGH,CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+          format: table
+          skip-dirs: 'NomaOS.Test/TestResults,.git'
+
+  # ---------------------------------------------------------------------------
+  # 5. Container smoke test. Builds the real image for linux/amd64 (the EC2
+  #    architecture), runs it, and proves /health/live answers 200 before any
+  #    image is allowed near ECR. Also where the image is scanned.
+  # ---------------------------------------------------------------------------
+  smoke:
+    name: Image build & /health/live smoke test
+    runs-on: ubuntu-latest
+    needs: metadata
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (linux/amd64, loaded locally)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: nomaos-api:smoke
+          provenance: false
+          build-args: |
+            COMMIT_SHA=${{ needs.metadata.outputs.sha }}
+            BUILD_VERSION=1.0.${{ github.run_number }}
+            BUILT_AT=${{ needs.metadata.outputs.built_at }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Trivy — image (HIGH,CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: nomaos-api:smoke
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: '1'
+          format: table
+
+      - name: Run the container
+        run: |
+          set -Eeuo pipefail
+          docker run -d --name nomaos-smoke \
+            -p 8080:8080 \
+            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e OTEL_SDK_DISABLED=true \
+            -e AWS_LOGS_ENABLED=false \
+            nomaos-api:smoke
+
+      - name: Poll /health/live
+        run: |
+          set -Eeuo pipefail
+          for attempt in $(seq 1 30); do
+            if code="$(curl -fsS -o /tmp/live.json -w '%{http_code}' http://127.0.0.1:8080/health/live 2>/dev/null)"; then
+              echo "attempt ${attempt}: HTTP ${code}"
+              cat /tmp/live.json; echo
+              # The body must be the JSON contract, not just any 200.
+              grep -q '"status":"Healthy"' /tmp/live.json
+              echo "smoke test passed"
+              exit 0
+            fi
+            echo "attempt ${attempt}/30: not ready yet"
+            sleep 2
+          done
+          echo "::error::/health/live never became healthy"
+          exit 1
+
+      - name: Container logs (on failure)
+        if: failure()
+        run: |
+          echo "--- docker logs ---"
+          docker logs nomaos-smoke 2>&1 | tail -n 200 || true
+          echo "--- docker inspect health ---"
+          docker inspect --format '{{json .State.Health}}' nomaos-smoke || true
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f nomaos-smoke || true
+
+  # ---------------------------------------------------------------------------
+  # 6. Push to ECR. Only after tests, scans and the smoke test are green.
+  # ---------------------------------------------------------------------------
+  push-image:
+    name: Push to ECR (${{ needs.metadata.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [metadata, test, security, smoke]
+    if: needs.metadata.outputs.should_deploy == 'true'
+    environment: ${{ needs.metadata.outputs.environment }}
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
+      image_tag: ${{ needs.metadata.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.metadata.outputs.environment == 'prod' && secrets.AWS_ROLE_ARN_PROD || secrets.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+          role-session-name: gha-nomaos-${{ needs.metadata.outputs.short_sha }}
+
+      - id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compose tag list
+        id: tags
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY || 'nomaos' }}
+          TAGS: ${{ needs.metadata.outputs.image_tags }}
+        run: |
+          set -Eeuo pipefail
+          list=""
+          IFS=',' read -ra parts <<< "${TAGS}"
+          for tag in "${parts[@]}"; do
+            list+="${REGISTRY}/${REPOSITORY}:${tag}"$'\n'
+          done
+          {
+            echo 'tags<<EOF'
+            printf '%s' "${list}"
+            echo 'EOF'
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Build & push (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE }}
+          # EC2 runs amd64. Cross-building arm64 here would need QEMU, which is
+          # slow and unnecessary; `docker buildx build --platform
+          # linux/amd64,linux/arm64` still works locally because the Dockerfile
+          # cross-compiles with `dotnet publish -a`.
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            COMMIT_SHA=${{ needs.metadata.outputs.sha }}
+            BUILD_VERSION=1.0.${{ github.run_number }}
+            BUILT_AT=${{ needs.metadata.outputs.built_at }}
+          labels: |
+            org.opencontainers.image.revision=${{ needs.metadata.outputs.sha }}
+            org.opencontainers.image.version=${{ needs.metadata.outputs.image_tag }}
+            org.opencontainers.image.created=${{ needs.metadata.outputs.built_at }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            com.nomaos.run-url=${{ needs.metadata.outputs.run_url }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPOSITORY: ${{ vars.ECR_REPOSITORY || 'nomaos' }}
+        run: |
+          {
+            echo "### Pushed to ECR"
+            echo ""
+            echo '```'
+            echo "${REGISTRY}/${REPOSITORY}:${{ needs.metadata.outputs.image_tag }}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+  # ---------------------------------------------------------------------------
+  # 7. Deploy: make the EC2 host pull the new image and recreate the Compose
+  #    service, then health-gate it. No ECS API is involved.
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to EC2 (${{ needs.metadata.outputs.environment }})
+    runs-on: ubuntu-latest
+    needs: [metadata, push-image]
+    if: needs.metadata.outputs.should_deploy == 'true'
+    environment: ${{ needs.metadata.outputs.environment }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'eu-west-1' }}
+      ECR_REGISTRY: ${{ needs.push-image.outputs.registry }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'nomaos' }}
+      IMAGE_TAG: ${{ needs.metadata.outputs.image_tag }}
+      COMPOSE_PATH: ${{ vars.COMPOSE_PATH || '/opt/nomaos' }}
+      COMPOSE_SERVICE: ${{ vars.COMPOSE_SERVICE || 'api' }}
+      DEPLOY_ENVIRONMENT: ${{ needs.metadata.outputs.environment }}
+      # `secrets` cannot be read from a step `if:`, so the channel selection is
+      # resolved once here and the steps branch on plain env values.
+      HAS_SSH: ${{ secrets.EC2_SSH_HOST != '' }}
+      HAS_SSM: ${{ vars.EC2_INSTANCE_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ needs.metadata.outputs.environment == 'prod' && secrets.AWS_ROLE_ARN_PROD || secrets.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-1' }}
+          role-session-name: gha-nomaos-deploy-${{ needs.metadata.outputs.short_sha }}
+
+      # -- Path A: SSH (used when EC2_SSH_HOST is configured) -------------------
+      - name: Sync deployment scripts to the host
+        if: env.HAS_SSH == 'true'
+        env:
+          SSH_HOST: ${{ secrets.EC2_SSH_HOST }}
+          SSH_USER: ${{ secrets.EC2_SSH_USER || 'ubuntu' }}
+          SSH_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          set -Eeuo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${SSH_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # The host always runs the scripts from this commit — never a stale
+          # copy someone edited in place during an incident.
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            deploy/ec2/ "${SSH_USER}@${SSH_HOST}:${COMPOSE_PATH}/"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "chmod +x ${COMPOSE_PATH}/*.sh"
+
+      - name: Deploy over SSH
+        if: env.HAS_SSH == 'true'
+        env:
+          SSH_HOST: ${{ secrets.EC2_SSH_HOST }}
+          SSH_USER: ${{ secrets.EC2_SSH_USER || 'ubuntu' }}
+          VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+          VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+          VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+        run: |
+          set -Eeuo pipefail
+
+          # Vault credentials are only forwarded when the host does not already
+          # have its own AppRole file (/opt/nomaos/vault-approle); host-side
+          # credentials are the preferred model.
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "AWS_REGION='${AWS_REGION}' \
+             ECR_REGISTRY='${ECR_REGISTRY}' \
+             ECR_REPOSITORY='${ECR_REPOSITORY}' \
+             IMAGE_TAG='${IMAGE_TAG}' \
+             DEPLOY_ENVIRONMENT='${DEPLOY_ENVIRONMENT}' \
+             GIT_SHA='${{ needs.metadata.outputs.short_sha }}' \
+             VAULT_ADDR='${VAULT_ADDR}' \
+             VAULT_ROLE_ID='${VAULT_ROLE_ID}' \
+             VAULT_SECRET_ID='${VAULT_SECRET_ID}' \
+             bash -lc 'cd ${COMPOSE_PATH} && ./deploy.sh --tag ${IMAGE_TAG} --service ${COMPOSE_SERVICE}'"
+
+      # -- Path B: SSM (no inbound SSH; the instance must have the SSM agent) ---
+      - name: Deploy over SSM
+        if: env.HAS_SSH != 'true' && env.HAS_SSM == 'true'
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+        run: |
+          set -Eeuo pipefail
+
+          read -r -d '' REMOTE <<EOF || true
+          set -Eeuo pipefail
+          cd ${COMPOSE_PATH}
+          export AWS_REGION='${AWS_REGION}'
+          export ECR_REGISTRY='${ECR_REGISTRY}'
+          export ECR_REPOSITORY='${ECR_REPOSITORY}'
+          export DEPLOY_ENVIRONMENT='${DEPLOY_ENVIRONMENT}'
+          export GIT_SHA='${{ needs.metadata.outputs.short_sha }}'
+          ./deploy.sh --tag '${IMAGE_TAG}' --service '${COMPOSE_SERVICE}'
+          EOF
+
+          jq -n --arg script "${REMOTE}" '{commands: [$script]}' > /tmp/ssm-params.json
+
+          COMMAND_ID="$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name AWS-RunShellScript \
+            --comment "nomaos deploy ${IMAGE_TAG}" \
+            --parameters file:///tmp/ssm-params.json \
+            --timeout-seconds 900 \
+            --query 'Command.CommandId' --output text)"
+
+          echo "SSM command: ${COMMAND_ID}"
+
+          for _ in $(seq 1 120); do
+            STATUS="$(aws ssm get-command-invocation \
+              --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}" \
+              --query 'Status' --output text 2>/dev/null || echo Pending)"
+            case "${STATUS}" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut) break ;;
+              *) sleep 5 ;;
+            esac
+          done
+
+          aws ssm get-command-invocation --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}" \
+            --query 'StandardOutputContent' --output text || true
+          aws ssm get-command-invocation --command-id "${COMMAND_ID}" --instance-id "${INSTANCE_ID}" \
+            --query 'StandardErrorContent' --output text >&2 || true
+
+          [[ "${STATUS}" == "Success" ]] || { echo "::error::SSM deploy finished with status ${STATUS}"; exit 1; }
+
+      - name: Guard — no deployment channel configured
+        if: env.HAS_SSH != 'true' && env.HAS_SSM != 'true'
+        run: |
+          echo "::error::Neither EC2_SSH_HOST (secret) nor EC2_INSTANCE_ID (var) is configured; nothing to deploy to."
+          exit 1
+
+      # deploy.sh already rolls back to /opt/nomaos/PREVIOUS_IMAGE_TAG when the
+      # health gate fails. This is the belt-and-braces path for the case where
+      # the SSH/SSM channel itself died mid-deploy.
+      - name: Rollback (on failure)
+        if: failure() && env.HAS_SSH == 'true'
+        env:
+          SSH_HOST: ${{ secrets.EC2_SSH_HOST }}
+          SSH_USER: ${{ secrets.EC2_SSH_USER || 'ubuntu' }}
+        run: |
+          set -Eeuo pipefail
+          echo "::warning::Deploy failed — rolling back to the previous image tag"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${SSH_USER}@${SSH_HOST}" \
+            "bash -lc 'cd ${COMPOSE_PATH} && ./rollback.sh --service ${COMPOSE_SERVICE}'" || \
+            echo "::error::Automatic rollback failed — manual intervention required"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deployment"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Environment | ${DEPLOY_ENVIRONMENT} |"
+            echo "| Image | \`${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}\` |"
+            echo "| Compose path | \`${COMPOSE_PATH}\` |"
+            echo "| Service | \`${COMPOSE_SERVICE}\` |"
+            echo "| Result | ${{ job.status }} |"
+          } >> "${GITHUB_STEP_SUMMARY}"

@@ -1,5 +1,7 @@
-﻿using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.API.Extensions;
+using Agrovesto.Backend.API.Health;
 using Agrovesto.Backend.API.HealthChecks;
+using Agrovesto.Backend.API.Observability;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure;
@@ -44,24 +46,26 @@ using VaultSharp.V1.AuthMethods.AppRole;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Logging — structured JSON on stdout.
+//
+// The container's stdout is the log transport (Docker json-file -> Grafana
+// Alloy -> Loki), so every line is a single JSON object and every line carries
+// trace_id/span_id (ActivityTraceEnricher) for the Loki -> Tempo jump.
+//
+// writeToProviders: true is what lets the OpenTelemetry logging provider see
+// the same events, so OTLP log records and stdout lines never disagree.
+// See NomaosSerilog for the LOG_LEVEL / LOG_FILE_PATH / AWS_LOGS_ENABLED knobs.
+// ─────────────────────────────────────────────────────────────────────────────
+Log.Logger = NomaosSerilog.CreateBootstrapLogger();
 
-var logConfig = new LoggerConfiguration()
-    .MinimumLevel.Information()
-    .WriteTo.Console();
-var logFilePath = Environment.GetEnvironmentVariable("LOG_FILE_PATH");
-if (!string.IsNullOrEmpty(logFilePath))
-{
-    logConfig.WriteTo.File(logFilePath, rollingInterval: RollingInterval.Day);
-}
-Log.Logger = logConfig
-    .WriteTo.AWSSeriLog(new AWSLoggerConfig
-    {
-        LogGroup = "/nomaos/prod/api",
-        Region = "eu-west-1",
-    })
-    .CreateLogger();
-
-builder.Host.UseSerilog();
+builder.Host.UseSerilog(
+    (context, _, loggerConfiguration) => NomaosSerilog.Configure(
+        loggerConfiguration,
+        Environment.GetEnvironmentVariable,
+        context.HostingEnvironment.EnvironmentName),
+    preserveStaticLogger: false,
+    writeToProviders: true);
 
 
 
@@ -81,6 +85,13 @@ if (!builder.Environment.IsDevelopment())
         !string.IsNullOrEmpty(secretId) &&
         !string.IsNullOrEmpty(vaultUrl))
     {
+        // Path is env-driven so dev and prod can share one image:
+        //   kv/nomaos/dev/appsettings  |  kv/nomaos/prod/appsettings
+        // Defaults reproduce the pre-container behaviour exactly.
+        var vaultMount = Environment.GetEnvironmentVariable("VAULT_KV_MOUNT") ?? "kv";
+        var vaultSecretPath = Environment.GetEnvironmentVariable("VAULT_SECRET_PATH")
+                              ?? "nomaos/prod/appsettings";
+
         ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
             () => new VaultOptions(
                 vaultUrl,
@@ -88,13 +99,40 @@ if (!builder.Environment.IsDevelopment())
                 reloadOnChange: true,
                 reloadCheckIntervalSeconds: 60
             ),
-            "nomaos/prod/appsettings",
-            "kv"
+            vaultSecretPath,
+            vaultMount
         );
     }
 }
-// Load AWS Secrets (if configured) into the application's configuration early so services can consume them during registration
-Console.WriteLine($"Loading AWS Secrets... config {builder.Configuration.GetConnectionString("DefaultConnection")}");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OpenTelemetry — traces + metrics to Alloy (Tempo / Prometheus), driven purely
+// by the OTEL_* environment block. Registered after the Vault provider so
+// OTEL_* values could also come from Vault if an operator puts them there.
+// ─────────────────────────────────────────────────────────────────────────────
+var observabilityOptions = ObservabilityOptions.FromConfiguration(
+    builder.Configuration,
+    builder.Environment.EnvironmentName,
+    typeof(Program).Assembly);
+
+builder.Services.AddNomaosObservability(observabilityOptions);
+// Configuration provenance, without the payload: the previous version printed
+// the full DefaultConnection string (server, user id AND password) to stdout,
+// which now means shipping database credentials straight into Loki/CloudWatch.
+Log.Information(
+    "Configuration loaded. DefaultConnection configured: {HasConnectionString}. Vault configured: {HasVault}",
+    !string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("DefaultConnection")),
+    !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("VAULT_ADDR")));
+
+// Whether this process has a database to talk to at all. In every deployed
+// environment the connection string arrives from Vault, so this is true; it is
+// false only for the CI container smoke test (and a bare `docker run`), where
+// the image must still boot far enough to answer /health/live. Without this
+// flag the Hangfire server, the sync hosted services and the SQL health check
+// all fail during startup and the process never starts listening — which would
+// make the smoke test assert on a container that died for the wrong reason.
+var databaseConfigured = !string.IsNullOrWhiteSpace(
+    builder.Configuration.GetConnectionString("DefaultConnection"));
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
@@ -117,11 +155,24 @@ builder.Services.AddDbContext<DataContext>(options =>
         }
     )
 );
-builder.Services.AddHangfire(config =>
-    config.UseSqlServerStorage(
-        builder.Configuration.GetConnectionString("DefaultConnection")));
+// Hangfire keeps its state in SQL Server and its storage provider connects
+// (and creates its schema) during startup, so it is only wired when there is a
+// database configured.
+var hangfireEnabled = databaseConfigured
+    && !string.Equals(builder.Configuration["HANGFIRE_ENABLED"], "false", StringComparison.OrdinalIgnoreCase);
 
-builder.Services.AddHangfireServer();
+if (hangfireEnabled)
+{
+    builder.Services.AddHangfire(config =>
+        config.UseSqlServerStorage(
+            builder.Configuration.GetConnectionString("DefaultConnection")));
+
+    builder.Services.AddHangfireServer();
+}
+else
+{
+    Log.Warning("Hangfire is disabled: no DefaultConnection configured (or HANGFIRE_ENABLED=false).");
+}
 
 builder.Services.Configure<IdentitypassOptions>(
     builder.Configuration.GetSection("IdentityPass"));
@@ -130,8 +181,16 @@ builder.Services.Configure<AesOptions>(
     builder.Configuration.GetSection("AesOptions"));
 
 builder.Services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
-builder.Services.AddHostedService<BulkUploadBgService>();
-builder.Services.AddHostedService<FarmerOrganizationSyncService>();
+
+// Both of these query the database inside StartAsync, which runs before Kestrel
+// starts listening. With EnableRetryOnFailure that is a multi-minute stall when
+// the database is unreachable, so they are only registered when one is
+// configured.
+if (databaseConfigured)
+{
+    builder.Services.AddHostedService<BulkUploadBgService>();
+    builder.Services.AddHostedService<FarmerOrganizationSyncService>();
+}
 builder.Services.AddScoped<BulkOnboardingProcessor>();
 builder.Services.Configure<ReconciliationEmailSettings>(
     builder.Configuration.GetSection("ReconciliationEmailSettings"));
@@ -240,33 +299,53 @@ builder.Services.AddHttpClient("health", c =>
 // component checks remain strict (Unhealthy on failure) because they are tagged
 // "critical" and the load balancer should pull the instance out of rotation if
 // those are down.
-builder.Services.AddHealthChecks()
-    .AddDbContextCheck<DataContext>("Database",
-        failureStatus: HealthStatus.Unhealthy,
-        tags: new[] { "database", "critical" },
-        timeout: TimeSpan.FromSeconds(5))
-    .AddSqlServer(
-        connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
-        name: "SQL Server Database",
-        healthQuery: "SELECT 1",
-        timeout: TimeSpan.FromSeconds(5),
-        tags: new[] { "database", "critical" })
+var healthChecks = builder.Services.AddHealthChecks()
+    // Liveness self-check + Redis/Vault readiness checks. SQL Server keeps its
+    // registrations below; the "ready" tag is what puts them behind
+    // /health/ready. Nothing here is tagged "live" except the self-check.
+    .AddNomaosProbeChecks();
 
+if (databaseConfigured)
+{
+    healthChecks
+        .AddDbContextCheck<DataContext>("Database",
+            failureStatus: HealthStatus.Unhealthy,
+            tags: new[] { "database", "critical", HealthTags.Ready },
+            timeout: TimeSpan.FromSeconds(5))
+        .AddSqlServer(
+            connectionString: builder.Configuration.GetConnectionString("DefaultConnection")!,
+            name: "SQL Server Database",
+            healthQuery: "SELECT 1",
+            timeout: TimeSpan.FromSeconds(5),
+            tags: new[] { "database", "critical", HealthTags.Ready });
+}
+else
+{
+    // Degraded, not Unhealthy: an image booted without a database is a
+    // deliberate configuration (CI smoke test), and /health/ready should say
+    // "not fully configured" rather than pretend the database is down.
+    healthChecks.AddCheck(
+        "Database",
+        () => HealthCheckResult.Degraded("No DefaultConnection is configured."),
+        tags: new[] { "database", HealthTags.Ready });
+}
+
+healthChecks
     .AddCheck<IdentityPassHealthCheck>("IdentityPass API",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
+        tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
     .AddCheck<TermiiSmsHealthCheck>("Termii SMS API",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
+        tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
     .AddCheck<CountryStateCityApiHealthCheck>("Country State City API",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
+        tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
     .AddCheck<SendGridHealthCheck>("SendGrid API",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
+        tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
     .AddS3(options =>
     {
@@ -275,16 +354,16 @@ builder.Services.AddHealthChecks()
         options.SecretKey = builder.Configuration["AWS:SecretKey"];
     }, name: "AWS S3",
        failureStatus: HealthStatus.Degraded,
-       tags: new[] { "external", "storage" },
+       tags: new[] { "external", "storage", HealthTags.Status },
        timeout: TimeSpan.FromSeconds(5))
 
     .AddCheck<ApiEndpointHealthCheck>("API Endpoints",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "api", "endpoints" },
+        tags: new[] { "api", "endpoints", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(10))
     .AddCheck<ApplicationComponentHealthCheck>("Application Components",
         failureStatus: HealthStatus.Unhealthy,
-        tags: new[] { "components", "critical" });
+        tags: new[] { "components", "critical", HealthTags.Status });
 
 builder.Services.AddScoped<IdentityPassHealthCheck>();
 builder.Services.AddScoped<TermiiSmsHealthCheck>();
@@ -338,8 +417,12 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
 });
+// Serilog owns stdout (JSON lines). Clearing the providers removes the default
+// plain-text console provider that would otherwise print every event a second
+// time in a non-parseable format; the OpenTelemetry provider is then the only
+// MEL provider, receiving events via Serilog's writeToProviders bridge.
 builder.Logging.ClearProviders();
-builder.Logging.AddConsole();
+builder.Logging.AddNomaosOpenTelemetryLogging(observabilityOptions);
 
 var corsOrigins = builder.Configuration
     .GetValue<string>("CorsOrigins")?
@@ -388,55 +471,24 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseCors();
 app.UseRouting();
 
-var customHealthResponseWriter = async (HttpContext context, HealthReport report) =>
-{
-    context.Response.ContentType = "application/json";
-    var result = new
-    {
-        status = report.Status.ToString(),
-        checks = report.Entries.Select(e => new
-        {
-            name = e.Key,
-            status = e.Value.Status.ToString(),
-            description = e.Value.Description,
-            duration = e.Value.Duration.TotalMilliseconds,
-            data = e.Value.Data
-        })
-    };
+// ─────────────────────────────────────────────────────────────────────────────
+// Probe surface: /health/live (self only), /health/ready (SQL + Redis + Vault),
+// /health (legacy summary) and /status (ops detail, always 200).
+// See Agrovesto.Backend.API/Health/HealthCheckExtensions.cs for the contract.
+// ─────────────────────────────────────────────────────────────────────────────
+app.MapNomaosHealthEndpoints();
 
-    await context.Response.WriteAsJsonAsync(result);
-};
+// Manual span + custom counter/histogram demo (traces -> Tempo, metrics -> Prometheus).
+app.MapObservabilityDemoEndpoint();
 
-app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    // Match the documented "graceful degradation" design: a single degraded external
-    // dependency must not flip the whole endpoint to 503. Only critical system
-    // failures (e.g. Application Components) return Unhealthy -> 503.
-    ResultStatusCodes =
-    {
-        [HealthStatus.Healthy] = StatusCodes.Status200OK,
-        [HealthStatus.Degraded] = StatusCodes.Status200OK,
-        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
-    },
-    ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
-});
-
-app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
-{
-    Predicate = registration => registration.Tags.Contains("critical"),
-    ResultStatusCodes =
-    {
-        [HealthStatus.Healthy] = StatusCodes.Status200OK,
-        [HealthStatus.Degraded] = StatusCodes.Status200OK,
-        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
-    },
-    ResponseWriter = async (ctx, report) => await customHealthResponseWriter(ctx, report)
-});
 app.UseHttpsRedirection();
 
 // Enable static files for health dashboard
 app.UseStaticFiles();
-app.UseHangfireDashboard("/hangfire");
+if (hangfireEnabled)
+{
+    app.UseHangfireDashboard("/hangfire");
+}
 app.UseAuthentication();
 //app.UseMiddleware<LicenseValidationMiddleware>();// remove before pushing
 //app.UseMiddleware<TenantResolutionMiddleware>();
