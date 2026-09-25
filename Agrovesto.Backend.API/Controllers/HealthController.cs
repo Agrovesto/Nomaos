@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using System.Net;
-using System.Text.Json;
 using System.Diagnostics;
 using System.Reflection;
 
@@ -46,7 +44,11 @@ namespace Agrovesto.Backend.API.Controllers
                     }).ToArray()
                 };
 
-                var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
+                // A Degraded status means some non-critical dependency is flaky but the
+                // app itself is still serving traffic. Treat it as success (200) and let
+                // monitoring pick up the per-check statuses from the response body. Only
+                // Unhealthy (critical systems down) returns 503.
+                var statusCode = result.Status == HealthStatus.Unhealthy ? 503 : 200;
                 return StatusCode(statusCode, response);
             }
             catch (Exception ex)
@@ -108,7 +110,7 @@ namespace Agrovesto.Backend.API.Controllers
                     }
                 };
 
-                var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
+                var statusCode = result.Status == HealthStatus.Unhealthy ? 503 : 200;
                 return StatusCode(statusCode, response);
             }
             catch (Exception ex)
@@ -168,7 +170,7 @@ namespace Agrovesto.Backend.API.Controllers
                     }).ToArray()
                 };
 
-                var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
+                var statusCode = result.Status == HealthStatus.Unhealthy ? 503 : 200;
                 return StatusCode(statusCode, response);
             }
             catch (Exception ex)
@@ -258,7 +260,7 @@ namespace Agrovesto.Backend.API.Controllers
                     }
                 };
 
-                var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
+                var statusCode = result.Status == HealthStatus.Unhealthy ? 503 : 200;
                 return StatusCode(statusCode, response);
             }
             catch (Exception ex)
@@ -304,7 +306,7 @@ namespace Agrovesto.Backend.API.Controllers
                     }
                 };
 
-                var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
+                var statusCode = result.Status == HealthStatus.Unhealthy ? 503 : 200;
                 return StatusCode(statusCode, response);
             }
             catch (Exception ex)
@@ -352,6 +354,8 @@ namespace Agrovesto.Backend.API.Controllers
                     }
                 };
 
+                // Critical systems endpoint is used by orchestrators and ALBs; keep it
+                // strict — any failure (Degraded or Unhealthy) returns 503.
                 var statusCode = result.Status == HealthStatus.Healthy ? 200 : 503;
                 return StatusCode(statusCode, response);
             }
