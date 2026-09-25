@@ -17,6 +17,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/farmer")]
     [ApiController]
+
+    [AllowPendingCredentialChange]
     public class FarmerController : BaseController
     {
         private readonly IBusinessManager _businessManager;
@@ -36,6 +38,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("dashboard")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
             var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);
@@ -142,11 +145,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                     
                     return _walletService.CreateWallet(request, query);
                 },
-                wallet => Ok(new Response<(bool status, string message)>
+                wallet => Ok(new Response<CreateWalletResult>
                 {
-                    Data = wallet,
+                    Data = wallet.data,
                     Message = wallet.message,
-                    Succeeded = true,
+                    Succeeded = wallet.status,
                     Code = wallet.status ? ResponseCodes.Success : ResponseCodes.Failed
                 }));
 
@@ -287,8 +290,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                            Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                            Succeeded = true,
                            Count = result.Count,
-                           PageNumber = query.PageNumber,
-                           PageSize = 10,
+                           // Carried through from the repository, which has already normalised them.
+                           // Hardcoding PageSize here made totalPages disagree with the rows returned.
+                           PageNumber = result.PageNumber,
+                           PageSize = result.PageSize,
                            Code = result.Count > 0 ? ResponseCodes.Success : ResponseCodes.Failed
                        }));
         }
@@ -312,8 +317,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                            Message = result.Count > 0 ? ResponseMessages.Successful : ResponseMessages.NotFound,
                            Succeeded = true,
                            Count = result.Count,
-                           PageNumber = query.PageNumber,
-                           PageSize = 10,
+                           PageNumber = result.PageNumber,
+                           PageSize = result.PageSize,
                            Code = result.Count > 0 ? ResponseCodes.Success : ResponseCodes.Failed
                        }));
         }

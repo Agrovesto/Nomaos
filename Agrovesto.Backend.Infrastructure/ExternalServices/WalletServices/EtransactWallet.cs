@@ -7,16 +7,9 @@ using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using SendGrid.Helpers.Mail;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 {
@@ -53,6 +46,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         }
         public string ProviderKey => "Etransact";
         public bool RequiresPreDebit => true;
+        public bool SupportsBankTransfer => true;
         private string GenerateHashKey(
            string clientSecret,
            string payloadJson = "",
@@ -81,20 +75,37 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         {
             var response = new ProviderParams();
 
-            var _params = parameters.ToDictionary(x => x.Key);
+            var _params = parameters.ToDictionary(x => x.Key, StringComparer.OrdinalIgnoreCase);
 
-            response.BaseUrl = _params["BaseUrl"].Value;
-            response.ClientSecret = _params["ClientSecret"].Value;
-            response.ClientId = _params["ClientId"].Value;
-            response.SchemeId = _params["SchemeId"].Value;
-            response.WalletShemeTierId = _params["WalletShemeTierId"].Value;
-            response.WalletFee = _params["Fee"].Value;
-            response.WalletStampDuty = _params["StampDuty"].Value;
+            response.BaseUrl = RequiredParam(_params, "BaseUrl", Env);
+            response.ClientSecret = RequiredParam(_params, "ClientSecret", Env);
+            response.ClientId = RequiredParam(_params, "ClientId", Env);
+            response.SchemeId = RequiredParam(_params, "SchemeId", Env);
+            response.WalletShemeTierId = RequiredParam(_params, "WalletShemeTierId", Env);
+            response.WalletFee = RequiredParam(_params, "Fee", Env);
+            response.WalletStampDuty = RequiredParam(_params, "StampDuty", Env);
 
+            // Unlike the fields above, these don't throw when the key is absent -
+            // FundTransferBaseUrl/TerminalId/Pin aren't provisioned for every
+            // environment yet.
+            response.FundTransferBaseUrl = _params.TryGetValue("FundTransferBaseUrl", out var fundTransferBaseUrl) ? fundTransferBaseUrl.Value : null;
+            response.TerminalId = _params.TryGetValue("TerminalId", out var terminalId) ? terminalId.Value : null;
+            response.Pin = _params.TryGetValue("Pin", out var pin) ? pin.Value : null;
 
             return response;
 
         }
+
+        private static string RequiredParam(
+            IDictionary<string, WalletProviderParameterModel> parameters, string key, string env)
+        {
+            if (!parameters.TryGetValue(key, out var parameter) || string.IsNullOrWhiteSpace(parameter.Value))
+                throw new InvalidOperationException(
+                    $"Etransact parameter '{key}' is not configured for the '{env}' environment.");
+
+            return parameter.Value;
+        }
+
         public async Task<WalletResponseService<AccountValidationResponse>> CreateWalletAsync(
             UserProfileResponse data,
             WalletProviderParameterModel[] parameters,
@@ -151,40 +162,47 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                     responseContent,
                     new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-                if (!response.IsSuccessStatusCode
-                    && etransactResponse == null 
-                    )
+                // The provider signals failure both with a non-2xx status and with
+                // status=false on a 200, so either one has to fail the call - otherwise
+                // the null Result below is dereferenced and the caller gets an NRE
+                // message instead of the reason the wallet wasn't created.
+                if (!response.IsSuccessStatusCode || etransactResponse == null || !etransactResponse.Success)
                 {
-                    return new WalletResponseService<AccountValidationResponse>
-                    {
-                        IsSuccess = false,
-                        Message = etransactResponse?.Message
-                                  ?? etransactResponse?.ResponseDescription
-                                  ?? responseContent
-                    };
+                    var errorMessage = etransactResponse?.Message
+                        ?? etransactResponse?.ResponseDescription
+                        ?? HttpStatusCodeHelper.Describe(response.StatusCode)
+                        ?? responseContent;
+
+                    return WalletResponseService<AccountValidationResponse>.Failed(
+                        errorMessage, (int)response.StatusCode);
+                }
+
+                if (string.IsNullOrWhiteSpace(etransactResponse.Result?.WalletNumber))
+                {
+                    return WalletResponseService<AccountValidationResponse>.Failed(
+                        $"Provider reported success but returned no wallet number. Raw: {responseContent}",
+                        (int)response.StatusCode);
                 }
 
                 var walletResponse = new AccountValidationResponse
                 {
-                    WalletNumber = etransactResponse.Result?.WalletNumber,
-                    AccountName = etransactResponse.Result?.AccountName,
-                    macChecksum= etransactResponse.Result.MacCheckSum
+                    WalletNumber = etransactResponse.Result.WalletNumber,
+                    AccountName = etransactResponse.Result.AccountName,
+                    macChecksum = etransactResponse.Result.MacCheckSum
                 };
 
-                return new WalletResponseService<AccountValidationResponse>
-                {
-                    IsSuccess = true,
-                    Data = walletResponse,
-                    Message = "Wallet created successfully."
-                };
+                return WalletResponseService<AccountValidationResponse>.Success(
+                    walletResponse,
+                    etransactResponse.ResponseDescription ?? "Wallet created successfully.");
+            }
+            catch (HttpRequestException ex)
+            {
+                return WalletResponseService<AccountValidationResponse>.Failed(
+                    "Unable to reach Etransact service: " + ex.Message, 503);
             }
             catch (Exception ex)
             {
-                return new WalletResponseService<AccountValidationResponse>
-                {
-                    IsSuccess = false,
-                    Message = ex.Message
-                };
+                return WalletResponseService<AccountValidationResponse>.Failed(ex.Message, 500);
             }
         }
 
@@ -616,14 +634,197 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 return WalletResponseService<PaymentResponse>.Failed(ex.Message, 500);
             }
         }
-        public  Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
+ 
+        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTopUpAsync(WalletTopUpProviderRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            if (string.IsNullOrWhiteSpace(request.WalletNumber))
+            {
+                return Task.FromResult(WalletResponseService<PaymentResponse>.Failed(
+                    "WalletNumber is required to generate funding instructions.", 400));
+            }
+
+            var instructions =
+                $"Transfer {request.Currency ?? "NGN"} {request.Amount:N2} to wallet number {request.WalletNumber}" +
+                (string.IsNullOrWhiteSpace(request.WalletName) ? "" : $" ({request.WalletName})") +
+                ". The wallet will be credited automatically once the transfer is received.";
+
+            System.Diagnostics.Debug.WriteLine(
+                $"[InitiateWalletTopUp] reference={request.TransactionReference} walletNumber={request.WalletNumber} amount={request.Amount}");
+
+            var result = new PaymentResponse
+            {
+                Success = true,
+                ResponseCode = "PENDING",
+                ResponseDescription = instructions,
+                Reference = request.TransactionReference,
+                ProviderReference = request.WalletNumber,
+                Status = "Pending"
+            };
+
+            return Task.FromResult(WalletResponseService<PaymentResponse>.Pending(result, instructions));
         }
 
-        public Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
+        private static string StripDelimiter(string value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Replace(';', ' ').Trim();
+
+        public async Task<WalletResponseService<PaymentResponse>> InitiateWalletTransferAsync(TransferRequest request, WalletProviderParameterModel[] parameters, string Env)
         {
-            throw new NotImplementedException();
+            try
+            {
+                var @params = await RetrieveParams(parameters, Env);
+
+                if (string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) || string.IsNullOrWhiteSpace(@params.TerminalId) || string.IsNullOrWhiteSpace(@params.Pin))
+                {
+                    _log.LogError(
+                        "Fund transfer is not configured for {Env}. Missing: {Missing}",
+                        Env,
+                        string.Join(", ", new[]
+                        {
+                            string.IsNullOrWhiteSpace(@params.FundTransferBaseUrl) ? "FundTransferBaseUrl" : null,
+                            string.IsNullOrWhiteSpace(@params.TerminalId) ? "TerminalId" : null,
+                            string.IsNullOrWhiteSpace(@params.Pin) ? "Pin" : null
+                        }.Where(x => x != null)));
+
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "Transfers are temporarily unavailable. Please try again later.", 501);
+                }
+
+                if (string.IsNullOrWhiteSpace(request.AccountNumber))
+                {
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "A destination account number is required.", 400);
+                }
+
+                if (string.IsNullOrWhiteSpace(request.SenderName)
+                    || string.IsNullOrWhiteSpace(request.SenderAccountNumber)
+                    || string.IsNullOrWhiteSpace(request.RecipientName))
+                {
+                    _log.LogError(
+                        "Transfer {Reference} is missing sender or recipient details required by the provider.",
+                        request.Reference);
+
+                    return WalletResponseService<PaymentResponse>.Failed(
+                        "We could not process this transfer. Please try again.", 400);
+                }
+
+                // "700" = PocketMoni/wallet-to-wallet, otherwise a NUBAN bank account code.
+                var bankCode = string.IsNullOrWhiteSpace(request.BankCode) ? "700" : request.BankCode;
+
+                var payload = new
+                {
+                    action = "FT",
+                    terminalId = @params.TerminalId,
+                    transaction = new
+                    {
+                        pin = @params.Pin,
+                        senderName = $"{StripDelimiter(request.SenderName)};{StripDelimiter(request.SenderAccountNumber)};{StripDelimiter(request.RecipientName)}",
+                        bankCode,
+                        amount = request.Amount,
+                        description = request.Message,
+                        destination = request.AccountNumber,
+                        reference = request.Reference,
+                        endPoint = "A"
+                    }
+                };
+
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                };
+
+                var payloadJson = JsonSerializer.Serialize(payload, jsonOptions);
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[InitiateWalletTransfer] reference={request.Reference} payloadJson={payloadJson}");
+
+                var fundTransferUri = new Uri(
+                    new Uri(@params.FundTransferBaseUrl.TrimEnd('/') + "/"), "fund-transfer");
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+                client.DefaultRequestHeaders.Clear();
+                client.DefaultRequestHeaders.Add("Accept", "application/json");
+
+                var content = new StringContent(payloadJson, Encoding.UTF8, "application/json");
+                var httpResponse = await client.PostAsync(fundTransferUri, content);
+                var responseContent = await httpResponse.Content.ReadAsStringAsync();
+
+                System.Diagnostics.Debug.WriteLine(
+                    $"[InitiateWalletTransfer] status={(int)httpResponse.StatusCode} body={responseContent}");
+
+                FundTransferEtransactResponse? transferResponse;
+
+                try
+                {
+                    transferResponse = JsonSerializer.Deserialize<FundTransferEtransactResponse>(
+                        responseContent,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+                catch (JsonException)
+                {
+                    transferResponse = null;
+                }
+
+                if (!httpResponse.IsSuccessStatusCode || transferResponse == null)
+                {
+                    _log.LogError(
+                        "Transfer {Reference} returned an unreadable provider response. Status: {Status}. Body: {Body}",
+                        request.Reference,
+                        HttpStatusCodeHelper.Describe(httpResponse.StatusCode),
+                        responseContent);
+
+                    return WalletResponseService<PaymentResponse>.Indeterminate(
+                        "We could not confirm this transfer. Please check your transaction history before retrying.",
+                        (int)httpResponse.StatusCode);
+                }
+
+                var result = new PaymentResponse
+                {
+                    Success = transferResponse.Error == "0",
+                    ResponseCode = transferResponse.Error,
+                    ResponseDescription = transferResponse.Message,
+                    Reference = transferResponse.Reference,
+                    ProviderReference = string.IsNullOrWhiteSpace(transferResponse.OtherReference)
+                        ? transferResponse.Reference
+                        : transferResponse.OtherReference,
+                    Status = transferResponse.Error switch
+                    {
+                        "0" => "Successful",
+                        "1" => "Pending",
+                        _ => "Failed"
+                    }
+                };
+
+                return transferResponse.Error switch
+                {
+                    "0" => WalletResponseService<PaymentResponse>.Success(
+                        result, transferResponse.Message ?? "Transfer completed successfully"),
+                    "1" => WalletResponseService<PaymentResponse>.Pending(
+                        result, transferResponse.Message ?? "Transfer pending - transaction status query required"),
+                    _ => WalletResponseService<PaymentResponse>.Failed(
+                        transferResponse.Message ?? "Transfer failed", (int)httpResponse.StatusCode)
+                };
+            }
+            catch (TaskCanceledException ex)
+            {
+                _log.LogError(ex, "Transfer {Reference} timed out awaiting the provider.", request.Reference);
+
+                return WalletResponseService<PaymentResponse>.Indeterminate(
+                    "We could not confirm this transfer. Please check your transaction history before retrying.", 504);
+            }
+            catch (HttpRequestException ex)
+            {
+                _log.LogError(ex, "Transfer {Reference} could not reach the provider.", request.Reference);
+
+                return WalletResponseService<PaymentResponse>.Indeterminate(
+                    "We could not confirm this transfer. Please check your transaction history before retrying.", 503);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Transfer {Reference} failed unexpectedly.", request.Reference);
+
+                return WalletResponseService<PaymentResponse>.Failed(
+                    "Transfer failed. Please try again.", 500);
+            }
         }
 
       
@@ -631,5 +832,4 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
 
     
     }
-
 }

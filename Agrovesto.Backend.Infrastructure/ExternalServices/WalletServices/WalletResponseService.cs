@@ -13,7 +13,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
         public string macChecksum { get; set; }
         public string walletTier { get; set; }
         public string walletName { get; set; }
-        public string AccountName { get; set; } // optional
+        public string? AccountName { get; set; } // optional; not returned by all providers (e.g. Momo)
         public string walletBalance { get; set; } 
         public decimal balance { get; set; } 
         public decimal ledgerBalance { get; set; }
@@ -51,6 +51,18 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices
                 Status = "Pending",
                 Message = message,
                 Data = data
+            };
+        }
+
+        public static WalletResponseService<T> Indeterminate(string message, int code = 502)
+        {
+            return new WalletResponseService<T>
+            {
+                IsSuccess = false,
+                StatusCode = code,
+                Status = "Unknown",
+                Message = message,
+                Data = default
             };
         }
 

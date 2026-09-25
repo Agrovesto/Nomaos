@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -99,7 +100,35 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasDatabaseName("IX_Farmers_OnBoardedOn");
         }
     }
+    public class CredentialResetAttemptConfiguration : IEntityTypeConfiguration<CredentialResetAttempt>
+    {
+        public void Configure(EntityTypeBuilder<CredentialResetAttempt> builder)
+        {
+            builder.ToTable("CredentialResetAttempts");
 
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.UserId)
+                .IsRequired()
+                .HasMaxLength(450); // match your User.Id column length
+
+            builder.Property(x => x.PurposeKey)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            builder.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            builder.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The rate-limit query filters by UserId + PurposeKey + CreatedAt range —
+            // this composite index is what makes that lookup fast as the table grows.
+            builder.HasIndex(x => new { x.UserId, x.PurposeKey, x.CreatedAt });
+        }
+    }
     public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
@@ -117,7 +146,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.ApplyConfiguration(new MemberShipAgentConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerAgentConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerConfiguration());
-
+            modelBuilder.ApplyConfiguration(new CredentialResetAttemptConfiguration());
 
             modelBuilder.Entity<BusinessWalletProvider>()
      .HasIndex(x => new { x.BusinessCode, x.ProviderId })
@@ -151,6 +180,10 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithMany(x => x.Parameters)
                 .HasForeignKey(x => x.BusinessSMSProviderId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UserNotificationPreference>()
+                .HasIndex(x => new { x.UserId, x.UserRole })
+                .IsUnique();
 
             modelBuilder.Entity<User>()
        .HasIndex(u => u.PhoneNumber)
@@ -477,6 +510,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .HasOne(p => p.RepaymentPlan)
     .WithOne(c => c.InputPackage)
     .HasForeignKey<RepaymentPlan>(c => c.InputPackageId);
+
+            modelBuilder.Entity<RepaymentSchedule>()
+    .HasQueryFilter(x => !x.IsDeleted);
         }
 
      
@@ -536,7 +572,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<FarmerSalesTracker> FarmerSalesTracker { get; set; }
         public DbSet<Trader> Traders { get; set; }
         public DbSet<Payout> Payouts { get; set; }
-        public DbSet<States> States { get; set; }
+        public DbSet<Entities.Common.States> States { get; set; }
         public DbSet<LGA> LGAs { get; set; }
         public DbSet<Ward> Wards { get; set; }
         public DbSet<FarmerCreditScore> FarmerCreditScores { get; set; }
@@ -619,7 +655,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<BusinessSMSProviderParameter> BusinessSMSProviderParameters { get; set; }
         public DbSet<SMSProviderParameter> SMSProviderParameters { get; set; }
         public DbSet<SMSProvider> SMSProvider { get; set; }
-    
+        public DbSet<RevokedToken> RevokedTokens { get; set; }
+        public DbSet<CredentialResetAttempt> CredentialResetAttempts { get; set; }
+        public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

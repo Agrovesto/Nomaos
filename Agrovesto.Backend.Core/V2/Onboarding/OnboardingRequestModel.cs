@@ -1,4 +1,5 @@
-﻿using Agrovesto.Backend.Core.Models.Businesses;
+﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Common;
 using Microsoft.AspNetCore.Http;
 using System;
@@ -28,16 +29,30 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string RoleId { get; set; }
         public string RoleName { get; set; }
     }
-        public class UsersProfileResponse
+    public class KYCDto
     {
+        public string NIN { get; set; }
+        public string BVN { get; set; }
+        public string Base64 { get; set; }
+        public KYCVerificationType? KycType { get; set; }
+    }
+    public class UsersProfileResponse
+    {
+        public KYCDto KYC { get; set; }
         public string UserId { get; set; }
         public string UserType { get; set; }
         public string Name { get; set; }
+        public string Gender { get; set; }
         // Common
         public string Email { get; set; }
         public string Phone { get; set; }
         public string NIN { get; set; }
         public string BVN { get; set; }
+        public string? DateOfBirth { get; set; }
+        public bool IsPhoneVerified { get; set; }
+        public bool IsEmailVerified { get; set; }
+        public bool IsNinVerified { get; set; }
+        public bool IsBvnVerified { get; set; }
         public List<UserRoleDto> Roles { get; set; }
         // Farmer
         public FarmerProfileDto Farmer { get; set; }
@@ -138,12 +153,19 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Destination { get; set; }
         public DateTime ExpiresAt { get; set; }
     }
+
+    public class TokenResult
+    {
+        public string Token { get; set; }
+        public DateTimeOffset ExpiresAt { get; set; }
+    }
     public class ConfirmOtpRequest
     {
-        [Required]
-        public string UserId { get; set; }
+        public string? UserId { get; set; }
+        public string? PhoneNumber { get; set; }
         [Required]
         public string Code { get; set; }
+        public string? NewPin { get; set; }
         public OtpPurpose Purpose { get; set; }
     }
 
@@ -165,7 +187,12 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         Onboarding,
         Login,
-        PasswordReset
+        PasswordReset,
+        WalletPinUpdate,
+        // Delivered to the user when they have forgotten their transaction PIN.
+        // Deliberately distinct from WalletPinUpdate, which is a token bucket.
+        WalletPinReset,
+        PhoneNumberPinReset
     }
     public class CreateAgentResponseModel
     {
@@ -191,9 +218,11 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Email { get; set; }
         public string? Message { get; set; }
         public bool IsExisting { get; set; }
+        public bool ShouldLogin { get; set; }
     }
     public class OnboardingRequestModel
     {
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Env { get; set; }
         public string? FullName { get; set; }
         public string? LogDescription { get; set; }
@@ -210,6 +239,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? Email { get; set; }
         public string? Bvn { get; set; }
         public string? Nin { get; set; }
+        public string? DateOfBirth { get; set; }
         public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;    
     }
@@ -241,45 +271,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public IFormFile File { get; set; }
     }
-    public class ProfileRequestModel 
-    {
-        public bool IsLeaderAFarmer { get; set; } = false;
-        public string? OnboardedByUserId { get; set; }
-        //  public IFormFile? FarmerCapturedImage { get; set; }
-        public string? Id { get; set; }
-        public string? PhoneNumber { get; set; }
-        public string? Email { get; set; }
-        public DateTimeOffset CreatedOn { get; set; } 
-        public string? CreatedBy { get; set; }
-        public DateTimeOffset? DateModified { get; set; } = DateTimeOffset.Now;
-        public string? ModifiedBy { get; set; }
-        public string? FirstName { get; set; }
-        public string? FullName { get; set; }
-        public string? CooperativeName { get; set; }
-        public string? MiddleName { get; set; }
-        public string? LastName { get; set; }
-        public string? Location { get; set; }
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public string? Ward { get; set; }
-        public string? Gender { get; set; }
-        public string? DateOfBirth { get; set; }
-
-        public string? Bvn { get; set; }
-        public string? NIN { get; set; }
-        public string? Password { get; set; }
-        public string? Pin { get; set; }
-        public string? FarmerCategory { get; set; }
-        public long YearsInAgric { get; set; }
-        public long? MembershipTypeId { get; set; }
-        public string? HighestLevelOfEducation { get; set; }
-        public long? OrganizationId { get; set; }
-        public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
-        public string? organizationCode { get; set; }
-        public long? LocationId { get; set; }
-        public long? RoleId { get; set; }
-    }
-    public class BulkOnboardingJobArgs
+     public class BulkOnboardingJobArgs
     {
         public long Id { get; set; }
         public string userType { get; set; }
@@ -313,6 +305,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string Env { get; set; }
         public string businessCode { get; set; }
     }
+   
     public class OnBoardingArgs
     {
 
@@ -356,6 +349,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? businessCode { get; set; }
         public string? organizationCode { get; set; }
         public List<long?>? CooperativeIds { get; set; }
+        public List<long?>? FarmerIds { get; set; }
         public List<long?>? MembershipIds { get; set; }
         public List<long?>? AgentIds { get; set; }
 
@@ -371,6 +365,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public long? Id { get; set; }
         public DateTimeOffset? StartDate { get; set; }
         public DateTimeOffset? EndDate { get; set; }
+        public string? SearchParam { get; set; }
     }
 
     public class BulkOnboardingQueueResponse
@@ -388,5 +383,116 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public bool status { get; set; }
         public string message { get; set; }
         public bool IsExisting { get; set; }
+        public bool ShouldLogin { get; set; }
+    }
+
+
+    public abstract class UserProfileBase
+    {
+        public string? PhoneNumber { get; set; }
+        public string? Email { get; set; }
+
+        public string? Location { get; set; }
+        public string? State { get; set; }
+        public string? Lga { get; set; }
+        public string? Ward { get; set; }
+
+        public string? Gender { get; set; }
+        public string? DateOfBirth { get; set; }
+
+        public string? NIN { get; set; }
+        public string? BVN { get; set; }
+
+        public string? FarmerCategory { get; set; }
+        public string? HighestLevelOfEducation { get; set; }
+        public string? OrganizationCode { get; set; }
+    }
+    public class ProfileRequestModel : UserProfileBase
+    {
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
+        public bool IsLeaderAFarmer { get; set; } = false;
+        public string? OnboardedByUserId { get; set; }
+        // public IFormFile? FarmerCapturedImage { get; set; }
+
+        public string? Id { get; set; }
+        public DateTimeOffset CreatedOn { get; set; }
+        public string? CreatedBy { get; set; }
+        public DateTimeOffset? DateModified { get; set; } = DateTimeOffset.Now;
+        public string? ModifiedBy { get; set; }
+
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public string? FullName { get; set; }
+        public string? CooperativeName { get; set; }
+
+        public string? Password { get; set; }
+        public string? Pin { get; set; }
+
+        public long YearsInAgric { get; set; }
+        public long? MembershipTypeId { get; set; }
+        public long? OrganizationId { get; set; }
+        public long? LocationId { get; set; }
+        public long? RoleId { get; set; }
+
+        public List<ValueChainSelectionDto>? ValueChainDto { get; set; }
+    }
+
+    public class FarmerUpdateModel : UserProfileBase
+    {
+        public string? Name { get; set; }
+        public string? FarmerImage { get; set; }
+
+        public long? YearsInAgric { get; set; }
+        public bool? IsNinVerified { get; set; }
+
+        public List<ValueChainSelectionDto>? SelectedItems { get; set; }
+        public List<long>? CooperativeIds { get; set; }
+        public List<long>? AgentIds { get; set; }
+    }
+
+    public sealed class ProfileUpdateResult
+    {
+        public bool Success { get; init; }
+        public string Message { get; init; }
+        public ProfileRole Role { get; init; }
+        public UserModel User { get; init; }
+
+        /// <summary>Fields of the role profile that ACTUALLY changed (not merely fields that were sent).</summary>
+        public IReadOnlyList<string> UpdatedFields { get; init; } = Array.Empty<string>();
+
+        // Only the one matching Role is populated
+        public FarmerModel Farmer { get; init; }
+        public AgentModel Agent { get; init; }
+        public MemberShipModel Membership { get; init; }
+    }
+
+    public enum ProfileRole
+    {
+        Farmer,
+        MemberShip,
+        Agent,
+        Organization
+    }
+
+    public sealed class UpdateProfileRequest
+    {
+        /// <summary>Whose profile to update. Omit to update your own.</summary>
+        public string UserId { get; init; }
+
+        /// <summary>
+        /// Which role profile is being edited: "Farmer" | "Agent" | "Cooperative".
+        /// Optional for self-edits when the caller has exactly one role; REQUIRED when editing on behalf of someone else.
+        /// </summary>
+        public string Role { get; init; }
+
+        public string BusinessCode { get; init; }
+        public string OrganizationCode { get; init; }
+
+        /// <summary>Common + agent/cooperative fields. Not needed for Farmer if <see cref="Farmer"/> is sent.</summary>
+        public ProfileRequestModel Profile { get; init; }
+
+        /// <summary>Farmer-only fields (value chains, cooperatives, agents...). Required when Role is Farmer.</summary>
+        public FarmerUpdateModel Farmer { get; init; }
     }
 }

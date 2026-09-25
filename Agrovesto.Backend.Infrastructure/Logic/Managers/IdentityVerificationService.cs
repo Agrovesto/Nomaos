@@ -15,13 +15,13 @@ using Microsoft.Extensions.Options;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Managers
 {
-    public class IdentityVerificationManager : IIdentityVerificationManager
+    public class IdentityVerificationService : IIdentityVerificationService
     {
 
         private readonly IHttpService _httpService;
         private readonly IdentitypassOptions _idPassOption;
         private readonly IEncryptionService _encryptionService;
-        public IdentityVerificationManager(IHttpService httpService,
+        public IdentityVerificationService(IHttpService httpService,
             IOptions<IdentitypassOptions> idPassOption, IEncryptionService encryptionService)
         {
             _httpService = httpService;

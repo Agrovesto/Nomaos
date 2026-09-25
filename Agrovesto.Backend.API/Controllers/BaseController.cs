@@ -3,11 +3,13 @@ using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
+using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Net.Http.Headers;
@@ -21,7 +23,10 @@ namespace Agrovesto.Backend.API.Controllers
     //[ApiController]
     //[Authorize]
     // [ValidateModelFilter]
-    public class BaseController : ControllerBase
+   
+    
+    
+    public class BaseController : ControllerBase, IAsyncActionFilter
     {
         private readonly IHttpContextAccessor _httpContextAccessor;
         protected const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
@@ -33,8 +38,75 @@ namespace Agrovesto.Backend.API.Controllers
             _httpContextAccessor = httpContextAccessor;
         }
         protected static readonly string[] RolePriority = { "Agent", "MemberShip" };
+        protected bool RequiresCredentialChange
+        {
+            get
+            {
+                var value = TryReadJwt()?
+                    .Claims.FirstOrDefault(c =>
+                        c.Type.Equals("RequiresCredentialChange", StringComparison.OrdinalIgnoreCase))
+                    ?.Value;
 
-        
+                // claim is the string "True"/"False"
+                return bool.TryParse(value, out var required) && required;
+            }
+        }
+        protected IActionResult? DetermineRoleViewAccess(SubscriptionQueryFilter filter)
+        {
+            // Organization is never itself a selectable "view" role 
+            // only count the other roles as candidates.
+            var eligibleRoles = new List<string>();
+
+            if (CurrentUserRoles.Contains("Agent", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.Agent.ToString());
+
+            
+            if (CurrentUserRoles.Contains("MemberShip", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.MemberShip.ToString());
+
+            if (CurrentUserRoles.Contains("Farmer", StringComparer.OrdinalIgnoreCase))
+                eligibleRoles.Add(UserType.Farmer.ToString());
+
+            var suppliedRole = filter.CurrentLoggedInUserRole;
+            if(suppliedRole == "Organization")
+                eligibleRoles.Add(UserType.Organization.ToString());
+
+            // No eligible roles at all (e.g. pure Organization user, or no roles)
+            if (eligibleRoles.Count == 0)
+                return null; 
+
+           
+            if (eligibleRoles.Count == 1 && string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                filter.CurrentLoggedInUserRole = eligibleRoles[0];
+                return null;
+            }
+
+            if (eligibleRoles.Count > 1 && string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                var response = ApiResponse<List<string>>.Fail(
+                    "You belong to multiple roles. Please specify a role to continue.",
+                    ResponseCodes.RoleSelectionRequired
+                );
+                response.Data = eligibleRoles;
+                return Unauthorized(response);
+            }
+
+            var match = eligibleRoles.FirstOrDefault(r =>
+                r.Equals(suppliedRole, StringComparison.OrdinalIgnoreCase));
+
+            if (match == null)
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied
+                ));
+            }
+
+            filter.CurrentLoggedInUserRole = match;
+            return null;
+        }
+
         protected string RequireOrganizationCode(string? provided)
         {
             if (!string.IsNullOrEmpty(provided))
@@ -324,6 +396,10 @@ namespace Agrovesto.Backend.API.Controllers
             TryReadJwt()?
                 .Claims.FirstOrDefault(x => x.Type.Equals("email", StringComparison.OrdinalIgnoreCase))
                 ?.Value;
+        public string? CurrentPhoneNumber =>
+            TryReadJwt()?
+                .Claims.FirstOrDefault(x => x.Type.Equals("PhoneNumber", StringComparison.OrdinalIgnoreCase))
+                ?.Value;
      
         
         
@@ -472,7 +548,29 @@ namespace Agrovesto.Backend.API.Controllers
             resolvedCode = match.OrganizationCode;
             return null;
         }
-    
+
+        [NonAction]
+        public virtual async Task OnActionExecutionAsync(
+            ActionExecutingContext context, ActionExecutionDelegate next)
+        {
+            var metadata = context.ActionDescriptor.EndpointMetadata;
+
+            var isExempt =
+                metadata.OfType<IAllowAnonymous>().Any() ||
+                metadata.OfType<AllowPendingCredentialChangeAttribute>().Any();
+
+            if (!isExempt && RequiresCredentialChange)
+            {
+                context.Result = Error(
+                    "CREDENTIAL_CHANGE_REQUIRED",
+                    "You must change your credentials before you can continue.",
+                    StatusCodes.Status403Forbidden);
+                return; // short-circuit: the action never runs
+            }
+
+            await next();
+        }
+
         public class OrganizationClaim
         {
             public string? OrganizationCode { get; set; }

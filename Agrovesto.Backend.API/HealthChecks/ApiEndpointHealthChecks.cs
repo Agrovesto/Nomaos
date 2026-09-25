@@ -98,13 +98,14 @@ namespace Agrovesto.Backend.API.HealthChecks
         private async Task CheckControllerAvailability(HttpClient client, string baseUrl, Dictionary<string, object> results, List<string> issues, CancellationToken cancellationToken)
         {
             // Check if main API controllers are accessible (they should return 401 for unauthorized requests, not 404)
+            // Use lightweight public ping endpoints to verify controller availability
             var controllerEndpoints = new[]
             {
-                new { Name = "Authentication API", Url = $"{baseUrl}/api/auth/login", Method = HttpMethod.Post },
-                new { Name = "User API", Url = $"{baseUrl}/api/user/update-profile", Method = HttpMethod.Post },
-                new { Name = "Location API", Url = $"{baseUrl}/api/location", Method = HttpMethod.Get },
-                new { Name = "Business API", Url = $"{baseUrl}/api/business", Method = HttpMethod.Get },
-                new { Name = "Farm Management API", Url = $"{baseUrl}/api/farm", Method = HttpMethod.Get }
+                new { Name = "Authentication API", Url = $"{baseUrl}/api/v2/account/ping", Method = HttpMethod.Get },
+                new { Name = "User API", Url = $"{baseUrl}/api/v2/user/ping", Method = HttpMethod.Get },
+                new { Name = "Location API", Url = $"{baseUrl}/api/v2/location/ping", Method = HttpMethod.Get },
+                new { Name = "Business API", Url = $"{baseUrl}/api/v2/business/ping", Method = HttpMethod.Get },
+                new { Name = "Farm Management API", Url = $"{baseUrl}/api/v2/farm/ping", Method = HttpMethod.Get }
             };
 
             foreach (var endpoint in controllerEndpoints)

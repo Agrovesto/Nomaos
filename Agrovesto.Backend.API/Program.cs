@@ -7,6 +7,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
+using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon;
@@ -31,6 +32,7 @@ using QuestPDF.Infrastructure;
 using Serilog;
 using SixLabors.ImageSharp;
 using System;
+using System.IdentityModel.Tokens.Jwt;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
@@ -181,6 +183,27 @@ builder.Services.AddAuthentication(options =>
             Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"])
         ),
         RoleClaimType = "Roles"
+    }; 
+    opt.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
+
+            if (string.IsNullOrEmpty(jti))
+            {
+                context.Fail("Token missing jti claim.");
+                return;
+            }
+
+            var revocationService = context.HttpContext.RequestServices
+                .GetRequiredService<IOnboardingRepository>();
+
+            if (await revocationService.IsRevokedAsync(jti))
+            {
+                context.Fail("Token has been revoked.");
+            }
+        }
     };
 });
 
@@ -194,7 +217,12 @@ builder.Services.Configure<FormOptions>(o =>
 QuestPDF.Settings.License = LicenseType.Community;
 
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(opts =>
+{
+    opts.JsonSerializerOptions.Converters.Add(new EmptyStringToNullDateTimeOffsetConverter());
+    opts.JsonSerializerOptions.Converters.Add(new EmptyStringToNullStringConverter());
+
+});
 
 // Dedicated HttpClient for external health checks with a sensible timeout so a slow upstream
 // can never stall the /health endpoint. The default HttpClient timeout is 100s, which is
@@ -338,7 +366,7 @@ var app = builder.Build();
 AppSettingsHelper.AppSettingConfigure(app.Services.GetRequiredService<IConfiguration>());
 app.UseForwardedHeaders();
 
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging() || app.Environment.IsProduction())
+if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
 

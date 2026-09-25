@@ -16,7 +16,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/agent")]
     [ApiController]
-    //  [Authorize]
+    [Authorize]
+
+    [AllowPendingCredentialChange]
     public class AgentController : BaseController
     {
 
@@ -249,6 +251,35 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 return await _agentManager.GetAgentDashboardData(query);
             },
             result => Ok(new Response<AgentDashboardDto>
+            {
+                Data = result,
+                Message = result != null ? ResponseMessages.Successful : "Could not retrieve data",
+                Succeeded = true,
+                Code = result != null ? ResponseCodes.Success : ResponseCodes.Failed
+            }));
+        }
+        [HttpGet("profile")]
+        public async Task<IActionResult> GetAgentProfile([FromQuery] ListQueryParams query)
+        {
+            ResolveAgentQueryContext(query);
+
+            if (string.IsNullOrEmpty(query.UserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            return await ExecuteAsync(async () =>
+            {
+                if (!await _onBoardingManager.IsUserInRoleAsync(query.UserId, "Agent"))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "The supplied user is not a Agent.");
+
+                return await _agentManager.GetAgentProfile(query.UserId);
+            },
+            result => Ok(new Response<AgentProfileDto>
             {
                 Data = result,
                 Message = result != null ? ResponseMessages.Successful : "Could not retrieve data",

@@ -12,6 +12,13 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Infrastructure.Entities.Common
 {
+    public class UserLookupResult
+    {
+        public User User { get; set; } = null!;
+        public bool MatchedById { get; set; }
+        public bool MatchedByPhone { get; set; }
+        public bool MatchedByEmail { get; set; }
+    }
     public class UserBusiness
     {
         [Key]
@@ -61,21 +68,21 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         { get; set; }
     = new HashSet<UserBusiness>();
 
+        public string? DateOfBirth { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
-       // public UserLevel UserLevel { get; set; }
+     
         public bool IsPhoneVerified { get; set; } = false;
         public bool IsEmailVerified { get; set; } = false;
 
         public bool IsPinEnabled { get; set; } = false;
-      //  public string? DefaultPassword { get; set; }
-            public bool HasDefaultPassword { get; set; } = false;
-       // public string? DefaultPin { get; set; }
+        public bool HasDefaultPassword { get; set; } = false;
         public bool HasDefaultPin { get; set; } = false;
-
-        // Add this to your User class
         public bool IsLeaderProfileComplete { get; set; } = false;
+        public bool IsNinVerified { get; set; } = false;
+        public bool IsBvnVerified { get; set; } = false;
+        public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
     }
 
     public class UserOrganization

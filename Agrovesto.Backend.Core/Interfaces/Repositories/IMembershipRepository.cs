@@ -1,4 +1,6 @@
 ﻿using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Core.V2.Onboarding;
@@ -25,7 +27,7 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<MemberShipModel> GetMembershipDetailByUserId(string userId);
         Task<List<MemberShipModel>> GetCooperatives();
         Task<List<MemberShipModel>> GetCooperativesByBusinessCode(string businessCode,ListQueryParams query);
-        Task<MembershipDashboardDto> GetMembershipDashboardAsync(string membershipuserId, string organizationCode = null);
+        Task<MembershipDashboardDto> GetMembershipDetailAsync(string membershipuserId, string organizationCode = null);
         Task<MemberShipTypeModel?> GetMemberShipTypeById(long id);
         Task<List<MemberShipTypeModel>> GetMembershipTypes(BusinessRegistrationArgs args);
         Task<AgentModel> ViewAgentAssignedToCooperative(long cooperativeId);
@@ -35,5 +37,15 @@ namespace Agrovesto.Backend.Core.Interfaces.Repositories
         Task<List<MemberShipModel>> AssignMemberShipToAgent(string agentUserId, List<long> membershipIds);
         Task<MembershipResponse> AssignLeaderAsync(AssignLeaderDto dto, string updatedById);
         Task<MembershipResponse> CreateMembershipAsync(CreateMembershipDto dto, OnBoardingArgs args);
+        Task DeactivateUser(
+            string membershipUserId,
+            string participantUserId,
+            MembershipParticipantType participantType,
+            string deactivatedByUserId,
+            string? reason);
+        Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(string membershipUserId, ListQueryParams query);
+        Task<ProfileChange<MemberShipModel>> UpsertMembershipAsync(MemberShipModel data);
     }
 }

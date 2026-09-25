@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
@@ -12,6 +13,9 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/farms")]
     [ApiController]
+    [Authorize]
+
+    [AllowPendingCredentialChange]
     public class FarmMappingController : BaseController
     {
         private readonly IFarmMappingManager _farmMappingManager;

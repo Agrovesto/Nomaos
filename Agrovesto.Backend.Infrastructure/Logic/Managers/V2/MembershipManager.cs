@@ -30,10 +30,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(string membershipUserId, ListQueryParams query);
 
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
-        Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query);
+        Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query);
         Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(string membershipUserId, ListQueryParams query);
     }
     public class MembershipManager : IMembershipManager
     {
@@ -158,7 +161,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Pin = model.Pin,
                     FirstName = model.FirstName,
                     MiddleName = model.MiddleName,
-                    LastName = model.LastName
+                    LastName = model.LastName,
+                    DateOfBirth = model.DateOfBirth,
+                    SignupMethod=model.SignupMethod
                 }, args);
 
             if (!result.status)
@@ -242,7 +247,7 @@ DateTimeOffset dateTime)
                     Id= userId,
                     Bvn=model.Bvn,
                     NIN=model.NIN,
-                });
+                }, false);
                 farmer.Level = FarmerLevel.Level3.ToString();
                 farmer.BVN = model.Bvn;
                 farmer.NIN= model.NIN;
@@ -261,7 +266,7 @@ DateTimeOffset dateTime)
                                         PerformedByUserId = args.UserId,
                                         Description = $"{model.LogDescription}",
                                         ActivityName= $"{model.ActivityName}",
-                                        ActivityType= Entities.Common.ActivityType.Onboarding,
+                                        ModuleAccessed= Entities.Common.ModuleAccessed.Onboarding,
                                         BusinessCode=args.businessCode,
                                         OrganizationCode=args.organizationCode,
                                         CreatedOn= DateTimeOffset.Now,
@@ -348,7 +353,9 @@ OnboardingRequestModel user,
                 var dateTime = DateTimeOffset.UtcNow;
 
                 var business = await GetBusinessOrFail(args.businessCode);
-
+                model.SignupMethod = !string.IsNullOrWhiteSpace(model.Email)
+? SignupMethod.Email
+: SignupMethod.PhoneNumber;
                 var user = await RegisterFarmerOrFail(model, args);
 
                 var farmer = await CreateFarmerOrFails(
@@ -380,9 +387,27 @@ OnboardingRequestModel user,
                     "Unable to complete onboarding at the moment.");
             }
         }
-        public async Task<MembershipDashboardDto> GetMembershipDashboardAsync(ListQueryParams query)
+        public async Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query)
         {
-            return await _membershipRepository.GetMembershipDashboardAsync(query.UserId, query.organizationCode);
+            return await _membershipRepository.GetMembershipDetailAsync(query.UserId, query.organizationCode);
+        }
+        public async Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(
+    string membershipUserId,
+    ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipAgentsAsync(query.UserId, query);
+        }
+        public async Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(
+    string membershipUserId,
+    ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipFarmersAsync(query.UserId, query);
+        }
+        public async Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(
+        string membershipUserId,
+        ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipFinancingBreakdownAsync(query.UserId, query);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

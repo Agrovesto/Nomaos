@@ -8,6 +8,11 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Models.Businesses
 {
+    public enum SignupMethod
+    {
+        PhoneNumber = 2,
+        Email = 1
+    }
     public enum FarmerOnboardingStatus
     {
         Pending = 0,
@@ -18,7 +23,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     {
         public long Id { get; set; }
         public string? OnboardedByUserId { get; set; }
-
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? PhoneNumber { get; set; }
         public string? Email { get; set; }
         public string? FirstName { get; set; }
@@ -247,9 +252,11 @@ namespace Agrovesto.Backend.Core.Models.Businesses
     public class FarmerTransactionDto
     {
         public long TransactionId { get; set; }
+        public string TransactionReference { get; set; }
         public decimal Amount { get; set; }
         public decimal BalanceAfter { get; set; }
         public string TransactionType { get; set; } // e.g., Deposit, Withdrawal
+        public string Status { get; set; } // e.g., Completed, DebitPending, Failed
         public DateTimeOffset Timestamp { get; set; }
         public string Description { get; set; }
     }
@@ -333,30 +340,6 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
         public string Tier { get; set; }
     }
-    public class FarmerUpdateModel
-    {
-        public string? Name { get; set; }
-        public string? Location { get; set; }
-        public string? State { get; set; }
-        public string? Lga { get; set; }
-        public string? Ward { get; set; }
-        public string? PhoneNumber { get; set; }
-        public string? Email { get; set; }
-        public string? Gender { get; set; }
-        public string? DateOfBirth { get; set; }
-        public string? FarmerImage { get; set; }
-        public string? OrganizationCode { get; set; }
-        public string? NIN { get; set; }
-        public string? BVN { get; set; }
-        public string? FarmerCategory { get; set; }
-        public long? YearsInAgric { get; set; }
-        public string? HighestLevelOfEducation { get; set; }
-        public bool? IsNinVerified { get; set; }
-        public List<ValueChainSelectionDto>? SelectedItems { get; set; }
-        public List<long>? CooperativeIds { get; set; }
-        public List<long>? AgentIds { get; set; }
-    }
-
 
     public class AgentUpdateModel
     {
@@ -424,7 +407,9 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class ValueChainSelectionDto
     {
+        [Required(ErrorMessage = "Value chain type is required.")]
         public string ValueChainType { get; set; }
+      [Required(ErrorMessage = "Value chain item(s) is required")]
         public List<string> Items { get; set; }
     }
     public class FarmerValueChainsSelectionDto

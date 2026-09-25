@@ -3,10 +3,28 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum MembershipParticipantType
+    {
+        Farmer=1,
+        Agent=2
+    }
+
+    public enum KYCVerificationType
+    {
+        NIN,
+        BVN
+    }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public enum Channel
+    {
+        SMS = 1,
+        Email = 2
+    }
     public enum RateLimitType
     {
         OTP,

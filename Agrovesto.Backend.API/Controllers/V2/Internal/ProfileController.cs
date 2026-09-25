@@ -4,35 +4,41 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Logic;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/profile")]
     [ApiController]
+    [Authorize]
+
+    [AllowPendingCredentialChange]
     public class ProfileController : BaseController
     {
         private readonly IOnBoardingManager _onBoardingManager;
-
-        public ProfileController(IHttpContextAccessor httpContextAccessor, 
+        private readonly IProfileAccessPolicy _accessPolicy;
+        public ProfileController(IHttpContextAccessor httpContextAccessor,
+            IProfileAccessPolicy accessPolicy,
             IOnBoardingManager onBoardingManager
             ) : base(httpContextAccessor)
         {
             _onBoardingManager = onBoardingManager;
-           
+            _accessPolicy = accessPolicy;
         }
 
         [HttpPost("face-upload")]
         [AllowAnonymous]
         public async Task<IActionResult> SaveFarmerImage(
-     [FromForm] ProfileImageModel model,
-     [FromQuery] OnBoardingArgs args)
+        [FromForm] ProfileImageModel model,
+        [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -96,6 +102,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 });
             }
         }
+        
         [HttpPost("map-farm")]
         public async Task<IActionResult> CreateFarmMap([FromBody] CreateFarmDto dto, [FromQuery] BusinessRegistrationArgs args)
         {
@@ -193,7 +200,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     return StatusCode(400, new Response<string>
                     {
-                        Message = "The supplied user is not a Farmer.",
+                        Message = "The user is not a Farmer.",
                         Succeeded = false
                     });
                 }
@@ -333,18 +340,18 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         /// ///
         ////get current logged in user profile to include name, phone number, email, picture, id, level/tier
          [HttpGet("user-profile")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetUserProfile([FromQuery] string? userId)
         {
             try
             {
                 var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
-            
 
                 if (string.IsNullOrEmpty(targetUserId))
                 {
-                    return BadRequest(new Response<string>
+                    return Unauthorized(new Response<string>
                     {
-                        Message = "User Id is required.",
+                        Message = "User could not be resolved from the supplied token.",
                         Succeeded = false
                     });
                 }
@@ -596,7 +603,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpPut("update-agent-profile")]
-        public async Task<IActionResult> UpdateAgentProfile([FromBody] FarmerUpdateModel model, [FromQuery] string? userId)
+        public async Task<IActionResult> UpdateAgentProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
@@ -605,7 +612,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             try
             {
 
-                var targetUserId = !string.IsNullOrEmpty(userId) ? userId : CurrentUserId;
+                var targetUserId = !string.IsNullOrEmpty(args.UserId) ? args.UserId : CurrentUserId;
 
                  if (!await _onBoardingManager.IsUserInRoleAsync(targetUserId, "Farmer"))
                 {
@@ -615,13 +622,13 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                         Succeeded = false
                     });
                 }
-                var result = await _onBoardingManager.UpdateFarmerProfile(targetUserId, model);
+                var result = await _onBoardingManager.EditAgentUser(model, args);
 
-                return Ok(new Response<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto>()
+                return Ok(new Response<bool>()
                 {
                     Code = ResponseCodes.Success,
-                    Succeeded = result.Success,
-                    Message = result.Message,
+                    Succeeded = result,
+                    Message = ResponseCodes.Success,
                     Data = result
                 });
             }
@@ -644,5 +651,80 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
+
+        [HttpPatch("update-profile")]
+        [ProducesResponseType(typeof(ProfileUpdateResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status409Conflict)]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        {
+            var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(callerId)) return Unauthorized();
+
+          
+            var targetUserId = string.IsNullOrWhiteSpace(request.UserId) ? callerId : request.UserId.Trim();
+            var isSelf = string.Equals(targetUserId, callerId, StringComparison.Ordinal);
+
+            if (!TryResolveRole(request.Role, isSelf, out var role, out var roleError))
+                return BadRequest(new { message = roleError });
+
+            if (!await _accessPolicy.CanEditAsync(User, targetUserId, role, request.BusinessCode))
+                return Forbid();
+
+              var args = new OnBoardingArgs
+            {
+                UserId = targetUserId,
+                businessCode = request.BusinessCode,
+                organizationCode = request.OrganizationCode,
+                       OnboardedByUserId = !isSelf && User.IsInRole(DefaultProfileAccessPolicy.AgentRole) ? callerId : null
+            };
+            request.Profile.ModifiedBy = callerId;
+
+             var result = await _onBoardingManager.UpdateProfileAsync(role, args, request.Profile, request.Farmer);
+
+            return Ok(result);
+        }
+        private bool TryResolveRole(string requested, bool isSelf, out ProfileRole role, out string error)
+        {
+            role = default;
+            error = null;
+
+            if (!string.IsNullOrWhiteSpace(requested))
+            {
+                if (Enum.TryParse(requested, ignoreCase: true, out role) && Enum.IsDefined(role))
+                    return true;
+
+                error = "Role must be one of: Farmer, Agent, MemberShip.";
+                return false;
+            }
+
+            if (!isSelf)
+            {
+                error = "Role is required when updating another user's profile.";
+                return false;
+            }
+
+            var held = User.FindAll(ClaimTypes.Role)
+                .Select(c => Enum.TryParse<ProfileRole>(c.Value, ignoreCase: true, out var r) && Enum.IsDefined(r) ? (ProfileRole?)r : null)
+                .Where(r => r.HasValue)
+                .Select(r => r.Value)
+                .Distinct()
+                .ToList();
+
+            if (held.Count == 1)
+            {
+                role = held[0];
+                return true;
+            }
+
+            error = held.Count == 0
+                ? "Your account has no updatable profile role."
+                : "You hold more than one role. Specify which profile to update.";
+            return false;
+        }
+    
     }
 }

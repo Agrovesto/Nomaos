@@ -14,7 +14,7 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using static Org.BouncyCastle.Math.EC.ECCurve;
 using LocationType = Agrovesto.Backend.Infrastructure.Entities.Businesses.LocationType;
-using RepaymentMode = Agrovesto.Backend.Core.Models.Businesses.RepaymentMode;
+
 using States = Agrovesto.Backend.Infrastructure.Entities.Common.States;
 
 namespace Agrovesto.Backend.Infrastructure
@@ -49,7 +49,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middlename,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.telephoneno,
                 Photourl = model.photo,
                 Residentialaddress = model.residence_address,
@@ -75,7 +75,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //LoggedOn = model.LoggedOn,
                 //Maidenname = model.,
                 Middlename = model.middleName,
-                Nin = model.nin,
+                Number = model.nin,
                 Phonenumber = model.phoneNumber1,
 
                 Residentialaddress = model.residentialAddress,
@@ -1982,8 +1982,9 @@ namespace Agrovesto.Backend.Infrastructure
                 ContactEmail = model.CompanyEmail,
                 FirstName = model.FirstName,
                 LastName = model.LastName,
-                StateId = model.StateId,
-                LgaId = model.LgaId,
+                StateId = (model.StateId == null || model.StateId == 0) ? null : model.StateId,
+                LgaId = (model.LgaId == null || model.LgaId == 0) ? null : model.LgaId,
+
                 FullName = $"{model.FirstName} {model.LastName}",
                 OnboardedOn = DateTimeOffset.Now,
                 OrganizationEmail = model.CompanyEmail,
@@ -2744,5 +2745,63 @@ namespace Agrovesto.Backend.Infrastructure
         }
 
         #endregion SMS
+
+        #region IdentityPass
+        public static IdentityVerificationProvider Map(this IdentityVerificationProviderModel model)
+        {
+            if (model == null)
+            {
+                return null;
+            }
+            return new IdentityVerificationProvider()
+            {
+                Code = model.Code,
+                Name = model.Name,
+                ProviderId = model.ProviderId,
+                Parameters = model.Parameters.Select(x => x.Map()).ToList(),
+                Status = model.Status.ToString()
+            };
+        }
+
+        public static IdentityVerificationProviderModel Map(this IdentityVerificationProvider entity)
+        {
+            if (entity == null)
+            {
+                return null;
+            }
+            return new IdentityVerificationProviderModel()
+            {
+                Code = entity.Code,
+                Name = entity.Name,
+                ProviderId = entity.ProviderId,
+                Parameters = entity.Parameters.Select(x => x.Map()).ToList(),
+                Status = entity.Status.ToEnum<ProviderStatus>()
+            };
+        }
+        public static IdentityVerificationProviderParameter Map(this IdentityVerificationProviderParameterModel model)
+        {
+            return new IdentityVerificationProviderParameter()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = Enum.GetName(typeof(Env), model.Env)//model.Env.ToString()
+            };
+        }
+        public static IdentityVerificationProviderParameterModel Map(this IdentityVerificationProviderParameter model)
+        {
+            return new IdentityVerificationProviderParameterModel()
+            {
+                Description = model.Description,
+                Key = model.Key,
+                ParameterId = model.ParameterId,
+                ProviderId = model.ProviderId,
+                Value = model.Value,
+                Env = model.Env.ToEnum<Env>()
+            };
+        }
+        #endregion
     }
 }

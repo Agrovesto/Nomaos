@@ -24,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService
     {
         Task CreateTemplateAsync();
         Task SendCommitmentPaymentNotificationAsync(string senderEmail, string recipientEmail, string subject, string bodyHtml, string bodyText);
-        Task SendEmailAsync(string senderEmail, string recipientEmail, string subject, string bodyHtml, string bodyText);
+        Task<bool> SendEmailAsync(string senderEmail, string recipientEmail, string subject, string bodyHtml, string bodyText);
         Task SendReconciliationAlertAsync(ReconciliationAlertRequest model);
         Task SendSignupSms(string phoneNumber, string userName);
         Task SendTemplatedEmailAsync(string senderEmail, string recipientEmail, string templateName, object templateData);
@@ -147,15 +147,33 @@ Login to your account </a>
             try
             {
                 var response = await _sesClient.SendTemplatedEmailAsync(request);
-                Console.WriteLine($"Email sent! MessageId: {response.MessageId}");
+                _logger.LogInformation(
+                    "Sent template '{Template}' from {Sender} to {Recipient}. SES MessageId: {MessageId}",
+                    templateName, senderEmail, recipientEmail, response.MessageId);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error sending email: {ex.Message}");
+                _logger.LogError(ex,
+                    "Failed to send template '{Template}' from {Sender} to {Recipient}.",
+                    templateName, senderEmail, recipientEmail);
             }
         }
-        public async Task SendEmailAsync(string senderEmail,string recipientEmail,  string subject,  string bodyHtml,  string bodyText)
+        public async Task<bool> SendEmailAsync(string senderEmail,string recipientEmail,  string subject,  string bodyHtml,  string bodyText)
         {
+            if (string.IsNullOrWhiteSpace(senderEmail))
+            {
+                _logger.LogError(
+                    "Cannot send '{Subject}' to {Recipient}: no sender address was supplied (check Official:Email).",
+                    subject, recipientEmail);
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(recipientEmail))
+            {
+                _logger.LogError("Cannot send '{Subject}': no recipient address was supplied.", subject);
+                return false;
+            }
+
             var sendRequest = new SendEmailRequest
             {
                 Source = senderEmail, // Must be verified in SES
@@ -176,11 +194,27 @@ Login to your account </a>
             try
             {
                 var response = await _sesClient.SendEmailAsync(sendRequest);
-                Console.WriteLine($"Email sent! Message ID: {response.MessageId}");
+                _logger.LogInformation(
+                    "Sent '{Subject}' from {Sender} to {Recipient}. SES MessageId: {MessageId}",
+                    subject, senderEmail, recipientEmail, response.MessageId);
+
+                return true;
+            }
+            catch (MessageRejectedException ex)
+            {
+                _logger.LogError(ex,
+                    "SES rejected '{Subject}' from {Sender} to {Recipient}. Verify the sender identity in eu-west-1 and check whether the account is still in the SES sandbox.",
+                    subject, senderEmail, recipientEmail);
+
+                return false;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error sending email: {ex.Message}");
+                _logger.LogError(ex,
+                    "Failed to send '{Subject}' from {Sender} to {Recipient}.",
+                    subject, senderEmail, recipientEmail);
+
+                return false;
             }
         }
             public async Task SendCommitmentPaymentNotificationAsync(string senderEmail,
@@ -207,11 +241,15 @@ Login to your account </a>
             try
             {
                 var response = await _sesClient.SendEmailAsync(sendRequest);
-                Console.WriteLine($"Email sent! Message ID: {response.MessageId}");
+                _logger.LogInformation(
+                    "Sent commitment payment notification to {Recipient}. SES MessageId: {MessageId}",
+                    recipientEmail, response.MessageId);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error sending email: {ex.Message}");
+                _logger.LogError(ex,
+                    "Failed to send commitment payment notification from {Sender} to {Recipient}.",
+                    senderEmail, recipientEmail);
             }
         }
 

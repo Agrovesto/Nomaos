@@ -71,7 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entities.Select(x => x.Map()).ToArray();
         }
 
-        public async Task<WalletProviderModel> Get(long providerId)
+        public async Task<WalletProviderModel> GetById(long providerId)
         {
             WalletProvider entity = await _context.Set<WalletProvider>()
                 .Include(x => x.WalletProviderParameters)
@@ -204,10 +204,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
         public async Task<BusinessWalletProviderModel[]> GetProvidersForBusiness(string businessCode)
         {
+            var normalizedCode = businessCode.ToLower();
+            var activeStatus = ProviderStatus.Active.ToString().ToLower();
+
             BusinessWalletProvider[] entities = await _context.Set<BusinessWalletProvider>()
                 .Include(x => x.WalletProvider)
-                .Where(x => x.BusinessCode.ToLower() == businessCode.ToLower()
-                         && x.Status == ProviderStatus.Active.ToString())
+                .Where(x => x.BusinessCode.ToLower() == normalizedCode
+                         && x.Status.ToLower() == activeStatus)
                 .OrderBy(x => x.WalletProvider.Name)
                 .ToArrayAsync();
 
@@ -307,15 +310,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         public async Task<WalletProviderParameterModel[]> GetParametersByProvider(
             long providerId, string businessCode, string env)
         {
+            var normalisedEnv = (env ?? string.Empty).Trim().ToLower();
+
             WalletProviderParameter[] defaults = await _context.Set<WalletProviderParameter>()
-                .Where(x => x.WalletProviderProviderId == providerId && x.Env == env)
+                .Where(x => x.WalletProviderProviderId == providerId && x.Env.ToLower() == normalisedEnv)
                 .ToArrayAsync();
 
             BusinessWalletProviderParameter[] overrides = await _context.Set<BusinessWalletProviderParameter>()
                 .Include(x => x.BusinessWalletProvider)
                 .Where(x => x.BusinessWalletProvider.ProviderId == providerId
                          && x.BusinessWalletProvider.BusinessCode.ToLower() == businessCode.ToLower()
-                         && x.Env == env)
+                         && x.Env.ToLower() == normalisedEnv)
                 .ToArrayAsync();
 
             var merged = new Dictionary<string, WalletProviderParameterModel>(StringComparer.OrdinalIgnoreCase);

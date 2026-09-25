@@ -123,8 +123,8 @@ RepaymentTransaction
         public long? UserWalletId { get; set; } // if wallet has not been provisioned, it should be null, this allows for package configuration before wallet setup, and also allows for packages that do not require wallet disbursement (e.g. physical input delivery by 3rd party)
         public UserWallet UserWallet { get; set; } //wallet tied to organization or business, not individual farmer wallet
 
-        public long? WalletProviderId { get; set; }
-        public WalletProvider WalletProvider { get; set; }
+        public long? WalletProviderId { get; set; } = null;
+        public WalletProvider? WalletProvider { get; set; }
 
         public bool IsSelectedWalletProvisioned { get; set; } // indicates if the user wallet for disbursement has been provisioned, this is important for package activation and disbursement readiness
         public decimal AdditionalCostAmount { get; set; } // total of all additional costs, this is important for calculating total repayment amount and for farmer commitment
@@ -177,7 +177,7 @@ RepaymentTransaction
         public long InputPackageId { get; set; }
         public InputPackage InputPackage { get; set; }
         public bool IsActive { get; set; } = true;
-        public AdditionalCostType Type { get; set; }
+        public AdditionalCostType Type { get; set; } = AdditionalCostType.Other;
         public bool IsPerUnit { get; set; } // e.g. per hectare
         public decimal? Quantity { get; set; }
         public AdditionalCostTreatmentType AdditionalCostTreatmentType { get; set; } = AdditionalCostTreatmentType.Internal;
@@ -247,6 +247,7 @@ RepaymentTransaction
         public decimal Amount { get; set; }
         public decimal AmountPaid { get; set; }
         public DateTimeOffset? PaidOn { get; set; }
+        public DateTimeOffset? GracePeriodDueDate { get; set; }
       
         public bool IsWithinGracePeriod { get; set; }
 
@@ -256,6 +257,14 @@ RepaymentTransaction
         public bool IsOverdue { get; set; }
         public decimal PenaltyAccrued { get; set; }
         public decimal PenaltyPaid { get; set; }
+
+        public bool IsDeleted { get; set; }
+        public DateTimeOffset? DeletedOn { get; set; }
+        public string? DeletedByUserId { get; set; }
+        public string? DeletionReason { get; set; }
+
+        public long? SupersededByScheduleId { get; set; }
+        public RepaymentSchedule? SupersededByRepaymentSchedule { get; set; }
     }
 
     public class InputPackageSubscription
@@ -468,7 +477,9 @@ public class SubscriptionDocument
         public long SubscriptionId { get; set; }
         public InputPackageSubscription Subscription { get; set; }
         public decimal? RequestedAmount { get; set; }
-        public string? RequestedByUserId { get; set; }
+        public string RequestForUserId { get; set; }
+        public User RequestForUser { get; set; }
+        public string? RequestByUserId { get; set; }
         public User RequestByUser { get; set; }
         public string? Reference { get; set; }
         public DateTimeOffset RequestCreatedOn { get; set; } = DateTimeOffset.UtcNow;
@@ -479,7 +490,6 @@ public class SubscriptionDocument
         public DateTimeOffset? DisbursedOn { get; set; }
         public string? DisbursedByUserId { get; set; }
         public User DisbursedByUser { get; set; }
-        public decimal? DisbursedAmount { get; set; }
         public decimal? RemainingBalance { get; set; }
         public bool IsPartial { get; set; }
         public long? LocationId { get; set; }
@@ -487,6 +497,11 @@ public class SubscriptionDocument
         public double Latitude { get; set; }
         public double Longitude { get; set; }
         public DisbursementStatus Status { get; set; } = DisbursementStatus.PendingApproval;
+        public string? RejectedByUserId { get; set; }
+        public DateTimeOffset? RejectedOn { get; set; }
+
+        public string? RejectionReason { get; set; }
+
     }
 
     public class PaymentReconciliation
@@ -522,7 +537,7 @@ public class SubscriptionDocument
         public decimal UnitCost { get; set; }
         public decimal TotalDisbursedValue { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
-        public long LocationId { get; set; }
+        public long OrganizationLocationId { get; set; }
         public OrganizationLocation OrganizationLocation { get; set; }
         public string AgentUserId { get; set; }
         public User User { get; set; }

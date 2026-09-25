@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
+using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -12,6 +13,7 @@ using Agrovesto.Backend.Infrastructure.Utilities;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal.Util;
 using Amazon.S3;
+using Amazon.SimpleNotificationService.Model;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Microsoft.Data.SqlClient;
@@ -25,6 +27,8 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using NotFoundException = Agrovesto.Backend.Core.Exceptions.NotFoundException;
+using ValidationException = Agrovesto.Backend.Core.Exceptions.ValidationException;
 
 namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 {
@@ -1074,9 +1078,27 @@ SELECT
                 Roles = roles
             };
         }
-        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(
-      ListQueryParams query)
+
+        private static readonly SubscriptionStatus[] DisbursedOrBeyondStatuses =
+   {
+    SubscriptionStatus.Disbursed,
+    SubscriptionStatus.PartiallyDisbursed,
+    SubscriptionStatus.Active,
+    SubscriptionStatus.PendingRepayment,
+    SubscriptionStatus.Completed,
+    SubscriptionStatus.Defaulted
+};
+
+        public async Task<OrganizationMembershipDashboardResponse> GetOrganizationMembershipDashboard(ListQueryParams query)
         {
+            var organization = await _context.Organizations
+                .AsNoTracking()
+                .Where(o => o.OrganizationCode == query.organizationCode)
+                .FirstOrDefaultAsync();
+
+            if (organization == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
+
             var membershipIdsQuery = _context.OrganizationMemberships
                 .AsNoTracking()
                 .Where(om => om.Organization.OrganizationCode == query.organizationCode)
@@ -1087,6 +1109,12 @@ SELECT
 
             if (totalMemberships == 0)
                 return new OrganizationMembershipDashboardResponse();
+
+            // Active memberships among the ones belonging to this organization.
+            var totalActiveMemberships = await _context.MemberShips
+                .AsNoTracking()
+                .Where(m => membershipIdsQuery.Contains(m.Id) && m.IsActive)
+                .CountAsync();
 
             var farmerStats = await _context.FarmerCooperatives
                 .AsNoTracking()
@@ -1106,23 +1134,61 @@ SELECT
                 })
                 .FirstOrDefaultAsync();
 
+            // Subscriptions that reached Disbursed or a later lifecycle stage.
+            // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
+            // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
+            // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
+            //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
+            //                            were financed more than once).
+            var disbursedStats = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s => s.OrganizationId == organization.OrganizationId
+                         && s.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(s.Status))
+                .GroupBy(s => 1)
+                .Select(g => new
+                {
+                    Count = g.Count(),
+                    TotalFinanced = g.Sum(s => (decimal?)s.TotalFinancingValue) ?? 0m,
+                    DistinctMemberships = g.Select(s => s.SubscriberUserId).Distinct().Count()
+                })
+                .FirstOrDefaultAsync();
+
+            // Total recovered from those memberships — actual payments made, via the subscription's org link.
+            var totalRecoveryAmount = await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.Subscription.OrganizationId == organization.OrganizationId
+                         && p.Subscription.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(p.Subscription.Status))
+                .SumAsync(p => (decimal?)p.AmountPaid) ?? 0m;
+
             return new OrganizationMembershipDashboardResponse
             {
                 TotalMemberships = totalMemberships,
+                ActiveMemberships = totalActiveMemberships,
                 TotalFarmers = farmerStats?.TotalFarmers ?? 0,
                 TotalVerifiedFarmers = farmerStats?.TotalVerifiedFarmers ?? 0,
                 TotalUnverifiedFarmers = farmerStats?.TotalUnverifiedFarmers ?? 0,
-                TotalInputDisbursed = 0,
-                TotalRecoveryAmount = 0
+                TotalInputDisbursed = disbursedStats?.Count ?? 0,
+                TotalFinanced = disbursedStats?.TotalFinanced ?? 0m,
+                TotalFinancedMemberships = disbursedStats?.DistinctMemberships ?? 0,
+                TotalRecoveryAmount = totalRecoveryAmount
             };
         }
+
         public async Task<PagedListResponse<List<OrganizationMemberShipResponseModel>>> GetCooperativesByOrganization(
-    string organizationCode,
-    ListQueryParams query)
+            string organizationCode,
+            ListQueryParams query)
         {
             query ??= new ListQueryParams();
             if (query.PageNumber <= 0) query.PageNumber = 1;
-            if (query.PageSize <= 0) query.PageSize = 10;
+            if (query.PageSize <= 0 || query.PageSize > 10) query.PageSize = 10;
+
+            var organization = await _context.Organizations.Where(x => x.OrganizationCode == organizationCode).FirstOrDefaultAsync();
+            if (organization == null)
+            {
+                throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
+            }
 
             var baseQuery =
                 from m in _context.MemberShips.AsNoTracking()
@@ -1130,6 +1196,20 @@ SELECT
                 join o in _context.Organizations.AsNoTracking() on om.OrganizationId equals o.OrganizationId
                 where o.OrganizationCode == organizationCode
                 select m;
+
+            if (!string.IsNullOrWhiteSpace(query.SearchParam))
+            {
+                var pattern = $"%{query.SearchParam.Trim()}%";
+                baseQuery = baseQuery.Where(m =>
+                    EF.Functions.Like(m.Name, pattern) ||
+                    EF.Functions.Like(m.Location, pattern) ||
+                    EF.Functions.Like(m.State, pattern) ||
+                    EF.Functions.Like(m.Lga, pattern) ||
+                    EF.Functions.Like(m.Ward, pattern) ||
+                    EF.Functions.Like(m.MembershipLeaderFirstName, pattern) ||
+                    EF.Functions.Like(m.MembershipLeaderLastName, pattern) ||
+                    EF.Functions.Like(m.PhoneNumber, pattern));
+            }
 
             var totalCount = await baseQuery.CountAsync();
 
@@ -1144,37 +1224,99 @@ SELECT
                 };
             }
 
+            // BUG FIX: TotalInputReceived should only reflect subscriptions that actually reached Disbursed
+            // or a later lifecycle stage — pending/approved/rejected subscriptions haven't actually paid out
+            // anything yet, so they shouldn't count toward "received." Also fixed `query.businessCode`
+            // (no such property) → use the resolved `organization`.
+            var inputPackageSubscriptions = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s => s.OrganizationId == organization.OrganizationId
+                         && s.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(s.Status))
+                .GroupBy(s => s.SubscriberUserId)
+                .Select(g => new
+                {
+                    SubscriberUserId = g.Key,
+                    TotalInputReceived = g.Sum(s => (long?)s.TotalFinancingValue) ?? 0,
+                })
+                .ToDictionaryAsync(x => x.SubscriberUserId, x => new
+                {
+                    x.TotalInputReceived,
+                });
+
+            // Recovery amounts are actual payments made against those disbursed-or-beyond subscriptions.
+            var totalRepayment = await _context.InputPackageSubscriptionPayments
+                .AsNoTracking()
+                .Where(p => p.Subscription.OrganizationId == organization.OrganizationId
+                         && p.Subscription.SubscriberType == InputSubScriptionType.MemberShip
+                         && DisbursedOrBeyondStatuses.Contains(p.Subscription.Status))
+                .GroupBy(p => p.Subscription.SubscriberUserId)
+                .Select(g => new
+                {
+                    SubscriberUserId = g.Key,
+                    TotalRecoveryAmount = g.Sum(p => (decimal?)p.AmountPaid) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.SubscriberUserId, x => x.TotalRecoveryAmount);
+
+            // BUG FIX: was `query.businessCode` (no such property) — use the resolved organization's BusinessCode.
+            var walletBalancePerMembership = await _context.UserWallets
+                .AsNoTracking()
+                .Where(w =>
+                    w.BelongToBusinessCode == organization.BusinessCode
+                    && !w.IsDeleted)
+                .GroupBy(s => s.UserId)
+                .Select(g => new
+                {
+                    UserId = g.Key,
+                    WalletBalance = g.Sum(s => (decimal?)s.WalletBalance) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.UserId, x => x.WalletBalance);
+
             var pagedMemberships = await baseQuery
-                .OrderByDescending(m => m.OnBoardedOn)
+                .GroupJoin(_context.MemberShipTypes.AsNoTracking(),
+                    m => m.MemberShipTypeId,
+                    mt => mt.Id,
+                    (m, mtGroup) => new { m, mtGroup })
+                .SelectMany(
+                    x => x.mtGroup.DefaultIfEmpty(),
+                    (x, mt) => new { x.m, MembershipTypeName = mt != null ? mt.Name : null })
+                .OrderByDescending(x => x.m.OnBoardedOn)
                 .Skip((query.PageNumber - 1) * query.PageSize)
                 .Take(query.PageSize)
-                .Select(m => new
+                .Select(x => new
                 {
-                    m.Id,
-                    m.Name,
-                    m.Location,
-                    m.State,
-                    m.Lga,
-                    m.Ward,
-                    m.OnBoardedOn,
-                    m.MembershipLeaderLastName,
-                    m.MembershipLeaderFirstName,
-                    m.PhoneNumber,
-                    m.UserId,
-                    m.TierLevel,
-                    MembershipType = m.MemberShipType.Name })
+                    x.m.Email,
+                    x.m.Id,
+                    x.m.Name,
+                    x.m.Location,
+                    x.m.State,
+                    x.m.Lga,
+                    x.m.Ward,
+                    x.m.OnBoardedOn,
+                    x.m.MembershipLeaderLastName,
+                    x.m.MembershipLeaderFirstName,
+                    x.m.PhoneNumber,
+                    x.m.UserId,
+                    x.m.TierLevel,
+                    x.m.IsActive,
+                    MembershipType = x.MembershipTypeName,
+                    
+                })
                 .ToListAsync();
 
             var membershipIds = pagedMemberships.Select(m => m.Id).ToList();
 
             var farmerStats = await _context.FarmerCooperatives
                 .AsNoTracking()
-                .Where(fc => membershipIds.Contains(fc.CooperativeId))
                 .Join(_context.Farmers.AsNoTracking(),
                       fc => fc.FarmerId,
                       f => f.Id,
                       (fc, f) => new { fc.CooperativeId, fc.FarmerId, f.Level })
-                .Distinct() 
+                .Join(membershipIds,
+                      x => x.CooperativeId,
+                      id => id,
+                      (x, id) => x)
+                .Distinct()
                 .GroupBy(x => x.CooperativeId)
                 .Select(g => new
                 {
@@ -1184,13 +1326,15 @@ SELECT
                 })
                 .ToDictionaryAsync(x => x.CooperativeId, x => x);
 
-            var assignedAgentIds = await _context.MemberShipAgents
+            var assignedAgentSet = (await _context.MemberShipAgents
                 .AsNoTracking()
-                .Where(a => membershipIds.Contains(a.MemberShipId))
-                .Select(a => a.MemberShipId)
+                .Join(membershipIds,
+                      a => a.MemberShipId,
+                      id => id,
+                      (a, id) => a.MemberShipId)
                 .Distinct()
-                .ToListAsync();
-            var assignedAgentSet = assignedAgentIds.ToHashSet();
+                .ToListAsync())
+                .ToHashSet();
 
             var result = pagedMemberships.Select(m =>
             {
@@ -1198,16 +1342,21 @@ SELECT
                 var totalFarmers = stats?.TotalFarmers ?? 0;
                 var totalVerified = stats?.TotalVerified ?? 0;
 
+                var inputStats = inputPackageSubscriptions.GetValueOrDefault(m.UserId);
+                var totalRecovery = totalRepayment.GetValueOrDefault(m.UserId);
+                var walletBalance = walletBalancePerMembership.GetValueOrDefault(m.UserId);
+
                 return new OrganizationMemberShipResponseModel
                 {
+                    Status = m.IsActive,
                     Id = m.Id,
-                    Name = m.Name,
+                    MembershipName = m.Name,
                     Location = m.Location,
                     State = m.State,
                     Lga = m.Lga,
                     Ward = m.Ward,
                     OnBoardedOn = m.OnBoardedOn,
-                    ContactPerson = m.MembershipLeaderLastName + " " + m.MembershipLeaderFirstName,
+                    ContactPerson = $"{m.MembershipLeaderLastName} {m.MembershipLeaderFirstName}",
                     PhoneNumber = m.PhoneNumber,
                     UserId = m.UserId,
                     Tier = EnumExtensions.GetDisplayName(m.TierLevel),
@@ -1216,8 +1365,9 @@ SELECT
                     TotalVerifiedFarmers = totalVerified,
                     TotalUnverifiedFarmers = totalFarmers - totalVerified,
                     HasbeenAssignedAgent = assignedAgentSet.Contains(m.Id),
-                    TotalInputReceived = 0,
-                    RecoveryAmount = 0
+                    TotalInputReceived = inputStats?.TotalInputReceived ?? 0,
+                    RecoveryAmount = totalRecovery,
+                    WalletBalance = walletBalance
                 };
             }).ToList();
 
@@ -1600,7 +1750,7 @@ SELECT
                 OwnershipType=dto.OwnerShipType,
                 WardId=dto.WardId,
                 DateOfCommissioning = dto.DateOfCommissioning,
-
+                
                 HasTemperatureControl = dto.HasTemperatureControl,
                 TemperatureControlTypeId = dto.HasTemperatureControl ? dto.TemperatureControlTypeId : null,
 
@@ -1633,13 +1783,13 @@ SELECT
             var locations = _context.OrganizationLocations
                 .Where(x => x.OrganizationId == organizationId && x.IsActive);
 
-            
+
 
             var totalWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId == x.Id);
+                .CountAsync(x => x.ParentLocationId == null || x.ParentLocationId == x.Id);
 
             var totalSubWarehouses = await locations
-                .CountAsync(x => x.ParentLocationId !=x.Id);
+                .CountAsync(x => x.ParentLocationId != null && x.ParentLocationId != x.Id);
 
 
             var totalCapacity = await locations
@@ -1857,17 +2007,18 @@ SELECT
             //}
             var totalCount = await baseQuery.CountAsync();
 
-            var pageNumber = query.PageNumber < 1 ? 1 : query.PageNumber;
-            var pageSize = query.PageSize < 1 ? 100 : query.PageSize;
+            if (query.PageNumber <= 0) query.PageNumber = 1;
+            if (query.PageSize <= 0) query.PageSize = 10;
 
             var data = await baseQuery
                 .OrderByDescending(x => x.CreatedOn)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((query.PageNumber - 1) * query.PageSize)
+                .Take(query.PageNumber)
                 .Select(x => new LocationListResponseDto
                 {
-                    IsActive = x.LocationStatus == "Active",
-                    // IsActive= x.IsActive,
+                    IsActive = !string.IsNullOrEmpty(x.LocationStatus)
+    ? x.LocationStatus.Equals("Active", StringComparison.OrdinalIgnoreCase)
+    : x.IsActive,
                     Id = x.Id,
                     LocationName = x.LocationName,
                     Address = x.Address,
@@ -1904,8 +2055,8 @@ SELECT
             {
                 Data = data,
                 Count = totalCount,
-                PageNumber = pageNumber,
-                PageSize = pageSize
+                PageNumber = query.PageNumber,
+                PageSize = query.PageSize
             };
         }
         public async Task<PagedListResponse<List<AgentLocationListResponseDto>>> GetLocationsByAgentAsync(ListQueryParams query)
@@ -3291,156 +3442,8 @@ SELECT
         {
             return ex.InnerException?.Message.Contains("IX_Farmers_UserId") == true;
         }
-        //public async Task<(bool status, FarmerModel data)> CreateOrUpdateFarmer(FarmerModel data)
-        //{
-        //    var strategy = _context.Database.CreateExecutionStrategy();
-
-        //    return await strategy.ExecuteAsync(async () =>
-        //    {
-        //        using var transaction = await _context.Database.BeginTransactionAsync();
-
-        //        try
-        //        {
-        //            var farmer = await _context.Farmers
-        //                .FirstOrDefaultAsync(f => f.UserId == data.UserId);
-
-        //            if (farmer != null)
-        //            {
-        //                await UpdateFarmerProfileAsync(data.UserId, new FarmerUpdateModel
-        //                {
-        //                    DateOfBirth = data.DateOfBirth,
-        //                    State = data.State,
-        //                    Lga = data.Lga,
-        //                    Name = data.Name,
-        //                    PhoneNumber = data.PhoneNumber,
-        //                    Email = data.Email,
-        //                    Gender = data.Gender,
-        //                    Location = data.Location,
-        //                    Ward = data.Ward,
-        //                    BVN = data.BVN,
-        //                    NIN = data.NIN,
-        //                    IsNinVerified = data.IsNinVerified,
-        //                    FarmerCategory = data.FarmerCategory,
-        //                    FarmerImage = data.FarmerImage,
-        //                    HighestLevelOfEducation = data.HighestLevelOfEducation,
-        //                    YearsInAgric = data.YearsInAgric
-        //                });
-        //            }
-        //            else
-        //            {
-        //                farmer = data.Map();
-        //                await _context.Farmers.AddAsync(farmer);
-        //            }
-
-        //            await _context.SaveChangesAsync();
-
-        //            // ===========================
-        //            // ORGANIZATION LINK
-        //            // ===========================
-        //            if (!string.IsNullOrEmpty(data.OrganizationCode))
-        //            {
-        //                bool exists = await _context.FarmerOrganizations
-        //                    .AnyAsync(x => x.FarmerId == farmer.Id && x.OrganizationCode == data.OrganizationCode);
-
-        //                if (!exists)
-        //                {
-        //                    await _context.FarmerOrganizations.AddAsync(new FarmerOrganization
-        //                    {
-        //                        FarmerId = farmer.Id,
-        //                        OrganizationCode = data.OrganizationCode,
-        //                        OnboardedByUserId = data.OnboardedByUserId
-        //                    });
-        //                }
-        //            }
-
-        //            // ===========================
-        //            // COOPERATIVES
-        //            // ===========================
-        //            if (data.CooperativeIds != null)
-        //            {
-        //                var existing = await _context.FarmerCooperatives
-        //                    .Where(x => x.FarmerId == farmer.Id)
-        //                    .ToListAsync();
-
-        //                var incoming = data.CooperativeIds.Distinct().ToList();
-
-        //                var toAdd = incoming
-        //                    .Where(id => !existing.Any(e => e.CooperativeId == id))
-        //                    .ToList();
-
-        //                var toRemove = existing
-        //                    .Where(e => !incoming.Contains(e.CooperativeId))
-        //                    .ToList();
-
-        //                foreach (var id in toAdd)
-        //                {
-        //                    await _context.FarmerCooperatives.AddAsync(new FarmerCooperative
-        //                    {
-        //                        FarmerId = farmer.Id,
-        //                        CooperativeId = id,
-        //                        OnboardedByUserId = data.OnboardedByUserId,
-        //                        JoinedOn = DateTimeOffset.Now
-        //                    });
-        //                }
-
-        //                _context.FarmerCooperatives.RemoveRange(toRemove);
-        //            }
-
-        //            // ===========================
-        //            // AGENTS
-        //            // ===========================
-        //            if (data.AgentIds != null)
-        //            {
-        //                var existing = await _context.FarmerAgents
-        //                    .Where(x => x.FarmerId == farmer.Id)
-        //                    .ToListAsync();
-
-        //                var incoming = data.AgentIds.Distinct().ToList();
-
-        //                var toAdd = incoming
-        //                    .Where(id => !existing.Any(e => e.AgentId == id))
-        //                    .ToList();
-
-        //                var toRemove = existing
-        //                    .Where(e => !incoming.Contains(e.AgentId))
-        //                    .ToList();
-
-        //                foreach (var id in toAdd)
-        //                {
-        //                    await _context.FarmerAgents.AddAsync(new FarmerAgent
-        //                    {
-        //                        FarmerId = farmer.Id,
-        //                        AgentId = id,
-        //                        AssignedByUserId = data.OnboardedByUserId,
-        //                        AssignedOn = DateTimeOffset.Now
-        //                    });
-        //                }
-
-        //                _context.FarmerAgents.RemoveRange(toRemove);
-        //            }
-
-        //            // ===========================
-        //            // VALUE CHAIN
-        //            // ===========================
-        //            if (data.SelectedItems != null)
-        //            {
-        //                await UpdateFarmerValueChainItems(farmer.Id, data.SelectedItems);
-        //            }
-
-        //            await _context.SaveChangesAsync();
-        //            await transaction.CommitAsync();
-
-        //            return (true, farmer.Map());
-        //        }
-        //        catch
-        //        {
-        //            await transaction.RollbackAsync();
-        //            throw;
-        //        }
-        //    });
-        //}
-
-        public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateModel update)
+  
+        public async Task<FarmerModel> UpdateFarmerProfileAsync(string userId, FarmerUpdateModel update)
         {
             if (string.IsNullOrWhiteSpace(userId) || update == null)
                 return null;
@@ -3641,8 +3644,21 @@ SELECT
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
             var skip = (args.PageNumber - 1) * args.PageSize;
+            
 
             var query = GetOrganizationFarmerQuery(args.organizationCode);
+
+            if (!string.IsNullOrWhiteSpace(args.SearchParam))
+            {
+                var search = args.SearchParam.Trim();
+                query = query.Where(x =>
+                    EF.Functions.Like(x.Name, $"%{search}%") ||
+                    EF.Functions.Like(x.PhoneNumber, $"%{search}%") ||
+                    EF.Functions.Like(x.Email, $"%{search}%") ||
+                    EF.Functions.Like(x.State, $"%{search}%") ||
+                    EF.Functions.Like(x.Lga, $"%{search}%") ||
+                    EF.Functions.Like(x.Ward, $"%{search}%"));
+            }
 
             // if (args.IsActive.HasValue)
             //     query = query.Where(x => x.OrganizationIsActive == args.IsActive.Value);
@@ -3661,7 +3677,7 @@ SELECT
             }
 
             var pagedRows = await query
-                .OrderByDescending(x => x.CreatedOn)
+                .OrderByDescending(x=>x.CreatedOn)
                 .Skip(skip)
                 .Take(args.PageSize)
                 .Select(x => new
@@ -3822,9 +3838,9 @@ SELECT
                 PhoneNumber = farmer.PhoneNumber,
                 Email = farmer.Email,
                 Gender = farmer.Gender,
-                Dob = farmer.DateOfBirth,
-                BVN = user?.BVN,
-                NIN = user?.NIN,
+                Dob = user.DateOfBirth,
+                BVN = EncryptionUtil.MaskSensitiveNumber(user?.BVN),
+                NIN = EncryptionUtil.MaskSensitiveNumber(user?.NIN),
                 FarmerImage = farmerImage,
 
                 State = farmer.State,
@@ -3886,7 +3902,7 @@ SELECT
                     OrganizationIsActive = fo.IsActive,
                     Name = f.Name ?? u.Name,
                     PhoneNumber = u.PhoneNumber,
-                    Email = u.Email,
+                    Email = f.Email ?? u.Email,
                     Gender = f.Gender,
                     State = f.State,
                     Lga = f.Lga,

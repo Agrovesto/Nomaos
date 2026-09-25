@@ -31,6 +31,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<UserWalletModel> CreateUserWallet(UserWalletModel request, UserWalletParams args);
         Task<UserWallet> ExistingWalletForProvider(WalletQueryParams args, WalletContextType contextType, string? contextReferenceId, long providerId);
         Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args);
+        Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args);
+        Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode);
         Task<PagedListResponse<List<FarmerTransactionDto>>> GetUserWalletTransaction(ListQueryParams args);
         Task<PagedListResponse<List<UserWalletResponseModel>>> GetUserWallletsByUserId(UserWalletParams args);
         Task<UserWalletDetailResponseModel> GetWalletById(UserWalletParams args);
@@ -39,7 +41,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             , string? reference = null);
         Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null);
         Task CompleteWalletWithdrawal(string transactionReference, bool isSuccessful, string? providerReference, string? providerStatus);
+        Task<string> ReserveWalletWithdrawal(long userWalletId, decimal amount, string? description, string reference);
+        Task SettleWalletWithdrawal(string transactionReference, string? providerReference, string? providerStatus);
+        Task ReverseWalletWithdrawal(string transactionReference, string? providerReference, string? providerStatus);
+        Task MarkWithdrawalIndeterminate(string transactionReference, string? providerReference, string? providerStatus);
         Task ValidateTransactionPin(long walletId, string inputPin);
+        Task UpdateTransactionPin(long walletId, string newPin);
         Task UpdateTransaction(UserWalletTransactions transaction);
         Task UpdateTransactionProviderInfo(string transactionReference, string? providerReference, string providerStatus, string? rawPayload);
         Task UpdateTransactionStatus(string transactionReference, WalletTransactionStatus status);
@@ -50,15 +57,34 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<List<WalletReconciliationLog>> GetPendingReconciliations();
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
         Task AdjustWalletBalanceAsync(long walletId, decimal delta);
+        Task MarkPendingReconciliation(string reference, string reason);
     }
     public class UserWalletRepository : IUserWalletRepository
     {
+        private static readonly SubscriptionStatus[] ActiveLoanStatuses =
+        {
+            SubscriptionStatus.Active,
+            SubscriptionStatus.PendingDisbursement,
+            SubscriptionStatus.PendingCommitment,
+            SubscriptionStatus.PendingApproval
+        };
+
         private readonly DataContext _context;
         private readonly IAWSService _notificationService;
         public UserWalletRepository(DataContext context, IAWSService aWSService)
         {
             _context = context;
             _notificationService = aWSService;
+        }
+        public async Task<decimal> TotalUserWalletsBalance(string userId, string businessCode)
+        {
+            var totalBalance = await _context.UserWallets
+                .Where(w =>
+                    w.UserId == userId &&
+                    w.BelongToBusinessCode == businessCode &&
+                    !w.IsDeleted)
+                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+            return totalBalance;
         }
         public async Task AdjustWalletBalanceAsync(long walletId, decimal delta)
         {
@@ -151,6 +177,96 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
        
         
+        public async Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                return null;
+
+            return await _context.UserWallets
+                .Where(w =>
+                    w.UserId == userId &&
+                    w.BelongToBusinessCode == businessCode &&
+                    w.IsActive &&
+                    !w.IsDeleted)
+                .OrderByDescending(w => w.WalletContexts.Any(c => c.IsDefault))
+                .ThenBy(w => w.AddedOn)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<List<LinkedInputPackageDto>> GetWalletLinkedPackages(UserWalletParams args)
+        {
+            if (string.IsNullOrWhiteSpace(args.UserId))
+                throw new ArgumentException("UserId is required");
+
+            var walletIds = await _context.UserWallets
+                .AsNoTracking()
+                .Where(w =>
+                    w.UserId == args.UserId &&
+                    w.BelongToBusinessCode == args.businessCode &&
+                    !w.IsDeleted &&
+                    (args.Id <= 0 || w.Id == args.Id))
+                .Select(w => w.Id)
+                .ToListAsync();
+
+            if (!walletIds.Any())
+                return new List<LinkedInputPackageDto>();
+
+            var packages = await _context.InputPackages
+                .AsNoTracking()
+                .Where(p => p.UserWalletId.HasValue && walletIds.Contains(p.UserWalletId.Value))
+                .Select(p => new
+                {
+                    p.Id,
+                    p.Name,
+                    WalletId = p.UserWalletId.Value
+                })
+                .ToListAsync();
+
+            if (!packages.Any())
+                return new List<LinkedInputPackageDto>();
+
+            var packageIds = packages.Select(p => p.Id).ToList();
+
+            var activeLoans = await _context.InputPackageSubscriptions
+                .AsNoTracking()
+                .Where(s =>
+                    packageIds.Contains(s.InputPackageId) &&
+                    ActiveLoanStatuses.Contains(s.Status))
+                .GroupBy(s => s.InputPackageId)
+                .Select(g => new
+                {
+                    PackageId = g.Key,
+                    Count = g.Count()
+                })
+                .ToDictionaryAsync(x => x.PackageId, x => x.Count);
+
+            var outstanding = await _context.RepaymentSchedules
+                .AsNoTracking()
+                .Where(x =>
+                    packageIds.Contains(x.InputPackageSubscription.InputPackageId) &&
+                    !x.IsPaid &&
+                    !x.IsDeleted)
+                .GroupBy(x => x.InputPackageSubscription.InputPackageId)
+                .Select(g => new
+                {
+                    PackageId = g.Key,
+                    Amount = g.Sum(x => x.Amount - x.AmountPaid)
+                })
+                .ToDictionaryAsync(x => x.PackageId, x => x.Amount);
+
+            return packages
+                .Select(p => new LinkedInputPackageDto
+                {
+                    PackageId = p.Id,
+                    WalletId = p.WalletId,
+                    PackageName = p.Name,
+                    ActiveLoans = activeLoans.TryGetValue(p.Id, out var count) ? count : 0,
+                    OutstandingPortfolio = outstanding.TryGetValue(p.Id, out var amount) ? amount : 0
+                })
+                .OrderBy(p => p.PackageName)
+                .ToList();
+        }
+
         public async Task<FarmerFinancialSummaryDto> GetUserFinancialSummary(UserWalletParams args)
         {
             var subscriberUserId = args.UserId;
@@ -311,6 +427,23 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+
+        public async Task UpdateTransactionPin(long walletId, string newPin)
+        {
+            var security = await _context.WalletSecurities
+                .FirstOrDefaultAsync(x => x.UserWalletId == walletId);
+
+            if (security == null)
+                throw new BaseException(ExceptionType.NOTFOUND, "Wallet security record not found");
+
+            security.TransactionPinHash = BCrypt.Net.BCrypt.HashPassword(newPin);
+            security.PinFailedAttempts = 0;
+            security.PinLockedUntil = null;
+            security.LastPinChangeDate = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<UserWalletModel> CreateUserWallet(
        UserWalletModel request,
        UserWalletParams args)
@@ -629,6 +762,135 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return transactionReference;
         }
 
+        private const int ProviderStatusMaxLength = 50;
+        private const int ProviderReferenceMaxLength = 100;
+        private const int TransactionReferenceMaxLength = 50;
+        private const int TransactionDescriptionMaxLength = 500;
+
+        private static string? Clip(string? value, int maxLength) =>
+            string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+
+        public async Task<string> ReserveWalletWithdrawal(
+            long userWalletId, decimal amount, string? description, string reference)
+        {
+            if (amount <= 0)
+                throw new ArgumentException("Amount must be greater than zero");
+
+            if (string.IsNullOrWhiteSpace(reference))
+                throw new ArgumentException("A transaction reference is required");
+
+            if (reference.Length > TransactionReferenceMaxLength)
+                throw new ArgumentException(
+                    $"Transaction reference must be {TransactionReferenceMaxLength} characters or fewer");
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == userWalletId && !x.IsDeleted);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            if (wallet.WalletBalance < amount)
+                throw new Exception("Insufficient balance");
+
+            var balanceBefore = wallet.WalletBalance;
+            wallet.WalletBalance -= amount;
+
+            var transaction = new UserWalletTransactions
+            {
+                UserWalletId = wallet.Id,
+                WalletTransactionType = WalletTransactionType.Debit,
+                TransactionAmount = amount,
+                CommissionFee = 0,
+                TransactionFee = 0,
+                Currency = wallet.Currency,
+                TransactionDescription = Clip(description, TransactionDescriptionMaxLength),
+                TransactionDate = DateTimeOffset.UtcNow,
+                WalletTransactionStatus = WalletTransactionStatus.DebitPending,
+                TransactionReference = reference,
+                BalanceBefore = balanceBefore,
+                BalanceAfter = wallet.WalletBalance,
+                ProviderStatus = "RESERVED"
+            };
+
+            _context.UserWallets.Update(wallet);
+            _context.UserWalletTransactions.Add(transaction);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new Exception(
+                    "This wallet was updated by another transaction. Please check your balance and try again.");
+            }
+
+            return reference;
+        }
+
+        private async Task<UserWalletTransactions> GetReservedWithdrawal(string transactionReference)
+        {
+            var transaction = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == transactionReference);
+
+            if (transaction == null)
+                throw new Exception("Transaction not found");
+
+            if (transaction.WalletTransactionStatus != WalletTransactionStatus.DebitPending)
+                throw new Exception("Transaction already processed");
+
+            return transaction;
+        }
+
+        public async Task SettleWalletWithdrawal(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.Completed;
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task ReverseWalletWithdrawal(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            var wallet = await _context.UserWallets
+                .FirstOrDefaultAsync(x => x.Id == transaction.UserWalletId);
+
+            if (wallet == null)
+                throw new Exception("Wallet not found");
+
+            wallet.WalletBalance += transaction.TransactionAmount;
+
+            transaction.BalanceAfter = wallet.WalletBalance;
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
+
+            _context.UserWallets.Update(wallet);
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task MarkWithdrawalIndeterminate(
+            string transactionReference, string? providerReference, string? providerStatus)
+        {
+            var transaction = await GetReservedWithdrawal(transactionReference);
+
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
+            transaction.WalletTransactionStatus = WalletTransactionStatus.ReconciliationRequired;
+
+            _context.UserWalletTransactions.Update(transaction);
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<string> InitiateWalletWithdrawal(long userWalletId, decimal amount, string? description = "Wallet Withdrawal", string? reference = null)
         {
             if (amount <= 0)
@@ -697,13 +959,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                       // await _context.SaveChangesAsync();
+                        _context.UserWalletTransactions.Update(transaction);
+                        await _context.SaveChangesAsync();
                       //  await dbTransaction.CommitAsync();
                         return;
                     }
@@ -775,18 +1038,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     if (wallet == null)
                         throw new Exception("Wallet not found");
 
-                    transaction.ProviderReference = providerReference;
-                    transaction.ProviderStatus = providerStatus;
+                    transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+                    transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
 
                     if (!isSuccessful)
                     {
                         transaction.WalletTransactionStatus = WalletTransactionStatus.Failed;
-                        //await _context.SaveChangesAsync();
+                        _context.UserWalletTransactions.Update(transaction);
+                        await _context.SaveChangesAsync();
                        // await dbTransaction.CommitAsync();
                         return;
                     }
 
-                 
+
                     var balanceBefore = wallet.WalletBalance;
                     var netAmount = transaction.TransactionAmount
                                     - transaction.TransactionFee
@@ -826,8 +1090,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (transaction == null)
                 return;
 
-            transaction.ProviderReference = providerReference;
-            transaction.ProviderStatus = providerStatus;
+            transaction.ProviderReference = Clip(providerReference, ProviderReferenceMaxLength);
+            transaction.ProviderStatus = Clip(providerStatus, ProviderStatusMaxLength);
             transaction.TransactionDate = DateTimeOffset.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(rawPayload))
@@ -837,7 +1101,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
 
             _context.UserWalletTransactions.Update(transaction);
-           // await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
         }
         public async Task UpdateTransactionStatus(
     string transactionReference,
@@ -932,10 +1196,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (args.TransactionDate.HasValue)
             {
-                var date = args.TransactionDate.Value.Date;
+                // The caller's stated calendar date, matched as a UTC day. Transactions are
+                // always written with DateTimeOffset.UtcNow, so this is the day they belong to.
+                //
+                // A half-open range replaces CONVERT(date, column) == date, which had two
+                // problems: the function around the column made the predicate non-SARGable,
+                // and it compared the date in whatever offset each row was stored with rather
+                // than a fixed one. Comparing instants avoids both.
+                var dayStart = new DateTimeOffset(args.TransactionDate.Value.Date, TimeSpan.Zero);
+                var dayEnd = dayStart.AddDays(1);
 
                 query = query.Where(x =>
-                    x.TransactionDate.Date == date);
+                    x.TransactionDate >= dayStart && x.TransactionDate < dayEnd);
             }
 
             if (args.TransactionType.HasValue)
@@ -944,6 +1216,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 query = query.Where(x =>
                     x.WalletTransactionType == txnType);
+            }
+
+            if (args.TransactionStatus.HasValue)
+            {
+                var txnStatus = (WalletTransactionStatus)args.TransactionStatus;
+
+                query = query.Where(x =>
+                    x.WalletTransactionStatus == txnStatus);
             }
 
             var totalCount = await query.CountAsync();
@@ -966,9 +1246,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Select(t => new FarmerTransactionDto
                  {
                      TransactionId = t.Id,
+                     TransactionReference = t.TransactionReference,
                      Amount = t.TransactionAmount,
                      BalanceAfter = t.BalanceAfter,
                      TransactionType = EnumExtensions.GetDisplayName(t.WalletTransactionType),
+                     Status = EnumExtensions.GetDisplayName(t.WalletTransactionStatus),
                      Timestamp = t.TransactionDate,
                      Description = t.TransactionDescription
                  })
@@ -983,6 +1265,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             };
         }
 
+        public async Task MarkPendingReconciliation(string reference, string reason)
+        {
+            var tx = await _context.UserWalletTransactions
+                .FirstOrDefaultAsync(x => x.TransactionReference == reference);
+
+            if (tx == null)
+                return; 
+
+            tx.WalletTransactionStatus = WalletTransactionStatus.ReconciliationRequired;
+            //tx.IsSuccessful = null; // explicitly unknown, not false
+            //tx.FailureReason = reason;
+            //tx.UpdatedOn = DateTimeOffset.UtcNow;
+
+            await _context.SaveChangesAsync();
+        }
 
         public async Task FlagForReconciliation(
     string debitReference,

@@ -19,14 +19,16 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public bool IsLeaderAFarmer { get; set; }
         public long MemberShipTypeId { get; set; }
         public string Name { get; set; }
+        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Password { get; set; }
         public string? Pin { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }
         public string? Ward { get; set; }
+        public string? DateOfBirth { get; set; }
         public string? ContactPerson { get; set; }
-        public string Email { get; set; }
+        public string? Email { get; set; }
         public long OrganizationId { get; set; }
         public string? PhoneNumber { get; set; }
         public string? MembershipLeaderFirstName { get; set; }
@@ -110,7 +112,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class OrganizationMemberShipResponseModel
     {
-        public string Name { get; set; }
+        public string MembershipName { get; set; }
         public string? MembershipType { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
@@ -129,10 +131,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public long TotalUnverifiedFarmers { get; set; }
         public decimal RecoveryAmount { get; set; }
         public string Tier { get; set; }
+        public bool Status { get; set; }
     }
     public class OrganizationMembershipDashboardResponse
     {
         public int TotalMemberships { get; set; }
+        public int ActiveMemberships { get; set; }
+        public int TotalFinancedMemberships { get; set; }
+        public decimal TotalFinanced { get; set; }
 
         public int TotalFarmers { get; set; }
 

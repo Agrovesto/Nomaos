@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Agrovesto.Backend.Core.Enums;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -23,7 +24,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string Gender { get; set; }
         public string? Maidenname { get; set; }
         public string Middlename { get; set; }
-        public string Nin { get; set; }
+        public string Number { get; set; }
         public string Firstname { get; set; }
         public string Surname { get; set; }
         public string Phonenumber { get; set; }
@@ -46,5 +47,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         //public string residencestatus { get; set; }
         
         //public string title { get; set; }
+
+        public KYCVerificationType? VerificationType{ get; set; }
     }
+
+  
 }
