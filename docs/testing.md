@@ -86,7 +86,7 @@ No test touches a real SQL Server, Redis, Vault, socket or clock.
 
 ## In CI
 
-`.github/workflows/dotnet-api.yml` → job **Tests & coverage gate** runs the same
-script, uploads `coverage/` and the `.trx`, and fails the build on a test
+The `dotnet-api` pipeline (see [ci-cd.md](./ci-cd.md)) → job
+**Tests & coverage gate** runs the same script, uploads `coverage/` and the `.trx`, and fails the build on a test
 failure or on coverage below 95%. The SonarQube job consumes the OpenCover
 report from that artifact.
