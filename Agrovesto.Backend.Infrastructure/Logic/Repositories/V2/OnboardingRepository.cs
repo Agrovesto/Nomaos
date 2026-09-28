@@ -925,17 +925,31 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     "User not found");
 
 
-            var resolvedName =
-         !string.IsNullOrWhiteSpace(model.FullName)
-             ? model.FullName
-             : string.Join(" ",
-                 new[] { model.FirstName, model.MiddleName, model.LastName }
-                     .Where(x => !string.IsNullOrWhiteSpace(x)));
+            var resolvedName = !string.IsNullOrWhiteSpace(model.FullName)
+        ? model.FullName
+        : string.Join(" ",
+            new[] { model.FirstName, model.MiddleName, model.LastName }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
 
-                if (!string.IsNullOrWhiteSpace(resolvedName) && string.IsNullOrEmpty(user.Name))
-                    
-                user.Name = resolvedName;
-        
+            if (!string.IsNullOrWhiteSpace(resolvedName))
+            {
+                var isIdentityVerified = user.IsNinVerified || user.IsBvnVerified;
+                var hasExistingName = !string.IsNullOrWhiteSpace(user.Name);
+
+                if (hasExistingName && isIdentityVerified && !EnumExtensions.NamesMatch(user.Name, resolvedName))
+                {
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "Your name cannot be changed because your NIN or BVN has been verified. " +
+                        "Please contact support and provide relevant documentation (e.g. a valid ID or " +
+                        "legal name-change document) to request a name update.");
+                }
+
+                // Set if empty, or if the user has no verified identity locking it.
+                if (!hasExistingName || !isIdentityVerified)
+                    user.Name = resolvedName.Trim();
+            }
+
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
             {

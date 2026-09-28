@@ -659,60 +659,74 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request, [FromQuery] ProfileUpdateArgs query)
         {
             var callerId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(callerId)) return Unauthorized();
 
           
-            var targetUserId = string.IsNullOrWhiteSpace(request.UserId) ? callerId : request.UserId.Trim();
+            var targetUserId = string.IsNullOrWhiteSpace(query.UserId) ? callerId : query.UserId.Trim();
             var isSelf = string.Equals(targetUserId, callerId, StringComparison.Ordinal);
+           
 
-            if (!TryResolveRole(request.Role, isSelf, out var role, out var roleError))
+            if (!TryResolveRole(query.Role, isSelf, out var role, out var roleError))
                 return BadRequest(new { message = roleError });
 
-            if (!await _accessPolicy.CanEditAsync(User, targetUserId, role, request.BusinessCode))
+            if (!await _accessPolicy.CanEditAsync(User, targetUserId, role, query.BusinessCode))
                 return Forbid();
 
               var args = new OnBoardingArgs
             {
                 UserId = targetUserId,
-                businessCode = request.BusinessCode,
-                organizationCode = request.OrganizationCode,
+                businessCode = query.BusinessCode,
+                organizationCode = query.OrganizationCode,
                        OnboardedByUserId = !isSelf && User.IsInRole(DefaultProfileAccessPolicy.AgentRole) ? callerId : null
             };
-            request.Profile.ModifiedBy = callerId;
+           
+            var result = await _onBoardingManager.UpdateProfileAsync(role, args, request.Profile, request.Farmer, request.Organization);
 
-             var result = await _onBoardingManager.UpdateProfileAsync(role, args, request.Profile, request.Farmer);
-
-            return Ok(result);
+            return Ok(new Response<IReadOnlyList<string>>
+            {
+                Data=result.UpdatedFields,
+                Code=ResponseCodes.Success,
+                Succeeded=result.Success,
+                Message=result.Message
+            });
         }
-        private bool TryResolveRole(string requested, bool isSelf, out ProfileRole role, out string error)
+        private bool TryResolveRole(string? requested, bool isSelf, out ProfileRole role, out string? error)
         {
             role = default;
             error = null;
+            requested = requested?.Trim();
 
+            // 1. A role was explicitly requested: validate it.
             if (!string.IsNullOrWhiteSpace(requested))
             {
-                if (Enum.TryParse(requested, ignoreCase: true, out role) && Enum.IsDefined(role))
-                    return true;
+                if (!Enum.TryParse(requested, ignoreCase: true, out role) || !Enum.IsDefined(role))
+                {
+                    error = $"Role must be one of: {string.Join(", ", Enum.GetNames<ProfileRole>())}.";
+                    return false;
+                }
 
-                error = "Role must be one of: Farmer, Agent, MemberShip.";
-                return false;
+                // For self-edits, the caller must actually hold the role they're asking for.
+                if (isSelf && !GetHeldProfileRoles().Contains(role))
+                {
+                    error = "You do not hold that role.";
+                    return false;
+                }
+
+                return true;
             }
 
+            // 2. No role requested: only allowed for self-edits.
             if (!isSelf)
             {
                 error = "Role is required when updating another user's profile.";
                 return false;
             }
 
-            var held = User.FindAll(ClaimTypes.Role)
-                .Select(c => Enum.TryParse<ProfileRole>(c.Value, ignoreCase: true, out var r) && Enum.IsDefined(r) ? (ProfileRole?)r : null)
-                .Where(r => r.HasValue)
-                .Select(r => r.Value)
-                .Distinct()
-                .ToList();
+            // 3. Self-edit with no role: infer it if the caller holds exactly one profile role.
+            var held = GetHeldProfileRoles();
 
             if (held.Count == 1)
             {
@@ -725,6 +739,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 : "You hold more than one role. Specify which profile to update.";
             return false;
         }
-    
+
+        private List<ProfileRole> GetHeldProfileRoles() =>
+      User.FindAll("Roles")
+          .Select(c => Enum.TryParse<ProfileRole>(c.Value, ignoreCase: true, out var r) && Enum.IsDefined(r)
+              ? (ProfileRole?)r
+              : null)
+          .Where(r => r.HasValue)
+          .Select(r => r!.Value)
+          .Distinct()
+          .ToList();
     }
 }
