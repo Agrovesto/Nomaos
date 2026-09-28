@@ -411,6 +411,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public bool IsLeaderAFarmer { get; set; } = false;
+
         public string? OnboardedByUserId { get; set; }
         // public IFormFile? FarmerCapturedImage { get; set; }
 
@@ -455,16 +456,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     {
         public bool Success { get; init; }
         public string Message { get; init; }
-        public ProfileRole Role { get; init; }
-        public UserModel User { get; init; }
 
         /// <summary>Fields of the role profile that ACTUALLY changed (not merely fields that were sent).</summary>
         public IReadOnlyList<string> UpdatedFields { get; init; } = Array.Empty<string>();
 
-        // Only the one matching Role is populated
-        public FarmerModel Farmer { get; init; }
-        public AgentModel Agent { get; init; }
-        public MemberShipModel Membership { get; init; }
     }
 
     public enum ProfileRole
@@ -477,22 +472,42 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
 
     public sealed class UpdateProfileRequest
     {
+       
+
+        /// <summary>Common + agent/cooperative fields. Not needed for Farmer if <see cref="Farmer"/> is sent.</summary>
+        public ProfileRequestModel? Profile { get; init; }
+
+        /// <summary>Farmer-only fields (value chains, cooperatives, agents...). Required when Role is Farmer.</summary>
+        public FarmerUpdateModel? Farmer { get; init; }
+        public OrganizationUpdateModel? Organization { get; init; }
+    }
+    public class ProfileUpdateArgs
+    {
         /// <summary>Whose profile to update. Omit to update your own.</summary>
-        public string UserId { get; init; }
+        public string? UserId { get; set; }
 
         /// <summary>
         /// Which role profile is being edited: "Farmer" | "Agent" | "Cooperative".
         /// Optional for self-edits when the caller has exactly one role; REQUIRED when editing on behalf of someone else.
         /// </summary>
-        public string Role { get; init; }
+        public string? Role { get; set; }
 
-        public string BusinessCode { get; init; }
-        public string OrganizationCode { get; init; }
+        public string BusinessCode { get; set; }
+        public string? OrganizationCode { get; set; }
+    }
 
-        /// <summary>Common + agent/cooperative fields. Not needed for Farmer if <see cref="Farmer"/> is sent.</summary>
-        public ProfileRequestModel Profile { get; init; }
+    public class OrganizationUpdateModel : UserProfileBase
+    {
+        public string? OrganizationName { get; set; }
+        public string? OrgaizationType { get; set; }
+        public string? CACID { get; set; }
+        public long OrganizationStateId { get; set; }
+        public long OrganizationLgaId { get; set; }
+        public long OrganizationWardId { get; set; }
+        public string? OrganizationAddress { get; set; }
+        public string? OrganizationPhone { get; set; }
+        public string? OrganizationEmail { get; set; }
+        public string? OrganizationWebsite { get; set; }
 
-        /// <summary>Farmer-only fields (value chains, cooperatives, agents...). Required when Role is Farmer.</summary>
-        public FarmerUpdateModel Farmer { get; init; }
     }
 }
