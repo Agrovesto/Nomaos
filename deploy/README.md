@@ -331,7 +331,14 @@ git commit -m "Enable Docker deploy workflow"
 git push
 ```
 
-Required repository settings:
+Once installed, pull requests targeting `devops` build the Docker image without
+AWS credentials or deployment. A push to `devops` deploys to the `staging`
+GitHub environment; pushes to `master` continue to use `production` (`prod`).
+Configure the `staging` environment with the new server's `AWS_DEPLOY_ROLE_ARN`,
+`EC2_INSTANCE_ID`, and `HEALTH_URL` values so the devops branch targets that
+server instead of production.
+
+Required repository/environment settings:
 
 | Kind | Name | Value |
 |---|---|---|
