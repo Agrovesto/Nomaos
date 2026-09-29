@@ -299,69 +299,55 @@ builder.Services.AddHttpClient("health", c =>
 // component checks remain strict (Unhealthy on failure) because they are tagged
 // "critical" and the load balancer should pull the instance out of rotation if
 // those are down.
-var healthChecks = builder.Services.AddHealthChecks()
-    // Liveness self-check + Redis/Vault readiness checks. SQL Server keeps its
-    // registrations below; the "ready" tag is what puts them behind
-    // /health/ready. Nothing here is tagged "live" except the self-check.
-    .AddNomaosProbeChecks();
-
-if (databaseConfigured)
-{
-    healthChecks
-        .AddDbContextCheck<DataContext>("Database",
-            failureStatus: HealthStatus.Unhealthy,
-            tags: new[] { "database", "critical", HealthTags.Ready },
-            timeout: TimeSpan.FromSeconds(5))
-        .AddSqlServer(
-            connectionString: builder.Configuration.GetConnectionString("DefaultConnection")!,
-            name: "SQL Server Database",
-            healthQuery: "SELECT 1",
-            timeout: TimeSpan.FromSeconds(5),
-            tags: new[] { "database", "critical", HealthTags.Ready });
-}
-else
-{
-    // Degraded, not Unhealthy: an image booted without a database is a
-    // deliberate configuration (CI smoke test), and /health/ready should say
-    // "not fully configured" rather than pretend the database is down.
-    healthChecks.AddCheck(
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<DataContext>(
         "Database",
-        () => HealthCheckResult.Degraded("No DefaultConnection is configured."),
-        tags: new[] { "database", HealthTags.Ready });
-}
-
-healthChecks
-    .AddCheck<IdentityPassHealthCheck>("IdentityPass API",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: new[] { "database", "critical" })
+    .AddSqlServer(
+        connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
+        name: "SQL Server Database",
+        healthQuery: "SELECT 1",
+        timeout: TimeSpan.FromSeconds(5),
+        tags: new[] { "database", "critical" })
+    .AddCheck<IdentityPassHealthCheck>(
+        "IdentityPass API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
-    .AddCheck<TermiiSmsHealthCheck>("Termii SMS API",
+    .AddCheck<TermiiSmsHealthCheck>(
+        "Termii SMS API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
-    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API",
+    .AddCheck<CountryStateCityApiHealthCheck>(
+        "Country State City API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
-    .AddCheck<SendGridHealthCheck>("SendGrid API",
+    .AddCheck<SendGridHealthCheck>(
+        "SendGrid API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(5))
-    .AddS3(options =>
-    {
-        options.BucketName = builder.Configuration["AWS:BucketName"];
-        options.AccessKey = builder.Configuration["AWS:AccessKey"];
-        options.SecretKey = builder.Configuration["AWS:SecretKey"];
-    }, name: "AWS S3",
-       failureStatus: HealthStatus.Degraded,
-       tags: new[] { "external", "storage", HealthTags.Status },
-       timeout: TimeSpan.FromSeconds(5))
-
-    .AddCheck<ApiEndpointHealthCheck>("API Endpoints",
+    .AddS3(
+        options =>
+        {
+            options.BucketName = builder.Configuration["AWS:BucketName"];
+            options.AccessKey = builder.Configuration["AWS:AccessKey"];
+            options.SecretKey = builder.Configuration["AWS:SecretKey"];
+        },
+        name: "AWS S3",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external", "storage" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<ApiEndpointHealthCheck>(
+        "API Endpoints",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "api", "endpoints", HealthTags.Status },
         timeout: TimeSpan.FromSeconds(10))
-    .AddCheck<ApplicationComponentHealthCheck>("Application Components",
+    .AddCheck<ApplicationComponentHealthCheck>(
+        "Application Components",
         failureStatus: HealthStatus.Unhealthy,
         tags: new[] { "components", "critical", HealthTags.Status });
 
