@@ -54,7 +54,9 @@ echo "🔄 Restarting $TARGET slot..."
 sudo systemctl restart "Agrovesto.Backend.API-$TARGET"
 
 # ── 3. Health-check the idle slot (up to 30s) ────────────────────────────────
-# ── 3. Health-check the idle slot (up to 30s) ────────────────────────────────
+# HARD GATE: never flip Nginx to a slot that has not proven healthy.
+# Aborting here leaves the live slot ($ACTIVE) serving and the candidate
+# ($TARGET) on disk for inspection — zero impact on traffic.
 echo "⏳ Health-checking $TARGET on port $TARGET_PORT..."
 
 HEALTH_URL="http://127.0.0.1:$TARGET_PORT/health"
@@ -64,17 +66,16 @@ MAX_ATTEMPTS=15   # 15 × 2s = 30s timeout
 until curl -sf --max-time 3 "$HEALTH_URL" > /dev/null 2>&1; do
   ATTEMPTS=$(( ATTEMPTS + 1 ))
   if (( ATTEMPTS >= MAX_ATTEMPTS )); then
-    # 🔥 MODIFIED: Warn instead of breaking the build
-    echo "⚠️ Health check failed after ${MAX_ATTEMPTS} attempts, BUT continuing deployment anyway..."
-    break
+    echo "❌ Health check failed after ${MAX_ATTEMPTS} attempts — aborting before the traffic flip."
+    echo "   Live slot $ACTIVE ($ACTIVE_PORT) is untouched."
+    echo "   Inspect the candidate: journalctl -u Agrovesto.Backend.API-$TARGET"
+    exit 1
   fi
   echo "   ... waiting ($ATTEMPTS/$MAX_ATTEMPTS)"
   sleep 2
 done
 
-if (( ATTEMPTS < MAX_ATTEMPTS )); then
-  echo "✅ $TARGET slot healthy"
-fi
+echo "✅ $TARGET slot healthy"
 
 # ── 4. Flip Nginx atomically ──────────────────────────────────────────────────
 # Write to a temp file then move — avoids nginx reading a partial file
