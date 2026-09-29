@@ -68,15 +68,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             });
             var artifact = await handler.GenerateArtifactAsync(user, model);
 
-            var env = _configuration["Official:Env"]; 
-            //if (env == Env.Live.ToString())
-            //{
+            var env = _configuration["Official:Env"];
+            if (env == Env.Live.ToString())
+            {
                 await handler.DeliverLiveAsync(user, artifact, model);
                 return (true, "A reset code has been sent");
-           // }
+            }
 
 
-           // return (true, handler.BuildNonLiveMessage(artifact));
+             return (true, handler.BuildNonLiveMessage(artifact));
         }
 
         public async Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model)

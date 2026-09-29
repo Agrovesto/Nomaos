@@ -38,5 +38,14 @@ namespace Agrovesto.Backend.Infrastructure.Utilities
 
             return attribute?.Name ?? value.ToString();
         }
+
+        public static bool NamesMatch(string? a, string? b)
+        {
+            static string Normalize(string? s) =>
+                string.Join(" ", (s ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+            return string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
+

@@ -1385,9 +1385,45 @@ SELECT
             args.PageNumber = args.PageNumber <= 0 ? 1 : args.PageNumber;
             args.PageSize = args.PageSize <= 0 ? 10 : args.PageSize;
 
-            var agentIdsQuery = _context.OrganizationAgents
+            var orgAgentsQuery = _context.OrganizationAgents
                 .AsNoTracking()
-                .Where(oa => oa.OrganizationId == args.Id && oa.IsActive)
+                .Where(oa => oa.OrganizationId == args.Id && oa.IsActive);
+
+            // Exclude agents already assigned to the requesting farmer / membership
+            if (!string.IsNullOrWhiteSpace(args.RequestUserId) && !string.IsNullOrWhiteSpace(args.RequestModule))
+            {
+                var module = args.RequestModule.Trim();
+                var requestUserId = args.RequestUserId;
+
+                if (module.Equals("Farmer", StringComparison.OrdinalIgnoreCase))
+                {
+                    if(string.IsNullOrWhiteSpace(args.organizationCode))
+                    {
+                        throw new ValidationException("Organization code is required for Farmer module.");
+                    }
+                    orgAgentsQuery = orgAgentsQuery.Where(oa =>
+                        !(from fa in _context.FarmerAgents
+                          join f in _context.Farmers on fa.FarmerId equals f.Id
+                          where f.UserId == requestUserId
+                                && fa.OrganizationCode == args.organizationCode
+                                && fa.IsActive
+                                && fa.AgentId == oa.AgentId
+                          select fa.Id).Any());
+                }
+                else if (module.Equals("MemberShip", StringComparison.OrdinalIgnoreCase))
+                {
+                    orgAgentsQuery = orgAgentsQuery.Where(oa =>
+                        !(from ma in _context.MemberShipAgents
+                          join m in _context.MemberShips on ma.MemberShipId equals m.Id
+                          where m.UserId == requestUserId
+                               // && ma.OrganizationId == args.Id
+                                && ma.IsActive
+                                && ma.AgentId == oa.AgentId
+                          select ma.Id).Any());
+                }
+            }
+
+            var agentIdsQuery = orgAgentsQuery
                 .Select(oa => oa.AgentId)
                 .Distinct();
 

@@ -5,6 +5,7 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
+using Agrovesto.Backend.Core.Models;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
@@ -101,7 +102,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ChangeCredential(ChangeCredentialModel model);
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
-        Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null);
+        Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -2333,11 +2334,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         private void ValidateRequest(ProfileRequestModel model, OnBoardingArgs args)
         {
-            ValidateQuickOnboarding(new OnboardingRequestModel
-            {
-                Email = model.Email,
-                PhoneNumber = model.PhoneNumber
-            }, args.OnboardedByUserId);
+            //ValidateQuickOnboarding(new OnboardingRequestModel
+            //{
+            //    Email = model.Email,
+            //    PhoneNumber = model.PhoneNumber
+            //}, args.OnboardedByUserId);
 
             if (string.IsNullOrWhiteSpace(args.businessCode))
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Business code is required");
@@ -2383,7 +2384,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         public Task<(bool Status, string Message)> ChangeCredential(ChangeCredentialModel model)
         => _credentialChangeService.ChangeCredential(model);
         public Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
-        => _credentialChangeService.ForgotCredential(model);
+        {
+            return _credentialChangeService.ForgotCredential(model);
+        }
+        
         public Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model)
         => _credentialChangeService.ConfirmReset(model);
 
@@ -2485,7 +2489,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         ProfileRole role,
         OnBoardingArgs args,
         ProfileRequestModel model = null,
-        FarmerUpdateModel farmerUpdate = null)
+        FarmerUpdateModel farmerUpdate = null,
+        OrganizationUpdateModel organizationUpdate =null)
         {
             // 1. Normalise input ------------------------------------------------
             if (args == null || string.IsNullOrWhiteSpace(args.UserId))
@@ -2525,7 +2530,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                         ProfileRole.Farmer => await ApplyFarmerAsync(user, args, farmerUpdate),
                         ProfileRole.Agent => await ApplyAgentAsync(user, model, args),
                         ProfileRole.MemberShip => await ApplyCooperativeAsync(user, model, args),
-                       // ProfileRole.Organization => await ApplyCooperativeAsync(user, model, args),
+                       ProfileRole.Organization => await UpdateOrganizationAsync(user, organizationUpdate, model, args),
                         _ => throw new BaseException(
                             ExceptionType.BAD_REQUEST,
                             $"Profile updates are not supported for role '{role}'.")
@@ -2576,6 +2581,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 case ProfileRole.Farmer:
                 case ProfileRole.MemberShip:
+                case ProfileRole.Organization:
+                    ValidateRequest(model, args);
+                    await GetBusinessOrFail(args.businessCode);
                     break;
             }
         }
@@ -2598,9 +2606,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return new ProfileUpdateResult
             {
                 Success = true,
-                Role = ProfileRole.Farmer,
-                User = user,
-                Farmer = change.Data,
                 UpdatedFields = change.ChangedFields,
                 Message = "Farmer profile updated successfully."
             };
@@ -2627,9 +2632,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return new ProfileUpdateResult
             {
                 Success = true,
-                Role = ProfileRole.Agent,
-                User = user,
-                Agent = change.Data,
                 UpdatedFields = change.ChangedFields,
                 Message = change.Created ? "Agent profile created successfully." : "Agent profile updated successfully."
             };
@@ -2638,6 +2640,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private async Task<ProfileUpdateResult> ApplyCooperativeAsync(UserModel user, ProfileRequestModel model, OnBoardingArgs args)
         {
             var assignedByAgent = !string.IsNullOrWhiteSpace(args.OnboardedByUserId);
+
+            if (model.IsLeaderAFarmer)
+            {
+                model.Id = args.UserId;
+            }
 
             var change = await _cooperativeRepository.UpsertMembershipAsync(new MemberShipModel
             {
@@ -2657,31 +2664,68 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderLastName = model.LastName,
                 MembershipLeaderGender = model.Gender,
 
-                // 0 = "not provided": the repository applies the default type ONLY on create.
-                // (Defaulting to 1 here used to reset an existing cooperative's type on every update.)
                 MemberShipTypeId = model.MembershipTypeId ?? 0,
-                Tier = Tier.Tier1.ToString(),               // only used when the membership is created
-
+             
                 OnBoardedOn = model.CreatedOn,
                 OnboardedById = args.OnboardedByUserId,
-                IsAssignedToAgentId = args.OnboardedByUserId,
-                HasbeenAssignedAgent = assignedByAgent,
-
-                OrganizationId = model.OrganizationId       // was never passed before, so the org link was never created
             });
 
-            // Must be idempotent (create-if-missing), because it now runs on every cooperative update.
-            if (model.IsLeaderAFarmer)
+               if (model.IsLeaderAFarmer) 
                 await CreateFarmerProfileAsync(model, args);
 
             return new ProfileUpdateResult
             {
                 Success = true,
-                Role = ProfileRole.MemberShip,
-                User = user,
-                Membership = change.Data,
                 UpdatedFields = change.ChangedFields,
                 Message = change.Created ? "Cooperative profile created successfully." : "Cooperative profile updated successfully."
+            };
+        }
+        private async Task<OrganizationOnboardingModel> BuildOrganizationModel(OrganizationUpdateModel model, ProfileRequestModel profileModel)
+        {
+
+            // Implementation for building the organization model goes here
+            // This is a placeholder for the actual logic that would be used to build the organization model
+            var response = new OrganizationOnboardingModel
+            {
+                ContactEmail = model.OrganizationEmail,
+                OrganizationCode = model.OrganizationCode,
+                CompanyEmail = model.OrganizationEmail,
+                CompanyName = model.OrganizationName,
+                FirstName = profileModel.FirstName,
+                LastName = profileModel.LastName,
+                
+                PhoneNumber = model.OrganizationPhone,
+                OrganizationPhone = model.OrganizationPhone,
+                StateId = model.OrganizationStateId,
+                LgaId = model.OrganizationLgaId,
+                CompanyAddress = model.OrganizationAddress,
+                CompanyType = Enum.TryParse<CompanyType>(model.OrgaizationType, out var companyType) ? companyType : null,
+                CACNumber = model.CACID,
+               // RoleInOrganization = Enum.TryParse<RoleInOrganization>(model.RoleInOrganization, out var roleInOrg) ? roleInOrg : null
+            };
+            return response;
+        }
+        private async Task<ProfileUpdateResult> UpdateOrganizationAsync(UserModel user, OrganizationUpdateModel organizationUpdate, ProfileRequestModel model,OnBoardingArgs args)
+        {
+            var assignedByAgent = !string.IsNullOrWhiteSpace(args.OnboardedByUserId);
+
+            var organizationModel = await BuildOrganizationModel(organizationUpdate, model);
+            var change = await _businessRepository.CreateOrUpdateOrganization(organizationModel, new OnBoardingArgs
+            {
+                UserId = args.UserId,
+                userType = args.userType,
+                OnboardedByUserId = args.UserId,
+                Env = args.Env,
+                businessCode = args.businessCode,
+
+            });
+
+            
+
+            return new ProfileUpdateResult
+            {
+                Success = true,
+                Message = "Organization profile updated successfully."
             };
         }
 
@@ -2696,9 +2740,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             Location = u.Location
         };
 
-        // ═════════════════════════════════════════════════════════════════════
-        // Thin wrappers so existing controllers keep working unchanged
-        // ═════════════════════════════════════════════════════════════════════
 
         public async Task<FarmerUpdateResultDto> UpdateFarmerProfile(string userId, FarmerUpdateModel update)
         {
@@ -2709,7 +2750,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Success = r.Success,
                 Message = r.Message,
                 UpdatedFields = r.UpdatedFields.ToList(),
-                UpdatedFarmer = r.Farmer
             };
         }
 
