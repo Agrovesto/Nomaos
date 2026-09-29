@@ -244,7 +244,6 @@ builder.Services.AddHealthChecks()
     .AddDbContextCheck<DataContext>("Database",
         failureStatus: HealthStatus.Unhealthy,
         tags: new[] { "database", "critical" },
-        timeout: TimeSpan.FromSeconds(5))
     .AddSqlServer(
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
         name: "SQL Server Database",
