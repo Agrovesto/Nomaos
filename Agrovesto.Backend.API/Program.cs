@@ -241,37 +241,54 @@ builder.Services.AddHttpClient("health", c =>
 // "critical" and the load balancer should pull the instance out of rotation if
 // those are down.
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<DataContext>("Database",
+    .AddDbContextCheck<DataContext>(
+        "Database",
         failureStatus: HealthStatus.Unhealthy,
-        tags: new[] { "database", "critical" },
+        tags: new[] { "database", "critical" })
     .AddSqlServer(
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
         name: "SQL Server Database",
         healthQuery: "SELECT 1",
+        timeout: TimeSpan.FromSeconds(5),
         tags: new[] { "database", "critical" })
-    .AddCheck<IdentityPassHealthCheck>("IdentityPass API",
+    .AddCheck<IdentityPassHealthCheck>(
+        "IdentityPass API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external" },
-    .AddCheck<TermiiSmsHealthCheck>("Termii SMS API",
-        failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API",
-        failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
-    .AddCheck<SendGridHealthCheck>("SendGrid API",
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<TermiiSmsHealthCheck>(
+        "Termii SMS API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external" },
-    .AddS3(options =>
-    {
-        options.BucketName = builder.Configuration["AWS:BucketName"];
-        options.AccessKey = builder.Configuration["AWS:AccessKey"];
-        options.SecretKey = builder.Configuration["AWS:SecretKey"];
-    }, name: "AWS S3",
-       failureStatus: HealthStatus.Degraded,
-       tags: new[] { "external", "storage" },
-    .AddCheck<ApiEndpointHealthCheck>("API Endpoints",
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<CountryStateCityApiHealthCheck>(
+        "Country State City API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<SendGridHealthCheck>(
+        "SendGrid API",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddS3(
+        options =>
+        {
+            options.BucketName = builder.Configuration["AWS:BucketName"];
+            options.AccessKey = builder.Configuration["AWS:AccessKey"];
+            options.SecretKey = builder.Configuration["AWS:SecretKey"];
+        },
+        name: "AWS S3",
+        failureStatus: HealthStatus.Degraded,
+        tags: new[] { "external", "storage" },
+        timeout: TimeSpan.FromSeconds(5))
+    .AddCheck<ApiEndpointHealthCheck>(
+        "API Endpoints",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "api", "endpoints" },
-    .AddCheck<ApplicationComponentHealthCheck>("Application Components",
+        timeout: TimeSpan.FromSeconds(10))
+    .AddCheck<ApplicationComponentHealthCheck>(
+        "Application Components",
         failureStatus: HealthStatus.Unhealthy,
         tags: new[] { "components", "critical" });
 
