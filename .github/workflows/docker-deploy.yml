@@ -8,7 +8,7 @@ name: Docker Build & Blue/Green Deploy
 on:
   push:
     branches:
-      - master
+      - devops
   workflow_dispatch:
     inputs:
       app:

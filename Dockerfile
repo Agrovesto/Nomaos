@@ -106,7 +106,7 @@ RUN mkdir -p /app/logs && chown -R $APP_UID:$APP_UID /app/logs
 HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
     CMD curl -fsS --max-time 4 http://127.0.0.1:5000/health/ready || exit 1
 
-EXPOSE 5000
+EXPOSE 5005
 
 # UID form (not "app") so Kubernetes/ECS runAsNonRoot checks can verify it.
 USER $APP_UID

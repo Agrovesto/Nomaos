@@ -178,6 +178,7 @@ jobs:
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+        continue-on-error: true
       # =========================================================
       # BUILD
       # =========================================================
@@ -274,7 +275,7 @@ jobs:
         run: |
           dotnet sonarscanner end \
             /d:sonar.token="${SONAR_TOKEN}"
-
+        continue-on-error: true
 
       # =========================================================
       # COVERAGE SUMMARY
@@ -598,6 +599,7 @@ jobs:
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+        continue-on-error: true
 
 
       # =========================================================

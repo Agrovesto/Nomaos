@@ -6,7 +6,7 @@ IMAGE=$1
 APP_NAME="nomaos-api"
 NEW_CONTAINER="${APP_NAME}_new"
 OLD_CONTAINER="${APP_NAME}_old"
-PORT=5000
+PORT=5005
 
 echo "=============================="
 echo "Deploying: $IMAGE"

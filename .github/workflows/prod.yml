@@ -1,540 +1,540 @@
-name: CI/CD Deploy Agrovesto.Backend.API
-
-on:
-  push:
-    branches:
-      - master
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  pull-requests: read
-
-env:
-  DOTNET_VERSION: 8.0.x
-  SOLUTION_PATH: Agrovesto.Backend.sln
-  PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
-  SONAR_PROJECT_KEY: Agrovesto.Backend.API
-  PUBLISH_DIR: ${{ github.workspace }}/publish
-  COMMIT_SHA: ${{ github.sha }}
-  DOTNET_NOLOGO: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
-  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
-  DOTNET_DETERMINISTIC: true
-
-defaults:
-  run:
-    shell: bash
-
-jobs:
-
-  # ============================================================
-  # 🚀 PRODUCTION BUILD + DEPLOY
-  # ============================================================
-  deploy:
-    name: 🚀 Deploy to Production
-
-    if: |
-      github.event_name == 'push' &&
-      github.ref == 'refs/heads/master'
-
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-
-    environment:
-      name: production
-      url: https://noma-api.nomaos.com/health
-
-    steps:
-
-      # ==========================================================
-      # 📥 CHECKOUT
-      # ==========================================================
-      - name: 📥 Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      # ==========================================================
-      # 🔎 RESOLVE PR METADATA
-      # ==========================================================
-      - name: 🔎 Resolve PR metadata
-        id: pr-meta
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "🔎 Looking for PR associated with commit:"
-          echo "${{ github.sha }}"
-
-          PR_DATA=$(
-            gh api \
-              --paginate \
-              "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
-              --jq '.[0] // empty'
-          )
-
-          if [ -z "$PR_DATA" ]; then
-            echo "ℹ️ No PR associated with this commit."
-
-            echo "pr_number=" >> "$GITHUB_OUTPUT"
-            echo "pr_author=" >> "$GITHUB_OUTPUT"
-            echo "pr_approver=" >> "$GITHUB_OUTPUT"
-
-            exit 0
-          fi
-
-          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty')
-          PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login // empty')
-
-          echo "PR number : ${PR_NUMBER:-N/A}"
-          echo "PR author : ${PR_AUTHOR:-N/A}"
-
-          APPROVER=""
-
-          if [ -n "$PR_NUMBER" ]; then
-
-            REVIEWS=$(
-              gh api \
-                --paginate \
-                "/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
-                --jq '[.[] | select(.state == "APPROVED")]'
-            )
-
-            APPROVER=$(
-              echo "$REVIEWS" \
-                | jq -r '.[-1].user.login // empty'
-            )
-          fi
-
-          echo "PR approver: ${APPROVER:-N/A}"
-
-          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "pr_author=$PR_AUTHOR" >> "$GITHUB_OUTPUT"
-          echo "pr_approver=$APPROVER" >> "$GITHUB_OUTPUT"
-
-      # ==========================================================
-      # ⚙️ SETUP .NET 8
-      # ==========================================================
-      - name: ⚙️ Setup .NET 8
-        uses: actions/setup-dotnet@v5
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      # ==========================================================
-      # 📌 PIN .NET SDK
-      # ==========================================================
-      - name: 📌 Configure .NET SDK
-        run: |
-          INSTALLED_SDK=$(
-            dotnet --list-sdks \
-              | grep '^8\.' \
-              | tail -1 \
-              | awk '{print $1}'
-          )
-
-          if [ -z "$INSTALLED_SDK" ]; then
-            echo "❌ No .NET 8 SDK found."
-            exit 1
-          fi
-
-          echo "Using SDK version: $INSTALLED_SDK"
-
-          cat > global.json << EOF
-          {
-            "sdk": {
-              "version": "$INSTALLED_SDK",
-              "rollForward": "disable"
-            }
-          }
-          EOF
-
-          echo "===== global.json ====="
-          cat global.json
-
-          echo "===== Active SDK ====="
-          dotnet --version
-
-      # ==========================================================
-      # 🔍 DEBUG SDK
-      # ==========================================================
-      - name: 🔍 Debug SDK version
-        run: |
-          echo "===== global.json ====="
-          cat global.json
-
-          echo ""
-          echo "===== dotnet --version ====="
-          dotnet --version
-
-          echo ""
-          echo "===== dotnet --list-sdks ====="
-          dotnet --list-sdks
-
-          echo ""
-          echo "===== which dotnet ====="
-          which dotnet
-
-          echo ""
-          echo "===== DOTNET_ROOT ====="
-          echo "$DOTNET_ROOT"
-
-      # ==========================================================
-      # 🧹 CLEAN STALE BUILD OUTPUTS
-      # ==========================================================
-      - name: 🧹 Clean
-        run: |
-          dotnet clean \
-            "${{ env.PROJECT_PATH }}" \
-            --configuration Release \
-            || true
-
-          rm -rf "${{ env.PROJECT_PATH }}/../obj"
-          rm -rf "${{ env.PROJECT_PATH }}/../bin"
-
-      # ==========================================================
-      # 💾 CACHE NUGET
-      # ==========================================================
-      - name: 💾 Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
-            nuget-${{ runner.os }}-
-
-      # ==========================================================
-      # 💾 CACHE DOTNET TOOLS
-      # ==========================================================
-      - name: 💾 Cache dotnet tools
-        uses: actions/cache@v4
-        with:
-          path: ~/.dotnet/tools
-          key: dotnet-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
-          restore-keys: |
-            dotnet-tools-${{ runner.os }}-
-
-      # ==========================================================
-      # 🏷️ GET PROJECT VERSION
-      # ==========================================================
-      - name: 🏷️ Get project version
-        id: version
-        run: |
-          VERSION=$(
-            grep \
-              -oPm1 '(?<=<Version>)[^<]+' \
-              "${{ env.PROJECT_PATH }}" \
-              || true
-          )
-
-          if [ -z "$VERSION" ]; then
-            VERSION="1.0.${{ github.run_number }}"
-          fi
-
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
-
-          echo "📦 Project version: $VERSION"
-
-      # ==========================================================
-      # 📦 RESTORE
-      # ==========================================================
-      - name: 📦 Restore dependencies
-        run: |
-          dotnet restore \
-            "${{ env.PROJECT_PATH }}" \
-            --runtime linux-x64
-
-      # ==========================================================
-      # 🏗️ BUILD
-      # ==========================================================
-      - name: 🏗️ Build
-        run: |
-          START=$(date +%s)
-
-          dotnet build \
-            "${{ env.PROJECT_PATH }}" \
-            --configuration Release \
-            --no-restore \
-            --verbosity minimal
-
-          END=$(date +%s)
-
-          echo "✅ Build completed in $((END - START))s"
-
-      # ==========================================================
-      # 🚀 PUBLISH
-      # ==========================================================
-      - name: 🚀 Publish application
-        run: |
-          START=$(date +%s)
-
-          dotnet publish \
-            "${{ env.PROJECT_PATH }}" \
-            --configuration Release \
-            --runtime linux-x64 \
-            --framework net8.0 \
-            --self-contained true \
-            --no-restore \
-            --output "${{ env.PUBLISH_DIR }}" \
-            --verbosity minimal \
-            -p:ContinuousIntegrationBuild=true \
-            -p:Deterministic=true \
-            -p:DebugType=none \
-            -p:DebugSymbols=false
-
-          END=$(date +%s)
-
-          SIZE=$(du -sh "${{ env.PUBLISH_DIR }}" | cut -f1)
-
-          echo "✅ Publish completed"
-          echo "📦 Publish size: $SIZE"
-          echo "⏱️ Duration: $((END - START))s"
-
-          {
-            echo "### 🚀 Publish"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Size | $SIZE |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-            echo "| 🏷️ Version | ${{ env.VERSION }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ==========================================================
-      # 🏷️ CREATE DEPLOYMENT METADATA
-      # ==========================================================
-      - name: 🏷️ Create deployment metadata
-        run: |
-          cat > "${{ env.PUBLISH_DIR }}/.deploy-meta" <<EOF
-          commit=${{ env.COMMIT_SHA }}
-          pr_number=${{ steps.pr-meta.outputs.pr_number }}
-          pr_author=${{ steps.pr-meta.outputs.pr_author }}
-          pr_approver=${{ steps.pr-meta.outputs.pr_approver }}
-          deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          deployed_by=${{ github.actor }}
-          branch=${{ github.ref_name }}
-          version=${{ env.VERSION }}
-          environment=production
-          EOF
-
-          echo "${{ env.COMMIT_SHA }}" \
-            > "${{ env.PUBLISH_DIR }}/.commit-sha"
-
-          echo "${{ env.VERSION }}" \
-            > "${{ env.PUBLISH_DIR }}/.version"
-
-          date -u +"%Y-%m-%dT%H:%M:%SZ" \
-            > "${{ env.PUBLISH_DIR }}/.deployed-at"
-
-          echo "✅ Deployment metadata created"
-
-          echo ""
-          echo "===== .deploy-meta ====="
-          cat "${{ env.PUBLISH_DIR }}/.deploy-meta"
-
-      # ==========================================================
-      # 🔐 SSH AGENT
-      # ==========================================================
-      - name: 🔐 Setup SSH Agent
-        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
-
-      # ==========================================================
-      # 🔐 TRUST EC2 HOST
-      # ==========================================================
-      - name: 🔐 Add EC2 host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-
-          ssh-keyscan -H \
-            "${{ secrets.EC2_HOST_PROD }}" \
-            >> ~/.ssh/known_hosts
-
-          chmod 644 ~/.ssh/known_hosts
-
-      # ==========================================================
-      # 📁 CREATE RELEASE DIRECTORY
-      # ==========================================================
-      - name: 📁 Create release directory on server
-        run: |
-          ssh \
-            -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
-
-      # ==========================================================
-      # 📡 RSYNC BUILD TO EC2
-      # ==========================================================
-      - name: 📡 Rsync application to EC2
-        id: rsync
-        run: |
-          START=$(date +%s)
-
-          rsync -az \
-            --delete \
-            --exclude='.git' \
-            --exclude='*.pdb' \
-            --exclude='*.xml' \
-            --timeout=30 \
-            --stats \
-            "${{ env.PUBLISH_DIR }}/" \
-            "ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
-            2>&1 | tee rsync.log
-
-          EXIT_CODE=${PIPESTATUS[0]}
-
-          END=$(date +%s)
-
-          if [ "$EXIT_CODE" -ne 0 ]; then
-            echo "❌ Rsync failed"
-            exit "$EXIT_CODE"
-          fi
-
-          TRANSFERRED=$(
-            grep \
-              "Total transferred file size" \
-              rsync.log \
-              | awk '{print $5, $6}' \
-              || echo "N/A"
-          )
-
-          {
-            echo "### 📡 File Transfer"
-            echo ""
-            echo "| Metric | Value |"
-            echo "|--------|-------|"
-            echo "| ✅ Status | Success |"
-            echo "| 📦 Transferred | $TRANSFERRED |"
-            echo "| ⏱️ Duration | $((END - START))s |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ==========================================================
-      # 🔎 VERIFY DEPLOYMENT FILE ON EC2
-      # ==========================================================
-      - name: 🔎 Verify artifact on server
-        run: |
-          REMOTE_SHA=$(
-            ssh \
-              -o ConnectTimeout=10 \
-              ubuntu@${{ secrets.EC2_HOST_PROD }} \
-              "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null | tr -d '[:space:]' || echo NOT_FOUND"
-          )
-
-          echo "Expected SHA: ${{ env.COMMIT_SHA }}"
-          echo "Remote SHA:   $REMOTE_SHA"
-
-          if [ "$REMOTE_SHA" != "${{ env.COMMIT_SHA }}" ]; then
-            echo "❌ SHA mismatch"
-
-            echo "=== Remote release directory ==="
-
-            ssh \
-              ubuntu@${{ secrets.EC2_HOST_PROD }} \
-              "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
-
-            exit 1
-          fi
-
-          echo "✅ Remote SHA verified: $REMOTE_SHA"
-
-      # ==========================================================
-      # 🔄 ATOMIC PRODUCTION SLOT SWAP
-      # ==========================================================
-      - name: 🔄 Swap production deployment slot
-        run: |
-          ssh \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=4 \
-            -o ConnectTimeout=10 \
-            ubuntu@${{ secrets.EC2_HOST_PROD }} \
-            "bash /var/www/Nomaos/deploy-prod.sh ${{ env.COMMIT_SHA }}"
-
-          echo "✅ Production slot swap complete"
-
-      # ==========================================================
-      # ❤️ PRODUCTION HEALTH CHECK
-      # ==========================================================
-      - name: ❤️ Health check
-        id: health
-        run: |
-          echo "⏳ Waiting 20s for production service to stabilise..."
-          sleep 20
-
-          for i in {1..10}; do
-
-            if curl \
-              -sf \
-              --max-time 5 \
-              https://noma-api.nomaos.com/health \
-              >/dev/null; then
-
-              echo "✅ Production health check passed"
-
-              printf 'health_status=healthy\n' \
-                >> "$GITHUB_OUTPUT"
-
-              exit 0
-            fi
-
-            echo "   Retry $i/10..."
-            sleep 10
-          done
-
-          printf 'health_status=unhealthy\n' \
-            >> "$GITHUB_OUTPUT"
-
-          echo "❌ Production health check failed after 10 attempts"
-
-          exit 1
-
-        # Keep the job alive so the final summary can be generated
-        # even when the health check fails.
-        continue-on-error: true
-
-      # ==========================================================
-      # 📋 DEPLOYMENT SUMMARY
-      # ==========================================================
-      - name: 📋 Deployment Summary
-        if: always()
-        env:
-          HEALTH: ${{ steps.health.outputs.health_status }}
-        run: |
-          HEALTH_ICON=$(
-            [ "$HEALTH" = "healthy" ] \
-              && echo "✅" \
-              || echo "⚠️"
-          )
-
-          {
-            echo "## 🚀 Production Deployment Summary"
-            echo ""
-            echo "| Key | Value |"
-            echo "|-----|-------|"
-            echo "| 📦 Application | \`${{ env.APP }}\` |"
-            echo "| 🏷️ Version | \`${{ env.VERSION }}\` |"
-            echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |"
-            echo "| 🌍 Environment | \`production\` |"
-            echo "| 🔀 PR | #${{ steps.pr-meta.outputs.pr_number }} |"
-            echo "| 👤 Raised by | \`${{ steps.pr-meta.outputs.pr_author }}\` |"
-            echo "| ✅ Approved by | \`${{ steps.pr-meta.outputs.pr_approver }}\` |"
-            echo "| 🚀 Deployed by | \`${{ github.actor }}\` |"
-            echo "| 🕐 Deployed At | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
-            echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
-            echo "| 🔗 URL | https://noma-api.nomaos.com/health |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # ==========================================================
-      # 🧹 CLEAN LOCAL RUNNER
-      # ==========================================================
-      - name: 🧹 Clean runner publish directory
-        if: always()
-        run: |
-          rm -rf "${{ env.PUBLISH_DIR }}"
-          echo "✅ Local publish directory removed"
+# name: CI/CD Deploy Agrovesto.Backend.API
+
+# on:
+#   push:
+#     branches:
+#       - master
+
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.ref }}
+#   cancel-in-progress: true
+
+# permissions:
+#   contents: read
+#   pull-requests: read
+
+# env:
+#   DOTNET_VERSION: 8.0.x
+#   SOLUTION_PATH: Agrovesto.Backend.sln
+#   PROJECT_PATH: Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+#   SONAR_PROJECT_KEY: Agrovesto.Backend.API
+#   PUBLISH_DIR: ${{ github.workspace }}/publish
+#   COMMIT_SHA: ${{ github.sha }}
+#   DOTNET_NOLOGO: true
+#   DOTNET_CLI_TELEMETRY_OPTOUT: true
+#   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+#   DOTNET_DETERMINISTIC: true
+
+# defaults:
+#   run:
+#     shell: bash
+
+# jobs:
+
+#   # ============================================================
+#   # 🚀 PRODUCTION BUILD + DEPLOY
+#   # ============================================================
+#   deploy:
+#     name: 🚀 Deploy to Production
+
+#     if: |
+#       github.event_name == 'push' &&
+#       github.ref == 'refs/heads/master'
+
+#     runs-on: ubuntu-latest
+#     timeout-minutes: 20
+
+#     environment:
+#       name: production
+#       url: https://noma-api.nomaos.com/health
+
+#     steps:
+
+#       # ==========================================================
+#       # 📥 CHECKOUT
+#       # ==========================================================
+#       - name: 📥 Checkout
+#         uses: actions/checkout@v6
+#         with:
+#           fetch-depth: 0
+
+#       # ==========================================================
+#       # 🔎 RESOLVE PR METADATA
+#       # ==========================================================
+#       - name: 🔎 Resolve PR metadata
+#         id: pr-meta
+#         env:
+#           GH_TOKEN: ${{ github.token }}
+#         run: |
+#           echo "🔎 Looking for PR associated with commit:"
+#           echo "${{ github.sha }}"
+
+#           PR_DATA=$(
+#             gh api \
+#               --paginate \
+#               "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+#               --jq '.[0] // empty'
+#           )
+
+#           if [ -z "$PR_DATA" ]; then
+#             echo "ℹ️ No PR associated with this commit."
+
+#             echo "pr_number=" >> "$GITHUB_OUTPUT"
+#             echo "pr_author=" >> "$GITHUB_OUTPUT"
+#             echo "pr_approver=" >> "$GITHUB_OUTPUT"
+
+#             exit 0
+#           fi
+
+#           PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty')
+#           PR_AUTHOR=$(echo "$PR_DATA" | jq -r '.user.login // empty')
+
+#           echo "PR number : ${PR_NUMBER:-N/A}"
+#           echo "PR author : ${PR_AUTHOR:-N/A}"
+
+#           APPROVER=""
+
+#           if [ -n "$PR_NUMBER" ]; then
+
+#             REVIEWS=$(
+#               gh api \
+#                 --paginate \
+#                 "/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+#                 --jq '[.[] | select(.state == "APPROVED")]'
+#             )
+
+#             APPROVER=$(
+#               echo "$REVIEWS" \
+#                 | jq -r '.[-1].user.login // empty'
+#             )
+#           fi
+
+#           echo "PR approver: ${APPROVER:-N/A}"
+
+#           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+#           echo "pr_author=$PR_AUTHOR" >> "$GITHUB_OUTPUT"
+#           echo "pr_approver=$APPROVER" >> "$GITHUB_OUTPUT"
+
+#       # ==========================================================
+#       # ⚙️ SETUP .NET 8
+#       # ==========================================================
+#       - name: ⚙️ Setup .NET 8
+#         uses: actions/setup-dotnet@v5
+#         with:
+#           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+#       # ==========================================================
+#       # 📌 PIN .NET SDK
+#       # ==========================================================
+#       - name: 📌 Configure .NET SDK
+#         run: |
+#           INSTALLED_SDK=$(
+#             dotnet --list-sdks \
+#               | grep '^8\.' \
+#               | tail -1 \
+#               | awk '{print $1}'
+#           )
+
+#           if [ -z "$INSTALLED_SDK" ]; then
+#             echo "❌ No .NET 8 SDK found."
+#             exit 1
+#           fi
+
+#           echo "Using SDK version: $INSTALLED_SDK"
+
+#           cat > global.json << EOF
+#           {
+#             "sdk": {
+#               "version": "$INSTALLED_SDK",
+#               "rollForward": "disable"
+#             }
+#           }
+#           EOF
+
+#           echo "===== global.json ====="
+#           cat global.json
+
+#           echo "===== Active SDK ====="
+#           dotnet --version
+
+#       # ==========================================================
+#       # 🔍 DEBUG SDK
+#       # ==========================================================
+#       - name: 🔍 Debug SDK version
+#         run: |
+#           echo "===== global.json ====="
+#           cat global.json
+
+#           echo ""
+#           echo "===== dotnet --version ====="
+#           dotnet --version
+
+#           echo ""
+#           echo "===== dotnet --list-sdks ====="
+#           dotnet --list-sdks
+
+#           echo ""
+#           echo "===== which dotnet ====="
+#           which dotnet
+
+#           echo ""
+#           echo "===== DOTNET_ROOT ====="
+#           echo "$DOTNET_ROOT"
+
+#       # ==========================================================
+#       # 🧹 CLEAN STALE BUILD OUTPUTS
+#       # ==========================================================
+#       - name: 🧹 Clean
+#         run: |
+#           dotnet clean \
+#             "${{ env.PROJECT_PATH }}" \
+#             --configuration Release \
+#             || true
+
+#           rm -rf "${{ env.PROJECT_PATH }}/../obj"
+#           rm -rf "${{ env.PROJECT_PATH }}/../bin"
+
+#       # ==========================================================
+#       # 💾 CACHE NUGET
+#       # ==========================================================
+#       - name: 💾 Cache NuGet packages
+#         uses: actions/cache@v5
+#         with:
+#           path: ~/.nuget/packages
+#           key: nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-${{ hashFiles('**/*.csproj', '**/packages.lock.json') }}
+#           restore-keys: |
+#             nuget-${{ runner.os }}-${{ env.DOTNET_VERSION }}-
+#             nuget-${{ runner.os }}-
+
+#       # ==========================================================
+#       # 💾 CACHE DOTNET TOOLS
+#       # ==========================================================
+#       - name: 💾 Cache dotnet tools
+#         uses: actions/cache@v4
+#         with:
+#           path: ~/.dotnet/tools
+#           key: dotnet-tools-${{ runner.os }}-${{ hashFiles('**/.config/dotnet-tools.json') }}
+#           restore-keys: |
+#             dotnet-tools-${{ runner.os }}-
+
+#       # ==========================================================
+#       # 🏷️ GET PROJECT VERSION
+#       # ==========================================================
+#       - name: 🏷️ Get project version
+#         id: version
+#         run: |
+#           VERSION=$(
+#             grep \
+#               -oPm1 '(?<=<Version>)[^<]+' \
+#               "${{ env.PROJECT_PATH }}" \
+#               || true
+#           )
+
+#           if [ -z "$VERSION" ]; then
+#             VERSION="1.0.${{ github.run_number }}"
+#           fi
+
+#           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+#           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+#           echo "📦 Project version: $VERSION"
+
+#       # ==========================================================
+#       # 📦 RESTORE
+#       # ==========================================================
+#       - name: 📦 Restore dependencies
+#         run: |
+#           dotnet restore \
+#             "${{ env.PROJECT_PATH }}" \
+#             --runtime linux-x64
+
+#       # ==========================================================
+#       # 🏗️ BUILD
+#       # ==========================================================
+#       - name: 🏗️ Build
+#         run: |
+#           START=$(date +%s)
+
+#           dotnet build \
+#             "${{ env.PROJECT_PATH }}" \
+#             --configuration Release \
+#             --no-restore \
+#             --verbosity minimal
+
+#           END=$(date +%s)
+
+#           echo "✅ Build completed in $((END - START))s"
+
+#       # ==========================================================
+#       # 🚀 PUBLISH
+#       # ==========================================================
+#       - name: 🚀 Publish application
+#         run: |
+#           START=$(date +%s)
+
+#           dotnet publish \
+#             "${{ env.PROJECT_PATH }}" \
+#             --configuration Release \
+#             --runtime linux-x64 \
+#             --framework net8.0 \
+#             --self-contained true \
+#             --no-restore \
+#             --output "${{ env.PUBLISH_DIR }}" \
+#             --verbosity minimal \
+#             -p:ContinuousIntegrationBuild=true \
+#             -p:Deterministic=true \
+#             -p:DebugType=none \
+#             -p:DebugSymbols=false
+
+#           END=$(date +%s)
+
+#           SIZE=$(du -sh "${{ env.PUBLISH_DIR }}" | cut -f1)
+
+#           echo "✅ Publish completed"
+#           echo "📦 Publish size: $SIZE"
+#           echo "⏱️ Duration: $((END - START))s"
+
+#           {
+#             echo "### 🚀 Publish"
+#             echo ""
+#             echo "| Metric | Value |"
+#             echo "|--------|-------|"
+#             echo "| ✅ Status | Success |"
+#             echo "| 📦 Size | $SIZE |"
+#             echo "| ⏱️ Duration | $((END - START))s |"
+#             echo "| 🏷️ Version | ${{ env.VERSION }} |"
+#           } >> "$GITHUB_STEP_SUMMARY"
+
+#       # ==========================================================
+#       # 🏷️ CREATE DEPLOYMENT METADATA
+#       # ==========================================================
+#       - name: 🏷️ Create deployment metadata
+#         run: |
+#           cat > "${{ env.PUBLISH_DIR }}/.deploy-meta" <<EOF
+#           commit=${{ env.COMMIT_SHA }}
+#           pr_number=${{ steps.pr-meta.outputs.pr_number }}
+#           pr_author=${{ steps.pr-meta.outputs.pr_author }}
+#           pr_approver=${{ steps.pr-meta.outputs.pr_approver }}
+#           deployed_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+#           deployed_by=${{ github.actor }}
+#           branch=${{ github.ref_name }}
+#           version=${{ env.VERSION }}
+#           environment=production
+#           EOF
+
+#           echo "${{ env.COMMIT_SHA }}" \
+#             > "${{ env.PUBLISH_DIR }}/.commit-sha"
+
+#           echo "${{ env.VERSION }}" \
+#             > "${{ env.PUBLISH_DIR }}/.version"
+
+#           date -u +"%Y-%m-%dT%H:%M:%SZ" \
+#             > "${{ env.PUBLISH_DIR }}/.deployed-at"
+
+#           echo "✅ Deployment metadata created"
+
+#           echo ""
+#           echo "===== .deploy-meta ====="
+#           cat "${{ env.PUBLISH_DIR }}/.deploy-meta"
+
+#       # ==========================================================
+#       # 🔐 SSH AGENT
+#       # ==========================================================
+#       - name: 🔐 Setup SSH Agent
+#         uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555
+#         with:
+#           ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+
+#       # ==========================================================
+#       # 🔐 TRUST EC2 HOST
+#       # ==========================================================
+#       - name: 🔐 Add EC2 host to known_hosts
+#         run: |
+#           mkdir -p ~/.ssh
+#           chmod 700 ~/.ssh
+
+#           ssh-keyscan -H \
+#             "${{ secrets.EC2_HOST_PROD }}" \
+#             >> ~/.ssh/known_hosts
+
+#           chmod 644 ~/.ssh/known_hosts
+
+#       # ==========================================================
+#       # 📁 CREATE RELEASE DIRECTORY
+#       # ==========================================================
+#       - name: 📁 Create release directory on server
+#         run: |
+#           ssh \
+#             -o ConnectTimeout=10 \
+#             ubuntu@${{ secrets.EC2_HOST_PROD }} \
+#             "mkdir -p /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}"
+
+#       # ==========================================================
+#       # 📡 RSYNC BUILD TO EC2
+#       # ==========================================================
+#       - name: 📡 Rsync application to EC2
+#         id: rsync
+#         run: |
+#           START=$(date +%s)
+
+#           rsync -az \
+#             --delete \
+#             --exclude='.git' \
+#             --exclude='*.pdb' \
+#             --exclude='*.xml' \
+#             --timeout=30 \
+#             --stats \
+#             "${{ env.PUBLISH_DIR }}/" \
+#             "ubuntu@${{ secrets.EC2_HOST_PROD }}:/var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/" \
+#             2>&1 | tee rsync.log
+
+#           EXIT_CODE=${PIPESTATUS[0]}
+
+#           END=$(date +%s)
+
+#           if [ "$EXIT_CODE" -ne 0 ]; then
+#             echo "❌ Rsync failed"
+#             exit "$EXIT_CODE"
+#           fi
+
+#           TRANSFERRED=$(
+#             grep \
+#               "Total transferred file size" \
+#               rsync.log \
+#               | awk '{print $5, $6}' \
+#               || echo "N/A"
+#           )
+
+#           {
+#             echo "### 📡 File Transfer"
+#             echo ""
+#             echo "| Metric | Value |"
+#             echo "|--------|-------|"
+#             echo "| ✅ Status | Success |"
+#             echo "| 📦 Transferred | $TRANSFERRED |"
+#             echo "| ⏱️ Duration | $((END - START))s |"
+#           } >> "$GITHUB_STEP_SUMMARY"
+
+#       # ==========================================================
+#       # 🔎 VERIFY DEPLOYMENT FILE ON EC2
+#       # ==========================================================
+#       - name: 🔎 Verify artifact on server
+#         run: |
+#           REMOTE_SHA=$(
+#             ssh \
+#               -o ConnectTimeout=10 \
+#               ubuntu@${{ secrets.EC2_HOST_PROD }} \
+#               "cat /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/.commit-sha 2>/dev/null | tr -d '[:space:]' || echo NOT_FOUND"
+#           )
+
+#           echo "Expected SHA: ${{ env.COMMIT_SHA }}"
+#           echo "Remote SHA:   $REMOTE_SHA"
+
+#           if [ "$REMOTE_SHA" != "${{ env.COMMIT_SHA }}" ]; then
+#             echo "❌ SHA mismatch"
+
+#             echo "=== Remote release directory ==="
+
+#             ssh \
+#               ubuntu@${{ secrets.EC2_HOST_PROD }} \
+#               "ls -la /var/www/Nomaos/releases/${{ env.COMMIT_SHA }}/"
+
+#             exit 1
+#           fi
+
+#           echo "✅ Remote SHA verified: $REMOTE_SHA"
+
+#       # ==========================================================
+#       # 🔄 ATOMIC PRODUCTION SLOT SWAP
+#       # ==========================================================
+#       - name: 🔄 Swap production deployment slot
+#         run: |
+#           ssh \
+#             -o ServerAliveInterval=15 \
+#             -o ServerAliveCountMax=4 \
+#             -o ConnectTimeout=10 \
+#             ubuntu@${{ secrets.EC2_HOST_PROD }} \
+#             "bash /var/www/Nomaos/deploy-prod.sh ${{ env.COMMIT_SHA }}"
+
+#           echo "✅ Production slot swap complete"
+
+#       # ==========================================================
+#       # ❤️ PRODUCTION HEALTH CHECK
+#       # ==========================================================
+#       - name: ❤️ Health check
+#         id: health
+#         run: |
+#           echo "⏳ Waiting 20s for production service to stabilise..."
+#           sleep 20
+
+#           for i in {1..10}; do
+
+#             if curl \
+#               -sf \
+#               --max-time 5 \
+#               https://noma-api.nomaos.com/health \
+#               >/dev/null; then
+
+#               echo "✅ Production health check passed"
+
+#               printf 'health_status=healthy\n' \
+#                 >> "$GITHUB_OUTPUT"
+
+#               exit 0
+#             fi
+
+#             echo "   Retry $i/10..."
+#             sleep 10
+#           done
+
+#           printf 'health_status=unhealthy\n' \
+#             >> "$GITHUB_OUTPUT"
+
+#           echo "❌ Production health check failed after 10 attempts"
+
+#           exit 1
+
+#         # Keep the job alive so the final summary can be generated
+#         # even when the health check fails.
+#         continue-on-error: true
+
+#       # ==========================================================
+#       # 📋 DEPLOYMENT SUMMARY
+#       # ==========================================================
+#       - name: 📋 Deployment Summary
+#         if: always()
+#         env:
+#           HEALTH: ${{ steps.health.outputs.health_status }}
+#         run: |
+#           HEALTH_ICON=$(
+#             [ "$HEALTH" = "healthy" ] \
+#               && echo "✅" \
+#               || echo "⚠️"
+#           )
+
+#           {
+#             echo "## 🚀 Production Deployment Summary"
+#             echo ""
+#             echo "| Key | Value |"
+#             echo "|-----|-------|"
+#             echo "| 📦 Application | \`${{ env.APP }}\` |"
+#             echo "| 🏷️ Version | \`${{ env.VERSION }}\` |"
+#             echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |"
+#             echo "| 🌍 Environment | \`production\` |"
+#             echo "| 🔀 PR | #${{ steps.pr-meta.outputs.pr_number }} |"
+#             echo "| 👤 Raised by | \`${{ steps.pr-meta.outputs.pr_author }}\` |"
+#             echo "| ✅ Approved by | \`${{ steps.pr-meta.outputs.pr_approver }}\` |"
+#             echo "| 🚀 Deployed by | \`${{ github.actor }}\` |"
+#             echo "| 🕐 Deployed At | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
+#             echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
+#             echo "| 🔗 URL | https://noma-api.nomaos.com/health |"
+#           } >> "$GITHUB_STEP_SUMMARY"
+
+#       # ==========================================================
+#       # 🧹 CLEAN LOCAL RUNNER
+#       # ==========================================================
+#       - name: 🧹 Clean runner publish directory
+#         if: always()
+#         run: |
+#           rm -rf "${{ env.PUBLISH_DIR }}"
+#           echo "✅ Local publish directory removed"
