@@ -22,7 +22,7 @@ on:
         required: true
         default: nomaos-api
         type: choice
-        options: [nomaos-api, nomaos-app2]
+        options: [nomaos-api]
       environment:
         description: "Target environment"
         required: true
@@ -42,7 +42,7 @@ permissions:
 
 env:
   AWS_REGION: eu-west-1
-  ECR_REPOSITORY: nomaos
+  ECR_REPOSITORY: agrovesto-dev-nomaos
   APP_NAME: ${{ inputs.app || 'nomaos-api' }}
 
 jobs:
@@ -104,18 +104,18 @@ jobs:
               --image-scanning-configuration scanOnPush=true \
               --image-tag-mutability IMMUTABLE
 
-            # Keep the last 15 images: blue/green means the previous image must
+            # Keep the last 3 images: blue/green means the previous image must
             # remain pullable for rollback, so don't prune too aggressively.
             aws ecr put-lifecycle-policy \
               --repository-name "$ECR_REPOSITORY" \
               --lifecycle-policy-text '{
                 "rules": [{
                   "rulePriority": 1,
-                  "description": "Keep last 15 images",
+                  "description": "Keep last 3 images",
                   "selection": {
                     "tagStatus": "any",
                     "countType": "imageCountMoreThan",
-                    "countNumber": 15
+                    "countNumber": 3
                   },
                   "action": { "type": "expire" }
                 }]
