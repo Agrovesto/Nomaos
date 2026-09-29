@@ -38,7 +38,7 @@ on:
 
 concurrency:
   group: "docker-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}-${{ inputs.app || 'nomaos-api' }}"
-  cancel-in-progress: fals
+  cancel-in-progress: false
 
 permissions:
   id-token: write
