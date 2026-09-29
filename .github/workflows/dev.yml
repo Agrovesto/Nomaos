@@ -403,7 +403,6 @@ jobs:
       url: https://dev-noma-api.nomaos.com/health
 
     outputs:
-      quality-gate: ${{ steps.quality-gate.outputs.status }}
       version: ${{ steps.version.outputs.value }}
 
     steps:
@@ -1094,7 +1093,6 @@ jobs:
           echo "❌ Health check failed after 10 attempts"
 
           exit 1
-        continue-on-error: true
 
 
       # =========================================================
@@ -1106,7 +1104,6 @@ jobs:
         env:
           HEALTH: ${{ steps.health.outputs.health_status }}
           VERSION: ${{ steps.version.outputs.value }}
-          QG: ${{ steps.quality-gate.outputs.status }}
         run: |
 
           HEALTH_ICON=$(
@@ -1124,7 +1121,6 @@ jobs:
             echo "| 📦 Version | \`$VERSION\` |"
             echo "| 🔖 Commit | \`${{ env.COMMIT_SHA }}\` |"
             echo "| 🌍 Environment | \`dev\` |"
-            echo "| 🎯 Quality Gate | $QG |"
             echo "| $HEALTH_ICON Health | ${HEALTH:-unknown} |"
             echo "| 🕐 Deployed At | \`$(date -u +"%Y-%m-%dT%H:%M:%SZ")\` |"
             echo "| 🔗 URL | https://dev-noma-api.nomaos.com/health |"

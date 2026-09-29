@@ -107,7 +107,7 @@ jobs:
       # AWS
       ######################################################################
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -134,7 +134,7 @@ jobs:
               --image-scanning-configuration scanOnPush=true \
               --image-tag-mutability IMMUTABLE
 
-            # Keep the last 3 images so the previous image remains
+            # Keep the last 15 images so several previous images remain
             # available for blue/green rollback.
             aws ecr put-lifecycle-policy \
               --repository-name "$ECR_REPOSITORY" \
@@ -145,7 +145,7 @@ jobs:
                   "selection": {
                     "tagStatus": "any",
                     "countType": "imageCountMoreThan",
-                    "countNumber": 3
+                    "countNumber": 15
                   },
                   "action": {
                     "type": "expire"
@@ -250,7 +250,7 @@ jobs:
       # AWS
       ######################################################################
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -281,6 +281,15 @@ jobs:
           #   3. run the complete deployment under Bash
           #
           # This makes `set -euo pipefail` valid on the EC2 host.
+          #
+          # NOTE: `|` binds LOOSER than `+` in jq, so the @sh pipe must be
+          # wrapped inside the parentheses of the bash payload:
+          #
+          #   "prefix" + ( ( "..." + "..." ) | @sh )     <- correct
+          #   "prefix" + ( "..." + "..." ) | @sh         <- quotes EVERYTHING
+          #
+          # The second form single-quotes the whole multi-line script into one
+          # shell word and sh fails with 127 "command not found" on the host.
           ####################################################################
           jq -n \
             --arg image    "$IMAGE" \
@@ -317,7 +326,8 @@ jobs:
                     "--app \"$APP\" " +
                     "--image \"$IMAGE\" " +
                     "--commit \"$SHA\""
-                  ) | @sh
+                    | @sh
+                  )
                 )
               ]
             }' > /tmp/ssm-params.json
