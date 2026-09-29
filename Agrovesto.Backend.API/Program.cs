@@ -248,25 +248,18 @@ builder.Services.AddHealthChecks()
         connectionString: builder.Configuration.GetConnectionString("DefaultConnection"),
         name: "SQL Server Database",
         healthQuery: "SELECT 1",
-        timeout: TimeSpan.FromSeconds(5),
         tags: new[] { "database", "critical" })
-
     .AddCheck<IdentityPassHealthCheck>("IdentityPass API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external" },
-        timeout: TimeSpan.FromSeconds(5))
     .AddCheck<TermiiSmsHealthCheck>("Termii SMS API",
         failureStatus: HealthStatus.Degraded,
-        tags: new[] { "external" },
-        timeout: TimeSpan.FromSeconds(5))
-    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API",
+        tags: new[] { "external" },    .AddCheck<CountryStateCityApiHealthCheck>("Country State City API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external" },
-        timeout: TimeSpan.FromSeconds(5))
     .AddCheck<SendGridHealthCheck>("SendGrid API",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "external" },
-        timeout: TimeSpan.FromSeconds(5))
     .AddS3(options =>
     {
         options.BucketName = builder.Configuration["AWS:BucketName"];
@@ -275,12 +268,9 @@ builder.Services.AddHealthChecks()
     }, name: "AWS S3",
        failureStatus: HealthStatus.Degraded,
        tags: new[] { "external", "storage" },
-       timeout: TimeSpan.FromSeconds(5))
-
     .AddCheck<ApiEndpointHealthCheck>("API Endpoints",
         failureStatus: HealthStatus.Degraded,
         tags: new[] { "api", "endpoints" },
-        timeout: TimeSpan.FromSeconds(10))
     .AddCheck<ApplicationComponentHealthCheck>("Application Components",
         failureStatus: HealthStatus.Unhealthy,
         tags: new[] { "components", "critical" });
