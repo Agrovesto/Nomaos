@@ -317,26 +317,18 @@ Two things to do before that move, both already set up here:
 
 ---
 
-## Installing the CI workflow
+## CI workflow
 
-The pipeline lives at **`deploy/ci/docker-deploy.yml`** rather than
-`.github/workflows/`, because the GitHub App used for this branch does not hold
-the `workflows` permission and the push is rejected otherwise.
+The pipeline is installed at **`.github/workflows/docker-deploy.yml`**:
 
-Activate it yourself with:
+- pull requests targeting `devops` build the Docker image only — no AWS
+  credentials, no deployment;
+- a push to `devops` builds and blue/green deploys to the `staging` GitHub
+  environment;
+- a push to `master` (or a manual `workflow_dispatch` with `environment: prod`)
+  deploys to the `prod` environment.
 
-```bash
-git mv deploy/ci/docker-deploy.yml .github/workflows/docker.yml
-git commit -m "Enable Docker deploy workflow"
-git push
-```
-
-Once installed, pull requests targeting `devops` build the Docker image without
-AWS credentials or deployment. A push to `devops` deploys to the `staging`
-GitHub environment; pushes to `master` continue to use `production` (`prod`).
-Configure the `staging` environment with the new server's `AWS_DEPLOY_ROLE_ARN`,
-`EC2_INSTANCE_ID`, and `HEALTH_URL` values so the devops branch targets that
-server instead of production.
+Configure the `staging` and `prod` environments with:
 
 Required repository/environment settings:
 
@@ -346,10 +338,11 @@ Required repository/environment settings:
 | Secret | `EC2_INSTANCE_ID` | `i-…` of the target box |
 | Variable | `HEALTH_URL` | e.g. `https://noma-api.nomaos.com/health` |
 
-The IAM role needs `ecr:*` on the `nomaos` repository plus
+The IAM role needs `ecr:*` on the `agrovesto-dev-nomaos` repository plus
 `ssm:SendCommand` / `ssm:ListCommandInvocations` on the instance. The EC2
 instance profile needs `AmazonSSMManagedInstanceCore` and ECR pull rights.
 
-Note this replaces `prod.yaml` (rsync + systemd). Keep both only while you are
-mid-migration, and make sure just one of them is enabled on `master` at a time
-so two pipelines never deploy the same box.
+The old rsync + systemd production pipeline (`prod.yml`) has been removed — the
+Docker workflow is the only pipeline that deploys production. The `dev` branch
+still deploys through the rsync pipeline in `.github/workflows/dev.yml`; keep
+exactly one pipeline active per branch so two never deploy the same box.
