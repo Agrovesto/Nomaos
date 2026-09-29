@@ -1224,11 +1224,7 @@ SELECT
                 };
             }
 
-            // BUG FIX: TotalInputReceived should only reflect subscriptions that actually reached Disbursed
-            // or a later lifecycle stage — pending/approved/rejected subscriptions haven't actually paid out
-            // anything yet, so they shouldn't count toward "received." Also fixed `query.businessCode`
-            // (no such property) → use the resolved `organization`.
-            var inputPackageSubscriptions = await _context.InputPackageSubscriptions
+              var inputPackageSubscriptions = await _context.InputPackageSubscriptions
                 .AsNoTracking()
                 .Where(s => s.OrganizationId == organization.OrganizationId
                          && s.SubscriberType == InputSubScriptionType.MemberShip
@@ -1244,7 +1240,6 @@ SELECT
                     x.TotalInputReceived,
                 });
 
-            // Recovery amounts are actual payments made against those disbursed-or-beyond subscriptions.
             var totalRepayment = await _context.InputPackageSubscriptionPayments
                 .AsNoTracking()
                 .Where(p => p.Subscription.OrganizationId == organization.OrganizationId
@@ -1258,8 +1253,7 @@ SELECT
                 })
                 .ToDictionaryAsync(x => x.SubscriberUserId, x => x.TotalRecoveryAmount);
 
-            // BUG FIX: was `query.businessCode` (no such property) — use the resolved organization's BusinessCode.
-            var walletBalancePerMembership = await _context.UserWallets
+             var walletBalancePerMembership = await _context.UserWallets
                 .AsNoTracking()
                 .Where(w =>
                     w.BelongToBusinessCode == organization.BusinessCode
@@ -1367,7 +1361,8 @@ SELECT
                     HasbeenAssignedAgent = assignedAgentSet.Contains(m.Id),
                     TotalInputReceived = inputStats?.TotalInputReceived ?? 0,
                     RecoveryAmount = totalRecovery,
-                    WalletBalance = walletBalance
+                    WalletBalance = walletBalance,
+                    Email=m.Email
                 };
             }).ToList();
 
@@ -1455,7 +1450,8 @@ SELECT
                     a.State,
                     a.Lga,
                     a.Ward,
-                    a.OnBoardedOn
+                    a.OnBoardedOn,
+                    a.IsActive
                 })
                 .Skip((args.PageNumber - 1) * args.PageSize)
                 .Take(args.PageSize)
@@ -1506,7 +1502,8 @@ SELECT
                 Subscribers = 0,
                 InputDisbursed = 0,
                 EquityPaid = 0,
-                ProductSold = 0
+                ProductSold = 0,
+                Status=a.IsActive
             }).ToList();
 
             return new PagedListResponse<List<OrganizationAgentResponse>>
