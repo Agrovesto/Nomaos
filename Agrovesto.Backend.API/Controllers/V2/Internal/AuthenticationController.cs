@@ -39,6 +39,113 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             _logger = logger;
         }
 
+        [Authorize]
+        [HttpGet("notification-preference")]
+        public async Task<IActionResult> GetNotificationPreference([FromQuery] string? role = null)
+        {
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            var resolutionError = TryResolveNotificationRole(role, out var resolvedRole);
+            if (resolutionError != null) return resolutionError;
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.GetNotificationPreferenceAsync(CurrentUserId, resolvedRole),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        [Authorize]
+        [HttpPost("notification-preference")]
+        public async Task<IActionResult> SaveNotificationPreference(
+            [FromBody] NotificationPreferenceRequest model,
+            [FromQuery] string? role = null)
+        {
+            if (!ModelState.IsValid)
+                return ValidationProblemResponse();
+
+            if (string.IsNullOrEmpty(CurrentUserId))
+            {
+                return Unauthorized(new Response<string>
+                {
+                    Message = "User could not be resolved from the supplied token.",
+                    Succeeded = false
+                });
+            }
+
+            var resolutionError = TryResolveNotificationRole(role, out var resolvedRole);
+            if (resolutionError != null) return resolutionError;
+
+            return await ExecuteAsync(
+                () => _onBoardingManager.SaveNotificationPreferenceAsync(CurrentUserId, resolvedRole, model),
+                result => Ok(new Response<NotificationPreferenceResponse>
+                {
+                    Data = result,
+                    Message = ResponseMessages.Successful,
+                    Succeeded = true,
+                    Code = ResponseCodes.Success
+                }));
+        }
+
+        private IActionResult? TryResolveNotificationRole(string? suppliedRole, out NotificationUserRole resolvedRole)
+        {
+            resolvedRole = default;
+
+            var eligibleRoles = Enum.GetValues<NotificationUserRole>()
+                .Where(r => CurrentUserRoles.Contains(r.ToString(), StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(suppliedRole))
+            {
+                if (!Enum.TryParse<NotificationUserRole>(suppliedRole, ignoreCase: true, out var parsedRole))
+                {
+                    return BadRequest(ApiResponse<List<string>>.Fail(
+                        $"'{suppliedRole}' is not a notification role. Use one of: {string.Join(", ", Enum.GetNames<NotificationUserRole>())}.",
+                        ResponseCodes.Failed));
+                }
+
+                if (!eligibleRoles.Contains(parsedRole))
+                {
+                    return Unauthorized(ApiResponse<object>.Fail(
+                        ResponseMessages.AccessDenied,
+                        ResponseCodes.AccessDenied));
+                }
+
+                resolvedRole = parsedRole;
+                return null;
+            }
+
+            if (eligibleRoles.Count == 0)
+            {
+                return Unauthorized(ApiResponse<object>.Fail(
+                    ResponseMessages.AccessDenied,
+                    ResponseCodes.AccessDenied));
+            }
+
+            if (eligibleRoles.Count > 1)
+            {
+                var response = ApiResponse<List<string>>.Fail(
+                    "You belong to multiple roles. Please specify a role to continue.",
+                    ResponseCodes.RoleSelectionRequired);
+                response.Data = eligibleRoles.Select(r => r.ToString()).ToList();
+                return Unauthorized(response);
+            }
+
+            resolvedRole = eligibleRoles[0];
+            return null;
+        }
+
         [HttpPost("bulk-onboard")]
         [RequestSizeLimit(MaxFileSizeBytes)]
         public async Task<IActionResult> BulkOnboard(IFormFile file, [FromQuery] OnBoardingArgs args)
@@ -56,8 +163,11 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return await HandleBulkFarmerUploadAsync(file, args, _bulkFarmerUploadService, _logger);
         }
+       
+        
         [HttpPost("create-account")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Register([FromBody] OnboardingRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -79,8 +189,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             request => Ok(Success(request, request.Message, ResponseMessages.Successful)));
         }
 
+       
         [HttpPost("verify-otp")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> VerifyOtp([FromBody] ConfirmOtpRequest model)
         {
             if (!ModelState.IsValid)
@@ -93,6 +205,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("resend-otp")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> ResendOtp([FromBody] ResendOtpRequest model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -108,6 +221,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-profile")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> CreateProfile([FromBody] ProfileRequestModel model, [FromQuery] OnBoardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -135,6 +249,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("create-organization-profile")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> CreateOrganization([FromBody] OrganizationOnboardingModel model, [FromQuery] OrganizationOnboardingArgs args)
         {
             if (!ModelState.IsValid)
@@ -150,6 +265,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
         [HttpPost("login")]
         [AllowAnonymous]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Login([FromBody] LoginModel model, [FromQuery] string businessCode)
         {
             if (!ModelState.IsValid)
@@ -201,211 +317,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
             request => Ok(Success(request, ResponseMessages.Successful)));
         }
-
-   
-        [HttpPost("forgot-password")]
-        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordModel model)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-                var request = await _onBoardingManager.ForgotPassword(model.Username);
-
-            return Ok(ApiResponse<bool>.Success(
-                true,
-               ResponseMessages.Successful,
-                 ResponseCodes.Success
-            ));
-        }
-        [HttpPost("reset-password")]
-        public async Task<IActionResult> ResetPassword(PasswordResetModel model)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-        var resetPasswordRequest = await _onBoardingManager.ResetPassword(model);
-
-            return Ok(ApiResponse<bool>.Success(
-                true,
-               ResponseMessages.Successful,
-                 ResponseCodes.Success
-            ));
-        }
-        [Authorize]
-        [HttpPost("change-password")]
-        [Authorize]
-        public async Task<IActionResult> ChangePassword(ChnagePasswordModel model)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-
-            if (string.IsNullOrEmpty(CurrentUserEmail))
-            {
-                return Unauthorized(new Response<string>
-                {
-                    Message = "User could not be resolved from the supplied token.",
-                    Succeeded = false
-                });
-            }
-
-                model.Email = CurrentUserEmail;
-                var resetPasswordRequest = await _onBoardingManager.ChangePassword(model);
-
-            return Ok(ApiResponse<bool>.Success(
-                true,
-               ResponseMessages.Successful,
-                 ResponseCodes.Success
-            ));
-        }
-   
-        [HttpPost("forgot-pin")]
-        public async Task<IActionResult> ForgotPin([FromBody] ForgotPasswordModel model, [FromQuery] string businessCode, [FromQuery] string Env)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-                var request = await _onBoardingManager.ForgotPin(model.PhoneNumber, businessCode, Env);
-
-            return Ok(ApiResponse<string>.Success(
-                request.Message,
-               ResponseMessages.Successful,
-                 ResponseCodes.Success
-            ));
-        }
-        [HttpPost("reset-pin")]
-        public async Task<IActionResult> ResetPin(ConfirmOtpRequest model)
-        {
-            if (!ModelState.IsValid)
-                return ValidationProblemResponse();
-
-            try
-            {
-
-                var request = await _onBoardingManager.ResetPin(model);
-
-
-                return Ok(new Response<bool>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = true,
-                    Message = ResponseMessages.Successful,
-                    Data = request
-                });
-
-
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(400, new Response<string>
-                {
-                    Message = ex.Message,//"An unexpected error occurred. Please contact your administrator.",
-                    Succeeded = false,
-                });
-            }
-
-        }
-        [Authorize]
-        [HttpPost("change-pin")]
-        [Authorize]
-        public async Task<IActionResult> ChangePin([FromBody] ChangePinModel model, [FromQuery]OnBoardingArgs args)
-        {
-            if (!ModelState.IsValid)
-            {
-
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-
-            if (string.IsNullOrEmpty(CurrentUserId))
-            {
-                return Unauthorized(new Response<string>
-                {
-                    Message = "User could not be resolved from the supplied token.",
-                    Succeeded = false
-                });
-            }
-
-                args.UserId = CurrentUserId;
-                model.PhoneNumber = CurrentPhoneNumber;
-
-                var resetPasswordRequest = await _onBoardingManager.ChangePin(model,args);
-
-            return Ok(ApiResponse<bool>.Success(
-                true,
-               ResponseMessages.Successful,
-                 ResponseCodes.Success
-            ));
-        }
-
+                
         [Authorize]
         [HttpPost("logout")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> Logout()
         {
             var result = await _onBoardingManager.Logout(User);
@@ -415,7 +330,6 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
             return Ok(new { message = result.Message });
         }
-
 
         private async Task EnrichArgsByRoleAsync(OnBoardingArgs args)
         {
@@ -472,5 +386,64 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             if (!args.AgentIds.Contains(agent.Id))
                 args.AgentIds.Add(agent.Id);
         }
+
+        [HttpPost("change-credential")]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> ChangeCredential([FromBody] ChangeCredentialRequest request)
+        {
+            var model = new ChangeCredentialModel
+            {
+                Type = request.Type,
+                OldValue = request.OldValue,
+                NewValue = request.NewValue,
+                ConfirmValue = request.ConfirmValue,
+                Email = request.Type == CredentialType.Password
+                    ? User.FindFirstValue(ClaimTypes.Email)
+                    : null,
+                PhoneNumber = request.Type == CredentialType.Pin
+                    ? User.FindFirstValue(ClaimTypes.MobilePhone)
+                    : null
+            };
+            var (status, message) = await _onBoardingManager.ChangeCredential(model);
+            return Ok(new { status, message });
+        }
+
+        [HttpPost("forgot-credential")]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> ForgotCredential([FromBody] ForgotCredentialRequest request,
+            [FromQuery] string businessCode,
+            [FromQuery] string env)
+        {
+            var model = new ForgotCredentialModel
+            {
+                Type = request.Type,
+                Email = request.Email,
+                PhoneNumber = request.PhoneNumber,
+                BusinessCode = businessCode,
+                Env=env
+            };
+
+            var (status, message) = await _onBoardingManager.ForgotCredential(model);
+            return Ok(new { status, message });
+        }
+        [HttpPost("reset-credential")]
+        [AllowPendingCredentialChange]
+        public async Task<IActionResult> ResetCredential([FromBody] ConfirmCredentialResetRequest request)
+        {
+            var model = new ConfirmCredentialResetModel
+            {
+                Type = request.Type,
+                PhoneNumber = request.PhoneNumber,
+                Code = request.Code,
+                UserId = request.UserId,
+                Token = request.Token,
+                NewValue = request.NewValue,
+                ConfirmValue = request.ConfirmValue
+            };
+
+            var (status, message) = await _onBoardingManager.ConfirmReset(model);
+            return Ok(new { status, message });
+        }
     }
 }
+

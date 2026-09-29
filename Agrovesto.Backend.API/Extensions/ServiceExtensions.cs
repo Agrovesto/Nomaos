@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.MarketDataAnalyticsServi
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.PaymentService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
+using Agrovesto.Backend.Infrastructure.Logic;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
@@ -177,6 +178,7 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ILicenseService, LicenseService>();
             services.AddScoped<IModuleAccessService, SystemModuleAccessService>();
             services.AddScoped<IMigrationService, MigrationService>();
+            services.AddScoped<IProfileAccessPolicy, DefaultProfileAccessPolicy>();
 
             services.AddScoped<RepaymentOverdueProcessor>();
             services.AddHostedService<JobSchedulerService>();
@@ -189,6 +191,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ISMSProviderRepository, SMSProviderRepository>();
             services.AddScoped<IUserRoleReconciliationService, UserRoleReconciliationService>();
 
+
+            services.AddScoped<IResetRateLimiter, ResetRateLimiter>();
+            services.AddScoped<ICredentialChangeHandler, PasswordChangeHandler>();
+            services.AddScoped<ICredentialChangeHandler, PinChangeHandler>();
+            services.AddScoped<CredentialChangeService>();
 
         }
     }

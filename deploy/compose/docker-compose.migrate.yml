@@ -1,0 +1,66 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# EF Core migrations runner (project: nomaos-migrate)
+#
+# Program.cs never calls Database.Migrate(), so schema changes have always been
+# applied out of band. Keeping that explicit is the right call for blue/green:
+# during a flip both the old and new build are live at once, so the schema must
+# stay compatible with both. An app that self-migrates on boot breaks that.
+#
+#   docker compose -p nomaos-migrate --env-file /opt/nomaos/env/nomaos-api.env \
+#     -f docker-compose.migrate.yml run --rm migrate
+#
+# Uses the SDK image (dotnet-ef needs the SDK) and builds from source, so run
+# it from a checkout at the commit you are deploying.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: nomaos-migrate
+
+networks:
+  nomaos_data:
+    name: nomaos_data
+    external: true
+
+services:
+  migrate:
+    image: mcr.microsoft.com/dotnet/sdk:8.0-jammy
+    networks:
+      - nomaos_data
+    working_dir: /src
+    volumes:
+      - ../..:/src:ro
+      - nuget_cache:/root/.nuget/packages
+      # dotnet-ef writes obj/ during design-time build, so give it a writable
+      # overlay rather than opening up the read-only source mount.
+      - migrate_obj:/src/Agrovesto.Backend.API/obj
+      - migrate_bin:/src/Agrovesto.Backend.API/bin
+    environment:
+      ConnectionStrings__DefaultConnection: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING must be set}"
+      # Design-time build must not try to reach Vault.
+      ASPNETCORE_ENVIRONMENT: Development
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    entrypoint:
+      - /bin/bash
+      - -ec
+      - |
+        echo "installing dotnet-ef ..."
+        dotnet tool install --global dotnet-ef --version 8.* 2>/dev/null || true
+        export PATH="$$PATH:/root/.dotnet/tools"
+
+        echo "current migration state:"
+        dotnet ef migrations list \
+          --project Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          --startup-project Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          --no-build 2>/dev/null || true
+
+        echo "applying migrations ..."
+        dotnet ef database update \
+          --project Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          --startup-project Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          --verbose
+
+        echo "migrations applied."
+
+volumes:
+  nuget_cache:
+  migrate_obj:
+  migrate_bin:

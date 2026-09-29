@@ -81,6 +81,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<FarmerSubscriptionOverviewDto> GetAgentSubscriptionOverview(SubscriptionQueryFilter filter);
         Task<bool> RemoveSubscriptionAsync(InputSubscriptionRequestArgs args, CancellationToken cancellationToken = default);
         Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(long packageId, UpdateRepaymentPlanRequest request, InputPackageConfigArgs args);
+        Task<PerUserTypeFinancingOverviewCountDto> GetFinancingOverViewPerSubscriptionType(SubscriptionQueryFilter filter);
     }
     public class InputFinancingRepository : IInputFinancingRepository
     {
@@ -189,15 +190,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             return true;
         }
 
-        private static void ValidateRepaymentRequest(bool repaymentRequired, decimal repaymentValue)
+        private static void ValidateRepaymentRequest(bool repaymentRequired, decimal? repaymentValue)
         {
-            if (!repaymentRequired && repaymentValue > 0)
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Request cannot be null");
+            if (!repaymentRequired && repaymentValue.HasValue)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Cannot specify a repayment value when RepaymentRequired is false, please set RepaymentRequired to true or remove the repayment value");
         }
 
-        private static void ValidateCommitmentRequest(bool commitmentRequired, decimal commitmentValue)
+        private static void ValidateCommitmentRequest(bool commitmentRequired, decimal? commitmentValue)
         {
-            if (!commitmentRequired && commitmentValue > 0)
+            if (!commitmentRequired && commitmentValue.HasValue)
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Cannot specify a commitment value when CommitmentRequired is false, please set CommitmentRequired to true or remove the commitment value");
         }
 
@@ -275,8 +276,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         private static CommitmentPlan? BuildCommitmentPlan(
             bool commitmentRequired,
-            CommitmentType commitmentType,
-            decimal requestCommitmentValue,
+            CommitmentType? commitmentType,
+            decimal? requestCommitmentValue,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate,
             decimal totalPackageValue)
@@ -284,17 +285,26 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!commitmentRequired)
                 return null;
 
+            if (!commitmentType.HasValue)
+            {
+                throw new ValidationException("Commitment type is required when commitment is required");
+            }
+            if (!requestCommitmentValue.HasValue)
+            {
+                throw new ValidationException("Commitment requestCommitmentValue is required when commitment is required");
+            }
+
             var commitmentValue = commitmentType == CommitmentType.PercentageOfTotalValue
                 ? totalPackageValue * (requestCommitmentValue / 100m)
                 : requestCommitmentValue;
 
             var plan = new CommitmentPlan
             {
-                CommitmentType = commitmentType,
-                CommitmentValue = commitmentValue,
+                CommitmentType = commitmentType.Value,
+                CommitmentValue = commitmentValue.Value,
                 CommitmentPaymentStartDate = startDate,
                 CommitmentPaymentEndDate = endDate,
-                CommitmentPercentage =commitmentType == CommitmentType.PercentageOfTotalValue ? requestCommitmentValue : 0
+                CommitmentPercentage =commitmentType == CommitmentType.PercentageOfTotalValue ? requestCommitmentValue.Value : 0
             };
 
             ValidateCommitmentPlan(plan); // reused from AddSubscriberAsync
@@ -303,27 +313,42 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
         private static RepaymentPlan? BuildRepaymentPlan(
             bool repaymentRequired,
-            RepaymentFrequency frequency,
-            int duration,
+            RepaymentFrequency? frequency,
+            int? duration,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate,
             DateTimeOffset? gracePeriod,
-            InputPackageRepaymentMode mode,
-            decimal repaymentValue,
+            InputPackageRepaymentMode? mode,
+            decimal? repaymentValue,
             RiskCategory riskCategory)
         {
             if (!repaymentRequired)
                 return null;
-
+            if(!frequency.HasValue)
+            {
+                throw new ValidationException("Repayment frequency is required when repayment is required");
+            }
+            if (!mode.HasValue)
+            {
+                throw new ValidationException("Repayment mode is required when repayment is required");
+            }
+            if (!duration.HasValue)
+            {
+                throw new ValidationException("Repayment duration is required when repayment is required");
+            }
+            if (!repaymentValue.HasValue)
+            {
+                throw new ValidationException("Repayment repaymentValue is required when repayment is required");
+            }
             var plan = new RepaymentPlan
             {
-                RepaymentFrequency = frequency,
-                RepaymentDuration = duration,
+                RepaymentFrequency = frequency.Value,
+                RepaymentDuration = duration.Value,
                 RepaymentStartDate = startDate,
                 RepaymentEndDate = endDate,
                 RepaymentGracePeriod = gracePeriod,
-                RepaymentMode = mode,
-                RepaymentValue = repaymentValue,
+                RepaymentMode = mode.Value,
+                RepaymentValue = repaymentValue.Value,
                 RiskCategory = riskCategory
             };
 
@@ -397,20 +422,20 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                         CommitmentPlan = BuildCommitmentPlan(
                             request.CommitmentRequired,
-                            request.CommitmentType,
-                            request.CommitmentValue,
+                            request.CommitmentType.HasValue ? request.CommitmentType.Value : null,
+                            request.CommitmentValue.HasValue ? request.CommitmentValue.Value : null,
                             request.CommitmentPaymentStartDate,
                             request.CommitmentPaymentEndDate,
                             totalPackageValue),
 
                         RepaymentPlan = BuildRepaymentPlan(
                             request.RepaymentRequired,
-                            request.RepaymentFrequency,
-                            request.RepaymentDuration,
+                            request.RepaymentFrequency.HasValue ? request.RepaymentFrequency.Value : null,
+                            request.RepaymentDuration.HasValue ? request.RepaymentDuration.Value : null,
                             request.RepaymentStartDate,
                             request.RepaymentEndDate,
                             request.RepaymentGracePeriod,
-                            request.RepaymentModel,
+                            request.RepaymentModel.HasValue ? request.RepaymentModel.Value : null,
                             request.RepaymentValue,
                             request.RiskCategory)
                     };
@@ -521,6 +546,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         _context.CommitmentPlans.Remove(package.CommitmentPlan);
                         package.CommitmentPlan = null;
                     }
+                    ApplyIfPresent(request.UserWalletId, v => package.UserWalletId = v);
+                    if (args.isSelectedWalletProvisioned)
+                    {
+                        package.IsSelectedWalletProvisioned = true;
+                    }
 
                     if (package.RepaymentRequired)
                     {
@@ -534,6 +564,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         ApplyIfPresent(request.RepaymentModel, v => plan.RepaymentMode = v);
                         ApplyIfPresent(request.RepaymentValue, v => plan.RepaymentValue = v);
                         ApplyIfPresent(request.RiskCategory, v => plan.RiskCategory = v);
+                       
 
                         ValidateRepaymentPlan(plan);
                         package.RepaymentPlan = plan;
@@ -652,7 +683,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var schedule = new List<RepaymentScheduleDto>();
 
-            if (plan.RepaymentDuration <= 0 || plan.RepaymentStartDate == null)
+            if (plan ==null)
                 return schedule;
 
             int duration = plan.RepaymentDuration;
@@ -3751,6 +3782,64 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 NextDueDate = nextDueDates.GetValueOrDefault(id)
             };
         }
+
+        public async Task<PerUserTypeFinancingOverviewCountDto> GetFinancingOverViewPerSubscriptionType(
+       SubscriptionQueryFilter filter)
+        {
+            var totalFinancedValue = 0m;
+            var totalSubscription = 0;
+            var subscriptionsQuery = _context.InputPackageSubscriptions
+            
+                .Where(x => x.BusinessCode == filter.BusinessCode);
+
+            if (filter.OrganizationId.HasValue)
+            {
+                subscriptionsQuery = subscriptionsQuery
+                    .Where(x => x.OrganizationId == filter.OrganizationId.Value);
+            }
+            if(filter.SubscriptionType.HasValue)
+            {
+                subscriptionsQuery = subscriptionsQuery
+                    .Where(x => x.SubscriberType == filter.SubscriptionType.Value);
+                if(filter.SubscriptionType.Value == InputSubScriptionType.Individual)
+                {
+                    totalFinancedValue = await subscriptionsQuery
+                        .Where(x=>x.SubscriberType == InputSubScriptionType.Individual)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+
+                    totalSubscription = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.Individual)
+                        .CountAsync();
+                }
+                else if (filter.SubscriptionType.Value == InputSubScriptionType.MemberShip)
+                {
+                    totalFinancedValue = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.MemberShip)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+                    totalSubscription = await subscriptionsQuery
+                        .Where(x => x.SubscriberType == InputSubScriptionType.MemberShip)
+                        .CountAsync();
+                }
+            }
+            else
+            {
+                totalFinancedValue = await subscriptionsQuery
+                      .Where(x => x.SubscriberType == InputSubScriptionType.Individual)
+                        .SumAsync(x => (decimal?)x.TotalFinancingValue) ?? 0m;
+                totalSubscription = await subscriptionsQuery
+                          .CountAsync();
+
+            }
+
+
+            return new PerUserTypeFinancingOverviewCountDto
+            {
+                TotalFinancedValue = totalFinancedValue,
+                TotalFinance= totalSubscription
+            };
+        }
+
+
         public async Task<InputFinancingDashboardDto> GetInputFinancingOverviewAsync(
         SubscriptionQueryFilter filter)
         {

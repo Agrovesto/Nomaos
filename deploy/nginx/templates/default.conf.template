@@ -1,0 +1,121 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NomaOS edge — server blocks
+#
+# Rendered once at nginx container start (envsubst, NOMAOS_* vars only).
+# The upstream blocks live in /etc/nginx/upstreams/*.conf and are rewritten
+# by deploy/scripts/deploy.sh on every traffic flip, followed by
+# `nginx -s reload`. Reload is graceful: in-flight requests finish on the old
+# worker, new connections go to the new slot. Zero dropped requests.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Included from the http{} context of the base image config.
+include /etc/nginx/upstreams/*.conf;
+
+# Trust the ALB / CloudFront in front of us for X-Forwarded-*.
+# ASP.NET Core's UseForwardedHeaders then sees the real client IP + scheme.
+map $http_x_forwarded_proto $nomaos_forwarded_proto {
+    default $scheme;
+    https   https;
+    http    http;
+}
+
+# WebSocket/SignalR upgrade passthrough.
+# Note the empty string rather than "close" for the non-upgrade case: sending
+# `Connection: close` upstream would defeat the `keepalive` pool in every
+# upstream block. Empty means nginx omits the header and reuses the connection.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      '';
+}
+
+proxy_http_version 1.1;
+proxy_set_header Host              $host;
+proxy_set_header X-Real-IP         $remote_addr;
+proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $nomaos_forwarded_proto;
+proxy_set_header X-Forwarded-Host  $host;
+proxy_set_header Upgrade           $http_upgrade;
+proxy_set_header Connection        $connection_upgrade;
+
+proxy_connect_timeout 15s;
+proxy_send_timeout    ${NOMAOS_PROXY_READ_TIMEOUT};
+proxy_read_timeout    ${NOMAOS_PROXY_READ_TIMEOUT};
+
+# Bulk upload / farmer image endpoints post large multipart bodies.
+client_max_body_size ${NOMAOS_CLIENT_MAX_BODY_SIZE};
+client_body_buffer_size 1m;
+
+# Buffering off keeps report/export streaming responsive.
+proxy_buffering on;
+proxy_buffers 16 16k;
+proxy_busy_buffers_size 32k;
+
+# ── App 1: Agrovesto.Backend.API ─────────────────────────────────────────────
+# This is the default_server: anything arriving with an unrecognised Host —
+# the ALB's health checker hitting the instance IP, a direct curl, the old
+# ELB DNS name — still reaches the API. That mirrors the `server_name <dns> _;`
+# catch-all the host nginx config used, so nothing that works today breaks.
+server {
+    listen 80 default_server;
+    server_name ${NOMAOS_API_SERVER_NAME} _;
+
+    add_header X-Frame-Options        "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff"    always;
+    add_header X-XSS-Protection       "1; mode=block" always;
+    # Which slot served this response — invaluable when debugging a flip.
+    add_header X-Nomaos-Slot          $upstream_addr always;
+
+    location = /__edge_health {
+        access_log off;
+        return 200 "edge-ok\n";
+    }
+
+    # Health endpoints must never be cached and must fail fast.
+    location /health {
+        access_log off;
+        proxy_pass http://nomaos_api;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    10s;
+    }
+
+    # Hangfire dashboard — keep it off the public internet at the ALB/SG level.
+    location /hangfire {
+        proxy_pass http://nomaos_api;
+        proxy_read_timeout 120s;
+    }
+
+    location / {
+        proxy_pass http://nomaos_api;
+        proxy_cache_bypass $http_upgrade;
+        # Retry the other upstream server on a connect/500 — during a flip the
+        # draining slot may refuse a connection mid-reload.
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 2;
+    }
+}
+
+# ── App 2: second .NET service ───────────────────────────────────────────────
+# Inactive until you deploy app2 (its upstream file ships pointing at a
+# non-existent host, and this server_name defaults to app2.invalid).
+server {
+    listen 80;
+    server_name ${NOMAOS_APP2_SERVER_NAME};
+
+    add_header X-Frame-Options        "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff"    always;
+    add_header X-Nomaos-Slot          $upstream_addr always;
+
+    location /health {
+        access_log off;
+        proxy_pass http://nomaos_app2;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout    10s;
+    }
+
+    location / {
+        proxy_pass http://nomaos_app2;
+        proxy_cache_bypass $http_upgrade;
+        proxy_next_upstream error timeout http_502 http_503 http_504;
+        proxy_next_upstream_tries 2;
+    }
+}

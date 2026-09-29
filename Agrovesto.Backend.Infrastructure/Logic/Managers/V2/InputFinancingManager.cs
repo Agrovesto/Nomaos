@@ -29,6 +29,7 @@ using Core.Models.Payment;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Office2013.Drawing.ChartStyle;
 using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Hangfire;
 using Microsoft.AspNetCore.Http;
@@ -195,19 +196,52 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             args.organizationId = organization.OrganizaionId;
 
-            if (request.PaybackWalletId <= 0)
+            if (request.PaybackWalletId.HasValue && request.PaybackWalletId.Value <= 0)
+            {
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Invalid Payback Wallet Selected");
+
+            }
+            if (request.CommitmentRequired &&
+  (!request.PaybackWalletId.HasValue ||
+   request.PaybackWalletId.Value == 0))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A wallet provider must be selected when commitment is required."
+                );
+            }
+
+            if (!request.CommitmentRequired &&
+   !request.RepaymentRequired &&
+   request.PaybackWalletId.HasValue)
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A payback wallet cannot be selected when neither commitment nor repayment is required. Please remove the payback wallet or enable commitment or repayment."
+                );
+            }
+            if (request.RepaymentRequired &&
+(!request.PaybackWalletId.HasValue ||
+request.PaybackWalletId.Value == 0))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "A wallet provider must be selected when repayment is required."
+                );
+            }
+            if (!request.PaybackWalletId.HasValue)
             {
                 return await _inputFinancingRepository.CreateInputFinancingPackageConfig(request, args);
             }
-
-            var provider = await _walletproviderRepo.Get(request.PaybackWalletId);
+          
+            var provider = await _walletproviderRepo.GetById(request.PaybackWalletId.Value);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
 
             var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
             {
-                Id = request.PaybackWalletId,
+                Id = request.PaybackWalletId.Value,
                 UserId = query.UserId,
                 businessCode = query.businessCode
             });
@@ -253,7 +287,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (package.IsRepaymentWalletConfigured)
             {
                 if (package.WalletProviderId == null)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "Wallet provider not configured for this package.");
+                    throw new BaseException(
+                        ExceptionType.OPERATION_FAILED,
+                        "The repayment wallet provider has not been configured for this package. Please contact support."
+                    );
 
                 var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
                 {
@@ -263,7 +300,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 });
 
                 if (userWallet == null)
-                    throw new BaseException(ExceptionType.OPERATION_FAILED, "User wallet not found for repayment configuration.");
+                    throw new BaseException(
+                        ExceptionType.OPERATION_FAILED,
+                        "No eligible wallet was found for repayment configured for this package. Please ensure the package has a wallet with the required provider or contact support."
+                    );
 
                 package.RepaymentWallet = new InputPackageRepaymentWallet
                 {
@@ -299,6 +339,32 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 args.organizationId = hasOrg.OrganizaionId;
             }
+
+            if (request.PaybackWalletId.HasValue)
+            {
+                var provider = await _walletproviderRepo.GetById(request.PaybackWalletId.Value);
+
+                if (provider == null)
+                    throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Wallet Provider not found");
+
+                var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
+                {
+                    Id = request.PaybackWalletId.Value,
+                    UserId = args.createdByUserId,
+                    businessCode = args.BusinessCode
+                });
+
+                if (userWallet != null)
+                {
+                    args.isSelectedWalletProvisioned = true;
+                    request.UserWalletId = userWallet.Id;
+                }
+                else
+                {
+                    args.isSelectedWalletProvisioned = false;
+                }
+            }
+
             return await _inputFinancingRepository.UpdateInputPackageConfig(packageId, request, args);
         }
         public async Task<EditRepaymentPlanResult> EditRepaymentPlanAsync(
@@ -308,7 +374,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             ArgumentNullException.ThrowIfNull(request, nameof(request));
             if (packageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(packageId));
-           
+
             return await _inputFinancingRepository.EditRepaymentPlanAsync(packageId, request, args);
         }
 
@@ -435,7 +501,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             if (query.PackageId <= 0) throw new ArgumentException("Invalid PackageId", nameof(query.PackageId));
 
             if (query.SubscriptionId <= 0) throw new ArgumentException("Invalid Id provided", nameof(query.SubscriptionId));
-           
+
             return await _inputFinancingRepository.RemoveSubscriptionAsync(query, cancellationToken);
         }
         public async Task<bool> ApproveSubscriptionAsync(ApproveSubscriptionRequest request, InputSubscriptionRequestArgs query)
@@ -498,7 +564,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<SubscriptionReviewResponseDto> GetSubscriptionDetail(SubscriptionQueryFilter filter)
         {
-           
+
             if (!filter.ViewType.HasValue)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "View type is required");
@@ -602,8 +668,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     Key = s3Key,
                     FileName = file.FileName,
                     UploadedOn = DateTimeOffset.UtcNow,
-                    UploadedBy =userId,
-                    FilePath=s3Key
+                    UploadedBy = userId,
+                    FilePath = s3Key
 
                 });
             }
@@ -615,22 +681,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public async Task<List<Core.Models.Businesses.Input.SubscriptionDocument>> GetDocuments(long subscriptionId)
         {
-           var document = await _context.SubscriptionDocuments
-                .Where(x =>
-                    x.SubscriptionId == subscriptionId).ToListAsync();
+            var document = await _context.SubscriptionDocuments
+                 .Where(x =>
+                     x.SubscriptionId == subscriptionId).ToListAsync();
 
             if (document.Count == 0)
                 throw new BaseException(ExceptionType.NO_RECORD_FOUND, "Commission letter not found for this subscription");
 
-            List<Core.Models.Businesses.Input.SubscriptionDocument> response = document.Select(x=> new Core.Models.Businesses.Input.SubscriptionDocument
-            { 
-                FileName= x.FileName,
-                FilePath=x.FilePath,
-                Id=x.Id,
-                Key=x.Key,
-                SubscriptionId=x.SubscriptionId,
-                Type=x.DocumentType,
-                UploadedOn=x.UploadedOn
+            List<Core.Models.Businesses.Input.SubscriptionDocument> response = document.Select(x => new Core.Models.Businesses.Input.SubscriptionDocument
+            {
+                FileName = x.FileName,
+                FilePath = x.FilePath,
+                Id = x.Id,
+                Key = x.Key,
+                SubscriptionId = x.SubscriptionId,
+                Type = x.DocumentType,
+                UploadedOn = x.UploadedOn
             }).ToList();
 
 
@@ -665,7 +731,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var orgRoute = _configuration["Receipt:OrgRoute"];
 
             var baseUrl = _configuration["Receipt:BaseUrl"];
-            if(currentloggedInrole == UserType.Agent.ToString())
+            if (currentloggedInrole == UserType.Agent.ToString())
             {
                 baseUrl += $"/{agentroute}";
             }
@@ -716,7 +782,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             var installmentAmount = package.RepaymentPlan.RepaymentValue / totalInstallments;
             var receiptNumber = $"RCP-{package.InputSeason}-{package.InputTarget}-{latestPayment.PaidOn:yyyyMMdd}-{subscriptionId:D4}";
 
-            var data= new PaymentReceiptData
+            var data = new PaymentReceiptData
             {
                 ReceiptNumber = receiptNumber,
                 PaymentDate = latestPayment.PaidOn ?? DateTimeOffset.UtcNow,
@@ -809,7 +875,22 @@ RepaymentFrequency frequency)
             ValidateArgs(request);
 
             var subscription = await GetSubscriptionAsync(request, args);
-            ValidateSubscription(subscription, request);
+            if(subscription.InputPackage.CommitmentRequired && (!subscription.InputPackage.WalletProviderId.HasValue || subscription.InputPackage.WalletProviderId == null || subscription.InputPackage.WalletProviderId == 0))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "No wallet provider was configured for payment for this package.");
+            }
+          
+            if (subscription.InputPackage.WalletProviderId == null || !subscription.InputPackage.WalletProviderId.HasValue)
+            {
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "This package has no wallet configuration. Please contact support.");
+            }
+            var configredProvider = await _providerRepo.GetById(subscription.InputPackage.WalletProviderId.Value);
+
+            var requestProvider = await _providerRepo.GetById(request.WalletProviderId);
+
+            ValidateSubscription(subscription, request, configredProvider, requestProvider);
 
             var amountToPay = await CalculateAmountToPayAsync(request, subscription);
 
@@ -848,12 +929,18 @@ RepaymentFrequency frequency)
                     x.SubscriberUserId == args.SubscriberUserId);
         }
 
-        private static void ValidateSubscription(
+        private static async Task ValidateSubscription(
             InputPackageSubscription subscription,
-            RecordCommitmentPaymentRequest request)
+            RecordCommitmentPaymentRequest request, WalletProviderModel configuredProvider, WalletProviderModel requestProvider)
         {
+            
+            if(configuredProvider == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Configured package wallet provider not found");
+            if(requestProvider == null)
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Request wallet provider not found");
+
             if (subscription == null)
-                throw new BaseException(ExceptionType.OPERATION_FAILED,"Subscription not found");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscription not found");
 
             if (subscription.InputPackage == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Cannot find input package");
@@ -867,8 +954,8 @@ RepaymentFrequency frequency)
 
             if (subscription.InputPackage.CommitmentPlan.CommitmentPaymentEndDate < DateTimeOffset.UtcNow)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Commitment Payment cut off window has expired, you can no longer make commitmen fee, reach out to your admin");
-            
-            
+
+
             if (subscription.Status == SubscriptionStatus.PendingApproval)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Can only pay commitment fee after subscription is approved");
 
@@ -879,8 +966,11 @@ RepaymentFrequency frequency)
             if (subscription.Status != SubscriptionStatus.PendingCommitment)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Current state of subscription does not indicate pending commitment");
 
+            
+
             if (subscription.InputPackage.WalletProviderId != request.WalletProviderId)
-                throw new BaseException(ExceptionType.OPERATION_FAILED, "Selected wallet does not match configured package wallet, please use the configured package wallet");
+                throw new BaseException(ExceptionType.OPERATION_FAILED, 
+                    $"Selected wallet {requestProvider.Name} does not match configured package wallet {configuredProvider.Name}, please use the configured package wallet");
 
             if (subscription.SubscriberUser == null)
                 throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber not found. Please try again later.");
@@ -990,7 +1080,7 @@ RepaymentFrequency frequency)
             {
                 throw new BaseException(ExceptionType.BAD_REQUEST, "Could not determine debit account");
             }
-            
+
             var organizationWalletProviderId = subscription.InputPackage.WalletProviderId;
 
             if (!organizationWalletProviderId.HasValue)
@@ -1027,7 +1117,7 @@ RepaymentFrequency frequency)
 
             // ─── Step 4: Resolve provider ───
 
-            var provider = await _providerRepo.Get(debitFromUserWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(debitFromUserWallet.WalletProviderId);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");
@@ -1080,17 +1170,17 @@ RepaymentFrequency frequency)
 
 
                         ProviderDebitResult debitResult = provider.Code switch
-                           {
-                               "Momo" => await ProcessMomoWalletDebit(
-                                             args, debitReference, providerParams, providerService,debitRequest),
+                        {
+                            "Momo" => await ProcessMomoWalletDebit(
+                                          args, debitReference, providerParams, providerService, debitRequest),
 
-                               "Etransact" => await ProcessEtransactWalletDebit(
-                                             args, debitReference, providerParams, providerService, debitRequest),
+                            "Etransact" => await ProcessEtransactWalletDebit(
+                                          args, debitReference, providerParams, providerService, debitRequest),
 
-                               _ => throw new BaseException(
-                                        ExceptionType.OPERATION_FAILED,
-                                        $"Debit not implemented for provider {provider.Code}")
-                           };
+                            _ => throw new BaseException(
+                                     ExceptionType.OPERATION_FAILED,
+                                     $"Debit not implemented for provider {provider.Code}")
+                        };
                         debitProviderReference = debitResult.ProviderReference;
                         providerMessage = debitResult.Message;
 
@@ -1166,7 +1256,7 @@ RepaymentFrequency frequency)
 
                             case "Etransact":
                                 //credit on etransact
-                                break; 
+                                break;
 
                             default:
                                 await dbTransaction.RollbackAsync();
@@ -1189,7 +1279,7 @@ RepaymentFrequency frequency)
                             {
                                 ExternalReference = masterReference,
                                 Status = TransactionStatus.Successful,
-                                
+
                             }, args.UserId);
 
                         await dbTransaction.CommitAsync();
@@ -1266,7 +1356,7 @@ RepaymentFrequency frequency)
         }
 
         private async Task<ProviderDebitResult> ProcessMomoWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
-            IGenericWalletService providerService,  WalletTopUpProviderRequest debitRequest)
+            IGenericWalletService providerService, WalletTopUpProviderRequest debitRequest)
         {
             var result = new ProviderDebitResult();
             var debitResponse = await providerService.DebitWalletAsync(
@@ -1301,7 +1391,7 @@ RepaymentFrequency frequency)
             return result;
         }
         private async Task<ProviderDebitResult> ProcessEtransactWalletDebit(InputSubscriptionRequestArgs args, string debitReference, WalletProviderParameterModel[] providerParams,
-            IGenericWalletService providerService,  WalletTopUpProviderRequest debitRequest)
+            IGenericWalletService providerService, WalletTopUpProviderRequest debitRequest)
         {
             var result = new ProviderDebitResult();
 
@@ -1407,8 +1497,8 @@ RepaymentFrequency frequency)
                        PaymentType = PaymentType.Repayment,
                        PaymentChannel = PaymentChannel.Wallet,
                        Reference = reference,
-                       ExternalReference=reference,
-                       WalletProviderId= request.WalletProviderId.Value,
+                       ExternalReference = reference,
+                       WalletProviderId = request.WalletProviderId.Value,
                        RecordedByUserId = args.UserId
                    });
 
@@ -1423,16 +1513,16 @@ RepaymentFrequency frequency)
                 return new RepaymentResponse
                 {
                     IsSuccessful = true,
-                    AmountApplied =0,
+                    AmountApplied = 0,
                     OutstandingBalance = 0,
                     OverpaymentCredited = 0,
-                    ExternalReference =reference
+                    ExternalReference = reference
                 };
 
             }
 
             // ─── Outstanding must aggregate across BOTH cash and produce repayments already made ───
-         
+
             switch (request.PaymentChannel)
             {
                 case PaymentChannel.Wallet:
@@ -1615,9 +1705,9 @@ RepaymentFrequency frequency)
             });
         }
 
-          public async Task SendCommitmentReminderAsync(SubscriptionQueryFilter filter)
+        public async Task SendCommitmentReminderAsync(SubscriptionQueryFilter filter)
         {
-            
+
             var reminder = await _inputFinancingRepository.GetCommitmentReminderAsync(filter.SubscriptionId);
 
             if (reminder == null || !reminder.RequiresReminder)
@@ -1661,7 +1751,7 @@ RepaymentFrequency frequency)
         }
         public async Task SendRepaymentReminderAsync(SubscriptionQueryFilter filter)
         {
-            
+
             var reminder = await _inputFinancingRepository.GetRepaymentReminderAsync(filter.SubscriptionId);
 
             if (reminder == null || !reminder.RequiresReminder)
@@ -1705,13 +1795,13 @@ RepaymentFrequency frequency)
         }
         public async Task<List<RepaymentScheduleItemDto>> GetRepaymentScheduleAsync(SubscriptionQueryFilter filter)
         {
-           return await _inputFinancingRepository.GetRepaymentScheduleAsync(filter.SubscriptionId);
+            return await _inputFinancingRepository.GetRepaymentScheduleAsync(filter.SubscriptionId);
 
 
         }
         public async Task<PagedResult<RepaymentLedgerEntryDto>> GetRepaymentLedgerAsync(SubscriptionQueryFilter filter)
         {
-           return await _inputFinancingRepository.GetRepaymentLedgerAsync(filter.SubscriptionId, filter.PageNumber, filter.PageSize);
+            return await _inputFinancingRepository.GetRepaymentLedgerAsync(filter.SubscriptionId, filter.PageNumber, filter.PageSize);
 
 
         }
@@ -1784,9 +1874,9 @@ RepaymentFrequency frequency)
         {
             var reference = ReferenceUtil.GenerateDisbursementReference();
             return await _inputFinancingRepository.RequestInputDisbursementApprovalAsync(args.SubscriptionId, reference, args.UserId
-                ,args.SubscriberUserId);
+                , args.SubscriberUserId);
         }
-        private async Task<OrganizationAgent> ResolveOrganizationAgentLocation(long agentId, string? organizationCode)
+        private async Task<OrganizationAgent> ResolveOrganizationAgentLocation(long agentId, string? organizationCode, long locationId)
         {
             if (string.IsNullOrWhiteSpace(organizationCode))
                 throw new BaseException(ExceptionType.NOTFOUND, "Organization code is required");
@@ -1801,7 +1891,7 @@ RepaymentFrequency frequency)
                 .ToListAsync();
 
             if (!organizations.Any())
-                throw new BaseException(ExceptionType.NOTFOUND,"Organization not found");
+                throw new BaseException(ExceptionType.NOTFOUND, "Organization not found");
 
             var orgIds = organizations.Select(o => o.OrganizationId).ToList();
 
@@ -1810,45 +1900,23 @@ RepaymentFrequency frequency)
                 .Where(x =>
                     x.AgentId == agentId &&
                     orgIds.Contains(x.OrganizationId) &&
-                    x.LocationId != null &&
-                    x.IsActive)
-                .ToListAsync();
-
-            OrganizationAgent selected;
-
-            if (codes.Count == 1)
-            {
-                var requestedOrgId = organizations.First().OrganizationId;
-                selected = agentAssignments.FirstOrDefault(x => x.OrganizationId == requestedOrgId);
-
-                if (selected == null)
-                    throw new DisbursementException(
-                        "Agent does not have an active assignment within this organization " +
-                        "and cannot perform disbursements.");
-            }
-            else
-            {
-                selected = orgIds
-                    .Select(id => agentAssignments.FirstOrDefault(x => x.OrganizationId == id))
-                    .FirstOrDefault(x => x != null);
-
-                if (selected == null)
-                    throw new DisbursementException(
-                        "Agent does not have an active assignment within this organization " +
-                        "and cannot perform disbursements.");
-            }
-
-            return selected;
-        }
-        
-        private async Task<OrganizationLocation> ResolveOrganizationUserLocation(long organizationId, long locationId)
-        {
-           var orgLocation = await _context.OrganizationLocations
-                .Where(x =>
-                    x.OrganizationId == organizationId &&
-                    x.Id == locationId &&
+                    x.LocationId == locationId &&
                     x.IsActive)
                 .FirstOrDefaultAsync();
+
+
+
+            return agentAssignments;
+        }
+
+        private async Task<OrganizationLocation> ResolveOrganizationUserLocation(long organizationId, long locationId)
+        {
+            var orgLocation = await _context.OrganizationLocations
+                 .Where(x =>
+                     x.OrganizationId == organizationId &&
+                     x.Id == locationId &&
+                     x.IsActive)
+                 .FirstOrDefaultAsync();
             if (orgLocation == null)
             {
                 throw new DisbursementException(
@@ -1858,7 +1926,7 @@ RepaymentFrequency frequency)
 
             return orgLocation;
         }
-        
+
 
 
         public async Task<DisburseSubscriptionResult> DisburseSubscriptionAsync(
@@ -1882,7 +1950,7 @@ RepaymentFrequency frequency)
                     if (args.SubscriptionId <= 0)
                         throw new DisbursementException("A valid Subscription Id is required.");
 
-                  
+
                     if (Math.Abs(request.Latitude) < 1e-6 && Math.Abs(request.Longitude) < 1e-6)
                         throw new DisbursementException(
                             "Geolocation is required for disbursement. " +
@@ -1893,7 +1961,7 @@ RepaymentFrequency frequency)
                         .Include(x => x.Subscription)
                             .ThenInclude(x => x.InputPackage)
                                 .ThenInclude(x => x.InputPackageItems)
-                                .ThenInclude(x=>x.OrganizationProduct)
+                                .ThenInclude(x => x.OrganizationProduct)
                         .Include(x => x.Subscription)
                             .ThenInclude(x => x.InputPackage)
                                 .ThenInclude(x => x.AdditionalCosts)
@@ -1910,14 +1978,14 @@ RepaymentFrequency frequency)
                     if (query == null)
                         throw new DisbursementException("Disbursement Request  not found.");
 
-                   
+
                     if (query.Subscription.InputPackage.Organization == null)
                         throw new DisbursementException("Organization not found for this input package.");
                     args.OrganizationId = query.Subscription.InputPackage.Organization.OrganizationId;
 
                     var allowedStatuses = new[] { DisbursementStatus.Approved };
                     if (!allowedStatuses.Contains(query.Status))
-                        throw new BaseException(ExceptionType.OPERATION_FAILED,$"" +
+                        throw new BaseException(ExceptionType.OPERATION_FAILED, $"" +
                             $"Subscription is not approved " +
                             $"for disbursement or already disbursed. Current subscription status: {query.Status.ToString()}");
 
@@ -1927,7 +1995,7 @@ RepaymentFrequency frequency)
 
                     var org = query.Subscription.InputPackage.Organization;
 
-                    if(string.IsNullOrEmpty(query.RequestForUserId)) 
+                    if (string.IsNullOrEmpty(query.RequestForUserId))
                         throw new BaseException(ExceptionType.OPERATION_FAILED, "Subscriber user ID is missing in the disbursement request.");
 
                     var subscriberDetails = await _onBoardingManager.GetUseridentity(query.RequestForUserId);
@@ -1952,7 +2020,7 @@ RepaymentFrequency frequency)
                         request.UserImage,
                         new ImageVerificationArgs
                         {
-                            OrganizationCode=args.OrganizationCode,
+                            OrganizationCode = args.OrganizationCode,
                             BusinessCode = args.BusinessCode,
                             FarmerUserId = query.RequestForUserId
                         });
@@ -1970,24 +2038,16 @@ RepaymentFrequency frequency)
                         throw new DisbursementException("No agent profile found for the current user.");
                     OrganizationLocation? disbursementLocation;
 
-                    if(args.CurrentLoggedInUserRole == UserType.Agent.ToString())
+                    if (args.CurrentLoggedInUserRole == UserType.Agent.ToString())
                     {
-                        var organizationAgent = await ResolveOrganizationAgentLocation(agent.Id, org.OrganizationCode);
+                        var organizationAgent = await ResolveOrganizationAgentLocation(agent.Id, org.OrganizationCode, request.WarehouseId);
 
                         if (organizationAgent == null)
                             throw new DisbursementException(
-                                "Agent does not have an active assignment within this organization " +
+                                "Agent does not have an active assignment within this organization tied to" +
+                                "the selected warehouse" +
                                 "and cannot perform disbursements.");
 
-                        if (organizationAgent.Location == null)
-                            throw new DisbursementException(
-                                "Agent's assigned location could not be resolved. " +
-                                "Contact an administrator to correct the assignment.");
-
-                        if (!organizationAgent.Location.IsActive)
-                            throw new DisbursementException(
-                                $"Location '{organizationAgent.Location.LocationName}' is currently " +
-                                "inactive and cannot be used for disbursements.");
 
                         if (organizationAgent.Location.Id != request.WarehouseId)
                             throw new DisbursementException(
@@ -1995,6 +2055,11 @@ RepaymentFrequency frequency)
 
                         disbursementLocation = organizationAgent.Location;
 
+                    }
+                    else if (args.CurrentLoggedInUserRole == UserType.MemberShip.ToString())
+                    {
+                        throw new BaseException(ExceptionType.OPERATION_FAILED, "Disbursement is not allowed for this user role at the moment.");
+                        //disbursementLocation = await ResolveOrganizationUserLocation(org.OrganizationId, request.WarehouseId);
                     }
                     else
                     {
@@ -2007,10 +2072,15 @@ RepaymentFrequency frequency)
                         lon2: disbursementLocation.Longitude);
 
                     if (distanceMetres > GeometryHelper.AllowedRadiusMetres)
+                    {
+                        double excessMetres = distanceMetres - GeometryHelper.AllowedRadiusMetres;
+
                         throw new DisbursementException(
-                            $"Your current location ({distanceMetres:F0} m away) does not match " +
-                            $"the assigned inventory location '{disbursementLocation.LocationName}'. " +
-                            "Move to the correct location and try again.");
+                            $"Location check failed for '{disbursementLocation.LocationName}'.\n" +
+                            $"• Your distance from this location: {distanceMetres:N0} m\n" +
+                            $"• Allowed range: {GeometryHelper.AllowedRadiusMetres:N0} m\n" +
+                            $"• You need to move {excessMetres:N0} m closer to proceed.");
+                    }
 
 
                     if (query.Status == DisbursementStatus.Disbursed)
@@ -2043,15 +2113,15 @@ RepaymentFrequency frequency)
 
                         if (query.Subscription.InputPackage.AdditionalCosts.Count > 0)
                         {
-                           // disbursement.IsPartial = true;
+                            // disbursement.IsPartial = true;
                             //    var totalAdditionalCost = query.Subscription.InputPackage.AdditionalCosts.Sum(x => x.Amount);
                             //    //sum up the amount in the additional cost
                             //    disbursement = await ProcessMonetaryDisbursementAsync(
                             //     query.Subscription, agentLocation, query,
                             //     request, args, totalAdditionalCost, reference);
-                       }  //revisit
-                            // if physical but has additional cost to be given to farmer
-                        }
+                        }  //revisit
+                           // if physical but has additional cost to be given to farmer
+                    }
                     else
                     {
                         throw new BaseException(ExceptionType.OPERATION_FAILED, "Monetary disbursement is currently not " +
@@ -2081,9 +2151,10 @@ RepaymentFrequency frequency)
                         ? SubscriptionStatus.PartiallyDisbursed
                         : SubscriptionStatus.Active;
                     query.Subscription.DisbursedOn = DateTimeOffset.UtcNow;
+
                     if (!query.Subscription.InputPackage.RepaymentRequired)
                     {
-                        query.Subscription.Status = SubscriptionStatus.Completed;                      
+                        query.Subscription.Status = SubscriptionStatus.Completed;
                     }
 
                     _context.OutboxMessages.Add(new OutboxMessage
@@ -2133,7 +2204,7 @@ RepaymentFrequency frequency)
                         }).ToList()
                     };
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
                     throw;
@@ -2142,7 +2213,7 @@ RepaymentFrequency frequency)
         }
 
 
-       
+
         /// <summary>
         /// Validates the uploaded live image before any DB calls are made.
         /// Throws <see cref="DisbursementException"/> on any violation.
@@ -2231,9 +2302,9 @@ RepaymentFrequency frequency)
                     Latitude = request.Latitude,
                     Longitude = request.Longitude,
                     PerformedByUserId = args.UserId,
-                    BusinessCode= args.BusinessCode,
-                    OrganizationId= args.OrganizationId.Value,
-                    LocationInventoryId= inventory.Id
+                    BusinessCode = args.BusinessCode,
+                    OrganizationId = args.OrganizationId.Value,
+                    LocationInventoryId = inventory.Id
                 });
 
                 lineItems.Add(new DisbursementLineItem
@@ -2251,7 +2322,7 @@ RepaymentFrequency frequency)
                     Latitude = request.Latitude,
                     Longitude = request.Longitude,
                     CreatedOn = DateTimeOffset.UtcNow,
-                    
+
                 });
 
                 itemsTotal += quantityToGive * item.UnitCost;
@@ -2426,7 +2497,7 @@ RepaymentFrequency frequency)
             var debitReference = $"{masterReference}-DB";
             var creditReference = $"{Guid.NewGuid():D}-CR";
 
-            var provider = await _providerRepo.Get(organizationWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(organizationWallet.WalletProviderId);
 
             if (provider == null)
                 throw new BaseException(ExceptionType.NOTFOUND, "Wallet provider not found");

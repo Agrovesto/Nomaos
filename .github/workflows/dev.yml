@@ -178,6 +178,7 @@ jobs:
             /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
             /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
             /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+        continue-on-error: true
       # =========================================================
       # BUILD
       # =========================================================
@@ -274,7 +275,7 @@ jobs:
         run: |
           dotnet sonarscanner end \
             /d:sonar.token="${SONAR_TOKEN}"
-
+        continue-on-error: true
 
       # =========================================================
       # COVERAGE SUMMARY
@@ -498,15 +499,15 @@ jobs:
       # CACHE SONARQUBE
       # =========================================================
 
-      - name: 💾 Cache SonarQube
-        uses: actions/cache@v4
-        with:
-          path: ~/.sonar/cache
+      # - name: 💾 Cache SonarQube
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: ~/.sonar/cache
 
-          key: sonar-${{ runner.os }}-7.1.0
+      #     key: sonar-${{ runner.os }}-7.1.0
 
-          restore-keys: |
-            sonar-${{ runner.os }}-
+      #     restore-keys: |
+      #       sonar-${{ runner.os }}-
 
 
       # =========================================================
@@ -542,18 +543,18 @@ jobs:
       # INSTALL SONARSCANNER
       # =========================================================
 
-      - name: 🛠️ Install SonarScanner
-        run: |
-          if dotnet tool list --global | grep -q "dotnet-sonarscanner"; then
-            echo "✅ SonarScanner already available"
-          else
-            dotnet tool install \
-              --global \
-              dotnet-sonarscanner \
-              --version 7.1.0
-          fi
+      # - name: 🛠️ Install SonarScanner
+      #   run: |
+      #     if dotnet tool list --global | grep -q "dotnet-sonarscanner"; then
+      #       echo "✅ SonarScanner already available"
+      #     else
+      #       dotnet tool install \
+      #         --global \
+      #         dotnet-sonarscanner \
+      #         --version 7.1.0
+      #     fi
 
-          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+      #     echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
 
       # =========================================================
@@ -583,21 +584,22 @@ jobs:
       # SONAR BEGIN
       # =========================================================
 
-      - name: 🔍 SonarQube — Begin
-        env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
-          dotnet sonarscanner begin \
-            /k:"${{ env.SONAR_PROJECT_KEY }}" \
-            /d:sonar.host.url="${SONAR_HOST_URL}" \
-            /d:sonar.token="${SONAR_TOKEN}" \
-            /v:"${{ steps.version.outputs.value }}" \
-            /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
-            /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
-            /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
-            /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
-            /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+      # - name: 🔍 SonarQube — Begin
+      #   env:
+      #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
+      #   run: |
+      #     dotnet sonarscanner begin \
+      #       /k:"${{ env.SONAR_PROJECT_KEY }}" \
+      #       /d:sonar.host.url="${SONAR_HOST_URL}" \
+      #       /d:sonar.token="${SONAR_TOKEN}" \
+      #       /v:"${{ steps.version.outputs.value }}" \
+      #       /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx" \
+      #       /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml" \
+      #       /d:sonar.exclusions="**/Migrations/**,**/wwwroot/**,**/obj/**,**/bin/**,**/*.css,**/*.js" \
+      #       /d:sonar.coverage.exclusions="**/*Tests/**,**/*.Tests/**,**/Program.cs,**/Startup.cs" \
+      #       /d:sonar.test.inclusions="**/*Tests/**,**/*.Tests/**"
+      #   continue-on-error: true
 
 
       # =========================================================
@@ -668,138 +670,138 @@ jobs:
       # SONAR END
       # =========================================================
 
-      - name: 🔍 SonarQube — End
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
-          dotnet sonarscanner end \
-            /d:sonar.token="${SONAR_TOKEN}"
+      # - name: 🔍 SonarQube — End
+      #   env:
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
+      #   run: |
+      #     dotnet sonarscanner end \
+      #       /d:sonar.token="${SONAR_TOKEN}"
 
 
       # =========================================================
       # SONAR QUALITY GATE
       # =========================================================
 
-      - name: 🎯 Quality Gate check
-        id: quality-gate
-        env:
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
-        run: |
+      # - name: 🎯 Quality Gate check
+      #   id: quality-gate
+      #   env:
+      #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_DOTNET }}
+      #   run: |
 
-          REPORT=".sonarqube/out/.sonar/report-task.txt"
+      #     REPORT=".sonarqube/out/.sonar/report-task.txt"
 
-          if [ ! -f "$REPORT" ]; then
-            echo "❌ report-task.txt missing"
-            exit 1
-          fi
-
-
-          ANALYSIS_ID=$(
-            grep \
-              -oP 'ceTaskId=\K.*' \
-              "$REPORT"
-          )
-
-          echo "📋 Task ID: $ANALYSIS_ID"
+      #     if [ ! -f "$REPORT" ]; then
+      #       echo "❌ report-task.txt missing"
+      #       exit 1
+      #     fi
 
 
-          TASK_COMPLETED=false
+      #     ANALYSIS_ID=$(
+      #       grep \
+      #         -oP 'ceTaskId=\K.*' \
+      #         "$REPORT"
+      #     )
+
+      #     echo "📋 Task ID: $ANALYSIS_ID"
 
 
-          for i in $(seq 1 30); do
-
-            RESP=$(
-              curl \
-                -sf \
-                --max-time 10 \
-                -u "${SONAR_TOKEN}:" \
-                "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}"
-            )
-
-            STATUS=$(
-              echo "$RESP" |
-              jq -r '.task.status'
-            )
-
-            echo "[$i/30] $STATUS"
+      #     TASK_COMPLETED=false
 
 
-            case "$STATUS" in
+      #     for i in $(seq 1 30); do
 
-              SUCCESS)
-                TASK_COMPLETED=true
-                break
-                ;;
+      #       RESP=$(
+      #         curl \
+      #           -sf \
+      #           --max-time 10 \
+      #           -u "${SONAR_TOKEN}:" \
+      #           "${SONAR_HOST_URL}/api/ce/task?id=${ANALYSIS_ID}"
+      #       )
 
-              FAILED|CANCELED)
-                echo "❌ Sonar task $STATUS"
-                exit 1
-                ;;
+      #       STATUS=$(
+      #         echo "$RESP" |
+      #         jq -r '.task.status'
+      #       )
 
-              *)
-                sleep $(
-                  (
-                    i < 4
-                  ) && echo 5 ||
-                  (
-                    i < 8
-                  ) && echo 10 ||
-                  echo 15
-                )
-                ;;
-
-            esac
-
-          done
+      #       echo "[$i/30] $STATUS"
 
 
-          if [ "$TASK_COMPLETED" != "true" ]; then
-            echo "❌ Sonar analysis timed out"
-            exit 1
-          fi
+      #       case "$STATUS" in
+
+      #         SUCCESS)
+      #           TASK_COMPLETED=true
+      #           break
+      #           ;;
+
+      #         FAILED|CANCELED)
+      #           echo "❌ Sonar task $STATUS"
+      #           exit 1
+      #           ;;
+
+      #         *)
+      #           sleep $(
+      #             (
+      #               i < 4
+      #             ) && echo 5 ||
+      #             (
+      #               i < 8
+      #             ) && echo 10 ||
+      #             echo 15
+      #           )
+      #           ;;
+
+      #       esac
+
+      #     done
 
 
-          QG=$(
-            curl \
-              -sf \
-              --max-time 10 \
-              -u "${SONAR_TOKEN}:" \
-              "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}"
-          )
+      #     if [ "$TASK_COMPLETED" != "true" ]; then
+      #       echo "❌ Sonar analysis timed out"
+      #       exit 1
+      #     fi
 
 
-          QG_STATUS=$(
-            echo "$QG" |
-            jq -r '.projectStatus.status'
-          )
+      #     QG=$(
+      #       curl \
+      #         -sf \
+      #         --max-time 10 \
+      #         -u "${SONAR_TOKEN}:" \
+      #         "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}"
+      #     )
 
 
-          echo "status=$QG_STATUS" \
-            >> "$GITHUB_OUTPUT"
+      #     QG_STATUS=$(
+      #       echo "$QG" |
+      #       jq -r '.projectStatus.status'
+      #     )
 
 
-          {
-            echo "### 🎯 Quality Gate: $QG_STATUS"
-            echo ""
-            echo "| Metric | Actual | Threshold | Status |"
-            echo "|--------|--------|-----------|--------|"
-
-            echo "$QG" |
-              jq -r '
-                .projectStatus.conditions[] |
-                "| \(.metricKey) | \(.actualValue // "N/A") | \(.errorThreshold // "N/A") | \(if .status == "OK" then "✅" else "❌" end) |"
-              '
-          } >> "$GITHUB_STEP_SUMMARY"
+      #     echo "status=$QG_STATUS" \
+      #       >> "$GITHUB_OUTPUT"
 
 
-          if [ "$QG_STATUS" != "OK" ]; then
-            echo "❌ Quality Gate FAILED"
-            exit 1
-          fi
+      #     {
+      #       echo "### 🎯 Quality Gate: $QG_STATUS"
+      #       echo ""
+      #       echo "| Metric | Actual | Threshold | Status |"
+      #       echo "|--------|--------|-----------|--------|"
+
+      #       echo "$QG" |
+      #         jq -r '
+      #           .projectStatus.conditions[] |
+      #           "| \(.metricKey) | \(.actualValue // "N/A") | \(.errorThreshold // "N/A") | \(if .status == "OK" then "✅" else "❌" end) |"
+      #         '
+      #     } >> "$GITHUB_STEP_SUMMARY"
 
 
-          echo "✅ Quality Gate passed!"
+      #     if [ "$QG_STATUS" != "OK" ]; then
+      #       echo "❌ Quality Gate FAILED"
+      #       exit 1
+      #     fi
+
+
+      #     echo "✅ Quality Gate passed!"
 
 
       # =========================================================

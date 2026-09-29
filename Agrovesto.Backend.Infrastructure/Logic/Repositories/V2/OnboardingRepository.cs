@@ -1,4 +1,4 @@
-﻿using Agrovesto.Backend.Core.Enums;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Businesses;
@@ -24,6 +24,7 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Net.Mail;
 using System.Net.NetworkInformation;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -57,8 +58,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task OnCreateKYC(KYCDetails kYC);
         Task<UsersProfileResponse> GetUserProfile(string userId);
         Task<NotificationPreferenceResponse> GetNotificationPreference(string userId, NotificationUserRole role);
-        Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model);
-        Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model);
+        Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationUserRole role, NotificationPreferenceRequest model);
         Task<UserModel> UpdateUserProfileAsync(string userId, ProfileRequestModel model);
         Task<UsersProfile> FindUserById(string userId);
         Task<bool> IsUserInRoleAsync(string userId, string role);
@@ -72,6 +72,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<CreateUserResult> HandleExistingUser(User user, OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
         Task<CreateUserResult> CreateNewUser(OnboardingRequestModel model, OnBoardingArgs args, IdentityRole role);
         Task<IdentityRole> GetRoleAsync(string roleName);
+        Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
+        Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
     }
     public class OnboardingRepository : IOnboardingRepository
     {
@@ -201,6 +203,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
         new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
         new Claim("BusinessRole", activeBusiness.Role ?? ""),
+        new Claim("AuthMethod", user.SignupMethod.ToString()),
 
         new Claim("HasPendingOnboarding", hasPendingOnboarding.ToString())
     };
@@ -218,6 +221,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
                 claims.Add(new Claim("PhoneNumber", user.PhoneNumber));
 
+            if (!string.IsNullOrWhiteSpace(user.Email))
+                claims.Add(new Claim(ClaimTypes.Email, user.Email));
+
+            if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
+                claims.Add(new Claim(ClaimTypes.MobilePhone, user.PhoneNumber));
             claims.Add(new Claim(
                 "DisplayName",
                 user.Name ??
@@ -370,27 +378,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 weakCredentialResult.IsWeak
             );
 
-            var token = GenerateJwtToken(claims);
-
+            var expiration = DateTime.UtcNow.AddHours(1);
+            var token = GenerateJwtToken(claims, expiration);
             return (true, "Successful", new TokenModel
             {
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
+                ExpiresOn= expiration,
                 Token = token,
                 Roles = roles.ToList(),
                 Organizations= organizations,
                 phone_number = user.PhoneNumber,
                 TokenType =TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                Businesses = userBusinesses.Select(b => new BusinessClaimModel
-                {
-                  BusinessId=  b.BusinessId,
-                   BusinessCode= b.Business.BusinessCode,
-                   BusinessName= b.Business.BusinessName
-                }).ToList(),
-                RequiresCredentialChange = weakCredentialResult.IsWeak,
-                SecurityNotice = weakCredentialResult.Message
+                SecurityNotice = weakCredentialResult.Message,
+                Authmethod=user.SignupMethod.ToString(),
+                RequiresCredentialChange= weakCredentialResult.IsWeak,
+                TwoFactorEnabled= false
             });
         } 
         
@@ -403,7 +408,6 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 case LoginType.Password:
                     //if (!HasPassword(user))
                     //    return (false, "Password login is not enabled for this account");
-
                     if (!await _userManager.CheckPasswordAsync(user, model.Password))
                         return (false, "Invalid email or password");
                     break;
@@ -422,7 +426,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return (true, "OK");
         }
-        private string GenerateJwtToken(IEnumerable<Claim> claims)
+        private string GenerateJwtToken(IEnumerable<Claim> claims, DateTime validity)
         {
             var key = _configuration["JWT:Key"];
             if (string.IsNullOrWhiteSpace(key))
@@ -435,7 +439,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 audience: _configuration["JWT:Audience"],
                 claims: claims,
                 notBefore: DateTime.UtcNow,
-                expires: DateTime.UtcNow.AddDays(1),
+                expires: validity,
                 signingCredentials: new SigningCredentials(
                     signingKey,
                     SecurityAlgorithms.HmacSha256)
@@ -593,42 +597,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     WalletRepaymentDue = false,
                     Sms = false,
                     Email = false,
-                    InAppNotification = false
+                    PushNotification = false
                 };
             }
 
             return MapNotificationPreference(preference);
         }
 
-        public async Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationPreferenceRequest model)
+        public async Task<NotificationPreferenceResponse> SaveNotificationPreference(string userId, NotificationUserRole role, NotificationPreferenceRequest model)
         {
-            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Farmer);
+            var preference = await ResolvePreferenceForWriteAsync(userId, role);
 
-            preference.MappingStatusUpdates = model.MappingStatusUpdates;
-            preference.AgentVisitReminders = model.AgentVisitReminders;
-            preference.MembershipAnnouncements = model.MembershipAnnouncements;
-            preference.DocumentApprovalUpdates = model.DocumentApprovalUpdates;
-            preference.GeneralPlatformUpdates = model.GeneralPlatformUpdates;
+            switch (role)
+            {
+                case NotificationUserRole.Farmer:
+                    preference.MappingStatusUpdates = model.MappingStatusUpdates;
+                    preference.AgentVisitReminders = model.AgentVisitReminders;
+                    preference.MembershipAnnouncements = model.MembershipAnnouncements;
+                    preference.DocumentApprovalUpdates = model.DocumentApprovalUpdates;
+                    preference.GeneralPlatformUpdates = model.GeneralPlatformUpdates;
+                    break;
+
+                case NotificationUserRole.Agent:
+                    preference.NewFarmerAssigned = model.NewFarmerAssigned;
+                    preference.NewFarmCreated = model.NewFarmCreated;
+                    preference.BulkUploadCompleted = model.BulkUploadCompleted;
+                    preference.WalletRepaymentDue = model.WalletRepaymentDue;
+                    break;
+            }
+
             preference.Sms = model.Sms;
             preference.Email = model.Email;
-            preference.InAppNotification = model.InAppNotification;
-
-            await _context.SaveChangesAsync();
-
-            return MapNotificationPreference(preference);
-        }
-
-        public async Task<NotificationPreferenceResponse> SaveAgentNotificationPreference(string userId, AgentNotificationPreferenceRequest model)
-        {
-            var preference = await ResolvePreferenceForWriteAsync(userId, NotificationUserRole.Agent);
-
-            preference.NewFarmerAssigned = model.NewFarmerAssigned;
-            preference.NewFarmCreated = model.NewFarmCreated;
-            preference.BulkUploadCompleted = model.BulkUploadCompleted;
-            preference.WalletRepaymentDue = model.WalletRepaymentDue;
-            preference.Sms = model.Sms;
-            preference.Email = model.Email;
-            preference.InAppNotification = model.InAppNotification;
+            preference.PushNotification = model.PushNotification;
 
             await _context.SaveChangesAsync();
 
@@ -676,7 +676,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 WalletRepaymentDue = preference.WalletRepaymentDue,
                 Sms = preference.Sms,
                 Email = preference.Email,
-                InAppNotification = preference.InAppNotification,
+                PushNotification = preference.PushNotification,
                 LastUpdatedOn = preference.DateModified ?? preference.CreatedOn
             };
 
@@ -772,9 +772,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 OrganizationCode = organization.OrganizationCode,
                 OrganizationEmail = organization.OrganizationEmail,
                 PhoneNumber = organization.PhoneNumber,
-                State = organization.State.State,
-                Lga = organization.LGA.Name,
+                State = organization.State?.State,
+                Lga = organization.LGA?.Name,
                 Location = organization.CompanyAddress,
+                OnboardedOn=organization.OnboardedOn
              
             };
             return profile;
@@ -924,29 +925,62 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     "User not found");
 
 
-            var resolvedName =
-         !string.IsNullOrWhiteSpace(model.FullName)
-             ? model.FullName
-             : string.Join(" ",
-                 new[] { model.FirstName, model.MiddleName, model.LastName }
-                     .Where(x => !string.IsNullOrWhiteSpace(x)));
+            var resolvedName = !string.IsNullOrWhiteSpace(model.FullName)
+        ? model.FullName
+        : string.Join(" ",
+            new[] { model.FirstName, model.MiddleName, model.LastName }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
 
-                if (!string.IsNullOrWhiteSpace(resolvedName) && string.IsNullOrEmpty(user.Name))
-                    user.Name = resolvedName;
-        
+            if (!string.IsNullOrWhiteSpace(resolvedName))
+            {
+                var isIdentityVerified = user.IsNinVerified || user.IsBvnVerified;
+                var hasExistingName = !string.IsNullOrWhiteSpace(user.Name);
+
+                if (hasExistingName && isIdentityVerified && !EnumExtensions.NamesMatch(user.Name, resolvedName))
+                {
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "Your name cannot be changed because your NIN or BVN has been verified. " +
+                        "Please contact support and provide relevant documentation (e.g. a valid ID or " +
+                        "legal name-change document) to request a name update.");
+                }
+
+                // Set if empty, or if the user has no verified identity locking it.
+                if (!hasExistingName || !isIdentityVerified)
+                    user.Name = resolvedName.Trim();
+            }
+
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
-               {
-                    user.PhoneNumber = model.PhoneNumber;
+            {
+                if(user.PhoneNumber != model.PhoneNumber)
+                {
+                    //add to error to be displayed to user
+                    throw new BaseException(
+                        ExceptionType.BAD_REQUEST,
+                        "Phone number cannot be changed. Please contact support if you believe this is an error.");
+                }
             }
        
 
             if (!string.IsNullOrWhiteSpace(model.Email))
-                user.Email = model.Email;
+            //check first if this email is not tied to any other user on the system
+            {
+                var existingEmailUser = await _userManager.Users
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id != user.Id && x.Email == model.Email);
+                if (existingEmailUser != null)
+                {
+                    throw new BaseException(
+                        ExceptionType.ALREADY_EXIST,
+                        "This email is unavailable, use another email or contact support if you believe this is an error.");
+                }
+            }
+            user.Email = model.Email;
 
             if (!string.IsNullOrWhiteSpace(model.NIN))
             {
-                if (!string.IsNullOrWhiteSpace(user.NIN))
+                if (!string.IsNullOrWhiteSpace(user.NIN) && user.IsNinVerified)
                 {
                     if (!string.Equals(user.NIN, model.NIN, StringComparison.Ordinal))
                     {
@@ -972,11 +1006,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(model.Bvn))
+            if (!string.IsNullOrWhiteSpace(model.BVN))
             {
-                if (!string.IsNullOrWhiteSpace(user.BVN))
+                if (!string.IsNullOrWhiteSpace(user.BVN) && user.IsBvnVerified)
                 {
-                    if (!string.Equals(user.BVN, model.Bvn, StringComparison.Ordinal))
+                    if (!string.Equals(user.BVN, model.BVN, StringComparison.Ordinal))
                     {
                         throw new BaseException(
                             ExceptionType.BAD_REQUEST,
@@ -987,7 +1021,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 {
                     var existingBvnUser = await _userManager.Users
                         .AsNoTracking()
-                        .FirstOrDefaultAsync(x => x.Id != user.Id && x.BVN == model.Bvn);
+                        .FirstOrDefaultAsync(x => x.Id != user.Id && x.BVN == model.BVN);
 
                     if (existingBvnUser != null)
                     {
@@ -996,7 +1030,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                             "This BVN is already linked to another account. Please contact support if you believe this is an error.");
                     }
 
-                    user.BVN = model.Bvn;
+                    user.BVN = model.BVN;
                 }
             }
             user.DateOfBirth ??= model.DateOfBirth;
@@ -1011,7 +1045,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
             try
             {
-
+                user.ModifiedBy = model.OnboardedByUserId;
+                user.DateModified = DateTimeOffset.UtcNow;
+               
 
                 await _context.SaveChangesAsync();
                 //
@@ -1021,7 +1057,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 //    throw new BaseException(
                 //        ExceptionType.BAD_REQUEST,
                 //        result.Errors.First().Description);
-                await LinkUserToOrganizationIfNeeded(user.Id, model.organizationCode);
+                await LinkUserToOrganizationIfNeeded(user.Id, model.OrganizationCode);
 
                 return user.Map();
             }
@@ -1630,16 +1666,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         private string GenerateUserId(OnBoardingArgs args)
         {
+            string prefix = !string.IsNullOrEmpty(args.businessCode)
+                ? args.businessCode
+                : !string.IsNullOrEmpty(args.organizationCode)
+                    ? args.organizationCode
+                    : "USR";
+
             var datePart = DateTime.UtcNow.ToString("yyyyMMdd");
-            var randomDigits = new Random().Next(100, 999);
+            var randomPart = GenerateSecureRandomString(16); // ~96 bits of entropy
 
-            if (!string.IsNullOrEmpty(args.businessCode))
-                return $"{args.businessCode}{datePart}{randomDigits}";
-
-            if (!string.IsNullOrEmpty(args.organizationCode))
-                return $"{args.organizationCode}{datePart}{randomDigits}";
-
-            return Guid.NewGuid().ToString();
+            return $"{prefix}{datePart}{randomPart}";
+        }
+        private static string GenerateSecureRandomString(int length)
+        {
+            const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"; // no ambiguous chars
+            var bytes = RandomNumberGenerator.GetBytes(length);
+            var result = new char[length];
+            for (int i = 0; i < length; i++)
+                result[i] = chars[bytes[i] % chars.Length];
+            return new string(result);
         }
         private async Task LinkUserToOrganizationIfNeeded(string userId, string organizationCode)
         {
@@ -1780,14 +1825,18 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (user != null)
             {
                 var generatedToken = await _userManager.GeneratePasswordResetTokenAsync(user);
-                
-                return (true, "User Found", generatedToken);
+                var tokenGeneratedByte = Encoding.UTF8.GetBytes(generatedToken);
+
+                var encodedToken = WebEncoders.Base64UrlEncode(tokenGeneratedByte);
+                string callbackUrl = $"{_configuration["ResetPasswordLink"]}?t={encodedToken}&u={user.Id}";
+
+                return (true, "User Found", callbackUrl);
             }
             return (false, "User Not found", null);
         }
         public async Task<(bool Status, string Message)> ResetPassword(PasswordResetModel model)
         {
-            var userExist = await _userManager.FindByEmailAsync(model.Username);
+            var userExist = await _userManager.FindByIdAsync(model.UserId);
             if (userExist != null)
             {
                 var decodedBytes = WebEncoders.Base64UrlDecode(model.Token);
@@ -2050,7 +2099,184 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             await _context.SaveChangesAsync();
             await _signInManager.SignOutAsync();
         }
- 
 
+        public async Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work)
+        {
+            if (_context.Database.CurrentTransaction != null)
+                return await work();
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            var attempt = 0;
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                if (attempt++ > 0) _context.ChangeTracker.Clear(); // discard stale state from a failed attempt
+
+                await using var tx = await _context.Database.BeginTransactionAsync();
+                var result = await work();
+                await tx.CommitAsync();
+                return result;
+            });
+        }
+        public async Task<UserModel> OnUpdateUserProfileAsync(
+    string userId,
+    ProfileRequestModel model,
+    string modifiedBy = null)
+        {
+            if (string.IsNullOrWhiteSpace(userId))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "User id is required.");
+            if (model == null)
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Profile details are required.");
+
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId)
+                ?? throw new BaseException(ExceptionType.NOTFOUND, "User not found");
+
+            // ── Name: only fill it in when the user has none yet ────────────────
+            var resolvedName = ResolveFullName(model);
+            if (!string.IsNullOrWhiteSpace(resolvedName) && string.IsNullOrWhiteSpace(user.Name))
+                user.Name = resolvedName;
+
+            // ── Phone: immutable (compared by digits so 0803… == +234803…) ──────
+            if (!string.IsNullOrWhiteSpace(model.PhoneNumber) &&
+                !PhoneNumbersMatch(user.PhoneNumber, model.PhoneNumber))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    "Phone number cannot be changed. Please contact support if you believe this is an error.");
+            }
+
+            // ── Email: only touched when one is supplied AND it really changes ──
+            var email = model.Email?.Trim();
+            if (!string.IsNullOrEmpty(email))
+            {
+                if (!IsValidEmail(email))
+                    throw new BaseException(ExceptionType.BAD_REQUEST, "The email address is not valid.");
+
+                var normalizedEmail = _userManager.NormalizeEmail(email);
+                if (!string.Equals(user.NormalizedEmail, normalizedEmail, StringComparison.Ordinal))
+                {
+                    var emailTaken = await _context.Users.AsNoTracking()
+                        .AnyAsync(x => x.Id != user.Id && x.NormalizedEmail == normalizedEmail);
+                    if (emailTaken)
+                    {
+                        throw new BaseException(
+                            ExceptionType.ALREADY_EXIST,
+                            "This email is unavailable, use another email or contact support if you believe this is an error.");
+                    }
+
+                    user.Email = email;
+                    user.NormalizedEmail = normalizedEmail;
+                    user.EmailConfirmed = false;   // a new address must be re-confirmed (what SetEmailAsync does)
+                }
+            }
+
+            // ── NIN ──────────────────────────────────────────────────────────────
+            var nin = model.NIN?.Trim();
+            if (ShouldWriteIdentifier("NIN", nin, user.NIN, user.IsNinVerified))
+            {
+                var taken = await _context.Users.AsNoTracking()
+                    .AnyAsync(x => x.Id != user.Id && x.NIN == nin);
+                if (taken)
+                {
+                    throw new BaseException(
+                        ExceptionType.ALREADY_EXIST,
+                        "This NIN is already linked to another account. Please contact support if you believe this is an error.");
+                }
+                user.NIN = nin;
+            }
+
+            // ── BVN ──────────────────────────────────────────────────────────────
+            var bvn = model.BVN?.Trim();
+            if (ShouldWriteIdentifier("BVN", bvn, user.BVN, user.IsBvnVerified))
+            {
+                var taken = await _context.Users.AsNoTracking()
+                    .AnyAsync(x => x.Id != user.Id && x.BVN == bvn);
+                if (taken)
+                {
+                    throw new BaseException(
+                        ExceptionType.ALREADY_EXIST,
+                        "This BVN is already linked to another account. Please contact support if you believe this is an error.");
+                }
+                user.BVN = bvn;
+            }
+
+            // ── Date of birth: set once, never overwritten ──────────────────────
+            user.DateOfBirth ??= model.DateOfBirth;
+
+            // Audit: who made the change (the acting user when known, else the user themself)
+            user.ModifiedBy = string.IsNullOrWhiteSpace(modifiedBy) ? userId : modifiedBy;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(model.OrganizationCode))
+                    await LinkUserToOrganizationIfNeeded(user.Id, model.OrganizationCode);
+
+                return user.Map();
+            }
+            catch (BaseException)
+            {
+                throw; // never re-wrap our own errors
+            }
+            catch (DbUpdateException ex) when (DbErrors.IsDuplicateKey(ex, out var conflictField))
+            {
+                // Race-condition backstop: the DB unique index caught what the pre-checks could not.
+                throw new BaseException(
+                    ExceptionType.ALREADY_EXIST,
+                    $"This {conflictField} is already linked to a different account. Please contact support to merge your accounts.");
+            }
+        }
+
+        /// <summary>
+        /// Decides whether an incoming NIN/BVN should be written.
+        /// false => nothing to do; true => caller must check uniqueness then write; throws if it conflicts with a VERIFIED value.
+        /// </summary>
+        private static bool ShouldWriteIdentifier(string label, string incoming, string current, bool isVerified)
+        {
+            if (string.IsNullOrEmpty(incoming)) return false;                                   // not provided
+            if (string.Equals(current, incoming, StringComparison.Ordinal)) return false;       // unchanged
+
+            if (isVerified && !string.IsNullOrWhiteSpace(current))
+            {
+                throw new BaseException(
+                    ExceptionType.BAD_REQUEST,
+                    $"The {label} you provided does not match the {label} already linked to your account. If you believe this is incorrect, please contact support.");
+            }
+            return true;
+        }
+
+        private static string ResolveFullName(ProfileRequestModel model)
+        {
+            if (!string.IsNullOrWhiteSpace(model.FullName)) return model.FullName.Trim();
+
+            return string.Join(" ",
+                new[] { model.FirstName, model.MiddleName, model.LastName }
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Select(x => x.Trim()));
+        }
+
+        private static bool IsValidEmail(string email)
+        {
+            try { return new MailAddress(email).Address == email; }
+            catch (FormatException) { return false; }
+        }
+
+        // Compares the last 10 digits (Nigerian numbers), so format differences don't cause false mismatches.
+        private static string PhoneKey(string phone)
+        {
+            var digits = new string((phone ?? string.Empty).Where(char.IsDigit).ToArray());
+            return digits.Length > 10 ? digits[^10..] : digits;
+        }
+
+        private static bool PhoneNumbersMatch(string a, string b)
+        {
+            var keyA = PhoneKey(a);
+            return keyA.Length > 0 && keyA == PhoneKey(b);
+        }
+   
+    
     }
+
 }
+

@@ -17,6 +17,8 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 {
     [Route("api/v2/farmer")]
     [ApiController]
+
+    [AllowPendingCredentialChange]
     public class FarmerController : BaseController
     {
         private readonly IBusinessManager _businessManager;
@@ -36,6 +38,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         [HttpGet("dashboard")]
+        [AllowPendingCredentialChange]
         public async Task<IActionResult> GetFarmerDashboardData([FromQuery] ListQueryParams query)
         {
             var orgError = TryResolveOrganizationCode(query.organizationCode, out var resolvedOrgCode);

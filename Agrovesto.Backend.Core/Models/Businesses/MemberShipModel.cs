@@ -112,7 +112,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
 
     public class OrganizationMemberShipResponseModel
     {
-        public string Name { get; set; }
+        public string MembershipName { get; set; }
         public string? MembershipType { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
@@ -132,10 +132,14 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public decimal RecoveryAmount { get; set; }
         public string Tier { get; set; }
         public bool Status { get; set; }
+        public string Email { get; set; }
     }
     public class OrganizationMembershipDashboardResponse
     {
         public int TotalMemberships { get; set; }
+        public int ActiveMemberships { get; set; }
+        public int TotalFinancedMemberships { get; set; }
+        public decimal TotalFinanced { get; set; }
 
         public int TotalFarmers { get; set; }
 

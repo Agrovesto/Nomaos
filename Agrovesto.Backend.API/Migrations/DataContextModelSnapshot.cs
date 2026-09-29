@@ -5104,9 +5104,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("GeneralPlatformUpdates")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("InAppNotification")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("MappingStatusUpdates")
                         .HasColumnType("bit");
 
@@ -5117,6 +5114,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasColumnType("bit");
 
                     b.Property<bool>("NewFarmerAssigned")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("PushNotification")
                         .HasColumnType("bit");
 
                     b.Property<bool>("Sms")
@@ -5598,6 +5598,34 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("BusinessWalletProviderId");
 
                     b.ToTable("BusinessWalletProviderParameters");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.CredentialResetAttempt", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PurposeKey")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "PurposeKey", "CreatedAt");
+
+                    b.ToTable("CredentialResetAttempts", (string)null);
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
@@ -8043,6 +8071,17 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.Navigation("BusinessWalletProvider");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.CredentialResetAttempt", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>

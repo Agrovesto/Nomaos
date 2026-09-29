@@ -169,7 +169,7 @@ public class WalletTransferTests
         var providerRepo = new Mock<IWalletProviderRepository>();
 
         providerRepo
-            .Setup(x => x.Get(ProviderId))
+            .Setup(x => x.GetById(ProviderId))
             .ReturnsAsync(new WalletProviderModel { ProviderId = ProviderId, Code = "Momo", Name = "MTN Momo" });
 
         providerRepo
@@ -226,11 +226,11 @@ public class WalletTransferTests
         var providerRepo = new Mock<IWalletProviderRepository>();
 
         providerRepo
-            .Setup(x => x.Get(ProviderId))
+            .Setup(x => x.GetById(ProviderId))
             .ReturnsAsync(new WalletProviderModel { ProviderId = ProviderId, Code = "Momo", Name = "MTN Momo" });
 
         providerRepo
-            .Setup(x => x.Get(OtherProviderId))
+            .Setup(x => x.GetById(OtherProviderId))
             .ReturnsAsync(new WalletProviderModel { ProviderId = OtherProviderId, Code = "Etransact", Name = "Etransact" });
 
         providerRepo

@@ -143,7 +143,7 @@ public class AgentDisbursementTests
         var providerRepo = new Mock<IWalletProviderRepository>();
 
         providerRepo
-            .Setup(x => x.Get(ProviderId))
+            .Setup(x => x.GetById(ProviderId))
             .ReturnsAsync(new WalletProviderModel { ProviderId = ProviderId, Code = "Momo", Name = "MTN Momo" });
 
         providerRepo
