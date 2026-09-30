@@ -229,6 +229,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ActivityName { get; set; }
         public string? Id { get; set; }
         public string? PhoneNumber { get; set; }
+       [MaxLength(15, ErrorMessage = "LastName cannot exceed 15 characters.")]
         public string? LastName { get; set; }
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }

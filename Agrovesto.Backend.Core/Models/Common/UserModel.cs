@@ -92,7 +92,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
         public string? BusinessCode { get; set; }
-        public string Env { get; set; } = default!;
+        public string? Env { get; set; } = default!;
     }
 
     public class ResetArtifact

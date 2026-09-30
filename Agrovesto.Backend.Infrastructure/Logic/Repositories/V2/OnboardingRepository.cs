@@ -549,6 +549,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = user.UserType,
                 Email = user.Email,
                 Phone = user.PhoneNumber,
+                Name= user.Name,
                 IsEmailVerified=user.IsEmailVerified,
                 IsPhoneVerified= user.IsPhoneVerified,
                 NIN = user.NIN,
@@ -721,7 +722,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 case "Farmer":
                     response.Farmer = await GetFarmerProfile(userId);
-                    response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
+                   // response.Name = response.Farmer?.PersonalInformation?.Name ?? response.Name;
                     response.Gender = response.Farmer?.PersonalInformation.Gender ?? "NA";
                     response.Email = !string.IsNullOrWhiteSpace(response.Farmer?.PersonalInformation?.Email)
                         ? response.Farmer.PersonalInformation.Email
@@ -730,7 +731,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 case "Agent":
                     response.Agent = await GetAgentProfile(userId);
-                    response.Name = response.Agent?.Name ?? response.Name;
+                   // response.Name = response.Agent?.Name ?? response.Name;
                     response.Email = !string.IsNullOrWhiteSpace(response.Agent?.Email)
                         ? response.Agent.Email
                         : response.Email;
@@ -746,7 +747,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 case "Organization":
                     response.Organization = await GetOrganizationProfile(userId); // fixed: was overwriting Membership
-                    response.Name = response.Organization?.OrganizationName ?? response.Name;
+                    //response.Name = response.Organization?.OrganizationName ?? response.Name;
                     response.Email = !string.IsNullOrWhiteSpace(response.Organization?.OrganizationEmail)
                         ? response.Organization.OrganizationEmail
                         : response.Email;

@@ -2249,70 +2249,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     "Unable to complete onboarding at the moment.");
             }
         }
-        //public async Task<bool> EditAgentUser(
-        //    ProfileRequestModel model,
-        //    OnBoardingArgs args)
-        //{
-        //    try
-        //    {
-        //        if (string.IsNullOrEmpty(args.UserId))
-        //            throw new BaseException(ExceptionType.BAD_REQUEST, "UserId is required");
-        //        ValidateRequest(model, args);
-
-        //        var business = await GetBusinessOrFail(args.businessCode);
-
-        //        var organization = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
-        //        if (organization != null)
-        //            model.OrganizationId = organization.OrganizaionId;
-
-        //        if (!string.IsNullOrWhiteSpace(model.NIN))
-        //            ValidateIdentifier(model.NIN, "NIN");
-
-        //        if (!string.IsNullOrWhiteSpace(model.BVN))
-        //            ValidateIdentifier(model.BVN, "BVN");
-
-        //        var updateUser = await _onboardingRepository.UpdateUserProfileAsync(args.UserId, new ProfileRequestModel
-        //        {
-
-        //            PhoneNumber = model.PhoneNumber,
-        //            Email = model.Email,
-        //            NIN = model.NIN,
-        //            DateOfBirth = model.DateOfBirth,
-        //            BVN = model.BVN,
-        //            Location = model.Location,
-        //        });
-
-
-        //        var updateprofile = await _agentRepository.CreateUpdateAgent(new AgentModel
-        //        {
-        //            BelongToBusinessCode = args.businessCode,
-        //            State = model.State,
-        //            Lga = model.Lga,
-        //            Email = model.Email,
-        //            Location = model.Location,
-        //            Name = BuildFullName(model),
-        //            OnBoardedOn = DateTimeOffset.Now,
-        //            PhoneNumber = model.PhoneNumber,
-        //            UserId = args.UserId,
-        //            Ward = model.Ward,
-        //            OnboardedById = args.OnboardedByUserId,
-        //            OrganizationId = model.OrganizationId
-        //        });
-
-        //        return true;
-        //    }
-        //    catch (BaseException)
-        //    {
-        //        throw;
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        throw new BaseException(
-        //            ExceptionType.INTERNAL_SERVER_ERROR,
-        //            "Unable to complete profile.");
-        //    }
-        //}
-        private string BuildFullName(ProfileRequestModel model)
+       private string BuildFullName(ProfileRequestModel model)
         {
             if (!string.IsNullOrWhiteSpace(model.FullName))
                 return model.FullName;

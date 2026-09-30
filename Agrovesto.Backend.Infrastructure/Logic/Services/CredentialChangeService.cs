@@ -55,8 +55,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
 
         public async Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
         {
-            if (string.IsNullOrWhiteSpace(model.Env))
-                throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required.");
+            //if (string.IsNullOrWhiteSpace(model.Env))
+            //    throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required.");
+
+
+            var env = _configuration["Official:Env"];
 
             var handler = _handlers.SingleOrDefault(h => h.Type == model.Type)
                 ?? throw new BaseException(ExceptionType.BAD_REQUEST, "Unsupported credential type.");
@@ -68,7 +71,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
             });
             var artifact = await handler.GenerateArtifactAsync(user, model);
 
-            var env = _configuration["Official:Env"];
+          
             if (env == Env.Live.ToString())
             {
                 await handler.DeliverLiveAsync(user, artifact, model);

@@ -1134,13 +1134,15 @@ SELECT
                 })
                 .FirstOrDefaultAsync();
 
-            // Subscriptions that reached Disbursed or a later lifecycle stage.
-            // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
-            // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
-            // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
-            //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
-            //                            were financed more than once).
-            var disbursedStats = await _context.InputPackageSubscriptions
+
+
+           // Subscriptions that reached Disbursed or a later lifecycle stage.
+           // TotalInputDisbursed      = how many such subscriptions there are (a membership can appear more than once).
+           // TotalFinanced            = how much (sum of TotalFinancingValue) across those same subscriptions.
+           // TotalFinancedMemberships = how many DISTINCT memberships received at least one of those disbursements
+           //                            (e.g. 10 subscriptions could still be only 5 distinct memberships if some
+           //                            were financed more than once).
+           var disbursedStats = await _context.InputPackageSubscriptions
                 .AsNoTracking()
                 .Where(s => s.OrganizationId == organization.OrganizationId
                          && s.SubscriberType == InputSubScriptionType.MemberShip
