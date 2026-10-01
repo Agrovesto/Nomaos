@@ -378,7 +378,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 weakCredentialResult.IsWeak
             );
 
-            var expiration = DateTime.UtcNow.AddHours(1);
+            var expiration = DateTime.UtcNow.AddHours(3);
             var token = GenerateJwtToken(claims, expiration);
             return (true, "Successful", new TokenModel
             {
