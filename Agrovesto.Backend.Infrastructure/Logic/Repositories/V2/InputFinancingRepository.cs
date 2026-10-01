@@ -683,22 +683,21 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         {
             var schedule = new List<RepaymentScheduleDto>();
 
-            if (plan ==null)
+            if (plan == null || !plan.RepaymentStartDate.HasValue || plan.RepaymentDuration <= 0)
                 return schedule;
 
             int duration = plan.RepaymentDuration;
+            var start = plan.RepaymentStartDate.Value;
 
             decimal baseAmount = Math.Floor(plan.RepaymentValue / duration * 100m) / 100m;
             decimal lastAmount = plan.RepaymentValue - (baseAmount * (duration - 1));
-
-            var start = plan.RepaymentStartDate.Value;
 
             for (int i = 1; i <= duration; i++)
             {
                 var dueDate = GetDueDate(start, plan.RepaymentFrequency, i);
                 var amount = (i == duration) ? lastAmount : baseAmount;
                 var grace = plan.RepaymentGracePeriod.HasValue
-                    ? EndOfMonth(dueDate.AddMonths(1)) 
+                    ? EndOfMonth(dueDate.AddMonths(1))
                     : (DateTimeOffset?)null;
 
                 schedule.Add(new RepaymentScheduleDto
