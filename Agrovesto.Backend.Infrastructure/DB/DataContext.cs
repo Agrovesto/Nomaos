@@ -513,9 +513,20 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             modelBuilder.Entity<RepaymentSchedule>()
     .HasQueryFilter(x => !x.IsDeleted);
+
+
+            modelBuilder.Entity<RefreshToken>(e =>
+            {
+                e.HasIndex(x => x.TokenHash).IsUnique();
+                e.HasIndex(x => x.UserId);
+                e.HasIndex(x => x.FamilyId);
+                e.Property(x => x.TokenHash).HasMaxLength(64);
+                e.Property(x => x.FamilyId).HasMaxLength(32);
+                e.Property(x => x.UserId).HasMaxLength(450);
+            });
         }
 
-     
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<MemberShipAgent> MemberShipAgents { get; set; }

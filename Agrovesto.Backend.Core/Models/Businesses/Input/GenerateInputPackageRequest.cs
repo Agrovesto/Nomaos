@@ -229,6 +229,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Input
     }
     public class InputPackageDto
     {
+        public string CreatedBy { get; set; }
         public long WalletProviderId { get; set; }
         public bool IsActive { get; set; }
         public long Id { get; set; }

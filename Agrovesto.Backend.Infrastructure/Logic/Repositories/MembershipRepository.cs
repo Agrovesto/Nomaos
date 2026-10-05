@@ -1024,6 +1024,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 {
                     entity.MemberShipTypeId = data.MemberShipTypeId;
                     changed.Add(nameof(MemberShipModel.MemberShipTypeId));
+                    PatchHelper.Patch(changed, nameof(MemberShipModel.MemberShipTypeId), data.MemberShipTypeId, entity.MemberShipTypeId, v => entity.MemberShipTypeId = v);
+
                 }
             }
 

@@ -314,8 +314,15 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string Phone_number
         { get; set; }
     }
+
+    public class RefreshTokenRequest
+    {
+        public string RefreshToken { get; set; }
+    }
     public class TokenModel
     {
+        public string RefreshToken { get; set; }
+        public DateTime RefreshTokenExpiresOn { get; set; }
         public string Token { get; set; }
         public TokenType TokenType { get; set; }
         public string Authmethod { get; set; }
