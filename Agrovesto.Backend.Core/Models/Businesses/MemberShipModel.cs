@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string Name { get; set; }
         public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber;
         public string? Password { get; set; }
+        public string? RegistrationNumber { get; set; }
         public string? Pin { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
@@ -81,6 +82,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses
         public string? Password { get; set; }
         public string? Pin { get; set; }
         public string? MembershipType { get; set; }
+        public string? RegistrationNumber { get; set; }
         public string Location { get; set; }
         public string State { get; set; }
         public string Lga { get; set; }

@@ -1910,9 +1910,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     x.Status == TransactionStatus.Successful)
                 .SumAsync(x => (decimal?)x.AmountPaid) ?? 0m;
 
-            var fullyRepaid = !subscription.InputPackage.RepaymentRequired
-         || subscription.RepaymentValue <= 0
-         || totalRepaid >= subscription.RepaymentValue;
+            var fullyRepaid = totalRepaid >= subscription.RepaymentValue;
             if (fullyRepaid 
                 //&& (subscription.Status == SubscriptionStatus.PendingRepayment || subscription.Status ==
                 //SubscriptionStatus.Disbursed || subscription.Status == SubscriptionStatus.Active)
@@ -1953,6 +1951,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         IsCompleted = fullyRepaid
                     })
             });
+
+            await _context.SaveChangesAsync();
+
         }
 
         public async Task<decimal> GetTotalRepaymentPaidAsync(long subscriptionId)

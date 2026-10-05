@@ -2242,7 +2242,7 @@ DateTimeOffset dateTime)
                 BelongToBusinessCode = args.businessCode,
                 OrganizationId = model.OrganizationId,
                 OnboardedById = args.OnboardedByUserId,
-
+                RegistrationNumber=model.RegistrationNumber,
                 HasbeenAssignedAgent = agentIds.Any(),
 
                 MembershipLeaderFirstName = model.MembershipLeaderFirstName,
