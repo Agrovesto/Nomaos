@@ -65,7 +65,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<FarmerProfileDto> GetFarmerProfileAsync(string userId);
 
         Task<FarmerProfileDto> GetFarmerProfile(string userId);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode,
+        string? ipAddress = null);
         Task<bool> RemoveFarmerFromCooperatives(string userId, List<long> cooperativeIds, string? organizationCode);
         Task<string> ResendOnboardingOtp(ResendOtpRequest model, OnBoardingArgs args);
         Task<ImageUploadResponse> SaveFarmerImage(ProfileImageModel model, OnBoardingArgs args);
@@ -103,6 +104,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
+        Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -628,27 +630,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
         LoginModel model,
-        string businessCode
+        string businessCode,
+        string? ipAddress = null
             )
         {
             ValidateLoginModel(model);
             model.BusinessCode = businessCode;
-            var login = await _onboardingRepository.Login(model);
+            var login = await _onboardingRepository.Login(model, ipAddress);
 
             return login;
+        }
+        public async Task<(bool Status, string Message, TokenModel Response)> RefreshToken(
+      string refreshToken,
+      string? ipAddress = null
+          )
+        {
+            var refresh = await _onboardingRepository.RefreshToken(refreshToken, ipAddress);
+
+            return refresh;
         }
         public async Task<(bool Status, string Message)> Logout(ClaimsPrincipal userPrincipal)
         {
             var jti = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Jti);
             var userId = userPrincipal.FindFirstValue(ClaimTypes.NameIdentifier);
             var expClaim = userPrincipal.FindFirstValue(JwtRegisteredClaimNames.Exp);
-
+            var sessionId = userPrincipal.FindFirstValue("SessionId");
             if (string.IsNullOrEmpty(jti) || string.IsNullOrEmpty(expClaim))
                 return (false, "Invalid token");
 
             var expiry = DateTimeOffset.FromUnixTimeSeconds(long.Parse(expClaim)).UtcDateTime;
 
-            await _onboardingRepository.RevokeAsync(jti, userId!, expiry);
+           // await _onboardingRepository.RevokeAsync(jti, userId!, expiry);
+
+           await _onboardingRepository.LogoutAsync(userId!, jti, expiry, sessionId);
 
             return (true, "Logged out successfully");
         }

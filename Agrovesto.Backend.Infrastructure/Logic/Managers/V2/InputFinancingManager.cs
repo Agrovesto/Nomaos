@@ -284,7 +284,7 @@ request.PaybackWalletId.Value == 0))
             if (package == null)
                 throw new Exception($"Package not found: {query.Id}");
 
-            if (package.IsRepaymentWalletConfigured)
+            if (package.IsRepaymentWalletConfigured && package.CreatedBy == query.UserId)
             {
                 if (package.WalletProviderId == null)
                     throw new BaseException(
@@ -295,7 +295,7 @@ request.PaybackWalletId.Value == 0))
                 var userWallet = await _userWalletRepository.GetUserWalletByProviderId(new UserWalletParams
                 {
                     Id = package.WalletProviderId,
-                    UserId = query.UserId,
+                    UserId = package.CreatedBy,
                     businessCode = query.businessCode
                 });
 
@@ -308,8 +308,8 @@ request.PaybackWalletId.Value == 0))
                 package.RepaymentWallet = new InputPackageRepaymentWallet
                 {
                     WalletId = userWallet.Id,
-                    WalletName = userWallet.WalletNumber,
-                    WalletNumber = userWallet.WalletNumber,
+                   // WalletName = userWallet.WalletNumber,
+                    WalletNumber = EncryptionUtil.MaskSensitiveNumber(userWallet.WalletNumber),
                     WalletProvider = userWallet.ProviderName
                 };
             }

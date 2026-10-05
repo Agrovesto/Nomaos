@@ -52,8 +52,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task AddUserToOrganizationAsync(User user, string organizationCode, string phoneNumber);
         Task<CreateUserResult> RegisterUser(OnboardingRequestModel model, OnBoardingArgs args);
         Task ConfirmUserEmailOrPassword(string userId, OneTimePassword otp);
-       // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
-        Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model);
+        // Task<(bool Status, string Message, TokenModel Response)> Login(LoginModel model, string businessCode);
+        Task<(bool Status, string Message, TokenModel Response)> Login(
+                LoginModel model, string ipAddress = null);
         //Task<(bool status, string message)> OnUserLevelUpdate(string userId, UserLevel level);
         Task<bool> OnNINBVNUpdate(UserModel model, bool IsVerified);
         Task OnCreateKYC(KYCDetails kYC);
@@ -75,9 +76,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task<IdentityRole> GetRoleAsync(string roleName);
         Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> work);
         Task<UserModel> OnUpdateUserProfileAsync(string userId, ProfileRequestModel model, string modifiedBy = null);
-    }
+        Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string ipAddress = null);
+        Task LogoutAsync(string userId, string jti, DateTime accessTokenExpiry, string? sessionId);
+        
+        }
     public class OnboardingRepository : IOnboardingRepository
     {
+
+        private const string OrganizationRole = "Organization";
         private readonly DataContext _context;
         private readonly RoleManager<Role> _roleManager;
         private readonly UserManager<User> _userManager;
@@ -188,6 +194,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         UserBusiness activeBusiness,
         List<OrganizationDto>? organizations,
         bool hasPendingOnboarding,
+         string sessionId,
         List<string>? modules = null,
         bool requiresCredentialChange = false)
         {
@@ -199,7 +206,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         new Claim(JwtRegisteredClaimNames.Sub, user.Id),
         new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         new Claim(ClaimTypes.NameIdentifier, user.Id),
-
+          new Claim("SessionId", sessionId), 
         // Business info
         new Claim("BusinessId", activeBusiness.BusinessId.ToString()),
         new Claim("BusinessCode", activeBusiness.Business?.BusinessCode ?? ""),
@@ -307,13 +314,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             return (false, null);
         }
+       
+        
         public async Task<(bool Status, string Message, TokenModel Response)> Login(
-        LoginModel model)
+        LoginModel model, string ipAddress = null)
         {
             var user = await ResolveUserAsync(model);
             if (user == null)
                 return (false, "Invalid credentials", null);
-            
+
             var credentialResult = await ValidateCredentialsAsync(user, model);
             if (!credentialResult.Success)
                 return (false, credentialResult.Message, null);
@@ -329,22 +338,138 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 return (false, "User is not assigned to any business", null);
 
             UserBusiness activeBusiness;
-
-
             if (!string.IsNullOrWhiteSpace(model.BusinessCode))
             {
                 activeBusiness = userBusinesses
                     .FirstOrDefault(x => x.Business.BusinessCode == model.BusinessCode);
 
                 if (activeBusiness == null)
-                    return (false, "Access denied: you do not has access to this platform", null);
+                    return (false, "Access denied: you do not have access to this platform", null);
             }
             else
             {
                 activeBusiness = userBusinesses.FirstOrDefault(x => x.IsDefault)
-                                  ?? userBusinesses.First();
+                                 ?? userBusinesses.First();
             }
 
+            var tokens = await IssueTokensAsync(
+                user,
+                activeBusiness,
+                weakCredentialResult.IsWeak,
+                weakCredentialResult.Message,
+                familyId: Guid.NewGuid().ToString("N"),
+                ipAddress);
+
+            return (true, "Successful", tokens);
+        }
+        public async Task<(bool Status, string Message, TokenModel Response)> RefreshToken(
+    string refreshToken, string ipAddress = null)
+        {
+            const string invalid = "Invalid or expired refresh token";
+
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                return (false, invalid, null);
+
+            var hash = HashToken(refreshToken);
+            var stored = await _context.RefreshTokens.FirstOrDefaultAsync(x => x.TokenHash == hash);
+
+            if (stored == null)
+                return (false, invalid, null);
+
+            // A revoked token being presented again = possible theft -> kill the whole family
+            if (stored.RevokedOn != null)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Reuse detected");
+                return (false, invalid, null);
+            }
+
+            if (stored.ExpiresOn <= DateTime.UtcNow)
+                return (false, invalid, null);
+
+            var user = await _userManager.FindByIdAsync(stored.UserId);
+            if (user == null || await _userManager.IsLockedOutAsync(user))
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "User unavailable");
+                return (false, invalid, null);
+            }
+
+            var activeBusiness = await _context.UserBusinesses
+                .Include(x => x.Business)
+                .FirstOrDefaultAsync(x => x.UserId == user.Id
+                                       && x.BusinessId == stored.BusinessId
+                                       && x.IsActive);
+
+            if (activeBusiness == null)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Business access removed");
+                return (false, invalid, null);
+            }
+
+            // Atomic rotation: only one concurrent request can win this update
+            var rows = await _context.RefreshTokens
+                .Where(x => x.Id == stored.Id && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, "Rotated"));
+
+            if (rows == 0)
+            {
+                await RevokeFamilyAsync(stored.FamilyId, "Concurrent reuse");
+                return (false, invalid, null);
+            }
+
+            var tokens = await IssueTokensAsync(
+                user,
+                activeBusiness,
+                stored.RequiresCredentialChange,   // carried forward; we can't re-check the password here
+                stored.RequiresCredentialChange
+                    ? "Your credentials are weak or default. Please change them for security."
+                    : null,
+                stored.FamilyId,
+                ipAddress);
+
+            return (true, "Successful", tokens);
+        }
+        public async Task RevokeAllForUserAsync(string userId, string reason)
+        {
+            await _context.RefreshTokens
+                .Where(x => x.UserId == userId && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, reason));
+        }
+
+        public async Task LogoutAsync(string userId, string jti, DateTime accessTokenExpiry, string? sessionId)
+        {
+            // 1. Kill the current access token right away (existing mechanism)
+            await RevokeAsync(jti, userId, accessTokenExpiry);
+
+            // 2. Kill the refresh tokens for this login session so it can't be refreshed
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                await _context.RefreshTokens
+                    .Where(x => x.UserId == userId && x.FamilyId == sessionId && x.RevokedOn == null)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                        .SetProperty(x => x.RevokedReason, "Logout"));
+            }
+        }
+
+        private Task RevokeFamilyAsync(string familyId, string reason) =>
+            _context.RefreshTokens
+                .Where(x => x.FamilyId == familyId && x.RevokedOn == null)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(x => x.RevokedOn, DateTime.UtcNow)
+                    .SetProperty(x => x.RevokedReason, reason));
+
+        private async Task<TokenModel> IssueTokensAsync(
+            User user,
+            UserBusiness activeBusiness,
+            bool requiresCredentialChange,
+            string securityNotice,
+            string familyId,
+            string ipAddress)
+        {
             var roles = await _userManager.GetRolesAsync(user);
 
             var organizations = await (from uo in _context.UserOrganizations
@@ -363,44 +488,72 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 string.IsNullOrWhiteSpace(user.UserType);
 
             var modules = await _context.BusinessLicenseModules
-                .Where(x =>
-                    x.BusinessLicense.BusinessId == activeBusiness.BusinessId &&
-                    x.IsEnabled)
+                .Where(x => x.BusinessLicense.BusinessId == activeBusiness.BusinessId && x.IsEnabled)
                 .Select(x => x.SystemModule.Code)
                 .ToListAsync();
 
-            var claims = BuildClaims(
-                user,
-                roles,
-                activeBusiness,   
-                organizations,
-                hasPendingOnboarding,
-                modules,
-                weakCredentialResult.IsWeak
-            );
+            var claims = BuildClaims(user, roles, activeBusiness, organizations,
+                                     hasPendingOnboarding, familyId, modules, requiresCredentialChange);
 
-            var expiration = DateTime.UtcNow.AddHours(3);
-            var token = GenerateJwtToken(claims, expiration);
-            return (true, "Successful", new TokenModel
+            var accessExpiry = DateTime.UtcNow.Add(GetAccessTokenLifetime(roles));
+            var accessToken = GenerateJwtToken(claims, accessExpiry);
+
+            // Refresh token
+            var rawRefresh = GenerateRefreshTokenValue();
+            var refreshDays = _configuration.GetValue("JWT:RefreshTokenDays", 7);
+            var refreshExpiry = DateTime.UtcNow.AddDays(refreshDays);
+
+            _context.RefreshTokens.Add(new RefreshToken
+            {
+                UserId = user.Id,
+                BusinessId = activeBusiness.BusinessId,
+                TokenHash = HashToken(rawRefresh),
+                FamilyId = familyId,
+                CreatedOn = DateTime.UtcNow,
+                ExpiresOn = refreshExpiry,
+                RequiresCredentialChange = requiresCredentialChange,
+                CreatedByIp = ipAddress
+            });
+            await _context.SaveChangesAsync();
+
+            return new TokenModel
             {
                 Id = user.Id,
                 Email = user.Email,
                 Name = user.Name,
-                ExpiresOn= expiration,
-                Token = token,
+                ExpiresOn = accessExpiry,
+                Token = accessToken,
+                RefreshToken = rawRefresh,
+                RefreshTokenExpiresOn = refreshExpiry,
                 Roles = roles.ToList(),
-                Organizations= organizations,
+                Organizations = organizations,
                 phone_number = user.PhoneNumber,
-                TokenType =TokenType.AccessToken,
+                TokenType = TokenType.AccessToken,
                 BusinessCode = activeBusiness.Business.BusinessCode,
-                SecurityNotice = weakCredentialResult.Message,
-                Authmethod=user.SignupMethod.ToString(),
-                RequiresCredentialChange= weakCredentialResult.IsWeak,
-                TwoFactorEnabled= false
-            });
-        } 
-        
-         private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
+                SecurityNotice = securityNotice,
+                Authmethod = user.SignupMethod.ToString(),
+                RequiresCredentialChange = requiresCredentialChange,
+                TwoFactorEnabled = false
+            };
+        }
+
+        private TimeSpan GetAccessTokenLifetime(IEnumerable<string> roles)
+        {
+            var isOrganization = roles.Any(r =>
+                string.Equals(r, OrganizationRole, StringComparison.OrdinalIgnoreCase));
+
+            return isOrganization
+                ? TimeSpan.FromMinutes(_configuration.GetValue("JWT:OrganizationAccessTokenMinutes", 30))
+                : TimeSpan.FromMinutes(_configuration.GetValue("JWT:AccessTokenMinutes", 60));
+        }
+
+        private static string GenerateRefreshTokenValue() =>
+            Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+        private static string HashToken(string token) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
+        private async Task<(bool Success, string Message)> ValidateCredentialsAsync(
         User user,
         LoginModel model)
         {

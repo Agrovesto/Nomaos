@@ -738,7 +738,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 IsActive = package.IsActive,
                 WalletProviderId = package.WalletProviderId ?? 0,
-
+                CreatedBy= package.CreatedByUserId,
                 Id = package.Id,
                 Name = package.Name,
                 IsRepaymentWalletConfigured = package.IsSelectedWalletProvisioned,
@@ -746,7 +746,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 SubscriptionType = EnumExtensions.GetDisplayName(package.SubScriptionType),
                 InputSeason = package.InputSeason,
                 InputTarget = package.InputTarget,
-
+                
                 FinancingCategory = package.InputFinancingCategory?.Name,
 
                 FinancialStructure = new InputPackageFinancingStructureDto

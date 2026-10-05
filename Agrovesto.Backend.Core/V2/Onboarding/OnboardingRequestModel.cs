@@ -255,16 +255,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         SecuritySetup,
         Completed
     }
-    public class RefreshToken
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string UserId { get; set; }
-        public string Token { get; set; }
-        public DateTime ExpiresAt { get; set; }
-        public bool IsRevoked { get; set; }
-        public string DeviceId { get; set; }
-    }
-
+  
     public class LoginRequestModel
     {
         public string Identifier { get; set; } // username | email | phone

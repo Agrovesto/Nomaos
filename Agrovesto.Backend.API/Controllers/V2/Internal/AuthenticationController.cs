@@ -262,7 +262,15 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             },
             result => Ok(Success(result, ResponseMessages.Successful)));
         }
+        [AllowAnonymous]
+        [HttpPost("refresh")]
+        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        {
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _onBoardingManager.RefreshToken(request.RefreshToken, ip);
 
+            return result.Status ? Ok(result.Response) : Unauthorized(new { message = result.Message });
+        }
         [HttpPost("login")]
         [AllowAnonymous]
         [AllowPendingCredentialChange]
@@ -270,9 +278,10 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         {
             if (!ModelState.IsValid)
                 return ValidationProblemResponse();
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
             return await ExecuteAsync(
-                () => _onBoardingManager.Login(model, businessCode),
+                () => _onBoardingManager.Login(model, businessCode, ip),
                 createUser =>
                 {
                     var response = new Response<TokenModel>

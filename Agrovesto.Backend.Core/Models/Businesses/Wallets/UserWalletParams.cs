@@ -270,6 +270,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
         public string? UserId { get; set; }
         public string Env { get; set; }
         public long Id { get; set; }
+        public long WalletProviderId { get; set; }
         public int pageNumber { get; set; } = 1;
         public int pageSize { get; set; } = 10;
     }
@@ -321,7 +322,7 @@ namespace Agrovesto.Backend.Core.Models.Businesses.Wallets
     public class UserWalletDetailResponseModel
     {
         public long Id { get; set; }
-        public string UserId { get; set; }  
+        public string UserId { get; set; }
         public string ProviderName { get; set; }
         public decimal WalletLedgerBalance { get; set; }
         public bool IsActive { get; set; }
