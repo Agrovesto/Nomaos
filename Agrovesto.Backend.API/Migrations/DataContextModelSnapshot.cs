@@ -3468,6 +3468,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("PhoneNumber")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("RegistrationNumber")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("State")
                         .HasColumnType("nvarchar(max)");
 
@@ -6236,6 +6239,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<int>("FarmerOnboardingStatus")
                         .HasColumnType("int");
 
+                    b.Property<string>("FirstName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("HasDefaultPassword")
                         .HasColumnType("bit");
 
@@ -6266,11 +6272,17 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTimeOffset?>("LastLoginDate")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<string>("LastName")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("LockoutEnabled")
                         .HasColumnType("bit");
 
                     b.Property<DateTimeOffset?>("LockoutEnd")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MiddleName")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ModifiedBy")
                         .HasColumnType("nvarchar(max)");

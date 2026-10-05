@@ -2002,10 +2002,19 @@ RepaymentFrequency frequency)
                     if (subscriberDetails == null)
                         throw new DisbursementException("User details not found.");
 
-                    if (request.NIN != subscriberDetails.NIN)
+                    if (subscriberDetails.IsNinVerified && (request.NIN != subscriberDetails.NIN))
+                    {
                         throw new BaseException(ExceptionType.CONFLICT,
-                            "Supplied NIN does not match our records. " +
-                            "Kindly update the subscriber's profile.");
+                            "Supplied NIN does not match our records. " 
+                            ); 
+                    }
+
+                    if (!subscriberDetails.IsNinVerified)
+                    {
+                        throw new BaseException(ExceptionType.CONFLICT,
+                            "NIN verification is required before disbursement. " +
+                            "Please complete NIN verification and try again.");
+                    }
 
                     var farmerImage = await _farmerRepository.GetFarmerImage(
                         query.RequestForUserId,

@@ -47,6 +47,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     }
     public class User : IdentityUser
     {
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
         public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
         public string? OnboardingError { get; set; }
         public string? Salt { get; set; }

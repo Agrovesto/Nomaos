@@ -38,6 +38,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
     }
     public class UsersProfileResponse
     {
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        // Name stays, now computed from the parts
         public KYCDto KYC { get; set; }
         public string UserId { get; set; }
         public string UserType { get; set; }
@@ -423,6 +427,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ModifiedBy { get; set; }
 
         public string? FirstName { get; set; }
+        public string? RegistrationNumber { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
         public string? FullName { get; set; }

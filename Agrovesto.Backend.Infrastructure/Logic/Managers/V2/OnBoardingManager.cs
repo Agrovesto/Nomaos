@@ -2600,7 +2600,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 MembershipLeaderMiddleName = model.MiddleName,
                 MembershipLeaderLastName = model.LastName,
                 MembershipLeaderGender = model.Gender,
-
+                RegistrationNumber= model.RegistrationNumber,
                 MemberShipTypeId = model.MembershipTypeId ?? 0,
              
                 OnBoardedOn = model.CreatedOn,

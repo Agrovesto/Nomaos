@@ -205,6 +205,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                     TierLevel = Tier.Tier1,
                     OnBoardedOn = DateTimeOffset.UtcNow,
                     IsActive = true,
+                    RegistrationNumber= dto.RegistrationNumber
                 };
                 await _context.MemberShips.AddAsync(membership);
 
@@ -1017,6 +1018,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderMiddleName), data.MembershipLeaderMiddleName, entity.MembershipLeaderMiddleName, v => entity.MembershipLeaderMiddleName = v);
                 PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderLastName), data.MembershipLeaderLastName, entity.MembershipLeaderLastName, v => entity.MembershipLeaderLastName = v);
                 PatchHelper.Patch(changed, nameof(MemberShipModel.MembershipLeaderGender), data.MembershipLeaderGender, entity.MembershipLeaderGender, v => entity.MembershipLeaderGender = v);
+                PatchHelper.Patch(changed, nameof(MemberShipModel.RegistrationNumber), data.RegistrationNumber, entity.RegistrationNumber, v => entity.RegistrationNumber = v);
 
                 if (data.MemberShipTypeId != 0 && data.MemberShipTypeId != entity.MemberShipTypeId)
                 {

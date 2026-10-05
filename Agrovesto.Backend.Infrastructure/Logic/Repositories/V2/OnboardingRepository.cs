@@ -9,6 +9,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Identity;
@@ -542,6 +543,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 where ur.UserId == userId
                 select r.Name 
             ).ToListAsync();
+            var (firstName, middleName, lastName, fullName) = ResolveDisplayName(user);
 
             var response = new UsersProfileResponse
             {
@@ -549,17 +551,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = user.UserType,
                 Email = user.Email,
                 Phone = user.PhoneNumber,
-                Name= user.Name,
-                IsEmailVerified=user.IsEmailVerified,
-                IsPhoneVerified= user.IsPhoneVerified,
+                FirstName = firstName,
+                MiddleName = middleName,
+                LastName = lastName,
+                Name = fullName,
+                IsEmailVerified = user.IsEmailVerified,
+                IsPhoneVerified = user.IsPhoneVerified,
                 NIN = user.NIN,
                 BVN = user.BVN,
-                DateOfBirth= user.DateOfBirth,
-                IsBvnVerified=user.IsBvnVerified,
-                IsNinVerified=user.IsNinVerified,
+                DateOfBirth = user.DateOfBirth,
+                IsBvnVerified = user.IsBvnVerified,
+                IsNinVerified = user.IsNinVerified,
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
-
             var allRoleTypes = new List<string> { user.UserType };
             allRoleTypes.AddRange(additionalRoles);
             allRoleTypes = allRoleTypes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -715,6 +719,27 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 .Where(o => o.UserId == userId)
                 .Select(o => o.OrganizationEmail)
                 .FirstOrDefaultAsync();
+        }
+        private static (string? First, string? Middle, string? Last, string? Full) ResolveDisplayName(User user)
+        {
+            var first = string.IsNullOrWhiteSpace(user.FirstName) ? null : user.FirstName.Trim();
+            var middle = string.IsNullOrWhiteSpace(user.MiddleName) ? null : user.MiddleName.Trim();
+            var last = string.IsNullOrWhiteSpace(user.LastName) ? null : user.LastName.Trim();
+
+            // Preferred: build from the parts
+            var fromParts = string.Join(" ", new[] { first, middle, last }.Where(x => x != null));
+            if (!string.IsNullOrWhiteSpace(fromParts))
+                return (first, middle, last, fromParts);
+
+            // Fallback: legacy Name column, split so the parts aren't empty in the response
+            if (!string.IsNullOrWhiteSpace(user.Name))
+            {
+                var (f, m, l) = MigrationNameSplitter.Split(user.Name);
+                return (f, m, l, user.Name.Trim());
+            }
+
+            // Nothing available
+            return (null, null, null, null);
         }
         private async Task PopulateRoleProfile(UsersProfileResponse response, string roleType, string userId)
         {
@@ -927,10 +952,10 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
 
             var resolvedName = !string.IsNullOrWhiteSpace(model.FullName)
-        ? model.FullName
-        : string.Join(" ",
-            new[] { model.FirstName, model.MiddleName, model.LastName }
-                .Where(x => !string.IsNullOrWhiteSpace(x)));
+       ? model.FullName
+       : string.Join(" ",
+           new[] { model.FirstName, model.MiddleName, model.LastName }
+               .Where(x => !string.IsNullOrWhiteSpace(x)));
 
             if (!string.IsNullOrWhiteSpace(resolvedName))
             {
@@ -946,11 +971,38 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                         "legal name-change document) to request a name update.");
                 }
 
+                // Work out the parts: use what the client sent if present, otherwise split the full name
+                string first;
+                string? middle, last;
+
+                if (!string.IsNullOrWhiteSpace(model.FirstName) || !string.IsNullOrWhiteSpace(model.LastName))
+                {
+                    first = model.FirstName?.Trim() ?? string.Empty;
+                    middle = string.IsNullOrWhiteSpace(model.MiddleName) ? null : model.MiddleName.Trim();
+                    last = string.IsNullOrWhiteSpace(model.LastName) ? null : model.LastName.Trim();
+                }
+                else
+                {
+                    (first, middle, last) = MigrationNameSplitter.Split(resolvedName);
+                }
+
                 // Set if empty, or if the user has no verified identity locking it.
                 if (!hasExistingName || !isIdentityVerified)
+                {
                     user.Name = resolvedName.Trim();
+                    user.FirstName = first;
+                    user.MiddleName = middle;
+                    user.LastName = last;
+                }
+                else if (string.IsNullOrWhiteSpace(user.FirstName))
+                {
+                    // Verified user whose name matches: the name stays locked,
+                    // but fill the new part columns if they were never populated.
+                    user.FirstName = first;
+                    user.MiddleName = middle;
+                    user.LastName = last;
+                }
             }
-
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
             {
@@ -1077,6 +1129,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
            
         }
+        
         public async Task<CreateUserResult> RegisterUser(
         OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -1202,6 +1255,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+        private static (string First, string? Middle, string? Last) ResolveNameParts(
+      string? firstName, string? middleName, string? lastName, string fullName)
+        {
+            if (!string.IsNullOrWhiteSpace(firstName) || !string.IsNullOrWhiteSpace(lastName))
+            {
+                return (
+                    firstName?.Trim() ?? string.Empty,
+                    string.IsNullOrWhiteSpace(middleName) ? null : middleName.Trim(),
+                    string.IsNullOrWhiteSpace(lastName) ? null : lastName.Trim());
+            }
+
+            return MigrationNameSplitter.Split(fullName);
+        }
         public async Task<CreateUserResult> HandleExistingUser(
         User user,
         OnboardingRequestModel model,
@@ -1212,6 +1278,39 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!string.IsNullOrEmpty(model.DateOfBirth) && user.DateOfBirth != model.DateOfBirth)
             {
                 user.DateOfBirth = model.DateOfBirth;
+            }
+            var incomingName = !string.IsNullOrWhiteSpace(model.FullName)
+    ? model.FullName
+    : string.Join(" ",
+        new[] { model.FirstName, model.MiddleName, model.LastName }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+
+            bool hasName = !string.IsNullOrWhiteSpace(user.Name);
+            bool hasParts = !string.IsNullOrWhiteSpace(user.FirstName);
+
+            if (!hasName && !string.IsNullOrWhiteSpace(incomingName))
+            {
+                user.Name = incomingName.Trim();
+            }
+
+            if (!hasParts)
+            {
+                if (hasName)
+                {
+                    // Name already on file but parts never populated: derive them from the stored name
+                    // so Name and the part columns always agree.
+                    var (f, m, l) = MigrationNameSplitter.Split(user.Name);
+                    user.FirstName = f;
+                    user.MiddleName = m;
+                    user.LastName = l;
+                }
+                else if (!string.IsNullOrWhiteSpace(incomingName))
+                {
+                    var (f, m, l) = ResolveNameParts(model.FirstName, model.MiddleName, model.LastName, incomingName);
+                    user.FirstName = f;
+                    user.MiddleName = m;
+                    user.LastName = l;
+                }
             }
             if (!string.IsNullOrWhiteSpace(model.PhoneNumber)
                 && !string.Equals(model.PhoneNumber, user.PhoneNumber, StringComparison.OrdinalIgnoreCase))
@@ -1657,6 +1756,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 UserType = args.userType,
                 BusinessCode = args.businessCode,
                 CreatedBy = args.UserId,
+                FirstName = model.FirstName,
+                MiddleName = model.MiddleName,
+                LastName = model.LastName,
                 Name = !string.IsNullOrWhiteSpace(model.FullName)
        ? model.FullName
        : (string.IsNullOrWhiteSpace(model.FirstName) && string.IsNullOrWhiteSpace(model.LastName)
