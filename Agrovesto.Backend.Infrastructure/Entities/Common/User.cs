@@ -47,6 +47,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     }
     public class User : IdentityUser
     {
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
         public FarmerOnboardingStatus FarmerOnboardingStatus { get; set; }
         public string? OnboardingError { get; set; }
         public string? Salt { get; set; }
@@ -82,7 +85,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsLeaderProfileComplete { get; set; } = false;
         public bool IsNinVerified { get; set; } = false;
         public bool IsBvnVerified { get; set; } = false;
-        public SignupMethod SignupMethod { get; set; } = SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
+        public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
     }
 
     public class UserOrganization

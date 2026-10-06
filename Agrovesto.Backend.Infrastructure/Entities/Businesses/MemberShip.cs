@@ -36,6 +36,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public string? ContactPerson { get; set; }
         public string? Email { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? RegistrationNumber { get; set; } //CAC
         public string? MembershipLeaderFirstName { get; set; }
         public string? MembershipLeaderMiddleName { get; set; }
         public string? MembershipLeaderLastName { get; set; }

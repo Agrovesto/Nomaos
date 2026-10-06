@@ -58,7 +58,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         Task ResolveReconciliation(long reconciliationId, string resolvedBy, string resolutionNote, ReconciliationStatus finalStatus);
         Task AdjustWalletBalanceAsync(long walletId, decimal delta);
         Task MarkPendingReconciliation(string reference, string reason);
-    }
+       }
     public class UserWalletRepository : IUserWalletRepository
     {
         private static readonly SubscriptionStatus[] ActiveLoanStatuses =
@@ -76,6 +76,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _context = context;
             _notificationService = aWSService;
         }
+        public async Task<decimal> TotalUserWalletsBalance(string userId, string businessCode)
+        {
+            var totalBalance = await _context.UserWallets
+                .Where(w =>
+                    w.UserId == userId &&
+                    w.BelongToBusinessCode == businessCode &&
+                    !w.IsDeleted)
+                .SumAsync(w => (decimal?)w.WalletBalance) ?? 0m;
+            return totalBalance;
+        }
         public async Task AdjustWalletBalanceAsync(long walletId, decimal delta)
         {
             var wallet = await _context.UserWallets.FirstOrDefaultAsync(x => x.Id == walletId);
@@ -87,6 +97,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             await _context.SaveChangesAsync();
         }
+       
+
         public async Task<UserWalletDetailResponseModel> GetUserWalletByProviderId(UserWalletParams args)
         {
 
@@ -166,6 +178,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
 
        
+        
         
         public async Task<UserWallet?> GetActiveWalletForUser(string userId, string businessCode)
         {

@@ -8,6 +8,12 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum MembershipParticipantType
+    {
+        Farmer=1,
+        Agent=2
+    }
+
     public enum KYCVerificationType
     {
         NIN,
@@ -24,6 +30,8 @@ namespace Agrovesto.Backend.Core.Enums
         OTP,
         LOGIN,
         RESET_PASSWORD,
+        FORGOT_CREDENTIAL,      // per account (email/phone)
+        FORGOT_CREDENTIAL_IP
     }
     public enum InventoryTransactionType
     {

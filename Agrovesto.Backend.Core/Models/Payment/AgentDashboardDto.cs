@@ -70,6 +70,36 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public int InProgress { get; set; }
         public int NotStarted { get; set; }
     }
+
+    
+    public class MembershipFinancingBreakdownDto
+    {
+        public string PackageName { get; set; }
+        public string Structure { get; set; }
+        public decimal FinancedValue { get; set; }
+        public long Members { get; set; }
+        public decimal OutstandingRepayments { get; set; }
+        public string Status { get; set; }
+    }
+    public class MembershipFarmerDto
+    {
+        public long FarmerId { get; set; }
+        public string UserId { get; set; }
+        public string FarmerName { get; set; }
+        public string Level { get; set; }
+        public long TotalFarms { get; set; }
+        public double LandSize { get; set; }
+        public bool Status { get; set; }
+    }
+    public class MembershipAgentDto
+    {
+        public long AgentId { get; set; }
+        public string UserId { get; set; }
+        public string AgentName { get; set; }
+        public string Location { get; set; }
+        public long TotalFarmersAssignedToAgents { get; set; }
+        public bool Status { get; set; }
+    }
     public class MembershipDashboardDto
     {
         public MembershipInfoDto Membership { get; set; }
@@ -105,6 +135,8 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public int MappingProgressPercentage { get; set; }
         public int TotalVerifiedFarmers { get; set; }
         public int TotalUnverifiedFarmers { get; set; }
+        public int ActiveFinancing { get; set; }
+        public decimal TotalFinancedValue { get; set; }
     }
 
     public class FarmMappingProgressDto
@@ -129,10 +161,12 @@ namespace Agrovesto.Backend.Core.Models.Payment
         public long MembershipId { get; set; }
         public string Name { get; set; }
         public string MembershipType { get; set; }
-        public string Status { get; set; }
+        public bool Status { get; set; }
         public DateTimeOffset DateCreated { get; set; }
         public string Location { get; set; }
         public string LeaderName { get; set; }
+        public string PhoneNumber { get; set; }
+        public string Email { get; set; }
     }
 
 }

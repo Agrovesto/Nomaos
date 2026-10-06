@@ -30,10 +30,13 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<AgentOverviewDto> GetAgentOverview(ListQueryParams args);
         Task<PagedListResponse<List<AgentMembershipDto>>> GetAgentsByMembership(ListQueryParams query);
         Task<PagedListResponse<List<FarmerAgentDto>>> GetFarmersByAgent(string userId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(string membershipUserId, ListQueryParams query);
 
         //Task<MembershipDashboardDto> GetMembershipDashboardData(ListQueryParams query);
         Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query);
         Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(string membershipUserId, ListQueryParams query);
+        Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(string membershipUserId, ListQueryParams query);
     }
     public class MembershipManager : IMembershipManager
     {
@@ -387,6 +390,24 @@ OnboardingRequestModel user,
         public async Task<MembershipDashboardDto> GetMembershipDetailAsync(ListQueryParams query)
         {
             return await _membershipRepository.GetMembershipDetailAsync(query.UserId, query.organizationCode);
+        }
+        public async Task<PagedListResponse<List<MembershipAgentDto>>> GetMembershipAgentsAsync(
+    string membershipUserId,
+    ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipAgentsAsync(query.UserId, query);
+        }
+        public async Task<PagedListResponse<List<MembershipFarmerDto>>> GetMembershipFarmersAsync(
+    string membershipUserId,
+    ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipFarmersAsync(query.UserId, query);
+        }
+        public async Task<PagedListResponse<List<MembershipFinancingBreakdownDto>>> GetMembershipFinancingBreakdownAsync(
+        string membershipUserId,
+        ListQueryParams query)
+        { 
+            return await _membershipRepository.GetMembershipFinancingBreakdownAsync(query.UserId, query);
         }
         public async Task<PagedListResponse<List<FarmerMembershipDto>>> GetMembershipFarmers(ListQueryParams query)
         {

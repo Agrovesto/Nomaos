@@ -1,18 +1,15 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json;
 
 namespace Agrovesto.Backend.API.HealthChecks
 {
     public class IdentityPassHealthCheck : IHealthCheck
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
-        public IdentityPassHealthCheck(HttpClient httpClient, IConfiguration configuration)
+        public IdentityPassHealthCheck(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
         }
 
@@ -21,36 +18,47 @@ namespace Agrovesto.Backend.API.HealthChecks
             try
             {
                 var baseUrl = _configuration["IdentityPass:preembleyurl"];
-                var response = await _httpClient.GetAsync($"{baseUrl}/api/v1/test", cancellationToken);
 
-                if (response.IsSuccessStatusCode)
+                if (string.IsNullOrEmpty(baseUrl))
+                {
+                    return HealthCheckResult.Degraded("IdentityPass configuration (IdentityPass:preembleyurl) is not configured");
+                }
+
+                // Prembly does not expose a /test endpoint. Probe the configured base URL
+                // itself with a HEAD/GET — any 2xx/3xx/4xx response proves the host is
+                // reachable, while a connection error or DNS failure returns Degraded.
+                var client = _httpClientFactory.CreateClient("health");
+                using var request = new HttpRequestMessage(HttpMethod.Get, baseUrl);
+                var response = await client.SendAsync(request, cancellationToken);
+
+                // Any response from the host means it is reachable. 5xx indicates the host
+                // is up but unhealthy; treat that as Degraded.
+                if (response.IsSuccessStatusCode || (int)response.StatusCode < 500)
                 {
                     return HealthCheckResult.Healthy("Identity Pass API is accessible");
                 }
-                else
-                {
-                    return HealthCheckResult.Degraded($"Identity Pass API returned status code: {response.StatusCode}");
-                }
+
+                return HealthCheckResult.Degraded($"Identity Pass API returned status code: {response.StatusCode}");
             }
             catch (HttpRequestException ex)
             {
-                return HealthCheckResult.Unhealthy("Identity Pass API is not accessible", ex);
+                return HealthCheckResult.Degraded("Identity Pass API is not accessible", ex);
             }
             catch (TaskCanceledException ex)
             {
-                return HealthCheckResult.Unhealthy("Identity Pass API request timeout", ex);
+                return HealthCheckResult.Degraded("Identity Pass API request timeout", ex);
             }
         }
     }
 
     public class TermiiSmsHealthCheck : IHealthCheck
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
-        public TermiiSmsHealthCheck(HttpClient httpClient, IConfiguration configuration)
+        public TermiiSmsHealthCheck(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
         }
 
@@ -58,49 +66,53 @@ namespace Agrovesto.Backend.API.HealthChecks
         {
             try
             {
+                // The configured base URL is optional; if not set we fall back to the
+                // canonical Termii v3 endpoint. The only required setting is the API key.
                 var baseUrl = _configuration["TermiSMS:url"];
                 var apiKey = _configuration["TermiSMS:livekey"];
-                
-                if (string.IsNullOrEmpty(baseUrl) || string.IsNullOrEmpty(apiKey))
+
+                if (string.IsNullOrEmpty(apiKey))
                 {
-                    return HealthCheckResult.Degraded("Termii SMS configuration is incomplete");
+                    return HealthCheckResult.Degraded("Termii SMS API key (TermiSMS:livekey) is not configured");
                 }
 
-                // Test with a simple balance check endpoint (if available)
-                var balanceUrl = "https://v3.api.termii.com/api/get-balance";
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("X-API-KEY", apiKey);
-                
-                var response = await _httpClient.GetAsync(balanceUrl, cancellationToken);
+                var balanceUrl = string.IsNullOrEmpty(baseUrl)
+                    ? "https://v3.api.termii.com/api/get-balance"
+                    : $"{baseUrl.TrimEnd('/')}/api/get-balance";
+
+                // Use a dedicated short-timeout client so a hung upstream cannot stall /health.
+                using var request = new HttpRequestMessage(HttpMethod.Get, balanceUrl);
+                request.Headers.Add("X-API-KEY", apiKey);
+
+                var client = _httpClientFactory.CreateClient("health");
+                var response = await client.SendAsync(request, cancellationToken);
 
                 if (response.IsSuccessStatusCode)
                 {
                     return HealthCheckResult.Healthy("Termii SMS API is accessible");
                 }
-                else
-                {
-                    return HealthCheckResult.Degraded($"Termii SMS API returned status code: {response.StatusCode}");
-                }
+
+                return HealthCheckResult.Degraded($"Termii SMS API returned status code: {response.StatusCode}");
             }
             catch (HttpRequestException ex)
             {
-                return HealthCheckResult.Unhealthy("Termii SMS API is not accessible", ex);
+                return HealthCheckResult.Degraded("Termii SMS API is not accessible", ex);
             }
             catch (TaskCanceledException ex)
             {
-                return HealthCheckResult.Unhealthy("Termii SMS API request timeout", ex);
+                return HealthCheckResult.Degraded("Termii SMS API request timeout", ex);
             }
         }
     }
 
     public class CountryStateCityApiHealthCheck : IHealthCheck
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
-        public CountryStateCityApiHealthCheck(HttpClient httpClient, IConfiguration configuration)
+        public CountryStateCityApiHealthCheck(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
         }
 
@@ -110,45 +122,44 @@ namespace Agrovesto.Backend.API.HealthChecks
             {
                 var baseUrl = _configuration["Location:apiUrl"];
                 var apiKey = _configuration["Location:apiKey"];
-                
+
                 if (string.IsNullOrEmpty(baseUrl) || string.IsNullOrEmpty(apiKey))
                 {
                     return HealthCheckResult.Degraded("Country State City API configuration is incomplete");
                 }
 
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("X-CSCAPI-KEY", apiKey);
-                
-                var response = await _httpClient.GetAsync($"{baseUrl}/countries", cancellationToken);
+                var client = _httpClientFactory.CreateClient("health");
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/countries");
+                request.Headers.Add("X-CSCAPI-KEY", apiKey);
+
+                var response = await client.SendAsync(request, cancellationToken);
 
                 if (response.IsSuccessStatusCode)
                 {
                     return HealthCheckResult.Healthy("Country State City API is accessible");
                 }
-                else
-                {
-                    return HealthCheckResult.Degraded($"Country State City API returned status code: {response.StatusCode}");
-                }
+
+                return HealthCheckResult.Degraded($"Country State City API returned status code: {response.StatusCode}");
             }
             catch (HttpRequestException ex)
             {
-                return HealthCheckResult.Unhealthy("Country State City API is not accessible", ex);
+                return HealthCheckResult.Degraded("Country State City API is not accessible", ex);
             }
             catch (TaskCanceledException ex)
             {
-                return HealthCheckResult.Unhealthy("Country State City API request timeout", ex);
+                return HealthCheckResult.Degraded("Country State City API request timeout", ex);
             }
         }
     }
 
     public class SendGridHealthCheck : IHealthCheck
     {
-        private readonly HttpClient _httpClient;
+        private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
 
-        public SendGridHealthCheck(HttpClient httpClient, IConfiguration configuration)
+        public SendGridHealthCheck(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
-            _httpClient = httpClient;
+            _httpClientFactory = httpClientFactory;
             _configuration = configuration;
         }
 
@@ -157,17 +168,17 @@ namespace Agrovesto.Backend.API.HealthChecks
             try
             {
                 var apiKey = _configuration["SendGrid:key"];
-                
+
                 if (string.IsNullOrEmpty(apiKey))
                 {
                     return HealthCheckResult.Degraded("SendGrid API key is not configured");
                 }
 
-                _httpClient.DefaultRequestHeaders.Clear();
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-                
-                // Check SendGrid API status
-                var response = await _httpClient.GetAsync("https://api.sendgrid.com/v3/user/profile", cancellationToken);
+                var client = _httpClientFactory.CreateClient("health");
+                using var request = new HttpRequestMessage(HttpMethod.Get, "https://api.sendgrid.com/v3/user/profile");
+                request.Headers.Add("Authorization", $"Bearer {apiKey}");
+
+                var response = await client.SendAsync(request, cancellationToken);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -177,18 +188,16 @@ namespace Agrovesto.Backend.API.HealthChecks
                 {
                     return HealthCheckResult.Degraded("SendGrid API key may be invalid");
                 }
-                else
-                {
-                    return HealthCheckResult.Degraded($"SendGrid API returned status code: {response.StatusCode}");
-                }
+
+                return HealthCheckResult.Degraded($"SendGrid API returned status code: {response.StatusCode}");
             }
             catch (HttpRequestException ex)
             {
-                return HealthCheckResult.Unhealthy("SendGrid API is not accessible", ex);
+                return HealthCheckResult.Degraded("SendGrid API is not accessible", ex);
             }
             catch (TaskCanceledException ex)
             {
-                return HealthCheckResult.Unhealthy("SendGrid API request timeout", ex);
+                return HealthCheckResult.Degraded("SendGrid API request timeout", ex);
             }
         }
     }

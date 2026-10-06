@@ -101,7 +101,35 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .HasDatabaseName("IX_Farmers_OnBoardedOn");
         }
     }
+    public class CredentialResetAttemptConfiguration : IEntityTypeConfiguration<CredentialResetAttempt>
+    {
+        public void Configure(EntityTypeBuilder<CredentialResetAttempt> builder)
+        {
+            builder.ToTable("CredentialResetAttempts");
 
+            builder.HasKey(x => x.Id);
+
+            builder.Property(x => x.UserId)
+                .IsRequired()
+                .HasMaxLength(450); // match your User.Id column length
+
+            builder.Property(x => x.PurposeKey)
+                .IsRequired()
+                .HasMaxLength(50);
+
+            builder.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            builder.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // The rate-limit query filters by UserId + PurposeKey + CreatedAt range —
+            // this composite index is what makes that lookup fast as the table grows.
+            builder.HasIndex(x => new { x.UserId, x.PurposeKey, x.CreatedAt });
+        }
+    }
     public class DataContext :IdentityDbContext<User,Role, string>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
@@ -124,7 +152,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.ApplyConfiguration(new MemberShipAgentConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerAgentConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerConfiguration());
-
+            modelBuilder.ApplyConfiguration(new CredentialResetAttemptConfiguration());
 
             modelBuilder.Entity<BusinessWalletProvider>()
      .HasIndex(x => new { x.BusinessCode, x.ProviderId })
@@ -615,9 +643,20 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
             modelBuilder.Entity<RepaymentSchedule>()
     .HasQueryFilter(x => !x.IsDeleted);
+
+
+            modelBuilder.Entity<RefreshToken>(e =>
+            {
+                e.HasIndex(x => x.TokenHash).IsUnique();
+                e.HasIndex(x => x.UserId);
+                e.HasIndex(x => x.FamilyId);
+                e.Property(x => x.TokenHash).HasMaxLength(64);
+                e.Property(x => x.FamilyId).HasMaxLength(32);
+                e.Property(x => x.UserId).HasMaxLength(450);
+            });
         }
 
-     
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
         public DbSet<MemberShipAgent> MemberShipAgents { get; set; }
@@ -758,6 +797,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<SMSProviderParameter> SMSProviderParameters { get; set; }
         public DbSet<SMSProvider> SMSProvider { get; set; }
         public DbSet<RevokedToken> RevokedTokens { get; set; }
+        public DbSet<CredentialResetAttempt> CredentialResetAttempts { get; set; }
         public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
     }
     public class MarketTransactionConfiguration

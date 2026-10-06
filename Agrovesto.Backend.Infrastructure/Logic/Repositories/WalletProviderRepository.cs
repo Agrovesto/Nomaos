@@ -79,7 +79,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             return entities.Select(x => x.Map()).ToArray();
         }
 
-        public async Task<WalletProviderModel> Get(long providerId)
+        public async Task<WalletProviderModel> GetById(long providerId)
         {
             WalletProvider entity = await _context.Set<WalletProvider>()
                 .Include(x => x.WalletProviderParameters)

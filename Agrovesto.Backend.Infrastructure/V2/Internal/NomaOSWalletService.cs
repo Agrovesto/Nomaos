@@ -287,7 +287,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     await UpdateOrganizationInputPackage(args, providerId, wallet);
                 }
 
-                var providerInfo = await _providerRepo.Get(providerId);
+                var providerInfo = await _providerRepo.GetById(providerId);
 
                 var result = new CreateWalletResult
                 {
@@ -976,7 +976,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
             if (string.IsNullOrWhiteSpace(recipientName))
                 recipientName = destinationWallet.WalletNumber;
 
-            var provider = await _providerRepo.Get(sourceWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(sourceWallet.WalletProviderId);
 
             if (provider == null)
                 return (false, "Wallet provider not found", null);
@@ -995,7 +995,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
             if (isCrossProvider)
             {
-                destinationProvider = await _providerRepo.Get(destinationWallet.WalletProviderId);
+                destinationProvider = await _providerRepo.GetById(destinationWallet.WalletProviderId);
 
                 if (destinationProvider == null)
                     return (false, "Destination wallet provider not found", null);
@@ -1262,7 +1262,7 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                 return (false, "No account name is on file for this user, which the provider requires to process a transfer.", null);
             }
 
-            var provider = await _providerRepo.Get(sourceWallet.WalletProviderId);
+            var provider = await _providerRepo.GetById(sourceWallet.WalletProviderId);
 
             if (provider == null)
                 return (false, "Wallet provider not found", null);
@@ -1618,13 +1618,21 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
 
             _logger.LogInformation("Wallet PIN reset OTP sent over {Channel} for UserId: {UserId}", request.Channel, args.UserId);
 
-            return (true, overSms
+            var baseMessage = overSms
                 ? "A reset code has been sent to your mobile number"
-                : "A reset code has been sent to your email address", new WalletPinResetOtpResult
-                {
-                    Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
-                    ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
-                });
+                : "A reset code has been sent to your email address";
+
+            // In Demo environment append the OTP code to the response so callers can see it.
+            if (!string.IsNullOrWhiteSpace(args.env) && args.env == Env.Demo.ToString())
+            {
+                baseMessage = $"{baseMessage} (code: {otp.Code})";
+            }
+
+            return (true, baseMessage, new WalletPinResetOtpResult
+            {
+                Destination = overSms ? MaskPhoneNumber(destination) : MaskEmail(destination),
+                ExpiresAt = new DateTimeOffset(otp.ExpiresAt, TimeSpan.Zero)
+            });
         }
 
         private async Task<bool> SendPinResetSms(string phoneNumber, string message, WalletQueryParams args)
