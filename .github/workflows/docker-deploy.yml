@@ -1,15 +1,21 @@
 name: Docker Build & Blue/Green Deploy
+
+# Copy this file to .github/workflows/docker-deploy.yml when you are ready.
+# Build once in CI -> push an immutable image to ECR -> EC2 pulls that exact
+# digest and flips slots. The deploy helper + Compose file are bundled by the
+# runner and sent through SSM; EC2 does not need a Git checkout or GitHub access.
+
 on:
+  # PRs targeting devops validate the Docker image only; they never receive
+  # AWS credentials and never deploy.
   pull_request:
     branches:
       - devops
-      - staging
-      - master
+
   push:
     branches:
       - master
       - devops
-      - staging
 
   workflow_dispatch:
     inputs:
@@ -20,6 +26,7 @@ on:
         type: choice
         options:
           - nomaos-api
+
       environment:
         description: "Target environment"
         required: true
@@ -32,9 +39,11 @@ on:
 concurrency:
   group: "docker-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}-${{ inputs.app || 'nomaos-api' }}"
   cancel-in-progress: false
+
 permissions:
   id-token: write
   contents: read
+
 env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: agrovesto-dev-nomaos
@@ -203,6 +212,7 @@ jobs:
             echo "| Commit | \`${{ github.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
+
   ##########################################################################
   # DEPLOY
   ##########################################################################
@@ -317,6 +327,11 @@ jobs:
                   "exec /bin/bash -lc " +
                   (
                     "set -euo pipefail\n" +
+                    "APP_ENV_BASE=\"/opt/nomaos/env/$APP\"\n" +
+                    "if ! sudo test -r \"$APP_ENV_BASE.json\" && ! sudo test -r \"$APP_ENV_BASE.env\"; then\n" +
+                    "  echo \"missing required EC2 config: expected $APP_ENV_BASE.json (flat JSON) or $APP_ENV_BASE.env\" >&2\n" +
+                    "  exit 1\n" +
+                    "fi\n" +
                     "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
                     "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
                     "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
@@ -336,6 +351,11 @@ jobs:
                     "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || { echo \"shared deployment helper missing from bundle\" >&2; exit 1; }\n" +
                     "test -f \"$COMPOSE_FILE\" || { echo \"Compose file missing from transferred bundle: $COMPOSE_FILE\" >&2; exit 1; }\n" +
                     "\n" +
+                    "echo \"Validating EC2 configuration before ECR login\"\n" +
+                    "sudo \"$DEPLOY_SCRIPT\" --app \"$APP\" --image \"$IMAGE\" --commit \"$SHA\" --dry-run\n" +
+                    "\n" +
+                    "cleanup_ecr_login() { sudo docker logout \"$REGISTRY\" >/dev/null 2>&1 || true; }\n" +
+                    "trap cleanup_ecr_login EXIT\n" +
                     "aws ecr get-login-password --region \"$REGION\" | " +
                     "sudo docker login --username AWS --password-stdin \"$REGISTRY\"\n" +
                     "\n" +
@@ -425,7 +445,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          URL="${{ vars.HEALTH_URL || 'https://noma-api-dev.nomaos.com/health/ready' }}"
+          URL="${{ vars.HEALTH_URL || 'https://noma-api.nomaos.com/health' }}"
 
           echo "probing $URL"
 
