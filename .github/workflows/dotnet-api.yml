@@ -9,9 +9,9 @@ name: API — build, test, scan, deploy (EC2 + Docker Compose)
 
 on:
   pull_request:
-    branches: [devops]
+    branches: [staging]
   push:
-    branches: [devops]
+    branches: [staging]
   workflow_dispatch:
     inputs:
       deploy:
