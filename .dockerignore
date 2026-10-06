@@ -47,3 +47,17 @@ HealthCheck-README.md
 deploy
 scripts
 *.md
+
+# Tests, workflow drafts, and local helper files are not runtime inputs for the API.
+Agrovesto.Backend.Tests/
+NomaOS.Test/
+github-workflows-fix/
+docker-deploy.yml
+docker.sh
+deploy-prod.sh
+deploy-staging.sh
+
+# Local/editor-only files do not affect the image.
+**/.DS_Store
+**/*.lscache
+**/*.http

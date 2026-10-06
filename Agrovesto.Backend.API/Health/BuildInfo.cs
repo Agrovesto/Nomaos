@@ -8,10 +8,10 @@ namespace Agrovesto.Backend.API.Health;
 ///
 /// The git SHA is the thing on-call actually needs at 3am ("is the fix
 /// deployed?"), so it is resolved from three places in order: the GIT_SHA env
-/// var Compose sets, the COMMIT_SHA build arg, and finally the
-/// <c>/app/.commit-sha</c> file the Dockerfile stamps into the image. The file
-/// fallback means the SHA is correct even when someone starts the container by
-/// hand without the env block.
+/// var Compose sets, the COMMIT_SHA runtime environment (set by Compose or the
+/// image), and finally the <c>/app/.commit-sha</c> file used by older/manual
+/// images. The file fallback means the SHA remains available when present even
+/// if a container is started without the expected environment block.
 /// </summary>
 public sealed class BuildInfo
 {

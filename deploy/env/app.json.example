@@ -1,0 +1,17 @@
+{
+  "APP_NAME": "nomaos-api",
+  "APP_PORT": "5005",
+  "UPSTREAM_NAME": "nomaos_api",
+  "ASPNETCORE_ENVIRONMENT": "Production",
+  "TZ": "Africa/Lagos",
+  "VAULT_ADDR": "https://vault.agrovesto.com",
+  "VAULT_ROLE_ID": "",
+  "VAULT_SECRET_ID": "",
+  "DB_CONNECTION_STRING": "Data Source=mssql,1433;Initial Catalog=nomaosdb;User Id=sa;Password=CHANGE_ME;Encrypt=True;TrustServerCertificate=True",
+  "REDIS_CONNECTION_STRING": "redis:6379",
+  "LOG_FILE_PATH": "/app/logs/nomaos-.log",
+  "APP_MEM_LIMIT": "1500m",
+  "APP_MEM_RESERVATION": "512m",
+  "STOP_GRACE_PERIOD": "30s",
+  "HEALTHCHECK_START_PERIOD": "45s"
+}

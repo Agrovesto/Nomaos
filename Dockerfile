@@ -36,13 +36,9 @@ RUN set -eux; \
 ########################################
 FROM restore AS publish
 
-# Build metadata — passed by CI and surfaced
-# in the resulting image.
-ARG COMMIT_SHA=unknown
-ARG BUILD_VERSION=0.0.0
-ARG BUILT_AT=unknown
-
-# Copy full source on top of restored project tree.
+# Copy full application source on top of the restored project tree.
+# Non-application files (tests, deployment scripts, docs) are excluded by
+# .dockerignore so changes to them do not invalidate this expensive layer.
 COPY . .
 
 # Verify that the repository global.json is present
@@ -59,18 +55,14 @@ RUN set -eux; \
       -c Release \
       -o /app/publish \
       --no-restore \
+      -maxcpucount \
       /p:UseAppHost=false \
       /p:EnableSourceControlManagerQueries=false \
       /p:PublishTrimmed=false
 
-# Stamp the artifact for runtime traceability.
-RUN printf '%s\n' "$COMMIT_SHA" \
-      > /app/publish/.commit-sha \
- && printf '%s\n' "$BUILD_VERSION" \
-      > /app/publish/.version \
- && printf '%s\n' "$BUILT_AT" \
-      > /app/publish/.deployed-at
-
+# Keep build metadata out of /app/publish: changing a commit SHA or timestamp
+# would otherwise change the large application filesystem layer and force it to
+# be pushed again. Metadata is stored in the image config below instead.
 
 ########################################
 # STAGE 3 — runtime
@@ -80,6 +72,9 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy AS runtime
 ARG COMMIT_SHA=unknown
 ARG BUILD_VERSION=0.0.0
 ARG BUILT_AT=unknown
+
+# BuildInfo reads this environment variable before falling back to a file.
+ENV COMMIT_SHA=$COMMIT_SHA
 
 LABEL org.opencontainers.image.title="nomaos-api" \
       org.opencontainers.image.source="https://github.com/Agrovesto/Nomaos" \

@@ -52,12 +52,23 @@ Host state lives in `/opt/nomaos` (`NOMAOS_STATE_DIR`), never in the checkout:
 
 ```
 /opt/nomaos/
-├── env/       nomaos-api.env, infra.env      root:root 0600  ← secrets
+├── env/       nomaos-api.env or nomaos-api.json, infra.env   root:root 0600  ← secrets
 ├── nginx/upstreams/   nomaos_api.conf        ← rewritten on every flip
 ├── state/     nomaos-api.active-slot
 ├── backups/
 └── logs/<app>/<slot>/
 ```
+
+The deploy helper accepts either `/opt/nomaos/env/<app>.env` (`KEY=value`) or
+`/opt/nomaos/env/<app>.json`. JSON must be a flat object whose top-level keys
+are the environment-variable names used in `deploy/env/app.env.example`; values
+must be scalar strings, numbers, booleans, or `null`. Nested objects and arrays
+are intentionally rejected. If both formats exist, the JSON file takes
+precedence. Keep the populated file root-owned with mode `0600`, and never
+commit it. See `deploy/env/app.json.example` for the expected shape. This
+container bootstrap file is separate from the Vault JSON payload: do not flatten
+Vault's `data.data` application settings into it. The app reads those settings
+from Vault using the `VAULT_*` credentials in this file.
 
 ---
 
