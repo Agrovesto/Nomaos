@@ -11,31 +11,27 @@ namespace Agrovesto.Backend.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "CredentialResetAttempts",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    UserId = table.Column<string>(type: "nvarchar(450)", maxLength: 450, nullable: false),
-                    PurposeKey = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_CredentialResetAttempts", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_CredentialResetAttempts_AspNetUsers_UserId",
-                        column: x => x.UserId,
-                        principalTable: "AspNetUsers",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+            migrationBuilder.Sql("""
+                DECLARE @userSchema sysname = CASE
+                    WHEN OBJECT_ID(N'[onboarding].[AspNetUsers]', N'U') IS NOT NULL THEN N'onboarding'
+                    ELSE N'dbo'
+                END;
 
-            migrationBuilder.CreateIndex(
-                name: "IX_CredentialResetAttempts_UserId_PurposeKey_CreatedAt",
-                table: "CredentialResetAttempts",
-                columns: new[] { "UserId", "PurposeKey", "CreatedAt" });
+                DECLARE @sql nvarchar(max) = N'
+                CREATE TABLE [dbo].[CredentialResetAttempts] (
+                    [Id] int NOT NULL IDENTITY,
+                    [UserId] nvarchar(450) NOT NULL,
+                    [PurposeKey] nvarchar(50) NOT NULL,
+                    [CreatedAt] datetime2 NOT NULL,
+                    CONSTRAINT [PK_CredentialResetAttempts] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_CredentialResetAttempts_AspNetUsers_UserId]
+                        FOREIGN KEY ([UserId]) REFERENCES [' + @userSchema + N'].[AspNetUsers] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_CredentialResetAttempts_UserId_PurposeKey_CreatedAt]
+                    ON [dbo].[CredentialResetAttempts] ([UserId], [PurposeKey], [CreatedAt]);';
+
+                EXEC sp_executesql @sql;
+                """);
         }
 
         /// <inheritdoc />

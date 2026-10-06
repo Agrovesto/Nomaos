@@ -10,19 +10,35 @@ namespace Agrovesto.Backend.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "RegistrationNumber",
-                table: "MemberShips",
-                type: "nvarchar(max)",
-                nullable: true);
+            migrationBuilder.Sql("""
+                DECLARE @membershipSchema sysname = CASE
+                    WHEN OBJECT_ID(N'[onboarding].[MemberShips]', N'U') IS NOT NULL THEN N'onboarding'
+                    ELSE N'dbo'
+                END;
+
+                DECLARE @sql nvarchar(max) = N'
+                ALTER TABLE [' + @membershipSchema + N'].[MemberShips]
+                    ADD [RegistrationNumber] nvarchar(max) NULL;';
+
+                EXEC sp_executesql @sql;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "RegistrationNumber",
-                table: "MemberShips");
+            migrationBuilder.Sql("""
+                DECLARE @membershipSchema sysname = CASE
+                    WHEN OBJECT_ID(N'[onboarding].[MemberShips]', N'U') IS NOT NULL THEN N'onboarding'
+                    ELSE N'dbo'
+                END;
+
+                DECLARE @sql nvarchar(max) = N'
+                ALTER TABLE [' + @membershipSchema + N'].[MemberShips]
+                    DROP COLUMN [RegistrationNumber];';
+
+                EXEC sp_executesql @sql;
+                """);
         }
     }
 }

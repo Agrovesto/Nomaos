@@ -10,39 +10,37 @@ namespace Agrovesto.Backend.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "FirstName",
-                table: "AspNetUsers",
-                type: "nvarchar(max)",
-                nullable: true);
+            migrationBuilder.Sql("""
+                DECLARE @userSchema sysname = CASE
+                    WHEN OBJECT_ID(N'[onboarding].[AspNetUsers]', N'U') IS NOT NULL THEN N'onboarding'
+                    ELSE N'dbo'
+                END;
 
-            migrationBuilder.AddColumn<string>(
-                name: "LastName",
-                table: "AspNetUsers",
-                type: "nvarchar(max)",
-                nullable: true);
+                DECLARE @sql nvarchar(max) = N'
+                ALTER TABLE [' + @userSchema + N'].[AspNetUsers] ADD
+                    [FirstName] nvarchar(max) NULL,
+                    [LastName] nvarchar(max) NULL,
+                    [MiddleName] nvarchar(max) NULL;';
 
-            migrationBuilder.AddColumn<string>(
-                name: "MiddleName",
-                table: "AspNetUsers",
-                type: "nvarchar(max)",
-                nullable: true);
+                EXEC sp_executesql @sql;
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "FirstName",
-                table: "AspNetUsers");
+            migrationBuilder.Sql("""
+                DECLARE @userSchema sysname = CASE
+                    WHEN OBJECT_ID(N'[onboarding].[AspNetUsers]', N'U') IS NOT NULL THEN N'onboarding'
+                    ELSE N'dbo'
+                END;
 
-            migrationBuilder.DropColumn(
-                name: "LastName",
-                table: "AspNetUsers");
+                DECLARE @sql nvarchar(max) = N'
+                ALTER TABLE [' + @userSchema + N'].[AspNetUsers] DROP COLUMN
+                    [FirstName], [LastName], [MiddleName];';
 
-            migrationBuilder.DropColumn(
-                name: "MiddleName",
-                table: "AspNetUsers");
+                EXEC sp_executesql @sql;
+                """);
         }
     }
 }
