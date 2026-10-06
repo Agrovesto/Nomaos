@@ -106,6 +106,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model);
         Task<(bool Status, string Message)> ConfirmReset(ConfirmCredentialResetModel model);
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
+        Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
     }
     public class OnBoardingManager : IOnBoardingManager
@@ -2350,6 +2351,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             return changePwd;
         }
 
+        public async Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName)
+        {
+            return await _onboardingRepository.OnRegistrationAsync(model, roleName);
+        }
+
         public Task<(bool Status, string Message)> ChangeCredential(ChangeCredentialModel model)
         => _credentialChangeService.ChangeCredential(model);
         public Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
@@ -2620,7 +2626,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 BelongToBusinessCode = args.businessCode,
                 UserId = args.UserId,                       // the target user (was model.Id)
-                Name = model.CooperativeName,
+                Name = model.CooperativeName ,
                 IsLeaderAFarmer = model.IsLeaderAFarmer,
                 State = model.State,
                 Lga = model.Lga,
