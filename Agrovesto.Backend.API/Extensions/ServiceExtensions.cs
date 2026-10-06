@@ -38,6 +38,8 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddHttpContextAccessor();
 
             services.AddScoped<IHttpService, HttpService>();
+            services.Configure<OutboxOptions>(configuration.GetSection("Outbox"));
+            services.AddScoped<IOutboxWriter, OutboxWriter>();
             services.Configure<SerilogServiceOptions>(
     configuration.GetSection("AppLogs"));
             //services.AddSingleton(configuration.GetSection("AppLogs").Get<SerilogServiceOptions>());

@@ -5,6 +5,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -110,8 +111,13 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            
             base.OnModelCreating(modelBuilder);
+            const string monitoringEvaluationSchema = "monitoring_evaluation";
+            const string warehouseSchema = "warehouse";
+            const string walletSchema = "wallet";
+            const string inputFinancingSchema = "input_financing";
+            const string serviceProviderSchema = "service_provider";
+            const string onboardingSchema = "onboarding";
 
             modelBuilder.ApplyConfiguration(new FarmConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerCooperativeConfiguration());
@@ -297,15 +303,23 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
             modelBuilder.Entity<MandEActivityType>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandEActivityType>()
+                .ToTable("MandEActivityTypes", monitoringEvaluationSchema);
             //modelBuilder.Entity<MandEActivityType>().HasIndex(x => x.Name).IsUnique();
 
             modelBuilder.Entity<MandESubActivity>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandESubActivity>()
+                .ToTable("MandESubActivities", monitoringEvaluationSchema);
             modelBuilder.Entity<MandESubActivity>().HasIndex(x => new { x.MandEActivityTypeId, x.Name }).IsUnique();
 
             modelBuilder.Entity<MandEFieldDefinition>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandEFieldDefinition>()
+                .ToTable("MandEFieldDefinitions", monitoringEvaluationSchema);
             modelBuilder.Entity<MandEFieldDefinition>().HasIndex(x => new { x.MandESubActivityId, x.Key }).IsUnique();
 
             modelBuilder.Entity<MandEFarmActivity>().HasKey(x => x.Id);
+            modelBuilder.Entity<MandEFarmActivity>()
+                .ToTable("MandEFarmActivities", monitoringEvaluationSchema);
 
             modelBuilder.Entity<Invoice>()
             .HasIndex(i => i.ReferenceCode)
@@ -369,6 +383,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .IsRequired();
 
             modelBuilder.Entity<MandEDataset>()
+       .ToTable("MandEDatasets", monitoringEvaluationSchema)
        .HasMany(d => d.Fields)
        .WithOne(f => f.MandEDataset)
        .HasForeignKey(f => f.MandEDatasetId)
@@ -379,6 +394,121 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 .WithOne(r => r.MandEDataset)
                 .HasForeignKey(r => r.MandEDatasetId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<MandEDataFieldDefinition>()
+                .ToTable("MandEDataFieldDefinitions", monitoringEvaluationSchema);
+            modelBuilder.Entity<MandERecord>()
+                .ToTable("MandERecords", monitoringEvaluationSchema);
+            modelBuilder.Entity<MandEChartDefinition>()
+                .ToTable("MandEChartDefinitions", monitoringEvaluationSchema);
+
+            modelBuilder.Entity<OutboxMessage>(entity =>
+            {
+                entity.Property(message => message.Source).HasMaxLength(64);
+                entity.HasIndex(message => new
+                {
+                    message.Source,
+                    message.IsProcessed,
+                    message.CreatedOn
+                });
+            });
+
+            modelBuilder.Entity<Warehouse>().ToTable("Warehouses", warehouseSchema);
+            modelBuilder.Entity<WarehouseInputInventory>().ToTable("WarehouseInputInventories", warehouseSchema);
+            modelBuilder.Entity<WarehouseUser>().ToTable("WarehouseUsers", warehouseSchema);
+            modelBuilder.Entity<Bundle>().ToTable("Bundles", warehouseSchema);
+            modelBuilder.Entity<BundleItems>().ToTable("BundleItems", warehouseSchema);
+            modelBuilder.Entity<OtherBundlePaymentCost>().ToTable("OtherBundlePaymentCosts", warehouseSchema);
+            modelBuilder.Entity<BundleSubscriptionInterest>().ToTable("BundleSubscriptionInterests", warehouseSchema);
+            modelBuilder.Entity<BundleSubscriptionDisbursement>().ToTable("BundleSubscriptionDisbursements", warehouseSchema);
+            modelBuilder.Entity<InventoryTransaction>().ToTable("InventoryTransactions", warehouseSchema);
+            modelBuilder.Entity<InputDeliveryTracker>().ToTable("InputDeliveryTrackers", warehouseSchema);
+
+            modelBuilder.Entity<SterlingBankWallet>().ToTable("SterlingBankWallets", walletSchema);
+            modelBuilder.Entity<UserWallet>().ToTable("UserWallets", walletSchema);
+            modelBuilder.Entity<WalletSecurity>().ToTable("WalletSecurities", walletSchema);
+            modelBuilder.Entity<UserWalletTransactions>().ToTable("UserWalletTransactions", walletSchema);
+            modelBuilder.Entity<WalletReconciliationLog>().ToTable("WalletReconciliationLogs", walletSchema);
+            modelBuilder.Entity<UserWalletContext>().ToTable("UserWalletContexts", walletSchema);
+            modelBuilder.Entity<ProviderWalletTransaction>().ToTable("ProviderWalletTransactions", walletSchema);
+            modelBuilder.Entity<ProviderWalletTransactionLog>().ToTable("ProviderWalletTransactionLogs", walletSchema);
+
+            modelBuilder.Entity<InputFinancingScheme>().ToTable("InputFinancingSchemes", inputFinancingSchema);
+            modelBuilder.Entity<InputSubscription>().ToTable("InputSubscriptions", inputFinancingSchema);
+            modelBuilder.Entity<InputPackage>().ToTable("InputPackages", inputFinancingSchema);
+            modelBuilder.Entity<InputPackageItem>().ToTable("InputPackageItems", inputFinancingSchema);
+            modelBuilder.Entity<AdditionalInputPackageCost>().ToTable("AdditionalInputPackageCosts", inputFinancingSchema);
+            modelBuilder.Entity<CommitmentPlan>().ToTable("CommitmentPlans", inputFinancingSchema);
+            modelBuilder.Entity<RepaymentPlan>().ToTable("RepaymentPlans", inputFinancingSchema);
+            modelBuilder.Entity<InputPackageSubscription>().ToTable("InputPackageSubscriptions", inputFinancingSchema);
+            modelBuilder.Entity<SubscriptionDocument>().ToTable("SubscriptionDocuments", inputFinancingSchema);
+            modelBuilder.Entity<RepaymentSchedule>().ToTable("RepaymentSchedules", inputFinancingSchema);
+            modelBuilder.Entity<RepaymentPenalty>().ToTable("RepaymentPenalties", inputFinancingSchema);
+            modelBuilder.Entity<PenaltyPolicy>().ToTable("PenaltyPolicies", inputFinancingSchema);
+            modelBuilder.Entity<SubscriptionPaymentAllocation>().ToTable("SubscriptionPaymentAllocations", inputFinancingSchema);
+            modelBuilder.Entity<InputPackageSubscriptionPayment>().ToTable("InputPackageSubscriptionPayments", inputFinancingSchema);
+            modelBuilder.Entity<SubscriptionCreditBalance>().ToTable("SubscriptionCreditBalance", inputFinancingSchema);
+            modelBuilder.Entity<PaymentReconciliation>().ToTable("PaymentReconciliation", inputFinancingSchema);
+            modelBuilder.Entity<InputSubscriptionDisbursement>().ToTable("InputSubscriptionDisbursements", inputFinancingSchema);
+            modelBuilder.Entity<DisbursementLineItem>().ToTable("DisbursementLineItems", inputFinancingSchema);
+            modelBuilder.Entity<MonetaryDisbursementTransaction>().ToTable("MonetaryDisbursementTransactions", inputFinancingSchema);
+            modelBuilder.Entity<EconomicsOfProduction>().ToTable("EconomicsOfProductions", inputFinancingSchema);
+            modelBuilder.Entity<EopCostItem>().ToTable("EopCostItems", inputFinancingSchema);
+            modelBuilder.Entity<InputFinancingCategory>().ToTable("InputFinancingCategories", inputFinancingSchema);
+
+            modelBuilder.Entity<PaymentProvider>().ToTable("PaymentProviders", serviceProviderSchema);
+            modelBuilder.Entity<PaymentProviderParameter>().ToTable("PaymentProviderParameters", serviceProviderSchema);
+            modelBuilder.Entity<WalletProvider>().ToTable("WalletProviders", serviceProviderSchema);
+            modelBuilder.Entity<WalletProviderParameter>().ToTable("WalletProviderParameters", serviceProviderSchema);
+            modelBuilder.Entity<BusinessWalletProvider>().ToTable("BusinessWalletProviders", serviceProviderSchema);
+            modelBuilder.Entity<BusinessWalletProviderParameter>().ToTable("BusinessWalletProviderParameters", serviceProviderSchema);
+            modelBuilder.Entity<SMSProvider>().ToTable("SMSProvider", serviceProviderSchema);
+            modelBuilder.Entity<SMSProviderParameter>().ToTable("SMSProviderParameters", serviceProviderSchema);
+            modelBuilder.Entity<BusinessSMSProvider>().ToTable("BusinessSMSProviders", serviceProviderSchema);
+            modelBuilder.Entity<BusinessSMSProviderParameter>().ToTable("BusinessSMSProviderParameters", serviceProviderSchema);
+
+            modelBuilder.Entity<User>().ToTable("AspNetUsers", onboardingSchema);
+            modelBuilder.Entity<Role>().ToTable("AspNetRoles", onboardingSchema);
+            modelBuilder.Entity<IdentityRoleClaim<string>>().ToTable("AspNetRoleClaims", onboardingSchema);
+            modelBuilder.Entity<IdentityUserClaim<string>>().ToTable("AspNetUserClaims", onboardingSchema);
+            modelBuilder.Entity<IdentityUserLogin<string>>().ToTable("AspNetUserLogins", onboardingSchema);
+            modelBuilder.Entity<IdentityUserRole<string>>().ToTable("AspNetUserRoles", onboardingSchema);
+            modelBuilder.Entity<IdentityUserToken<string>>().ToTable("AspNetUserTokens", onboardingSchema);
+
+            modelBuilder.Entity<Agent>().ToTable("Agents", onboardingSchema);
+            modelBuilder.Entity<Farm>().ToTable("Farms", onboardingSchema);
+            modelBuilder.Entity<FarmAllocation>().ToTable("FarmAllocations", onboardingSchema);
+            modelBuilder.Entity<FarmCoordinate>().ToTable("FarmCoordinates", onboardingSchema);
+            modelBuilder.Entity<FarmFlagAuditTrail>().ToTable("FarmFlagAuditTrail", onboardingSchema);
+            modelBuilder.Entity<FarmLandDocument>().ToTable("FarmLandDocuments", onboardingSchema);
+            modelBuilder.Entity<FarmMappingAuditTrail>().ToTable("FarmMappingAuditTrails", onboardingSchema);
+            modelBuilder.Entity<FarmPlotDetails>().ToTable("FarmPlotDetails", onboardingSchema);
+            modelBuilder.Entity<Farmer>().ToTable("Farmers", onboardingSchema);
+            modelBuilder.Entity<FarmerAgent>().ToTable("FarmerAgents", onboardingSchema);
+            modelBuilder.Entity<FarmerCooperative>().ToTable("FarmerCooperatives", onboardingSchema);
+            modelBuilder.Entity<FarmerImages>().ToTable("FarmerImages", onboardingSchema);
+            modelBuilder.Entity<FarmerOrganization>().ToTable("FarmerOrganizations", onboardingSchema);
+            modelBuilder.Entity<MemberShip>().ToTable("MemberShips", onboardingSchema);
+            modelBuilder.Entity<MemberShipAgent>().ToTable("MemberShipAgents", onboardingSchema);
+            modelBuilder.Entity<MemberShipType>().ToTable("MemberShipTypes", onboardingSchema);
+            modelBuilder.Entity<Organization>().ToTable("Organizations", onboardingSchema);
+            modelBuilder.Entity<OrganizationAgent>().ToTable("OrganizationAgents", onboardingSchema);
+            modelBuilder.Entity<OrganizationAgentRole>().ToTable("OrganizationAgentRoles", onboardingSchema);
+            modelBuilder.Entity<OrganizationBusiness>().ToTable("OrganizationBusinesses", onboardingSchema);
+            modelBuilder.Entity<OrganizationLocation>().ToTable("OrganizationLocations", onboardingSchema);
+            modelBuilder.Entity<OrganizationMembership>().ToTable("OrganizationMemberships", onboardingSchema);
+            modelBuilder.Entity<OrganizationRole>().ToTable("OrganizationRoles", onboardingSchema);
+            modelBuilder.Entity<BulkUploadJob>().ToTable("BulkUploadJobs", onboardingSchema);
+            modelBuilder.Entity<KYCDetails>().ToTable("KYCDetails", onboardingSchema);
+            modelBuilder.Entity<LGA>().ToTable("LGAs", onboardingSchema);
+            modelBuilder.Entity<OneTimePassword>().ToTable("OneTimePasswords", onboardingSchema);
+            modelBuilder.Entity<RevokedToken>().ToTable("RevokedTokens", onboardingSchema);
+            modelBuilder.Entity<Entities.Common.States>().ToTable("States", onboardingSchema);
+            modelBuilder.Entity<UserBusiness>().ToTable("UserBusinesses", onboardingSchema);
+            modelBuilder.Entity<UserDevice>().ToTable("UserDevices", onboardingSchema);
+            modelBuilder.Entity<UserNotificationPreference>().ToTable("UserNotificationPreferences", onboardingSchema);
+            modelBuilder.Entity<UserOrganization>().ToTable("UserOrganizations", onboardingSchema);
+            modelBuilder.Entity<Ward>().ToTable("Wards", onboardingSchema);
 
             modelBuilder.Entity<Farm>()
                 .HasKey(f => f.Id);
@@ -466,7 +596,7 @@ namespace Agrovesto.Backend.Infrastructure.DB
     .OnDelete(DeleteBehavior.NoAction);
 
             modelBuilder.Entity<Organization>()
-    .ToTable("Organizations");
+    .ToTable("Organizations", onboardingSchema);
 
             modelBuilder.Entity<RepaymentSchedule>()
         .HasOne(x => x.InputPackageSubscription)

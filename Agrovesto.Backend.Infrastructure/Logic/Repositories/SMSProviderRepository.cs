@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -45,9 +46,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class SMSProviderRepository : ISMSProviderRepository
     {
         private readonly DataContext _context;
-        public SMSProviderRepository(DataContext context)
+        private readonly IOutboxWriter _outboxWriter;
+
+        public SMSProviderRepository(DataContext context, IOutboxWriter outboxWriter)
         {
             _context = context;
+            _outboxWriter = outboxWriter;
         }
 
            public async Task<SMSProviderModel> ChangeStatus(long id, ProviderStatus providerStatus)
@@ -58,6 +62,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 throw new NotFoundException("Provider can not be found");
             }
             provider.Status = providerStatus.ToString();
+            EnqueueProviderStatusChanged("sms", provider.ProviderId, providerStatus);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -70,8 +75,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             SMSProvider entity = model.Map();
             _context.Set<SMSProvider>().Add(entity);
-
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            await _context.SaveChangesAsync();
+            EnqueueProviderCreated("sms", entity.ProviderId, entity.Code);
             int count = await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             if (count < 1)
             {
                 return null;
@@ -142,6 +150,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             entity.Name = model.Name;
             entity.Code = model.Code;
+            EnqueueProviderConfigurationChanged("sms", entity.ProviderId);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -159,6 +168,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
             entity.Value = model.Value;
+            EnqueueProviderConfigurationChanged("sms", entity.SMSProviderProviderId);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -201,6 +211,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             SMSProviderProviderId = entity.ProviderId
                         });
                         _context.AddRange(createList);
+                        await _context.SaveChangesAsync();
+                        EnqueueProviderConfigurationChanged("sms", entity.ProviderId);
                         await _context.SaveChangesAsync();
 
                         transaction.Commit();
@@ -292,6 +304,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             await _context.SaveChangesAsync();
                         }
 
+                        EnqueueProviderConfigurationChanged("sms", providerId, businessCode);
+                        await _context.SaveChangesAsync();
                         transaction.Commit();
 
                         var result = await _context.Set<BusinessSMSProvider>()
@@ -321,6 +335,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
             junction.Status = ProviderStatus.Disabled.ToString();
+            EnqueueProviderStatusChanged("sms", providerId, ProviderStatus.Disabled, businessCode);
             int count = await _context.SaveChangesAsync();
             return count > 0;
         }
@@ -370,13 +385,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             BusinessSMSProviderParameterModel model)
         {
             BusinessSMSProviderParameter entity = await _context.Set<BusinessSMSProviderParameter>()
-                .FindAsync(model.ParameterId);
+                .Include(x => x.BusinessSMSProvider)
+                .FirstOrDefaultAsync(x => x.ParameterId == model.ParameterId);
             if (entity == null)
             {
                 throw new NotFoundException("Business parameter override can not be found");
             }
 
             entity.Value = model.Value;
+            EnqueueProviderConfigurationChanged("sms", entity.BusinessSMSProvider.ProviderId, entity.BusinessSMSProvider.BusinessCode);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -384,6 +401,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return entity.Map();
         }
+
+        private void EnqueueProviderCreated(string providerType, long providerId, string code) =>
+            _outboxWriter.Enqueue("provider.created", new { providerType, providerId, code });
+
+        private void EnqueueProviderStatusChanged(string providerType, long providerId, ProviderStatus status, string businessCode = null) =>
+            _outboxWriter.Enqueue(
+                status == ProviderStatus.Active ? "provider.enabled" : "provider.disabled",
+                new { providerType, providerId, status = status.ToString(), businessCode });
+
+        private void EnqueueProviderConfigurationChanged(string providerType, long providerId, string businessCode = null) =>
+            _outboxWriter.Enqueue("provider.configuration-changed", new { providerType, providerId, businessCode });
     }
 
 }

@@ -20,6 +20,9 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Businesses
         public DateTime CreatedOn { get; set; }
         public DateTime? ProcessedOn { get; set; }
         public bool IsProcessed { get; set; }
+        public string? Source { get; set; }
+        public int Attempts { get; set; }
+        public string? LastError { get; set; }
     }
     /**Configuration Layer
 InputPackage

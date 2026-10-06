@@ -1,0 +1,82 @@
+services:
+  onboarding:
+    <<: &service-defaults
+      build:
+        context: .
+        dockerfile: Dockerfile.microservice
+      environment: &service-environment
+        ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+        NOMAOS_ConnectionStrings__DefaultConnection: ${NOMAOS_ConnectionStrings__DefaultConnection:?NOMAOS_ConnectionStrings__DefaultConnection is required}
+        NOMAOS_Jwt__Issuer: ${NOMAOS_Jwt__Issuer:?NOMAOS_Jwt__Issuer is required}
+        NOMAOS_Jwt__Audience: ${NOMAOS_Jwt__Audience:?NOMAOS_Jwt__Audience is required}
+        NOMAOS_Jwt__Key: ${NOMAOS_Jwt__Key:?NOMAOS_Jwt__Key is required}
+      restart: unless-stopped
+      healthcheck:
+        test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+        interval: 30s
+        timeout: 5s
+        start_period: 20s
+        retries: 3
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.Onboarding.API/Agrovesto.Backend.Onboarding.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.Onboarding.API.dll
+    ports:
+      - "5101:5000"
+
+  wallet:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.Wallet.API/Agrovesto.Backend.Wallet.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.Wallet.API.dll
+    ports:
+      - "5102:5000"
+
+  input-financing:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.InputFinancing.API/Agrovesto.Backend.InputFinancing.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.InputFinancing.API.dll
+    ports:
+      - "5103:5000"
+
+  monitoring-evaluation:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.MonitoringEvaluation.API/Agrovesto.Backend.MonitoringEvaluation.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.MonitoringEvaluation.API.dll
+    ports:
+      - "5104:5000"
+
+  warehouse:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.Warehouse.API/Agrovesto.Backend.Warehouse.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.Warehouse.API.dll
+    ports:
+      - "5105:5000"
+
+  service-provider:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: Dockerfile.microservice
+      args:
+        SERVICE_PROJECT: Agrovesto.Backend.ServiceProvider.API/Agrovesto.Backend.ServiceProvider.API.csproj
+        SERVICE_ASSEMBLY: Agrovesto.Backend.ServiceProvider.API.dll
+    ports:
+      - "5106:5000"

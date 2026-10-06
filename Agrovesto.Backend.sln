@@ -10,6 +10,18 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Infrastru
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NomaOS.Test", "NomaOS.Test\NomaOS.Test.csproj", "{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Onboarding.API", "Agrovesto.Backend.Onboarding.API\Agrovesto.Backend.Onboarding.API.csproj", "{F034308E-015E-485E-B49B-798B3070E30D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Wallet.API", "Agrovesto.Backend.Wallet.API\Agrovesto.Backend.Wallet.API.csproj", "{F319E9B2-DBBB-48B4-B891-6AD8EEF118E4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.InputFinancing.API", "Agrovesto.Backend.InputFinancing.API\Agrovesto.Backend.InputFinancing.API.csproj", "{DD3249C9-CE6B-4CB2-B73E-B31A949615CD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.MonitoringEvaluation.API", "Agrovesto.Backend.MonitoringEvaluation.API\Agrovesto.Backend.MonitoringEvaluation.API.csproj", "{27E7EA0F-3A99-4018-9B47-D840FE00745E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.Warehouse.API", "Agrovesto.Backend.Warehouse.API\Agrovesto.Backend.Warehouse.API.csproj", "{73D1FAD5-C499-4916-8674-FADC7EB76264}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agrovesto.Backend.ServiceProvider.API", "Agrovesto.Backend.ServiceProvider.API\Agrovesto.Backend.ServiceProvider.API.csproj", "{1A6A0F77-6D72-4E2C-A7B3-7ABBABA51145}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -32,6 +44,30 @@ Global
 		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A8D9052F-BD21-46DB-83AF-C37F0B17D2CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F034308E-015E-485E-B49B-798B3070E30D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F034308E-015E-485E-B49B-798B3070E30D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F034308E-015E-485E-B49B-798B3070E30D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F034308E-015E-485E-B49B-798B3070E30D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F319E9B2-DBBB-48B4-B891-6AD8EEF118E4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F319E9B2-DBBB-48B4-B891-6AD8EEF118E4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F319E9B2-DBBB-48B4-B891-6AD8EEF118E4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F319E9B2-DBBB-48B4-B891-6AD8EEF118E4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD3249C9-CE6B-4CB2-B73E-B31A949615CD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD3249C9-CE6B-4CB2-B73E-B31A949615CD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD3249C9-CE6B-4CB2-B73E-B31A949615CD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD3249C9-CE6B-4CB2-B73E-B31A949615CD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{27E7EA0F-3A99-4018-9B47-D840FE00745E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{27E7EA0F-3A99-4018-9B47-D840FE00745E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{27E7EA0F-3A99-4018-9B47-D840FE00745E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{27E7EA0F-3A99-4018-9B47-D840FE00745E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{73D1FAD5-C499-4916-8674-FADC7EB76264}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{73D1FAD5-C499-4916-8674-FADC7EB76264}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{73D1FAD5-C499-4916-8674-FADC7EB76264}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{73D1FAD5-C499-4916-8674-FADC7EB76264}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1A6A0F77-6D72-4E2C-A7B3-7ABBABA51145}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A6A0F77-6D72-4E2C-A7B3-7ABBABA51145}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A6A0F77-6D72-4E2C-A7B3-7ABBABA51145}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A6A0F77-6D72-4E2C-A7B3-7ABBABA51145}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

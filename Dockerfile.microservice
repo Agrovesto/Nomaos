@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1.7
+FROM mcr.microsoft.com/dotnet/sdk:8.0-jammy AS publish
+
+WORKDIR /src
+ARG SERVICE_PROJECT
+RUN test -n "$SERVICE_PROJECT"
+
+COPY . .
+RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
+    dotnet publish "$SERVICE_PROJECT" \
+      --configuration Release \
+      --output /app/publish \
+      /p:UseAppHost=false \
+      /p:EnableSourceControlManagerQueries=false \
+      /p:PublishTrimmed=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0-jammy AS runtime
+
+WORKDIR /app
+ARG SERVICE_ASSEMBLY
+ENV ASPNETCORE_URLS=http://+:5000 \
+    ASPNETCORE_ENVIRONMENT=Development \
+    DOTNET_RUNNING_IN_CONTAINER=true \
+    SERVICE_ASSEMBLY=$SERVICE_ASSEMBLY
+
+COPY --from=publish /app/publish .
+
+EXPOSE 5000
+USER app
+ENTRYPOINT ["sh", "-c", "exec dotnet \"$SERVICE_ASSEMBLY\""]

@@ -63,7 +63,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("InputPackageId");
 
-                    b.ToTable("AdditionalInputPackageCosts");
+                    b.ToTable("AdditionalInputPackageCosts", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Agent", b =>
@@ -119,7 +119,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Agents");
+                    b.ToTable("Agents", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Bundle", b =>
@@ -187,7 +187,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Bundles");
+                    b.ToTable("Bundles", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleItems", b =>
@@ -215,7 +215,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("BundleId");
 
-                    b.ToTable("BundleItems");
+                    b.ToTable("BundleItems", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleSubscriptionDisbursement", b =>
@@ -288,7 +288,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BundleSubscriptionDisbursements");
+                    b.ToTable("BundleSubscriptionDisbursements", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.BundleSubscriptionInterest", b =>
@@ -394,7 +394,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BundleSubscriptionInterests");
+                    b.ToTable("BundleSubscriptionInterests", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", b =>
@@ -723,7 +723,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("InputPackageId")
                         .IsUnique();
 
-                    b.ToTable("CommitmentPlans");
+                    b.ToTable("CommitmentPlans", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.CooperativeCreditScore", b =>
@@ -876,7 +876,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("DisbursementLineItems");
+                    b.ToTable("DisbursementLineItems", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Distributions", b =>
@@ -995,7 +995,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.ToTable("EconomicsOfProductions");
+                    b.ToTable("EconomicsOfProductions", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.EopCostItem", b =>
@@ -1028,7 +1028,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationProductId");
 
-                    b.ToTable("EopCostItems");
+                    b.ToTable("EopCostItems", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Farm", b =>
@@ -1150,7 +1150,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("FarmerId")
                         .HasDatabaseName("IX_Farms_FarmerId");
 
-                    b.ToTable("Farms");
+                    b.ToTable("Farms", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmActivityType", b =>
@@ -1224,7 +1224,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("FarmAllocations");
+                    b.ToTable("FarmAllocations", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmCoordinate", b =>
@@ -1275,7 +1275,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("FarmCoordinates");
+                    b.ToTable("FarmCoordinates", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmFlagAuditTrail", b =>
@@ -1312,7 +1312,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmPlotDetailsId");
 
-                    b.ToTable("FarmFlagAuditTrail");
+                    b.ToTable("FarmFlagAuditTrail", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmLandDocument", b =>
@@ -1353,7 +1353,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmPlotDetailsId");
 
-                    b.ToTable("FarmLandDocuments");
+                    b.ToTable("FarmLandDocuments", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmMappingAuditTrail", b =>
@@ -1389,7 +1389,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmId");
 
-                    b.ToTable("FarmMappingAuditTrails");
+                    b.ToTable("FarmMappingAuditTrails", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmPlotDetails", b =>
@@ -1495,7 +1495,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FarmPlotDetails");
+                    b.ToTable("FarmPlotDetails", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmVisitationActivity", b =>
@@ -1645,7 +1645,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("OnBoardedOn")
                         .HasDatabaseName("IX_Farmers_OnBoardedOn");
 
-                    b.ToTable("Farmers");
+                    b.ToTable("Farmers", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerAgent", b =>
@@ -1690,7 +1690,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmerId", "AgentId");
 
-                    b.ToTable("FarmerAgents");
+                    b.ToTable("FarmerAgents", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerCooperative", b =>
@@ -1735,7 +1735,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmerId", "CooperativeId");
 
-                    b.ToTable("FarmerCooperatives");
+                    b.ToTable("FarmerCooperatives", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerCreditScore", b =>
@@ -1809,7 +1809,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("FarmerImages");
+                    b.ToTable("FarmerImages", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerOrganization", b =>
@@ -1849,7 +1849,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("FarmerId", "OrganizationCode");
 
-                    b.ToTable("FarmerOrganizations");
+                    b.ToTable("FarmerOrganizations", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.FarmerSalesTracker", b =>
@@ -2080,7 +2080,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InputDeliveryTrackers");
+                    b.ToTable("InputDeliveryTrackers", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputFinancingCategory", b =>
@@ -2111,7 +2111,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InputFinancingCategories");
+                    b.ToTable("InputFinancingCategories", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputFinancingConfiguration", b =>
@@ -2251,7 +2251,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InputFinancingSchemes");
+                    b.ToTable("InputFinancingSchemes", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackage", b =>
@@ -2385,7 +2385,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("WalletProviderId");
 
-                    b.ToTable("InputPackages");
+                    b.ToTable("InputPackages", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageItem", b =>
@@ -2423,7 +2423,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationProductId");
 
-                    b.ToTable("InputPackageItems");
+                    b.ToTable("InputPackageItems", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscription", b =>
@@ -2543,7 +2543,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("SubscriberUserId");
 
-                    b.ToTable("InputPackageSubscriptions");
+                    b.ToTable("InputPackageSubscriptions", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputPackageSubscriptionPayment", b =>
@@ -2600,7 +2600,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("WalletProviderId");
 
-                    b.ToTable("InputPackageSubscriptionPayments");
+                    b.ToTable("InputPackageSubscriptionPayments", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputSubscription", b =>
@@ -2676,7 +2676,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("InputSubscriptions");
+                    b.ToTable("InputSubscriptions", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InputSubscriptionDisbursement", b =>
@@ -2762,7 +2762,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("SubscriptionId");
 
-                    b.ToTable("InputSubscriptionDisbursements");
+                    b.ToTable("InputSubscriptionDisbursements", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.InventoryTransaction", b =>
@@ -2861,7 +2861,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("ToLocationId");
 
-                    b.ToTable("InventoryTransactions");
+                    b.ToTable("InventoryTransactions", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Invoice", b =>
@@ -3109,7 +3109,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("MandEDatasetId");
 
-                    b.ToTable("MandEChartDefinitions");
+                    b.ToTable("MandEChartDefinitions", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE.MandEDataFieldDefinition", b =>
@@ -3164,7 +3164,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("MandEDatasetId");
 
-                    b.ToTable("MandEDataFieldDefinitions");
+                    b.ToTable("MandEDataFieldDefinitions", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE.MandEDataset", b =>
@@ -3200,7 +3200,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MandEDatasets");
+                    b.ToTable("MandEDatasets", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE.MandERecord", b =>
@@ -3242,7 +3242,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("MandEDatasetId");
 
-                    b.ToTable("MandERecords");
+                    b.ToTable("MandERecords", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandEActivityType", b =>
@@ -3269,7 +3269,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MandEActivityTypes");
+                    b.ToTable("MandEActivityTypes", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandEFarmActivity", b =>
@@ -3326,7 +3326,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MandEFarmActivities");
+                    b.ToTable("MandEFarmActivities", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandEFieldDefinition", b =>
@@ -3372,7 +3372,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("MandESubActivityId", "Key")
                         .IsUnique();
 
-                    b.ToTable("MandEFieldDefinitions");
+                    b.ToTable("MandEFieldDefinitions", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MandESubActivity", b =>
@@ -3405,7 +3405,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("MandEActivityTypeId", "Name")
                         .IsUnique();
 
-                    b.ToTable("MandESubActivities");
+                    b.ToTable("MandESubActivities", "monitoring_evaluation");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShip", b =>
@@ -3485,7 +3485,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("MemberShipTypeId");
 
-                    b.ToTable("MemberShips");
+                    b.ToTable("MemberShips", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipAgent", b =>
@@ -3524,7 +3524,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("MemberShipId");
 
-                    b.ToTable("MemberShipAgents");
+                    b.ToTable("MemberShipAgents", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MemberShipType", b =>
@@ -3561,7 +3561,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MemberShipTypes");
+                    b.ToTable("MemberShipTypes", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.MigrationTracker", b =>
@@ -3649,7 +3649,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("MonetaryDisbursementTransactions");
+                    b.ToTable("MonetaryDisbursementTransactions", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Organization", b =>
@@ -3724,7 +3724,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("StateId");
 
-                    b.ToTable("Organizations", (string)null);
+                    b.ToTable("Organizations", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgent", b =>
@@ -3775,7 +3775,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsUnique()
                         .HasFilter("[IsPrimary] = 1");
 
-                    b.ToTable("OrganizationAgents");
+                    b.ToTable("OrganizationAgents", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationAgentRole", b =>
@@ -3801,7 +3801,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("RoleId");
 
-                    b.ToTable("OrganizationAgentRoles");
+                    b.ToTable("OrganizationAgentRoles", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationBundleItem", b =>
@@ -3912,7 +3912,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.ToTable("OrganizationBusinesses");
+                    b.ToTable("OrganizationBusinesses", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationConfiguration", b =>
@@ -4038,7 +4038,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("WardId");
 
-                    b.ToTable("OrganizationLocations");
+                    b.ToTable("OrganizationLocations", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationMembership", b =>
@@ -4076,7 +4076,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.ToTable("OrganizationMemberships");
+                    b.ToTable("OrganizationMemberships", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OrganizationProduct", b =>
@@ -4195,7 +4195,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("OrganizationId");
 
-                    b.ToTable("OrganizationRoles");
+                    b.ToTable("OrganizationRoles", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OtherBundlePaymentCost", b =>
@@ -4223,7 +4223,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("BundleId");
 
-                    b.ToTable("OtherBundlePaymentCosts");
+                    b.ToTable("OtherBundlePaymentCosts", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.OutboxMessage", b =>
@@ -4231,6 +4231,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("int");
 
                     b.Property<DateTime>("CreatedOn")
                         .HasColumnType("datetime2");
@@ -4242,6 +4245,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<bool>("IsProcessed")
                         .HasColumnType("bit");
 
+                    b.Property<string>("LastError")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -4249,7 +4255,13 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<DateTime?>("ProcessedOn")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Source")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("Source", "IsProcessed", "CreatedOn");
 
                     b.ToTable("OutboxMessages");
                 });
@@ -4283,7 +4295,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("PaymentId");
 
-                    b.ToTable("PaymentReconciliation");
+                    b.ToTable("PaymentReconciliation", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.PenaltyPolicy", b =>
@@ -4314,7 +4326,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PenaltyPolicies");
+                    b.ToTable("PenaltyPolicies", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.Receipt", b =>
@@ -4488,7 +4500,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RepaymentPenalties");
+                    b.ToTable("RepaymentPenalties", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.RepaymentPlan", b =>
@@ -4555,7 +4567,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("InputPackageId")
                         .IsUnique();
 
-                    b.ToTable("RepaymentPlans");
+                    b.ToTable("RepaymentPlans", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.RepaymentSchedule", b =>
@@ -4632,7 +4644,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("SupersededByRepaymentScheduleId");
 
-                    b.ToTable("RepaymentSchedules");
+                    b.ToTable("RepaymentSchedules", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubAccount", b =>
@@ -4790,7 +4802,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubscriptionCreditBalance");
+                    b.ToTable("SubscriptionCreditBalance", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionDocument", b =>
@@ -4830,7 +4842,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("SubscriptionId");
 
-                    b.ToTable("SubscriptionDocuments");
+                    b.ToTable("SubscriptionDocuments", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionPaymentAllocation", b =>
@@ -4858,7 +4870,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SubscriptionPaymentAllocations");
+                    b.ToTable("SubscriptionPaymentAllocations", "input_financing");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.SubscriptionRepayment", b =>
@@ -5137,7 +5149,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("UserId", "UserRole")
                         .IsUnique();
 
-                    b.ToTable("UserNotificationPreferences");
+                    b.ToTable("UserNotificationPreferences", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.WalletProviderConfiguration", b =>
@@ -5217,7 +5229,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Warehouses");
+                    b.ToTable("Warehouses", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.WarehouseInputInventory", b =>
@@ -5309,7 +5321,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WarehouseInputInventories");
+                    b.ToTable("WarehouseInputInventories", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.WarehouseUser", b =>
@@ -5356,7 +5368,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WarehouseUsers");
+                    b.ToTable("WarehouseUsers", "warehouse");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ActivityLog", b =>
@@ -5465,7 +5477,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("BulkUploadJobs");
+                    b.ToTable("BulkUploadJobs", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", b =>
@@ -5497,7 +5509,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("BusinessCode", "ProviderId")
                         .IsUnique();
 
-                    b.ToTable("BusinessSMSProviders");
+                    b.ToTable("BusinessSMSProviders", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProviderParameter", b =>
@@ -5531,7 +5543,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("BusinessSMSProviderId");
 
-                    b.ToTable("BusinessSMSProviderParameters");
+                    b.ToTable("BusinessSMSProviderParameters", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProvider", b =>
@@ -5563,7 +5575,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("BusinessCode", "ProviderId")
                         .IsUnique();
 
-                    b.ToTable("BusinessWalletProviders");
+                    b.ToTable("BusinessWalletProviders", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessWalletProviderParameter", b =>
@@ -5597,7 +5609,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("BusinessWalletProviderId");
 
-                    b.ToTable("BusinessWalletProviderParameters");
+                    b.ToTable("BusinessWalletProviderParameters", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.FarmerValueChainItem", b =>
@@ -5694,7 +5706,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("KYCDetails");
+                    b.ToTable("KYCDetails", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.LGA", b =>
@@ -5716,7 +5728,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("StatesStateId");
 
-                    b.ToTable("LGAs");
+                    b.ToTable("LGAs", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Module", b =>
@@ -5795,7 +5807,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId", "Purpose", "Target");
 
-                    b.ToTable("OneTimePasswords");
+                    b.ToTable("OneTimePasswords", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProvider", b =>
@@ -5820,7 +5832,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("ProviderId");
 
-                    b.ToTable("PaymentProviders");
+                    b.ToTable("PaymentProviders", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.PaymentProviderParameter", b =>
@@ -5854,7 +5866,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("PaymentProviderProviderId");
 
-                    b.ToTable("PaymentProviderParameters");
+                    b.ToTable("PaymentProviderParameters", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Payout", b =>
@@ -5928,7 +5940,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("RevokedTokens");
+                    b.ToTable("RevokedTokens", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
@@ -5967,7 +5979,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasDatabaseName("RoleNameIndex")
                         .HasFilter("[NormalizedName] IS NOT NULL");
 
-                    b.ToTable("AspNetRoles", (string)null);
+                    b.ToTable("AspNetRoles", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", b =>
@@ -5992,7 +6004,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("ProviderId");
 
-                    b.ToTable("SMSProvider");
+                    b.ToTable("SMSProvider", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProviderParameter", b =>
@@ -6026,7 +6038,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("SMSProviderProviderId");
 
-                    b.ToTable("SMSProviderParameters");
+                    b.ToTable("SMSProviderParameters", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.States", b =>
@@ -6043,7 +6055,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("StateId");
 
-                    b.ToTable("States");
+                    b.ToTable("States", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SterlingBankWallet", b =>
@@ -6110,7 +6122,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SterlingBankWallets");
+                    b.ToTable("SterlingBankWallets", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.StorageCategory", b =>
@@ -6333,7 +6345,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsUnique()
                         .HasFilter("[PhoneNumber] IS NOT NULL");
 
-                    b.ToTable("AspNetUsers", (string)null);
+                    b.ToTable("AspNetUsers", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserBusiness", b =>
@@ -6372,7 +6384,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserBusinesses");
+                    b.ToTable("UserBusinesses", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserDevice", b =>
@@ -6401,7 +6413,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("UserDevices");
+                    b.ToTable("UserDevices", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserOrganization", b =>
@@ -6417,7 +6429,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("UserId", "OrganizationCode");
 
-                    b.ToTable("UserOrganizations");
+                    b.ToTable("UserOrganizations", "onboarding");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", b =>
@@ -6482,7 +6494,7 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("UserId", "WalletProviderId")
                         .IsUnique();
 
-                    b.ToTable("UserWallets");
+                    b.ToTable("UserWallets", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletContext", b =>
@@ -6523,7 +6535,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsUnique()
                         .HasFilter("[ContextReferenceId] IS NOT NULL");
 
-                    b.ToTable("UserWalletContexts");
+                    b.ToTable("UserWalletContexts", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWalletTransactions", b =>
@@ -6605,7 +6617,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserWalletId");
 
-                    b.ToTable("UserWalletTransactions");
+                    b.ToTable("UserWalletTransactions", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProvider", b =>
@@ -6633,7 +6645,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("ProviderId");
 
-                    b.ToTable("WalletProviders");
+                    b.ToTable("WalletProviders", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletProviderParameter", b =>
@@ -6667,7 +6679,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("WalletProviderProviderId");
 
-                    b.ToTable("WalletProviderParameters");
+                    b.ToTable("WalletProviderParameters", "service_provider");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.WalletSecurity", b =>
@@ -6706,7 +6718,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserWalletId");
 
-                    b.ToTable("WalletSecurities");
+                    b.ToTable("WalletSecurities", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Ward", b =>
@@ -6734,7 +6746,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("LgaId");
 
-                    b.ToTable("Wards");
+                    b.ToTable("Wards", "onboarding");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -6764,7 +6776,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("RoleId1");
 
-                    b.ToTable("AspNetRoleClaims", (string)null);
+                    b.ToTable("AspNetRoleClaims", "onboarding");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<string>", b =>
@@ -6789,7 +6801,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AspNetUserClaims", (string)null);
+                    b.ToTable("AspNetUserClaims", "onboarding");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<string>", b =>
@@ -6811,7 +6823,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AspNetUserLogins", (string)null);
+                    b.ToTable("AspNetUserLogins", "onboarding");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
@@ -6831,7 +6843,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("RoleId1");
 
-                    b.ToTable("AspNetUserRoles", (string)null);
+                    b.ToTable("AspNetUserRoles", "onboarding");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
@@ -6850,7 +6862,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("UserId", "LoginProvider", "Name");
 
-                    b.ToTable("AspNetUserTokens", (string)null);
+                    b.ToTable("AspNetUserTokens", "onboarding");
                 });
 
             modelBuilder.Entity("ProviderWalletTransaction", b =>
@@ -6910,7 +6922,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ProviderWalletTransactions");
+                    b.ToTable("ProviderWalletTransactions", "wallet");
                 });
 
             modelBuilder.Entity("ProviderWalletTransactionLog", b =>
@@ -6946,7 +6958,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasIndex("ProviderWalletTransactionId");
 
-                    b.ToTable("ProviderWalletTransactionLogs");
+                    b.ToTable("ProviderWalletTransactionLogs", "wallet");
                 });
 
             modelBuilder.Entity("WalletReconciliationLog", b =>
@@ -6986,7 +6998,7 @@ namespace Agrovesto.Backend.API.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WalletReconciliationLogs");
+                    b.ToTable("WalletReconciliationLogs", "wallet");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Businesses.AdditionalInputPackageCost", b =>

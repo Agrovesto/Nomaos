@@ -1,5 +1,6 @@
 ﻿using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
@@ -15,9 +16,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class PaymentProviderRepository : IPaymentProviderRepository
     {
         private readonly DataContext _context;
-        public PaymentProviderRepository(DataContext context)
+        private readonly IOutboxWriter _outboxWriter;
+
+        public PaymentProviderRepository(DataContext context, IOutboxWriter outboxWriter)
         {
             _context = context;
+            _outboxWriter = outboxWriter;
         }
         public async Task<PaymentProviderModel> ChangeStatus(long id, ProviderStatus providerStatus)
         {
@@ -27,6 +31,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 throw new NotFoundException("Provider can not be found");
             }
             provider.Status = providerStatus.ToString();
+            EnqueueProviderStatusChanged("payment", provider.ProviderId, providerStatus);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -39,8 +44,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             PaymentProvider entity = model.Map();
             _context.Set<PaymentProvider>().Add(entity);
-
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            await _context.SaveChangesAsync();
+            EnqueueProviderCreated("payment", entity.ProviderId, entity.Code);
             int count = await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             if (count < 1)
             {
                 return null;
@@ -119,6 +127,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             entity.Name = model.Name;
             entity.Code = model.Code;
+            EnqueueProviderConfigurationChanged("payment", entity.ProviderId);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -149,6 +158,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                         var createList = creates.Select(y => new PaymentProviderParameter() { Key = y.Key, Description = y.Description, Value = y.Value, Env = y.Env, PaymentProviderProviderId = entity.ProviderId });
                         _context.AddRange(createList);
                         await _context.SaveChangesAsync();
+                        EnqueueProviderConfigurationChanged("payment", entity.ProviderId);
+                        await _context.SaveChangesAsync();
 
                         //PaymentProviderParameter[] removeList = model.PaymentProviderParameters.Where(x => (x.ParamStatus == ParameterStatus.Remove) && (x.ParameterId != 0))
                         //.Select(x => x.Map()).ToArray();
@@ -173,9 +184,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             });
         }
 
+        private void EnqueueProviderCreated(string providerType, long providerId, string code) =>
+            _outboxWriter.Enqueue("provider.created", new { providerType, providerId, code });
+
+        private void EnqueueProviderStatusChanged(string providerType, long providerId, ProviderStatus status) =>
+            _outboxWriter.Enqueue(
+                status == ProviderStatus.Active ? "provider.enabled" : "provider.disabled",
+                new { providerType, providerId, status = status.ToString() });
+
+        private void EnqueueProviderConfigurationChanged(string providerType, long providerId) =>
+            _outboxWriter.Enqueue("provider.configuration-changed", new { providerType, providerId });
 
 
     }
 }
-
-

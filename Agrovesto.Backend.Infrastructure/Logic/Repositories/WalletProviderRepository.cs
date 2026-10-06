@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.Models.Payment;
 using Agrovesto.Backend.Infrastructure.DB;
@@ -16,9 +17,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class WalletProviderRepository : IWalletProviderRepository
     {
         private readonly DataContext _context;
-        public WalletProviderRepository(DataContext context)
+        private readonly IOutboxWriter _outboxWriter;
+
+        public WalletProviderRepository(DataContext context, IOutboxWriter outboxWriter)
         {
             _context = context;
+            _outboxWriter = outboxWriter;
         }
 
         // ============================= Global provider catalog =============================
@@ -31,6 +35,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 throw new NotFoundException("Provider can not be found");
             }
             provider.Status = providerStatus.ToString();
+            EnqueueProviderStatusChanged("wallet", provider.ProviderId, providerStatus);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -43,8 +48,11 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
         {
             WalletProvider entity = model.Map();
             _context.Set<WalletProvider>().Add(entity);
-
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            await _context.SaveChangesAsync();
+            EnqueueProviderCreated("wallet", entity.ProviderId, entity.Code);
             int count = await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
             if (count < 1)
             {
                 return null;
@@ -116,6 +124,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
 
             entity.Name = model.Name;
             entity.Code = model.Code;
+            EnqueueProviderConfigurationChanged("wallet", entity.ProviderId);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -133,6 +142,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
             entity.Value = model.Value;
+            EnqueueProviderConfigurationChanged("wallet", entity.WalletProviderProviderId);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -175,6 +185,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             WalletProviderProviderId = entity.ProviderId
                         });
                         _context.AddRange(createList);
+                        await _context.SaveChangesAsync();
+                        EnqueueProviderConfigurationChanged("wallet", entity.ProviderId);
                         await _context.SaveChangesAsync();
 
                         transaction.Commit();
@@ -270,7 +282,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                             await _context.SaveChangesAsync();
                         }
 
-                        transaction.Commit();
+                            EnqueueProviderConfigurationChanged("wallet", providerId, businessCode);
+                            await _context.SaveChangesAsync();
+                            transaction.Commit();
 
                         var result = await _context.Set<BusinessWalletProvider>()
                             .Include(x => x.WalletProvider)
@@ -299,6 +313,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
 
             junction.Status = ProviderStatus.Disabled.ToString();
+            EnqueueProviderStatusChanged("wallet", providerId, ProviderStatus.Disabled, businessCode);
             int count = await _context.SaveChangesAsync();
             return count > 0;
         }
@@ -350,13 +365,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             BusinessWalletProviderParameterModel model)
         {
             BusinessWalletProviderParameter entity = await _context.Set<BusinessWalletProviderParameter>()
-                .FindAsync(model.ParameterId);
+                .Include(x => x.BusinessWalletProvider)
+                .FirstOrDefaultAsync(x => x.ParameterId == model.ParameterId);
             if (entity == null)
             {
                 throw new NotFoundException("Business parameter override can not be found");
             }
 
             entity.Value = model.Value;
+            EnqueueProviderConfigurationChanged("wallet", entity.BusinessWalletProvider.ProviderId, entity.BusinessWalletProvider.BusinessCode);
             int count = await _context.SaveChangesAsync();
             if (count < 1)
             {
@@ -364,7 +381,16 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
             }
             return entity.Map();
         }
+
+        private void EnqueueProviderCreated(string providerType, long providerId, string code) =>
+            _outboxWriter.Enqueue("provider.created", new { providerType, providerId, code });
+
+        private void EnqueueProviderStatusChanged(string providerType, long providerId, ProviderStatus status, string businessCode = null) =>
+            _outboxWriter.Enqueue(
+                status == ProviderStatus.Active ? "provider.enabled" : "provider.disabled",
+                new { providerType, providerId, status = status.ToString(), businessCode });
+
+        private void EnqueueProviderConfigurationChanged(string providerType, long providerId, string businessCode = null) =>
+            _outboxWriter.Enqueue("provider.configuration-changed", new { providerType, providerId, businessCode });
     }
 }
-
-

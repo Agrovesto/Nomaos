@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "Agrovesto.Backend.Warehouse.API": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51009;http://localhost:51010"
+    }
+  }
+}

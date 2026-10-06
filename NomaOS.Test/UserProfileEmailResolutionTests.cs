@@ -11,6 +11,13 @@ public class UserProfileEmailResolutionTests
 {
     private static string? ResolveConnectionString()
     {
+        var testConnectionString = Environment.GetEnvironmentVariable(
+            "NOMAOS_TEST_ConnectionStrings__DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(testConnectionString))
+        {
+            return testConnectionString;
+        }
+
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
 
         while (dir != null)

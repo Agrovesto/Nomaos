@@ -1,4 +1,5 @@
 ﻿using Agrovesto.Backend.Core.Interfaces.Repositories;
+using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -20,17 +21,29 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
     public class WarehouseManagementRepository : IWarehouseManagementRepository
     {
         private readonly DataContext _context;
-        public WarehouseManagementRepository(DataContext context)
+        private readonly IOutboxWriter _outboxWriter;
+
+        public WarehouseManagementRepository(DataContext context, IOutboxWriter outboxWriter)
         {
             _context = context;
+            _outboxWriter = outboxWriter;
         }
         #region warehousemgt
         public async Task<(bool status, WarehouseModel data)> CreateWarehouse(WarehouseModel data)
         {
             var entity = data.Map();
             entity.IsActive = true;
+            await using var transaction = await _context.Database.BeginTransactionAsync();
             await _context.AddAsync(entity);
             await _context.SaveChangesAsync();
+            _outboxWriter.Enqueue("warehouse.created", new
+            {
+                warehouseId = entity.Id,
+                entity.BelongToBusinessCode,
+                entity.OrganizationCode
+            });
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
 
             return (true, entity.Map());
         }
