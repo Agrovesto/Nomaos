@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - devops
+      - staging
   workflow_dispatch:
     inputs:
       app:
