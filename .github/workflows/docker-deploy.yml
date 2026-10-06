@@ -1,21 +1,15 @@
 name: Docker Build & Blue/Green Deploy
-
-# Replaces the rsync + systemd pipeline in prod.yaml.
-# Build once in CI -> push an immutable tag to ECR -> the EC2 host pulls that
-# exact digest and flips slots. The same image is what will later be handed
-# to an ECS task definition, so nothing about the artifact changes in that move.
-
 on:
-  # PRs targeting devops validate the Docker image only; they never receive
-  # AWS credentials and never deploy.
   pull_request:
     branches:
       - devops
-
+      - staging
+      - master
   push:
     branches:
       - master
       - devops
+      - staging
 
   workflow_dispatch:
     inputs:
@@ -26,7 +20,6 @@ on:
         type: choice
         options:
           - nomaos-api
-
       environment:
         description: "Target environment"
         required: true
@@ -39,11 +32,9 @@ on:
 concurrency:
   group: "docker-deploy-${{ github.event_name == 'pull_request' && github.event.pull_request.number || inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}-${{ inputs.app || 'nomaos-api' }}"
   cancel-in-progress: false
-
 permissions:
   id-token: write
   contents: read
-
 env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: agrovesto-dev-nomaos
@@ -59,9 +50,6 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
-    # PR code is untrusted and must not inherit the workflow-level
-    # id-token permission.
     permissions:
       contents: read
 
@@ -78,9 +66,6 @@ jobs:
           context: .
           push: false
           tags: agrovesto-dev-nomaos:pr-${{ github.event.pull_request.number }}
-
-          # PR builds can reuse the trusted cache but do not publish into it.
-          # This avoids letting untrusted PR code modify the shared build cache.
           cache-from: type=gha,scope=nomaos-api
 
 
@@ -91,9 +76,7 @@ jobs:
     name: Build & push image
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-
     environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
-
     outputs:
       image: ${{ steps.meta.outputs.image }}
       digest_ref: ${{ steps.digest.outputs.digest_ref }}
@@ -185,22 +168,12 @@ jobs:
         with:
           context: .
           push: true
-
-          # CI creates the tag, but deployment uses the digest recorded below.
           tags: ${{ steps.meta.outputs.image }}
-
-          # Keep your current behavior.
           provenance: false
-
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             BUILD_VERSION=1.0.${{ github.run_number }}
             BUILT_AT=${{ steps.meta.outputs.built_at }}
-
-          # Persistent BuildKit cache in GitHub Actions.
-          #
-          # scope is dedicated to this image so another image build cannot
-          # replace this cache.
           cache-from: type=gha,scope=nomaos-api
           cache-to: type=gha,scope=nomaos-api,mode=max,ignore-error=true
 
@@ -211,9 +184,7 @@ jobs:
         id: digest
         run: |
           set -euo pipefail
-
           REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-
           echo "digest_ref=${REGISTRY}/${ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
             >> "$GITHUB_OUTPUT"
 
@@ -232,7 +203,6 @@ jobs:
             echo "| Commit | \`${{ github.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-
   ##########################################################################
   # DEPLOY
   ##########################################################################
@@ -241,10 +211,26 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     needs: build
-
     environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
 
     steps:
+
+      ######################################################################
+      # DEPLOY TOOLING
+      ######################################################################
+      # This is a fresh runner from the build job. Check out only the pinned
+      # deployment files here, bundle them, and send them with the SSM command.
+      # The EC2 instance itself never runs git or needs GitHub credentials.
+      - name: Checkout deployment files
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          sparse-checkout: |
+            deploy/scripts/deploy.sh
+            deploy/scripts/lib.sh
+            deploy/compose/docker-compose.app.yml
+          sparse-checkout-cone-mode: false
 
       ######################################################################
       # AWS
@@ -270,6 +256,19 @@ jobs:
 
           REGISTRY="${IMAGE%%/*}"
 
+          # Ship only the deployment helper and its Compose file. Application
+          # source stays inside the image; host secrets stay in /opt/nomaos.
+          BUNDLE_FILE="$RUNNER_TEMP/nomaos-deploy-bundle.tar.gz"
+          test -f deploy/scripts/deploy.sh
+          test -f deploy/scripts/lib.sh
+          test -f deploy/compose/docker-compose.app.yml
+          tar -czf "$BUNDLE_FILE" \
+            deploy/scripts/deploy.sh \
+            deploy/scripts/lib.sh \
+            deploy/compose/docker-compose.app.yml
+          BUNDLE_B64="$(base64 -w0 "$BUNDLE_FILE")"
+          BUNDLE_SHA256="$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')"
+
           ####################################################################
           # Build one remote command.
           #
@@ -294,9 +293,13 @@ jobs:
           jq -n \
             --arg image    "$IMAGE" \
             --arg sha      "${{ github.sha }}" \
-            --arg app      "${{ env.APP_NAME }}" \
-            --arg region   "${{ env.AWS_REGION }}" \
-            --arg registry "$REGISTRY" \
+            --arg app        "${{ env.APP_NAME }}" \
+            --arg region     "${{ env.AWS_REGION }}" \
+            --arg registry   "$REGISTRY" \
+            --arg bundle_b64 "$BUNDLE_B64" \
+            --arg bundle_sha "$BUNDLE_SHA256" \
+            --arg run_id     "${{ github.run_id }}" \
+            --arg run_attempt "${{ github.run_attempt }}" \
             '{
               executionTimeout: ["1800"],
               commands: [
@@ -306,23 +309,37 @@ jobs:
                   "APP=" + ($app | @sh) + "\n" +
                   "REGION=" + ($region | @sh) + "\n" +
                   "REGISTRY=" + ($registry | @sh) + "\n" +
-                  "export IMAGE SHA APP REGION REGISTRY\n" +
+                  "BUNDLE_B64=" + ($bundle_b64 | @sh) + "\n" +
+                  "BUNDLE_SHA256=" + ($bundle_sha | @sh) + "\n" +
+                  "RUN_ID=" + ($run_id | @sh) + "\n" +
+                  "RUN_ATTEMPT=" + ($run_attempt | @sh) + "\n" +
+                  "export IMAGE SHA APP REGION REGISTRY BUNDLE_B64 BUNDLE_SHA256 RUN_ID RUN_ATTEMPT\n" +
                   "exec /bin/bash -lc " +
                   (
                     "set -euo pipefail\n" +
-                    "cd /opt/nomaos/repo\n" +
+                    "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
+                    "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
+                    "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
+                    "sudo mkdir -p \"$DEPLOY_DIR\"\n" +
+                    "printf \"%s\" \"$BUNDLE_B64\" | base64 --decode | sudo tee \"$BUNDLE_FILE\" >/dev/null\n" +
+                    "printf \"%s  %s\\n\" \"$BUNDLE_SHA256\" \"$BUNDLE_FILE\" | sudo sha256sum --check --status || { echo \"deployment bundle checksum mismatch\" >&2; exit 1; }\n" +
+                    "sudo tar --no-same-owner -xzf \"$BUNDLE_FILE\" -C \"$DEPLOY_DIR\"\n" +
+                    "sudo rm -f \"$BUNDLE_FILE\"\n" +
+                    "DEPLOY_SCRIPT=\"$DEPLOY_DIR/deploy/scripts/deploy.sh\"\n" +
+                    "COMPOSE_FILE=\"$DEPLOY_DIR/deploy/compose/docker-compose.app.yml\"\n" +
                     "\n" +
-                    "echo \"Deploy commit: $SHA\"\n" +
-                    "echo \"Deploy image:  $IMAGE\"\n" +
-                    "echo \"Deploy app:    $APP\"\n" +
+                    "echo \"Image built from commit: $SHA\"\n" +
+                    "echo \"Deploy image:            $IMAGE\"\n" +
+                    "echo \"Deploy app:              $APP\"\n" +
                     "\n" +
-                    "sudo git fetch --all --quiet\n" +
-                    "sudo git checkout --quiet \"$SHA\"\n" +
+                    "test -x \"$DEPLOY_SCRIPT\" || { echo \"deployment helper missing from transferred bundle: $DEPLOY_SCRIPT\" >&2; exit 1; }\n" +
+                    "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || { echo \"shared deployment helper missing from bundle\" >&2; exit 1; }\n" +
+                    "test -f \"$COMPOSE_FILE\" || { echo \"Compose file missing from transferred bundle: $COMPOSE_FILE\" >&2; exit 1; }\n" +
                     "\n" +
                     "aws ecr get-login-password --region \"$REGION\" | " +
                     "sudo docker login --username AWS --password-stdin \"$REGISTRY\"\n" +
                     "\n" +
-                    "sudo ./deploy/scripts/deploy.sh " +
+                    "sudo \"$DEPLOY_SCRIPT\" " +
                     "--app \"$APP\" " +
                     "--image \"$IMAGE\" " +
                     "--commit \"$SHA\""
@@ -332,8 +349,9 @@ jobs:
               ]
             }' > /tmp/ssm-params.json
 
-          echo "Generated SSM parameters:"
-          jq . /tmp/ssm-params.json
+          echo "Generated SSM parameters (bundle content omitted):"
+          jq '{executionTimeout, command_count: (.commands | length), command_bytes: (.commands[0] | length)}' \
+            /tmp/ssm-params.json
 
           ####################################################################
           # Send command
@@ -407,7 +425,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          URL="${{ vars.HEALTH_URL || 'https://noma-api.nomaos.com/health' }}"
+          URL="${{ vars.HEALTH_URL || 'https://noma-api-dev.nomaos.com/health/ready' }}"
 
           echo "probing $URL"
 
