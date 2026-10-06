@@ -12,6 +12,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using DocumentFormat.OpenXml.Spreadsheet;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.SqlClient;
@@ -82,7 +83,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
     public class OnboardingRepository : IOnboardingRepository
     {
-
+     
         private const string OrganizationRole = "Organization";
         private readonly DataContext _context;
         private readonly RoleManager<Role> _roleManager;
@@ -102,6 +103,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             _configuration = config;
             _log = log;
             _signInManager = signInManager;
+
         }
         public async Task RevokeAsync(string jti, string userId, DateTime tokenExpiry)
         {
@@ -2071,6 +2073,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         }
         public async Task<(UserModel model, bool status, string message)> GetUserById(string userId)
         {
+
+
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return (null, false, "No record found");
             return (user.Map(), true, "Retrieved Successfully");

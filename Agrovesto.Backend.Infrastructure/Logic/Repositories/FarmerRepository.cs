@@ -1594,8 +1594,9 @@ WHERE f.UserId = @userId
                     EF.Functions.Like(f.Ward, pattern) ||
                     EF.Functions.Like(f.Location, pattern) ||
                     EF.Functions.Like(f.PhoneNumber, pattern) ||
-                    EF.Functions.Like(f.Email, pattern) ||
-                    EF.Functions.Like(f.Level, pattern)
+                    EF.Functions.Like(f.Email, pattern) 
+                    //||
+                    //EF.Functions.Like(f.Level, pattern)
                     );
             }
             return queryable;

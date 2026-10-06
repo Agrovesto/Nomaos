@@ -27,6 +27,7 @@ using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Spreadsheet;
 using DocumentFormat.OpenXml.Wordprocessing;
 using Hangfire;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+using NetTopologySuite.Densify;
 using NetTopologySuite.Operation.Valid;
 using Org.BouncyCastle.Asn1.Ocsp;
 using Serilog;
@@ -128,11 +130,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IBackgroundTaskQueue _taskQueue;
         private readonly CredentialChangeService _credentialChangeService;
+        private readonly IRateLimitService _rateLimitService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
         public OnBoardingManager(IBackgroundTaskQueue taskQueue,
               IServiceScopeFactory scopeFactory, IWalletManager walletManager,
             IConfiguration configuration,
             DataContext context,
+             IRateLimitService rateLimitService,
+        IHttpContextAccessor httpContextAccessor,
             INotificationService notificationService,
             IAWSRekognitionManager faceManager,
             IIdentityVerificationService identityVerificationManager,
@@ -142,6 +148,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         {
             _credentialChangeService = credentialChangeService;
 
+            _rateLimitService = rateLimitService;
+
+            _httpContextAccessor = httpContextAccessor;
             _scopeFactory = scopeFactory;
             _taskQueue = taskQueue;
             _onboardingRepository = onboardingRepository;
@@ -1403,6 +1412,15 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         public async Task<OtpResult> ResendOtpAsync(string userId, OtpTarget target, OtpPurpose purpose)
         {
+            await _rateLimitService.IsRateLimitedAsync($"{purpose}:{userId}",
+               RateLimitType.OTP);
+
+            // per-IP limit
+            var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            if (!string.IsNullOrEmpty(ip))
+                await _rateLimitService.IsRateLimitedAsync(ip, RateLimitType.OTP);
+
+
             var user = await _onboardingRepository.GetUserById(userId);
             var destination = "";
             if (target == OtpTarget.Email)
@@ -2336,6 +2354,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         => _credentialChangeService.ChangeCredential(model);
         public Task<(bool Status, string Message)> ForgotCredential(ForgotCredentialModel model)
         {
+
             return _credentialChangeService.ForgotCredential(model);
         }
         

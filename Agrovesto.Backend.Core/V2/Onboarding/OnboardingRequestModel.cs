@@ -241,7 +241,10 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? DefaultPin { get; set; }
         public string? Password { get; set; }
         public string? DefaultPassword { get; set; }
+
+        [RegularExpression(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", ErrorMessage = "Invalid email format.")]
         public string? Email { get; set; }
+       
         public string? Bvn { get; set; }
         public string? Nin { get; set; }
         public string? DateOfBirth { get; set; }
