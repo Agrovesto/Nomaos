@@ -3,8 +3,10 @@ using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Utilities;
 using Google;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using System;
@@ -19,11 +21,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
     {
         private readonly IEnumerable<ICredentialChangeHandler> _handlers;
         private readonly IConfiguration _configuration;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+
+        private readonly IRateLimitService _rateLimitService;
         public CredentialChangeService(IEnumerable<ICredentialChangeHandler> handlers,
-            IConfiguration configuration)
+            IConfiguration configuration, IRateLimitService rateLimitService,
+        IHttpContextAccessor httpContextAccessor)
         {
             _handlers = handlers;
+            _rateLimitService = rateLimitService;
 
+            _httpContextAccessor = httpContextAccessor;
             _configuration = configuration;
         }
 
@@ -57,6 +65,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Services
         {
             //if (string.IsNullOrWhiteSpace(model.Env))
             //    throw new BaseException(ExceptionType.BAD_REQUEST, "Environment is required.");
+
+            var identifier = (model.Email ?? model.PhoneNumber ?? string.Empty)
+       .Trim()
+       .ToLowerInvariant();
+
+            if (string.IsNullOrEmpty(identifier))
+                throw new BaseException(ExceptionType.BAD_REQUEST, "Email or phone number is required.");
+
+            // per-account limit (include Type so password/PIN resets don't share a bucket)
+            await _rateLimitService.IsRateLimitedAsync($"{model.Type}:{identifier}",
+                RateLimitType.FORGOT_CREDENTIAL);
+
+            // per-IP limit
+            var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            if (!string.IsNullOrEmpty(ip))
+                await _rateLimitService.IsRateLimitedAsync(ip, RateLimitType.FORGOT_CREDENTIAL_IP);
 
 
             var env = _configuration["Official:Env"];

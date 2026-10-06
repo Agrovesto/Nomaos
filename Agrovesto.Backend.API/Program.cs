@@ -207,6 +207,11 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.Configure<DataProtectionTokenProviderOptions>(o =>
+{
+    o.TokenLifespan = TimeSpan.FromMinutes(30); // pick what you want; the default is 24h
+});
+
 
 builder.Services.Configure<FormOptions>(o =>
 {

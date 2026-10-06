@@ -30,6 +30,8 @@ namespace Agrovesto.Backend.Core.Enums
         OTP,
         LOGIN,
         RESET_PASSWORD,
+        FORGOT_CREDENTIAL,      // per account (email/phone)
+        FORGOT_CREDENTIAL_IP
     }
     public enum InventoryTransactionType
     {
