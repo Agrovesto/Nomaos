@@ -218,10 +218,6 @@ UPSTREAM_FILE="$UPSTREAM_DIR/${UPSTREAM_NAME}.conf"
 
 COMMIT_SHA="${COMMIT_SHA:-unknown}"
 
-mkdir -p \
-  "$UPSTREAM_DIR" \
-  "$NOMAOS_STATE_DIR/logs/$APP_NAME/$TARGET"
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Determine active and target slots
 # ─────────────────────────────────────────────────────────────────────────────
@@ -241,11 +237,13 @@ TARGET="$(other_slot "$ACTIVE")"
 ACTIVE_CONTAINER="${APP_NAME}-${ACTIVE}"
 TARGET_CONTAINER="${APP_NAME}-${TARGET}"
 
+mkdir -p \
+  "$UPSTREAM_DIR" \
+  "$NOMAOS_STATE_DIR/logs/$APP_NAME/$TARGET"
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Display deployment plan
 # ─────────────────────────────────────────────────────────────────────────────
-
-cat <<EOF
 
 ===============================================================
  NomaOS Blue/Green Deployment
