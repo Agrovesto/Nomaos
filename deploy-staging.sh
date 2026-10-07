@@ -59,7 +59,7 @@ sudo systemctl restart "Agrovesto.Backend.API-$TARGET"
 # ($TARGET) on disk for inspection — zero impact on traffic.
 echo "⏳ Health-checking $TARGET on port $TARGET_PORT..."
 
-HEALTH_URL="http://127.0.0.1:$TARGET_PORT/health"
+HEALTH_URL="http://127.0.0.1:$TARGET_PORT/health/ready"
 ATTEMPTS=0
 MAX_ATTEMPTS=15   # 15 × 2s = 30s timeout
 

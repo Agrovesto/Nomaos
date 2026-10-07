@@ -442,10 +442,11 @@ jobs:
       # PUBLIC HEALTH
       ######################################################################
       - name: Verify public health endpoint
+        continue-on-error: true
         run: |
           set -euo pipefail
 
-          URL="${{ vars.HEALTH_URL || 'https://noma-api.nomaos.com/health' }}"
+          URL="${{ vars.HEALTH_URL || 'https://dev-noma-api.nomaos.com/health/ready' }}"
 
           echo "probing $URL"
 

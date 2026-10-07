@@ -30,8 +30,11 @@ COPY Agrovesto.Backend.Infrastructure/*.csproj Agrovesto.Backend.Infrastructure/
 # COPY Directory.Build.targets ./
 # COPY Directory.Packages.props ./
 
-RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    echo "=== .NET SDK ===" \
+# NOTE: no `--mount=type=cache` here on purpose. Cache-mount contents are NOT
+# part of the image layer, so the later `publish --no-restore` stage would not
+# find the restored packages. Keeping packages in this layer lets the GHA
+# layer cache (cache-from/cache-to) do the caching instead.
+RUN echo "=== .NET SDK ===" \
  && dotnet --version \
  && echo "=== INSTALLED SDKS ===" \
  && dotnet --list-sdks \
@@ -52,14 +55,18 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 FROM restore AS publish
 
 ARG TARGETARCH
-ARG COMMIT_SHA=unknown
-ARG BUILD_VERSION=0.0.0
-ARG BUILT_AT=unknown
 
 WORKDIR /src
 
 # Copy the complete source only after restore.
+# Requires a .dockerignore that excludes **/bin and **/obj, otherwise host
+# obj/project.assets.json files overwrite the ones created by restore.
 COPY . .
+
+# Build metadata is declared late (right before it is used) so that changing
+# a commit SHA / run URL does not bust the layers above.
+ARG COMMIT_SHA=unknown
+ARG BUILD_VERSION=0.0.0
 
 RUN echo "=== global.json ===" \
  && cat global.json \
@@ -86,13 +93,26 @@ RUN echo "=== global.json ===" \
       /p:DebugSymbols=false \
       /p:InformationalVersion="${BUILD_VERSION}+${COMMIT_SHA}"
 
-# Build metadata.
+# Build + git metadata shipped inside the image.
+ARG BUILT_AT=unknown
+ARG GIT_BRANCH=unknown
+ARG BUILD_RUN_URL=
+ARG BUILD_ACTOR=
+ARG PR_NUMBER=
+ARG PR_AUTHOR=
+ARG PR_APPROVERS=
+
 RUN printf '%s\n' "$COMMIT_SHA" \
       > /app/publish/.commit-sha \
  && printf '%s\n' "$BUILD_VERSION" \
       > /app/publish/.version \
  && printf '%s\n' "$BUILT_AT" \
-      > /app/publish/.deployed-at
+      > /app/publish/.deployed-at \
+ && printf '{\n  "commit": "%s",\n  "branch": "%s",\n  "version": "%s",\n  "builtAt": "%s",\n  "runUrl": "%s",\n  "actor": "%s",\n  "pullRequest": {\n    "number": "%s",\n    "author": "%s",\n    "approvers": "%s"\n  }\n}\n' \
+      "$COMMIT_SHA" "$GIT_BRANCH" "$BUILD_VERSION" "$BUILT_AT" \
+      "$BUILD_RUN_URL" "$BUILD_ACTOR" \
+      "$PR_NUMBER" "$PR_AUTHOR" "$PR_APPROVERS" \
+      > /app/publish/build-info.json
 
 
 ########################################
@@ -100,18 +120,6 @@ RUN printf '%s\n' "$COMMIT_SHA" \
 ########################################
 
 FROM ${DOTNET_RUNTIME_IMAGE} AS runtime
-
-ARG COMMIT_SHA=unknown
-ARG BUILD_VERSION=0.0.0
-ARG BUILT_AT=unknown
-
-LABEL org.opencontainers.image.title="nomaos-onboarding-api" \
-      org.opencontainers.image.description="NomaOS Onboarding API (ASP.NET Core 8)" \
-      org.opencontainers.image.source="https://github.com/Agrovesto/Nomaos" \
-      org.opencontainers.image.revision="$COMMIT_SHA" \
-      org.opencontainers.image.version="$BUILD_VERSION" \
-      org.opencontainers.image.created="$BUILT_AT" \
-      org.opencontainers.image.vendor="Agrovesto"
 
 ########################################
 # Runtime dependencies
@@ -156,6 +164,44 @@ ENV ASPNETCORE_URLS=http://+:8080 \
     DOTNET_GCConserveMemory=5 \
     DOTNET_GCHeapHardLimitPercent=75 \
     TZ=UTC
+
+########################################
+# Git / build metadata
+#
+# Declared after the dependency layers above so a new commit only
+# invalidates the layers from here down.
+########################################
+
+ARG COMMIT_SHA=unknown
+ARG BUILD_VERSION=0.0.0
+ARG BUILT_AT=unknown
+ARG GIT_BRANCH=unknown
+ARG BUILD_RUN_URL=
+ARG BUILD_ACTOR=
+ARG PR_NUMBER=
+ARG PR_AUTHOR=
+ARG PR_APPROVERS=
+
+# The app reads GIT_SHA / COMMIT_SHA for the Serilog `git.sha` property.
+ENV GIT_SHA=$COMMIT_SHA \
+    COMMIT_SHA=$COMMIT_SHA \
+    GIT_BRANCH=$GIT_BRANCH \
+    BUILD_VERSION=$BUILD_VERSION \
+    BUILT_AT=$BUILT_AT
+
+LABEL org.opencontainers.image.title="nomaos-onboarding-api" \
+      org.opencontainers.image.description="NomaOS Onboarding API (ASP.NET Core 8)" \
+      org.opencontainers.image.source="https://github.com/Agrovesto/Nomaos" \
+      org.opencontainers.image.revision="$COMMIT_SHA" \
+      org.opencontainers.image.version="$BUILD_VERSION" \
+      org.opencontainers.image.created="$BUILT_AT" \
+      org.opencontainers.image.ref.name="$GIT_BRANCH" \
+      org.opencontainers.image.vendor="Agrovesto" \
+      io.nomaos.build.run-url="$BUILD_RUN_URL" \
+      io.nomaos.build.actor="$BUILD_ACTOR" \
+      io.nomaos.pr.number="$PR_NUMBER" \
+      io.nomaos.pr.author="$PR_AUTHOR" \
+      io.nomaos.pr.approvers="$PR_APPROVERS"
 
 ########################################
 # Application
@@ -214,4 +260,3 @@ USER 1654:1654
 ########################################
 
 ENTRYPOINT ["dotnet", "Agrovesto.Backend.API.dll"]
-
