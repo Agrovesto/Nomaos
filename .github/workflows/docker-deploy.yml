@@ -130,11 +130,11 @@ jobs:
               --lifecycle-policy-text '{
                 "rules": [{
                   "rulePriority": 1,
-                  "description": "Keep last 15 images",
+                  "description": "Keep last 3 images",
                   "selection": {
                     "tagStatus": "any",
                     "countType": "imageCountMoreThan",
-                    "countNumber": 15
+                    "countNumber": 3
                   },
                   "action": {
                     "type": "expire"
@@ -291,7 +291,7 @@ jobs:
             --arg run_id "${{ github.run_id }}" \
             --arg run_attempt "${{ github.run_attempt }}" \
             '{
-              executionTimeout: ["1800"],
+              executionTimeout: ["600"],
               commands: [
                 (
                   "IMAGE=" + ($image | @sh) + "\n" +
@@ -409,7 +409,7 @@ jobs:
           ####################################################################
           # Poll SSM
           ####################################################################
-          for i in $(seq 1 120); do
+          for i in $(seq 1 20); do
 
             STATUS=$(aws ssm list-command-invocations \
               --command-id "$COMMAND_ID" \
@@ -445,11 +445,11 @@ jobs:
 
             esac
 
-            if [ $((i % 6)) -eq 0 ]; then
-              echo "  status: $STATUS ($((i * 10))s)"
+            if [ $((i % 3)) -eq 0 ]; then
+              echo "  status: $STATUS ($((i * 5))s)"
             fi
 
-            sleep 10
+            sleep 5
           done
 
           echo "::error::timed out waiting for the SSM command"
@@ -467,13 +467,13 @@ jobs:
 
           echo "probing $URL"
 
-          for i in $(seq 1 10); do
+          for i in $(seq 1 5); do
 
             CODE=$(curl \
               -s \
               -o /dev/null \
               -w '%{http_code}' \
-              --max-time 10 \
+              --max-time 5 \
               "$URL" || echo 000)
 
             if [ "$CODE" = "200" ]; then
@@ -481,9 +481,9 @@ jobs:
               exit 0
             fi
 
-            echo "  attempt $i/10 -> HTTP $CODE"
+            echo "  attempt $i/5 -> HTTP $CODE"
 
-            sleep 10
+            sleep 5
           done
 
           echo "::warning::public /health did not return 200 — check the active slot manually"

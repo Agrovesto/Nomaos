@@ -57,7 +57,7 @@ APP_NAME=""
 IMAGE=""
 COMMIT_SHA=""
 
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-10}"
 KEEP_OLD="${KEEP_OLD:-false}"
 
 # Application health failures are warnings only by default.
@@ -79,13 +79,13 @@ HOST_HEALTH_URL="${HOST_HEALTH_URL:-}"
 CONTAINER_HEALTH_PATH="${CONTAINER_HEALTH_PATH:-/health/ready}"
 EDGE_HEALTH_PATH="${EDGE_HEALTH_PATH:-/health}"
 
-HEALTH_RETRIES="${HEALTH_RETRIES:-10}"
-HEALTH_RETRY_INTERVAL="${HEALTH_RETRY_INTERVAL:-3}"
+HEALTH_RETRIES="${HEALTH_RETRIES:-3}"
+HEALTH_RETRY_INTERVAL="${HEALTH_RETRY_INTERVAL:-1}"
 
-EDGE_RETRIES="${EDGE_RETRIES:-5}"
-EDGE_RETRY_INTERVAL="${EDGE_RETRY_INTERVAL:-2}"
+EDGE_RETRIES="${EDGE_RETRIES:-2}"
+EDGE_RETRY_INTERVAL="${EDGE_RETRY_INTERVAL:-1}"
 
-DRAIN_SECONDS="${DRAIN_SECONDS:-5}"
+DRAIN_SECONDS="${DRAIN_SECONDS:-2}"
 
 NGINX_CONTAINER="${NGINX_CONTAINER:-nomaos-nginx}"
 
@@ -113,7 +113,7 @@ Options:
 
   --timeout <sec>
       Docker health gate timeout.
-      Default: 180
+      Default: 10
 
   --keep-old
       Leave previous slot running after the traffic flip.
@@ -130,11 +130,11 @@ Environment overrides:
   CHECK_CONTAINER_LOCAL=true|false
   CHECK_NGINX_NETWORK=true|false
   HOST_HEALTH_URL=http://127.0.0.1:<port>/health/ready
-  HEALTH_RETRIES=10
-  HEALTH_RETRY_INTERVAL=3
-  EDGE_RETRIES=5
-  EDGE_RETRY_INTERVAL=2
-  DRAIN_SECONDS=5
+  HEALTH_RETRIES=3
+  HEALTH_RETRY_INTERVAL=1
+  EDGE_RETRIES=2
+  EDGE_RETRY_INTERVAL=1
+  DRAIN_SECONDS=2
 EOF
 }
 
@@ -892,10 +892,7 @@ fi
 # 11. Cleanup dangling images
 # ─────────────────────────────────────────────────────────────────────────────
 
-info "pruning dangling Docker images"
-
-docker image prune -f \
-  >/dev/null 2>&1 || true
+info "retaining Docker image cache for faster future deployments"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 12. Cleanup backup
