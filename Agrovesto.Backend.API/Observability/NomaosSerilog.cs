@@ -17,10 +17,6 @@ namespace Agrovesto.Backend.API.Observability;
 /// deployment relied on it; a container that writes to a bind mount is fine,
 /// a container that writes logs nobody rotates is not.
 ///
-/// The AWS CloudWatch sink is likewise opt-in now (AWS_LOGS_ENABLED) instead of
-/// unconditional: shipping the same line twice (CloudWatch + Loki) doubles the
-/// bill for no benefit, and a missing IAM role used to make startup noisy.
-/// It defaults to ON in Production only, preserving today's behaviour.
 /// </summary>
 public static class NomaosSerilog
 {

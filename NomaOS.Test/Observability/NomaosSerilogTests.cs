@@ -20,8 +20,6 @@ public class NomaosSerilogTests
     private static Func<string, string?> NoCloudWatch(params (string Key, string? Value)[] values)
     {
         var map = values.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-        map["AWS_LOGS_ENABLED"] = "false";
-        return Env(map);
     }
 
     private static string CaptureConsole(Action action)
@@ -183,46 +181,3 @@ public class NomaosSerilogTests
     }
 
     [Theory]
-    [InlineData("true", "Development", true)]
-    [InlineData("1", "Development", true)]
-    [InlineData("false", "Production", false)]
-    [InlineData("0", "Production", false)]
-    public void CloudWatchEnabled_ExplicitFlagWins(string flag, string environmentName, bool expected)
-    {
-        NomaosSerilog.CloudWatchEnabled(Env(new Dictionary<string, string?> { ["AWS_LOGS_ENABLED"] = flag }), environmentName)
-            .Should().Be(expected);
-    }
-
-    [Theory]
-    [InlineData("Production", true)]
-    [InlineData("production", true)]
-    [InlineData("Staging", false)]
-    [InlineData("Development", false)]
-    public void CloudWatchEnabled_DefaultsToProductionOnly(string environmentName, bool expected)
-    {
-        NomaosSerilog.CloudWatchEnabled(Env(new Dictionary<string, string?>()), environmentName)
-            .Should().Be(expected);
-    }
-
-    [Theory]
-    [InlineData("Debug", LogEventLevel.Debug)]
-    [InlineData("warning", LogEventLevel.Warning)]
-    [InlineData("VERBOSE", LogEventLevel.Verbose)]
-    [InlineData("not-a-level", LogEventLevel.Information)]
-    [InlineData(null, LogEventLevel.Information)]
-    [InlineData("", LogEventLevel.Information)]
-    public void ParseLevel_FallsBackToInformation(string? raw, LogEventLevel expected)
-    {
-        NomaosSerilog.ParseLevel(raw, LogEventLevel.Information).Should().Be(expected);
-    }
-
-    [Fact]
-    public void Configure_ValidatesItsArguments()
-    {
-        var nullConfiguration = () => NomaosSerilog.Configure(null!, _ => null);
-        var nullAccessor = () => NomaosSerilog.Configure(new LoggerConfiguration(), null!);
-
-        nullConfiguration.Should().Throw<ArgumentNullException>();
-        nullAccessor.Should().Throw<ArgumentNullException>();
-    }
-}

@@ -52,7 +52,7 @@ var builder = WebApplication.CreateBuilder(args);
 //
 // writeToProviders: true is what lets the OpenTelemetry logging provider see
 // the same events, so OTLP log records and stdout lines never disagree.
-// See NomaosSerilog for the LOG_LEVEL / LOG_FILE_PATH / AWS_LOGS_ENABLED knobs.
+// See NomaosSerilog for the LOG_LEVEL / LOG_FILE_PATH knobs.
 // ─────────────────────────────────────────────────────────────────────────────
 Log.Logger = NomaosSerilog.CreateBootstrapLogger();
 
