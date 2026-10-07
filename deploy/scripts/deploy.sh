@@ -16,7 +16,7 @@
 #   8. Flip Nginx atomically
 #   9. Verify traffic through Nginx
 #  10. Stop old slot
-#  11. Prune dangling images
+#  11. Retain Docker image cache
 #
 # IMPORTANT:
 #   Application health failures are NON-FATAL by default.
@@ -59,7 +59,7 @@ COMMIT_SHA=""
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-10}"
 KEEP_OLD="${KEEP_OLD:-false}"
 
-# Application health failures are warnings only by default.
+# Health failures are warnings only by default.
 CONTINUE_ON_HEALTH_FAILURE="${CONTINUE_ON_HEALTH_FAILURE:-true}"
 
 # Health checks.
@@ -68,11 +68,6 @@ CHECK_CONTAINER_LOCAL="${CHECK_CONTAINER_LOCAL:-true}"
 CHECK_NGINX_NETWORK="${CHECK_NGINX_NETWORK:-true}"
 
 # Optional EC2 host check.
-#
-# Example:
-#   HOST_HEALTH_URL=http://127.0.0.1:5000/health/ready
-#
-# Leave empty to skip.
 HOST_HEALTH_URL="${HOST_HEALTH_URL:-}"
 
 CONTAINER_HEALTH_PATH="${CONTAINER_HEALTH_PATH:-/health/ready}"
@@ -102,6 +97,7 @@ Required:
 
   --image <ref>
       Full immutable image reference.
+
       Examples:
         1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos:abc123
         1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos@sha256:abc123...
@@ -185,6 +181,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Validate required arguments
+# ─────────────────────────────────────────────────────────────────────────────
+
 [[ -n "$APP_NAME" ]] || {
   usage >&2
   exit 2
@@ -237,6 +237,10 @@ TARGET="$(other_slot "$ACTIVE")"
 ACTIVE_CONTAINER="${APP_NAME}-${ACTIVE}"
 TARGET_CONTAINER="${APP_NAME}-${TARGET}"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Create required directories
+# ─────────────────────────────────────────────────────────────────────────────
+
 mkdir -p \
   "$UPSTREAM_DIR" \
   "$NOMAOS_STATE_DIR/logs/$APP_NAME/$TARGET"
@@ -245,9 +249,11 @@ mkdir -p \
 # Display deployment plan
 # ─────────────────────────────────────────────────────────────────────────────
 
-# ===============================================================
-#  NomaOS Blue/Green Deployment
-# ===============================================================
+cat <<EOF
+
+===============================================================
+ NomaOS Blue/Green Deployment
+===============================================================
 
   app             : $APP_NAME
   image           : $IMAGE
@@ -255,7 +261,7 @@ mkdir -p \
 
   live slot       : $ACTIVE
   live container  : $ACTIVE_CONTAINER
-  live state      : $(container_state "$ACTIVE_CONTAINER")
+  live state       : $(container_state "$ACTIVE_CONTAINER")
 
   target slot     : $TARGET
   target container: $TARGET_CONTAINER
@@ -275,6 +281,10 @@ mkdir -p \
 ===============================================================
 
 EOF
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dry run
+# ─────────────────────────────────────────────────────────────────────────────
 
 if [[ "${DRY_RUN:-false}" == true ]]; then
   info "dry run — nothing changed"
@@ -329,14 +339,13 @@ retry_command() {
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HTTP probe inside a container
-#
-# Supports either curl or wget.
 # ─────────────────────────────────────────────────────────────────────────────
 
 container_http_probe() {
   local container="$1"
   local url="$2"
 
+  # Prefer curl.
   if docker exec "$container" \
       sh -c 'command -v curl >/dev/null 2>&1'; then
 
@@ -352,6 +361,7 @@ container_http_probe() {
     return $?
   fi
 
+  # Fall back to wget.
   if docker exec "$container" \
       sh -c 'command -v wget >/dev/null 2>&1'; then
 
@@ -366,6 +376,7 @@ container_http_probe() {
     return $?
   fi
 
+  warn "neither curl nor wget exists inside $container"
   return 2
 }
 
@@ -401,6 +412,7 @@ host_http_probe() {
     return $?
   fi
 
+  warn "neither curl nor wget exists on EC2 host"
   return 2
 }
 
@@ -438,8 +450,6 @@ write_upstream() {
   local slot="$1"
   local tmp
 
-  # Create temp file on the SAME filesystem as the final file.
-  # This guarantees mv is an atomic replacement.
   tmp="$(mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.XXXXXX")"
 
   cat > "$tmp" <<EOF
@@ -481,6 +491,7 @@ cleanup_on_failure() {
         -r "$UPSTREAM_BACKUP" ]]; then
 
     warn "restoring previous nginx upstream"
+
     cp "$UPSTREAM_BACKUP" "$UPSTREAM_FILE"
 
     if ! reload_nginx; then
@@ -491,7 +502,7 @@ cleanup_on_failure() {
     set_active_slot "$APP_NAME" "$ACTIVE"
   fi
 
-  # Candidate is never left around after a genuine fatal failure.
+  # Remove candidate after a genuine fatal failure.
   warn "tearing down candidate slot: $TARGET"
 
   compose_target down --remove-orphans \
@@ -522,7 +533,7 @@ ok "image present locally"
 
 info "starting target slot: $TARGET"
 
-# Remove stale candidate from previous failed deployments.
+# Remove stale candidate from a previous failed deployment.
 compose_target down --remove-orphans \
   >/dev/null 2>&1 || true
 
@@ -575,11 +586,11 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. Candidate-container LOCAL healthcheck
 #
-# Runs INSIDE the candidate container:
+# Runs inside the candidate container:
 #
 #   http://127.0.0.1:<APP_PORT>/health/ready
 #
-# This checks the application without depending on:
+# This does not depend on:
 #   - nginx
 #   - Docker DNS
 #   - host port publishing
@@ -626,12 +637,13 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Candidate reachability from Nginx
 #
-# Runs INSIDE nginx container:
+# Runs inside nginx container:
 #
 #   http://nomaos-api-blue:<APP_PORT>/health/ready
+#   http://nomaos-api-green:<APP_PORT>/health/ready
 #
-# This verifies Docker-network connectivity between nginx and the candidate.
-# It is NOT the public/domain URL.
+# This verifies Docker-network connectivity.
+# It does NOT call the public Nomaos domain.
 # ─────────────────────────────────────────────────────────────────────────────
 
 NGINX_NETWORK_OK=false
@@ -673,13 +685,6 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. Optional EC2 HOST healthcheck
-#
-# Only performed when HOST_HEALTH_URL is supplied.
-#
-# Example:
-#   HOST_HEALTH_URL=http://127.0.0.1:5002/health/ready
-#
-# This requires the candidate port to be published on the EC2 host.
 # ─────────────────────────────────────────────────────────────────────────────
 
 HOST_HEALTH_OK=true
@@ -719,17 +724,17 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Health summary before traffic flip
+# Health summary
 # ─────────────────────────────────────────────────────────────────────────────
 
 echo ""
 echo "───────────────────────────────────────────────────────────────"
 echo " Candidate health summary"
 echo "───────────────────────────────────────────────────────────────"
-echo " Docker health       : $([ "$DOCKER_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL")"
-echo " Container-local     : $([ "$LOCAL_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL")"
-echo " Nginx network       : $([ "$NGINX_NETWORK_OK" = true ] && echo "PASS" || echo "FAIL")"
-echo " EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/SKIPPED")"
+echo " Docker health       : $([ "$DOCKER_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
+echo " Container-local     : $([ "$LOCAL_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
+echo " Nginx network       : $([ "$NGINX_NETWORK_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
+echo " EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING/SKIPPED")"
 echo " Continue on failure: $CONTINUE_ON_HEALTH_FAILURE"
 echo "───────────────────────────────────────────────────────────────"
 echo ""
@@ -756,16 +761,13 @@ fi
 
 write_upstream "$TARGET"
 
-# Mark as flipped BEFORE reload so the failure trap knows that the upstream
-# file was modified and must be restored if nginx reload fails.
+# Mark that the upstream has been modified.
 FLIPPED=true
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. Nginx validation + reload
 #
-# THIS REMAINS FATAL.
-#
-# An invalid nginx configuration must never be silently ignored.
+# Nginx/configuration errors remain FATAL.
 # ─────────────────────────────────────────────────────────────────────────────
 
 if ! reload_nginx; then
@@ -779,14 +781,9 @@ ok "traffic switched to $TARGET"
 # ─────────────────────────────────────────────────────────────────────────────
 # 9. Post-flip edge healthcheck
 #
-# This checks nginx itself.
+# Runs inside nginx against nginx itself.
 #
-# It uses:
-#   http://127.0.0.1/health
-#
-# from INSIDE the nginx container.
-#
-# This is intentionally NON-FATAL.
+# This is NON-FATAL.
 # ─────────────────────────────────────────────────────────────────────────────
 
 EDGE_OK=false
@@ -823,15 +820,13 @@ done
 if [[ "$EDGE_OK" != true ]]; then
 
   warn "post-flip edge /health check failed"
-
   warn "This check is NON-FATAL."
-
-  warn "The candidate was already switched into service."
 
   warn "Direct candidate URL:"
   warn "http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
 
   warn "Candidate logs:"
+
   docker logs \
     --tail 100 \
     "$TARGET_CONTAINER" 2>&1 |
@@ -839,9 +834,8 @@ if [[ "$EDGE_OK" != true ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Deployment has passed the traffic flip.
-#
-# From this point onward, cleanup must NOT trigger the rollback trap.
+# The traffic flip has succeeded.
+# Disable rollback trap before retiring old slot.
 # ─────────────────────────────────────────────────────────────────────────────
 
 trap - EXIT
@@ -886,13 +880,20 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 11. Cleanup dangling images
+# 11. Preserve Docker layer cache
 # ─────────────────────────────────────────────────────────────────────────────
 
 info "retaining Docker image cache for faster future deployments"
 
+# Intentionally do NOT run:
+#
+#   docker image prune -f
+#
+# Keeping cached image layers allows future ECR pulls to reuse unchanged
+# layers and reduces deployment time.
+
 # ─────────────────────────────────────────────────────────────────────────────
-# 12. Cleanup backup
+# 12. Remove temporary upstream backup
 # ─────────────────────────────────────────────────────────────────────────────
 
 if [[ -n "$UPSTREAM_BACKUP" ]]; then
@@ -900,7 +901,7 @@ if [[ -n "$UPSTREAM_BACKUP" ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 13. Final status
+# 13. Final deployment status
 # ─────────────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -918,7 +919,7 @@ echo ""
 echo "  Docker health       : $([ "$DOCKER_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo "  Container local     : $([ "$LOCAL_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo "  Nginx network       : $([ "$NGINX_NETWORK_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
-echo "  EC2 host             : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING/SKIPPED")"
+echo "  EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING/SKIPPED")"
 echo "  Edge /health        : $([ "$EDGE_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo ""
 echo "  Health failures     : NON-FATAL"
@@ -937,6 +938,7 @@ if [[ "$DOCKER_HEALTH_OK" != true ||
 else
 
   ok "all health checks passed"
+
 fi
 
 exit 0
