@@ -1,4 +1,3 @@
-```bash
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
 # deploy.sh — containerized blue/green deployment for NomaOS on EC2
@@ -943,4 +942,3 @@ else
 fi
 
 exit 0
-```
