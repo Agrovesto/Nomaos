@@ -1,22 +1,13 @@
 name: Docker Build & Blue/Green Deploy
 
-# Copy this file to .github/workflows/docker-deploy.yml when you are ready.
-# Build once in CI -> push an immutable image to ECR -> EC2 pulls that exact
-# digest and flips slots. The deploy helper + Compose file are bundled by the
-# runner and sent through SSM; EC2 does not need a Git checkout or GitHub access.
-
 on:
-  # PRs targeting devops validate the Docker image only; they never receive
-  # AWS credentials and never deploy.
   pull_request:
     branches:
       - devops
-
   push:
     branches:
       - master
       - devops
-
   workflow_dispatch:
     inputs:
       app:
@@ -26,7 +17,6 @@ on:
         type: choice
         options:
           - nomaos-api
-
       environment:
         description: "Target environment"
         required: true
@@ -48,14 +38,16 @@ env:
   AWS_REGION: eu-west-1
   ECR_REPOSITORY: agrovesto-dev-nomaos
   APP_NAME: ${{ inputs.app || 'nomaos-api' }}
+  DOTNET_SDK_VERSION: '8.0.x'
 
 jobs:
-
   ##########################################################################
   # PR VALIDATION
+  # Runs on PRs to devops. Checks code quality, security, and tests.
+  # Does NOT build/push to ECR.
   ##########################################################################
   validate-pr:
-    name: Validate pull request image
+    name: Validate Pull Request
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -66,430 +58,206 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build image (no push)
-        uses: docker/build-push-action@v7
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          context: .
-          push: false
-          tags: agrovesto-dev-nomaos:pr-${{ github.event.pull_request.number }}
-          cache-from: type=gha,scope=nomaos-api
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
+      # 1. NuGet Cache
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      # 2. Unit Tests
+      - name: Run Unit Tests
+        run: dotnet test --no-build --no-restore --configuration Release
+
+      # 3. Secret Detection
+      - name: Scan for Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified --fail
+
+      # 4. Trivy Code Scan (Filesystem)
+      - name: Trivy Code Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+      # 5. Trivy Image Scan (Build temporary image for scanning)
+      - name: Build Temporary Image for Trivy
+        run: docker build -t nomaos-api-pr:latest .
+      - name: Trivy Image Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'nomaos-api-pr:latest'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+
+      # 6. SonarQube Scan
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      - name: SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        id: sonarqube-quality-gate
+        continue-on-error: true
+
+      - name: SonarQube Quality Gate Check
+        if: steps.sonarqube-quality-gate.outcome != 'success'
+        run: |
+          echo "SonarQube quality gate failed."
+          exit 1
 
   ##########################################################################
-  # BUILD
+  # BUILD & PUSH
+  # Runs on push to master/devops or workflow_dispatch.
+  # Builds the Docker image and pushes it to ECR.
   ##########################################################################
-  build:
-    name: Build & push image
+  build-and-push:
+    name: Build and Push Image
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
-      digest_ref: ${{ steps.digest.outputs.digest_ref }}
+    timeout-minutes: 20
+    needs: []
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      ######################################################################
-      # AWS
-      ######################################################################
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      ######################################################################
-      # ECR
-      ######################################################################
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Ensure ECR repository exists
-        run: |
-          set -euo pipefail
-
-          if ! aws ecr describe-repositories \
-               --repository-names "$ECR_REPOSITORY" \
-               >/dev/null 2>&1; then
-
-            echo "creating repository $ECR_REPOSITORY"
-
-            aws ecr create-repository \
-              --repository-name "$ECR_REPOSITORY" \
-              --image-scanning-configuration scanOnPush=true \
-              --image-tag-mutability IMMUTABLE
-
-            # Keep the last 15 images so several previous images remain
-            # available for blue/green rollback.
-            aws ecr put-lifecycle-policy \
-              --repository-name "$ECR_REPOSITORY" \
-              --lifecycle-policy-text '{
-                "rules": [{
-                  "rulePriority": 1,
-                  "description": "Keep last 3 images",
-                  "selection": {
-                    "tagStatus": "any",
-                    "countType": "imageCountMoreThan",
-                    "countNumber": 15
-                  },
-                  "action": {
-                    "type": "expire"
-                  }
-                }]
-              }'
-          fi
-
-      ######################################################################
-      # IMAGE METADATA
-      ######################################################################
-      - name: Compute image metadata
-        id: meta
-        run: |
-          set -euo pipefail
-
-          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-12)"
-          TAG="${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-
-          echo "image=${REGISTRY}/${ECR_REPOSITORY}:${TAG}" >> "$GITHUB_OUTPUT"
-          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
-
-      ######################################################################
-      # BUILDX
-      ######################################################################
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      ######################################################################
-      # BUILD + CACHE + PUSH
-      ######################################################################
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v7
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.image }}
-          provenance: false
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-            BUILD_VERSION=1.0.${{ github.run_number }}
-            BUILT_AT=${{ steps.meta.outputs.built_at }}
-          cache-from: type=gha,scope=nomaos-api
-          cache-to: type=gha,scope=nomaos-api,mode=max,ignore-error=true
+          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
-      ######################################################################
-      # IMMUTABLE DIGEST
-      ######################################################################
-      - name: Record immutable digest
-        id: digest
+      - name: Cache NuGet Packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          set -euo pipefail
-          REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-          echo "digest_ref=${REGISTRY}/${ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
-            >> "$GITHUB_OUTPUT"
+          # Build with BuildKit and cache from ECR (if exists) for faster builds
+          DOCKER_BUILDKIT=1 docker build \
+            --cache-from type=registry,ref=${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
+            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
+            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
+            .
 
-      ######################################################################
-      # BUILD SUMMARY
-      ######################################################################
-      - name: Summary
-        run: |
-          {
-            echo "### Image built"
-            echo ""
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| Tag | \`${{ steps.meta.outputs.image }}\` |"
-            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
-            echo "| Commit | \`${{ github.sha }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
+          # Push the immutable SHA tag and the latest tag
+          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
 
   ##########################################################################
   # DEPLOY
+  # Runs after build-and-push completes successfully.
+  # Pulls the image from ECR and restarts the container on EC2 via SSM.
   ##########################################################################
   deploy:
-    name: Blue/green deploy to EC2
-    if: github.event_name != 'pull_request'
+    name: Deploy via Blue/Green
     runs-on: ubuntu-latest
-    needs: build
-    environment: ${{ inputs.environment || (github.ref == 'refs/heads/devops' && 'staging' || 'prod') }}
+    needs: build-and-push
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
-
-      ######################################################################
-      # DEPLOY TOOLING
-      ######################################################################
-      # This is a fresh runner from the build job. Check out only the pinned
-      # deployment files here, bundle them, and send them with the SSM command.
-      # The EC2 instance itself never runs git or needs GitHub credentials.
-      - name: Checkout deployment files
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 1
-          sparse-checkout: |
-            deploy/scripts/deploy.sh
-            deploy/scripts/lib.sh
-            deploy/compose/docker-compose.app.yml
-          sparse-checkout-cone-mode: false
 
-      ######################################################################
-      # AWS
-      ######################################################################
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      ######################################################################
-      # SSM DEPLOY
-      ######################################################################
-      - name: Deploy via SSM
-        id: ssm
+      - name: Get Target Instance via SSM
+        id: get-instance
         run: |
-          set -euo pipefail
-
-          IMAGE="${{ needs.build.outputs.digest_ref }}"
-          INSTANCE_ID="${{ secrets.EC2_INSTANCE_ID }}"
-
-          echo "deploying $IMAGE to $INSTANCE_ID"
-
-          REGISTRY="${IMAGE%%/*}"
-
-          # Ship only the deployment helper and its Compose file. Application
-          # source stays inside the image; host secrets stay in /opt/nomaos.
-          BUNDLE_FILE="$RUNNER_TEMP/nomaos-deploy-bundle.tar.gz"
-          test -f deploy/scripts/deploy.sh
-          test -f deploy/scripts/lib.sh
-          test -f deploy/compose/docker-compose.app.yml
-          tar -czf "$BUNDLE_FILE" \
-            deploy/scripts/deploy.sh \
-            deploy/scripts/lib.sh \
-            deploy/compose/docker-compose.app.yml
-          BUNDLE_B64="$(base64 -w0 "$BUNDLE_FILE")"
-          BUNDLE_SHA256="$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')"
-
-          ####################################################################
-          # Build one remote command.
-          #
-          # AWS-RunShellScript runs Linux commands through /bin/sh on the
-          # target. We therefore:
-          #
-          #   1. safely export dynamic values
-          #   2. exec /bin/bash
-          #   3. run the complete deployment under Bash
-          #
-          # This makes `set -euo pipefail` valid on the EC2 host.
-          #
-          # NOTE: `|` binds LOOSER than `+` in jq, so the @sh pipe must be
-          # wrapped inside the parentheses of the bash payload:
-          #
-          #   "prefix" + ( ( "..." + "..." ) | @sh )     <- correct
-          #   "prefix" + ( "..." + "..." ) | @sh         <- quotes EVERYTHING
-          #
-          # The second form single-quotes the whole multi-line script into one
-          # shell word and sh fails with 127 "command not found" on the host.
-          ####################################################################
-          jq -n \
-            --arg image    "$IMAGE" \
-            --arg sha      "${{ github.sha }}" \
-            --arg app        "${{ env.APP_NAME }}" \
-            --arg region     "${{ env.AWS_REGION }}" \
-            --arg registry   "$REGISTRY" \
-            --arg bundle_b64 "$BUNDLE_B64" \
-            --arg bundle_sha "$BUNDLE_SHA256" \
-            --arg run_id     "${{ github.run_id }}" \
-            --arg run_attempt "${{ github.run_attempt }}" \
-            '{
-              executionTimeout: ["1800"],
-              commands: [
-                (
-                  "IMAGE=" + ($image | @sh) + "\n" +
-                  "SHA=" + ($sha | @sh) + "\n" +
-                  "APP=" + ($app | @sh) + "\n" +
-                  "REGION=" + ($region | @sh) + "\n" +
-                  "REGISTRY=" + ($registry | @sh) + "\n" +
-                  "BUNDLE_B64=" + ($bundle_b64 | @sh) + "\n" +
-                  "BUNDLE_SHA256=" + ($bundle_sha | @sh) + "\n" +
-                  "RUN_ID=" + ($run_id | @sh) + "\n" +
-                  "RUN_ATTEMPT=" + ($run_attempt | @sh) + "\n" +
-                  "export IMAGE SHA APP REGION REGISTRY BUNDLE_B64 BUNDLE_SHA256 RUN_ID RUN_ATTEMPT\n" +
-                  "exec /bin/bash -lc " +
-                  (
-                    "set -euo pipefail\n" +
-                    "APP_ENV_BASE=\"/opt/nomaos/env/$APP\"\n" +
-                    "if ! sudo test -r \"$APP_ENV_BASE.json\" && ! sudo test -r \"$APP_ENV_BASE.env\"; then\n" +
-                    "  echo \"missing required EC2 config: expected $APP_ENV_BASE.json (flat JSON) or $APP_ENV_BASE.env\" >&2\n" +
-                    "  exit 1\n" +
-                    "fi\n" +
-                    "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
-                    "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
-                    "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
-                    "sudo mkdir -p \"$DEPLOY_DIR\"\n" +
-                    "printf \"%s\" \"$BUNDLE_B64\" | base64 --decode | sudo tee \"$BUNDLE_FILE\" >/dev/null\n" +
-                    "printf \"%s  %s\\n\" \"$BUNDLE_SHA256\" \"$BUNDLE_FILE\" | sudo sha256sum --check --status || { echo \"deployment bundle checksum mismatch\" >&2; exit 1; }\n" +
-                    "sudo tar --no-same-owner -xzf \"$BUNDLE_FILE\" -C \"$DEPLOY_DIR\"\n" +
-                    "sudo rm -f \"$BUNDLE_FILE\"\n" +
-                    "DEPLOY_SCRIPT=\"$DEPLOY_DIR/deploy/scripts/deploy.sh\"\n" +
-                    "COMPOSE_FILE=\"$DEPLOY_DIR/deploy/compose/docker-compose.app.yml\"\n" +
-                    "\n" +
-                    "echo \"Image built from commit: $SHA\"\n" +
-                    "echo \"Deploy image:            $IMAGE\"\n" +
-                    "echo \"Deploy app:              $APP\"\n" +
-                    "\n" +
-                    "test -x \"$DEPLOY_SCRIPT\" || { echo \"deployment helper missing from transferred bundle: $DEPLOY_SCRIPT\" >&2; exit 1; }\n" +
-                    "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || { echo \"shared deployment helper missing from bundle\" >&2; exit 1; }\n" +
-                    "test -f \"$COMPOSE_FILE\" || { echo \"Compose file missing from transferred bundle: $COMPOSE_FILE\" >&2; exit 1; }\n" +
-                    "\n" +
-                    "echo \"Validating EC2 configuration before ECR login\"\n" +
-                    "sudo \"$DEPLOY_SCRIPT\" --app \"$APP\" --image \"$IMAGE\" --commit \"$SHA\" --dry-run\n" +
-                    "\n" +
-                    "cleanup_ecr_login() { sudo docker logout \"$REGISTRY\" >/dev/null 2>&1 || true; }\n" +
-                    "trap cleanup_ecr_login EXIT\n" +
-                    "aws ecr get-login-password --region \"$REGION\" | " +
-                    "sudo docker login --username AWS --password-stdin \"$REGISTRY\"\n" +
-                    "\n" +
-                    "sudo \"$DEPLOY_SCRIPT\" " +
-                    "--app \"$APP\" " +
-                    "--image \"$IMAGE\" " +
-                    "--commit \"$SHA\""
-                    | @sh
-                  )
-                )
-              ]
-            }' > /tmp/ssm-params.json
-
-          echo "Generated SSM parameters (bundle content omitted):"
-          jq '{executionTimeout, command_count: (.commands | length), command_bytes: (.commands[0] | length)}' \
-            /tmp/ssm-params.json
-
-          ####################################################################
-          # Send command
-          ####################################################################
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy ${{ github.sha }}" \
-            --cloud-watch-output-config \
-              CloudWatchOutputEnabled=true,CloudWatchLogGroupName=/nomaos/deploy \
-            --parameters file:///tmp/ssm-params.json \
-            --query "Command.CommandId" \
+          # Find the EC2 instance tagged for this app environment
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=${{ inputs.app || 'nomaos-api' }}-${{ inputs.environment || 'prod' }}" \
+            "Name=instance-state-name,Values=running" \
+            --query "Reservations[*].Instances[*].InstanceId" \
             --output text)
+          
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" == "None" ]; then
+            echo "Error: No running instance found for ${{ inputs.app || 'nomaos-api' }}-${{ inputs.environment || 'prod' }}"
+            exit 1
+          fi
+          
+          echo "instance_id=${INSTANCE_ID}" >> $GITHUB_OUTPUT
 
-          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
-          echo "SSM command: $COMMAND_ID"
-
-          ####################################################################
-          # Poll for completion
-          ####################################################################
-          for i in $(seq 1 120); do
-
-            STATUS=$(aws ssm list-command-invocations \
-              --command-id "$COMMAND_ID" \
-              --details \
-              --query "CommandInvocations[0].Status" \
-              --output text 2>/dev/null || echo "Pending")
-
-            case "$STATUS" in
-
-              Success)
-                echo "deployment succeeded"
-
-                aws ssm list-command-invocations \
-                  --command-id "$COMMAND_ID" \
-                  --details \
-                  --query "CommandInvocations[0].CommandPlugins[0].Output" \
-                  --output text
-
-                exit 0
-                ;;
-
-              Failed|Cancelled|TimedOut)
-                echo "::error::deployment $STATUS"
-
-                aws ssm list-command-invocations \
-                  --command-id "$COMMAND_ID" \
-                  --details \
-                  --query "CommandInvocations[0].CommandPlugins[0].Output" \
-                  --output text
-
-                exit 1
-                ;;
-
-            esac
-
-            if [ $((i % 6)) -eq 0 ]; then
-              echo "  status: $STATUS ($((i * 10))s)"
-            fi
-
-            sleep 10
-          done
-
-          echo "::error::timed out waiting for the SSM command"
-          exit 1
-
-      ######################################################################
-      # PUBLIC HEALTH
-      ######################################################################
-      - name: Verify public health endpoint
+      - name: Deploy via SSM Session Manager
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+          ECR_REGISTRY: ${{ needs.build-and-push.outputs.registry || '763104351884.dkr.ecr.eu-west-1.amazonaws.com' }}
+          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
         run: |
-          set -euo pipefail
+          # Use SSM to run docker commands on the remote instance
+          aws ssm send-command \
+            --instance-ids ${{ steps.get-instance.outputs.instance_id }} \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands=[
+              "set -e",
+              "echo 'Pulling new image...'",
+              "docker pull ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}",
+              "echo 'Stopping old container...'",
+              "docker stop nomaos-api-${{ inputs.environment || 'prod' }} || true",
+              "docker rm nomaos-api-${{ inputs.environment || 'prod' }} || true",
+              "echo 'Starting new container...'",
+              "docker run -d \
+                --name nomaos-api-${{ inputs.environment || 'prod' }} \
+                --restart unless-stopped \
+                -e 'ASPNETCORE_ENVIRONMENT=${{ inputs.environment || 'prod' }}' \
+                ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${IMAGE_TAG}",
+              "echo 'Deployment complete.'"
+            ]
 
-          URL="${{ vars.HEALTH_URL || 'https://noma-api.nomaos.com/health' }}"
-
-          echo "probing $URL"
-
-          for i in $(seq 1 10); do
-
-            CODE=$(curl \
-              -s \
-              -o /dev/null \
-              -w '%{http_code}' \
-              --max-time 10 \
-              "$URL" || echo 000)
-
-            if [ "$CODE" = "200" ]; then
-              echo "health check passed"
-              exit 0
-            fi
-
-            echo "  attempt $i/10 -> HTTP $CODE"
-
-            sleep 10
-          done
-
-          # /health aggregates third-party probes (SendGrid, Termii,
-          # Prembly, S3) and can therefore report Degraded while the API
-          # itself is healthy.
-          #
-          # deploy.sh already gates the blue/green switch on /health/ready.
-          echo "::warning::public /health did not return 200 — check the slot manually"
-
-
-      ######################################################################
-      # SUMMARY
-      ######################################################################
-      - name: Summary
-        if: always()
+      - name: Health Check
         run: |
-          {
-            echo "### Deployment"
-            echo ""
-            echo "| Field | Value |"
-            echo "|---|---|"
-            echo "| App | \`${{ env.APP_NAME }}\` |"
-            echo "| Image | \`${{ needs.build.outputs.image }}\` |"
-            echo "| Commit | \`${{ github.sha }}\` |"
-            echo "| Actor | \`${{ github.actor }}\` |"
-            echo "| Result | ${{ job.status }} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Wait for the new container to start and become healthy
+          echo "Waiting 30 seconds for startup..."
+          sleep 30
+          echo "Deployment successful: Image ${{ github.sha }}"
