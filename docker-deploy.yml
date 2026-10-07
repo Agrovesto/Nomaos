@@ -41,12 +41,136 @@ env:
   DOTNET_SDK_VERSION: '8.0.x'
 
 jobs:
+
+  ##########################################################################
+  # Trivy validation
+  # Runs on PRs to devops. Checks code quality, security, and tests.
+  # Does NOT build/push to ECR.
+  ##########################################################################
+
+  TrivyScan:
+    runs-on: ubuntu-latest
+    environment: staging
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # sha for v5.0.1
+
+      - name: Scan for Secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          extra_args: --only-verified --fail
+
+      - name: Trivy scan repo (vuln + secrets + misconfig)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # sha for v0.36.0
+        with:
+          # version: v0.69.3
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: "1"
+          severity: "HIGH,CRITICAL"
+
+
+  ##########################################################################
+  # Sonarqube validation
+  # Runs on PRs to devops. Checks code quality, security, and tests.
+  # Does NOT build/push to ECR.
+  ##########################################################################
+
+SASTSonarQube:
+  needs: TrivyScan
+  runs-on: ubuntu-latest
+  environment: secops
+  if: github.event_name == 'pull_request'
+  steps:
+    - name: Checkout
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # sha for v5.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@d4c94342e560b47a8f9f5c2f5b0e8b8f4c8f8b9 # pin to approved SHA
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Display .NET version
+      run: |
+        dotnet --version
+        dotnet --list-sdks
+
+    - name: Restore dependencies
+      run: |
+        dotnet restore Agrovesto.Backend.API/Agrovesto.Backend.API.csproj
+
+    - name: Get package version
+      id: pkg_version
+      run: |
+        VERSION=$(dotnet msbuild Agrovesto.Backend.API/Agrovesto.Backend.API.csproj -getProperty:Version)
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+    - name: Install SonarScanner
+      run: |
+        dotnet tool install --global dotnet-sonarscanner
+        echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+    - name: SonarQube Begin
+      env:
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        dotnet sonarscanner begin \
+          /k:"${{ secrets.SONAR_PROJECT }}" \
+          /d:sonar.host.url="${SONAR_HOST_URL}" \
+          /d:sonar.token="${SONAR_TOKEN}" \
+          /d:sonar.projectVersion="${VERSION}" \
+          /d:sonar.cs.opencover.reportsPaths="coverage/coverage.opencover.xml" \
+          /d:sonar.exclusions="**/bin/**,**/obj/**,**/Migrations/**,**/*.md"
+
+    - name: Build
+      run: |
+        dotnet build Agrovesto.Backend.API/Agrovesto.Backend.API.csproj \
+          --configuration Release \
+          --no-restore
+
+    - name: Test and coverage
+      run: |
+        mkdir -p coverage
+
+        dotnet test \
+          --configuration Release \
+          --no-build \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./coverage \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+    - name: Locate coverage report
+      run: |
+        find coverage -type f -name "*.opencover.xml" -print
+
+    - name: SonarQube End
+      env:
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        dotnet sonarscanner end \
+          /d:sonar.token="${SONAR_TOKEN}"
+
+    - name: Check SonarQube Quality Gate
+      id: check_quality_gate
+      uses: sonarsource/sonarqube-quality-gate-action@cf038b0e0cdecfa9e56c198bbb7d21d751d62c3b # sha for v1.2.0
+      env:
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   ##########################################################################
   # PR VALIDATION
   # Runs on PRs to devops. Checks code quality, security, and tests.
   # Does NOT build/push to ECR.
   ##########################################################################
   validate-pr:
+    needs: [TrivyScan, SASTSonarQube]
     name: Validate Pull Request
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -63,27 +187,84 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
 
-      # 1. NuGet Cache
-      - name: Cache NuGet Packages
-        uses: actions/cache@v4
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # sha for v5.0.1
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # sha for v4.0.0
+      
+      - name: Build and tag image
+        id: build-image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f #sha for v7.1.0
         with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: |
+            ${{ env.ECR_REPOSITORY }}:latest
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Restore Dependencies
-        run: dotnet restore
+      - name: Trivy scan (fail on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # sha for v0.36.0
+        with:
+            # version: v0.69.3
+            image-ref: ${{ env.ECR_REPOSITORY }}:latest
+            scanners: vuln
+            format: json
+            output: trivy-image-report.json
+            exit-code: "0"
+            ignore-unfixed: false
+            vuln-type: "os,library"
+            severity: "HIGH,CRITICAL"
 
-      # 2. Unit Tests
-      - name: Run Unit Tests
-        run: dotnet test --no-build --no-restore --configuration Release
+      - name: Generate Clean GitHub Job Summary
+        if: always()
+        run: |
+          echo "## 🛡️ Trivy Scan Vulnerability Summary" >> "$GITHUB_STEP_SUMMARY"
 
+          # Check if any vulnerabilities were found
+          VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities // [] | length] | add // 0' trivy-image-report.json)
+
+          if [ "$VULN_COUNT" -eq 0 ]; then
+            echo "✅ No HIGH or CRITICAL patchable vulnerabilities found!" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ Found **$VULN_COUNT** actionable vulnerabilities." >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            echo "| Package | Severity | Vulnerability ID | Installed Version | Fixed Version | Source | Location |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| --- | --- | --- | --- | --- | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+            jq -r '
+              .Results[] |
+              . as $result |
+              ($result.Target // "-") as $target |
+              ($result.Vulnerabilities // [])[] |
+              [
+                .PkgName // "-",
+                .Severity // "-",
+                .VulnerabilityID // "-",
+                .InstalledVersion // "-",
+                (.FixedVersion // "-"),
+                $target,
+                (.PkgPath // "-")
+              ] |
+              @tsv
+            ' trivy-image-report.json |
+            head -n 30 |
+            while IFS=$'\t' read -r package severity vuln installed fixed source location; do
+              echo "| $package | $severity | $vuln | $installed | $fixed | $source | $location |" >> "$GITHUB_STEP_SUMMARY"
+            done
+
+            if [ "$VULN_COUNT" -gt 30 ]; then
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "*Note: Output truncated to the top 30 items. Download the full artifact JSON to see all $VULN_COUNT items.*" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
       # 3. Secret Detection
-      - name: Scan for Secrets
-        uses: trufflesecurity/trufflehog@main
-        with:
-          extra_args: --only-verified --fail
+
 
       # 4. Trivy Code Scan (Filesystem)
       - name: Trivy Code Scan
@@ -94,36 +275,6 @@ jobs:
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
-
-      # 5. Trivy Image Scan (Build temporary image for scanning)
-      - name: Build Temporary Image for Trivy
-        run: docker build -t nomaos-api-pr:latest .
-      - name: Trivy Image Scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'nomaos-api-pr:latest'
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
-
-      # 6. SonarQube Scan
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-
-      - name: SonarQube Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        timeout-minutes: 5
-        id: sonarqube-quality-gate
-        continue-on-error: true
-
-      - name: SonarQube Quality Gate Check
-        if: steps.sonarqube-quality-gate.outcome != 'success'
-        run: |
-          echo "SonarQube quality gate failed."
-          exit 1
 
   ##########################################################################
   # BUILD & PUSH
@@ -142,51 +293,89 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # sha for v5.0.1
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7 # sha for v6.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Create repository if ∄
+        # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ecr/create-repository.html
+        run: |
+          LIFECYCLE_POLICY_FILE=$(mktemp)
+
+          echo '{
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only the last 3 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 3
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }' > "$LIFECYCLE_POLICY_FILE"
+
+          if ! aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} > /dev/null 2>&1; then
+            echo "Repository does not exist. Creating repository..."
+            aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+
+            echo "Applying lifecycle policy..."
+            aws ecr put-lifecycle-policy \
+                --repository-name ${{ env.ECR_REPOSITORY }} \
+                --lifecycle-policy file://$LIFECYCLE_POLICY_FILE
+          else
+            echo "Repository already exists."
+          fi
+
+          rm "$LIFECYCLE_POLICY_FILE"
+
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # sha for v2.1.2
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_SDK_VERSION }}
+      - name: Get short SHA
+        run: |
+          calculatedSha=$(echo ${{ github.sha }} | cut -c 1-12)
+          echo "SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
 
-      - name: Cache NuGet Packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # sha for v4.0.0
 
-      - name: Restore Dependencies
-        run: dotnet restore
-
-      - name: Build and Push Docker Image
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f #sha for v7.1.0
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-          IMAGE_TAG: ${{ github.sha }}
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.SHORT_SHA }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Commit files
         run: |
-          # Build with BuildKit and cache from ECR (if exists) for faster builds
-          DOCKER_BUILDKIT=1 docker build \
-            --cache-from type=registry,ref=${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
-            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
-            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest \
-            .
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git commit -am "Bump docker tag"
 
-          # Push the immutable SHA tag and the latest tag
-          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
-          docker push ${ECR_REGISTRY}/${ECR_REPOSITORY}:latest
-
+      - name: Pushing to the protected branch 'protected'
+        uses: CasperWA/push-protected@74d25b8aa10e0c29024138735d32f3c0b75f9279 # sha for v2.16.0
+        with:
+          token: ${{ secrets.PAT }}
+          branch: dev
   ##########################################################################
   # DEPLOY
   # Runs after build-and-push completes successfully.
@@ -204,10 +393,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # sha for v5.0.1
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # sha for v6.0.0
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
@@ -231,7 +420,7 @@ jobs:
 
       - name: Deploy via SSM Session Manager
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_TAG: ${{ env.SHORT_SHA }}
           ECR_REGISTRY: ${{ needs.build-and-push.outputs.registry || '763104351884.dkr.ecr.eu-west-1.amazonaws.com' }}
           ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
         run: |
@@ -260,4 +449,4 @@ jobs:
           # Wait for the new container to start and become healthy
           echo "Waiting 30 seconds for startup..."
           sleep 30
-          echo "Deployment successful: Image ${{ github.sha }}"
+          echo "Deployment successful: Image ${{ env.SHORT_SHA }}"

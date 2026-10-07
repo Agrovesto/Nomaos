@@ -1,5 +1,3 @@
-using AWS.Logger;
-using AWS.Logger.SeriLog;
 using Serilog;
 using Serilog.Events;
 using Serilog.Formatting.Json;
@@ -26,15 +24,10 @@ namespace Agrovesto.Backend.API.Observability;
 /// </summary>
 public static class NomaosSerilog
 {
-    public const string DefaultLogGroup = "/nomaos/prod/api";
-    public const string DefaultLogRegion = "eu-west-1";
 
     /// <summary>
     /// Console-only logger used between process start and host build, so the
-    /// "starting up" / "Vault unreachable" lines are still JSON on stdout.
-    /// Deliberately without the CloudWatch sink: the real logger replaces this
-    /// one a few milliseconds later and two CloudWatch sinks would mean two
-    /// background flush threads for the lifetime of the process.
+    /// "starting up" / "Vault unreachable" lines are still JSON on stdout..
     /// </summary>
     public static Serilog.ILogger CreateBootstrapLogger() =>
         new LoggerConfiguration()
@@ -86,52 +79,7 @@ public static class NomaosSerilog
                 shared: true);
         }
 
-        ApplyCloudWatchSink(configuration, getEnv, environmentName);
-
         return configuration;
-    }
-
-    /// <summary>
-    /// Attaches the CloudWatch sink when enabled.
-    ///
-    /// Excluded from coverage on purpose: constructing the sink instantiates an
-    /// AmazonCloudWatchLogs client and starts its background flush loop, so a
-    /// test that covered this line would either need real AWS credentials or
-    /// would leave a retrying network thread behind — the definition of a flaky
-    /// test. The *decision* (<see cref="CloudWatchEnabled"/>) is fully tested.
-    /// </summary>
-    [System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-    private static void ApplyCloudWatchSink(
-        LoggerConfiguration configuration,
-        Func<string, string?> getEnv,
-        string environmentName)
-    {
-        if (!CloudWatchEnabled(getEnv, environmentName))
-        {
-            return;
-        }
-
-        configuration.WriteTo.AWSSeriLog(new AWSLoggerConfig
-        {
-            LogGroup = Coalesce(getEnv("AWS_LOG_GROUP"), DefaultLogGroup),
-            Region = Coalesce(getEnv("AWS_REGION"), DefaultLogRegion),
-        });
-    }
-
-    /// <summary>
-    /// CloudWatch is on when AWS_LOGS_ENABLED says so; when the variable is
-    /// absent it falls back to "Production only", which is exactly what the
-    /// pre-container deployment did.
-    /// </summary>
-    internal static bool CloudWatchEnabled(Func<string, string?> getEnv, string environmentName)
-    {
-        var flag = getEnv("AWS_LOGS_ENABLED");
-        if (!string.IsNullOrWhiteSpace(flag))
-        {
-            return ObservabilityOptions.IsTrue(flag);
-        }
-
-        return string.Equals(environmentName, "Production", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static LogEventLevel ParseLevel(string? raw, LogEventLevel fallback) =>
@@ -146,7 +94,6 @@ public static class NomaosSerilog
                 return value.Trim();
             }
         }
-
         return string.Empty;
     }
 }
