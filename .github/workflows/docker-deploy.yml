@@ -1,6 +1,5 @@
 name: Docker Build & Blue/Green Deploy
 
-# Copy this file to .github/workflows/docker-deploy.yml when you are ready.
 # Build once in CI -> push an immutable image to ECR -> EC2 pulls that exact
 # digest and flips slots. The deploy helper + Compose file are bundled by the
 # runner and sent through SSM; EC2 does not need a Git checkout or GitHub access.
@@ -126,14 +125,12 @@ jobs:
               --image-scanning-configuration scanOnPush=true \
               --image-tag-mutability IMMUTABLE
 
-            # Keep the last 15 images so several previous images remain
-            # available for blue/green rollback.
             aws ecr put-lifecycle-policy \
               --repository-name "$ECR_REPOSITORY" \
               --lifecycle-policy-text '{
                 "rules": [{
                   "rulePriority": 1,
-                  "description": "Keep last 3 images",
+                  "description": "Keep last 15 images",
                   "selection": {
                     "tagStatus": "any",
                     "countType": "imageCountMoreThan",
@@ -193,7 +190,9 @@ jobs:
         id: digest
         run: |
           set -euo pipefail
+
           REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+
           echo "digest_ref=${REGISTRY}/${ECR_REPOSITORY}@${{ steps.build.outputs.digest }}" \
             >> "$GITHUB_OUTPUT"
 
@@ -228,9 +227,6 @@ jobs:
       ######################################################################
       # DEPLOY TOOLING
       ######################################################################
-      # This is a fresh runner from the build job. Check out only the pinned
-      # deployment files here, bundle them, and send them with the SSM command.
-      # The EC2 instance itself never runs git or needs GitHub credentials.
       - name: Checkout deployment files
         uses: actions/checkout@v4
         with:
@@ -266,49 +262,33 @@ jobs:
 
           REGISTRY="${IMAGE%%/*}"
 
-          # Ship only the deployment helper and its Compose file. Application
-          # source stays inside the image; host secrets stay in /opt/nomaos.
+          # Ship only deployment tooling and Compose.
           BUNDLE_FILE="$RUNNER_TEMP/nomaos-deploy-bundle.tar.gz"
+
           test -f deploy/scripts/deploy.sh
           test -f deploy/scripts/lib.sh
           test -f deploy/compose/docker-compose.app.yml
+
           tar -czf "$BUNDLE_FILE" \
             deploy/scripts/deploy.sh \
             deploy/scripts/lib.sh \
             deploy/compose/docker-compose.app.yml
+
           BUNDLE_B64="$(base64 -w0 "$BUNDLE_FILE")"
           BUNDLE_SHA256="$(sha256sum "$BUNDLE_FILE" | awk '{print $1}')"
 
           ####################################################################
-          # Build one remote command.
-          #
-          # AWS-RunShellScript runs Linux commands through /bin/sh on the
-          # target. We therefore:
-          #
-          #   1. safely export dynamic values
-          #   2. exec /bin/bash
-          #   3. run the complete deployment under Bash
-          #
-          # This makes `set -euo pipefail` valid on the EC2 host.
-          #
-          # NOTE: `|` binds LOOSER than `+` in jq, so the @sh pipe must be
-          # wrapped inside the parentheses of the bash payload:
-          #
-          #   "prefix" + ( ( "..." + "..." ) | @sh )     <- correct
-          #   "prefix" + ( "..." + "..." ) | @sh         <- quotes EVERYTHING
-          #
-          # The second form single-quotes the whole multi-line script into one
-          # shell word and sh fails with 127 "command not found" on the host.
+          # Build remote SSM command
           ####################################################################
           jq -n \
-            --arg image    "$IMAGE" \
-            --arg sha      "${{ github.sha }}" \
-            --arg app        "${{ env.APP_NAME }}" \
-            --arg region     "${{ env.AWS_REGION }}" \
-            --arg registry   "$REGISTRY" \
+            --arg image "$IMAGE" \
+            --arg sha "${{ github.sha }}" \
+            --arg app "${{ env.APP_NAME }}" \
+            --arg region "${{ env.AWS_REGION }}" \
+            --arg registry "$REGISTRY" \
             --arg bundle_b64 "$BUNDLE_B64" \
             --arg bundle_sha "$BUNDLE_SHA256" \
-            --arg run_id     "${{ github.run_id }}" \
+            --arg run_id "${{ github.run_id }}" \
             --arg run_attempt "${{ github.run_attempt }}" \
             '{
               executionTimeout: ["1800"],
@@ -327,39 +307,72 @@ jobs:
                   "exec /bin/bash -lc " +
                   (
                     "set -euo pipefail\n" +
+
                     "APP_ENV_BASE=\"/opt/nomaos/env/$APP\"\n" +
+
                     "if ! sudo test -r \"$APP_ENV_BASE.json\" && ! sudo test -r \"$APP_ENV_BASE.env\"; then\n" +
-                    "  echo \"missing required EC2 config: expected $APP_ENV_BASE.json (flat JSON) or $APP_ENV_BASE.env\" >&2\n" +
+                    "  echo \"missing required EC2 config: expected $APP_ENV_BASE.json or $APP_ENV_BASE.env\" >&2\n" +
                     "  exit 1\n" +
                     "fi\n" +
+
                     "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
                     "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
                     "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
+
                     "sudo mkdir -p \"$DEPLOY_DIR\"\n" +
-                    "printf \"%s\" \"$BUNDLE_B64\" | base64 --decode | sudo tee \"$BUNDLE_FILE\" >/dev/null\n" +
-                    "printf \"%s  %s\\n\" \"$BUNDLE_SHA256\" \"$BUNDLE_FILE\" | sudo sha256sum --check --status || { echo \"deployment bundle checksum mismatch\" >&2; exit 1; }\n" +
+
+                    "printf \"%s\" \"$BUNDLE_B64\" | " +
+                    "base64 --decode | " +
+                    "sudo tee \"$BUNDLE_FILE\" >/dev/null\n" +
+
+                    "printf \"%s  %s\\n\" \"$BUNDLE_SHA256\" \"$BUNDLE_FILE\" | " +
+                    "sudo sha256sum --check --status || " +
+                    "{ echo \"deployment bundle checksum mismatch\" >&2; exit 1; }\n" +
+
                     "sudo tar --no-same-owner -xzf \"$BUNDLE_FILE\" -C \"$DEPLOY_DIR\"\n" +
+
                     "sudo rm -f \"$BUNDLE_FILE\"\n" +
+
                     "DEPLOY_SCRIPT=\"$DEPLOY_DIR/deploy/scripts/deploy.sh\"\n" +
                     "COMPOSE_FILE=\"$DEPLOY_DIR/deploy/compose/docker-compose.app.yml\"\n" +
-                    "\n" +
+
+                    "sudo chmod +x \"$DEPLOY_SCRIPT\"\n" +
+
                     "echo \"Image built from commit: $SHA\"\n" +
                     "echo \"Deploy image:            $IMAGE\"\n" +
                     "echo \"Deploy app:              $APP\"\n" +
-                    "\n" +
-                    "test -x \"$DEPLOY_SCRIPT\" || { echo \"deployment helper missing from transferred bundle: $DEPLOY_SCRIPT\" >&2; exit 1; }\n" +
-                    "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || { echo \"shared deployment helper missing from bundle\" >&2; exit 1; }\n" +
-                    "test -f \"$COMPOSE_FILE\" || { echo \"Compose file missing from transferred bundle: $COMPOSE_FILE\" >&2; exit 1; }\n" +
-                    "\n" +
+
+                    "test -f \"$DEPLOY_SCRIPT\" || " +
+                    "{ echo \"deployment helper missing: $DEPLOY_SCRIPT\" >&2; exit 1; }\n" +
+
+                    "test -f \"$DEPLOY_DIR/deploy/scripts/lib.sh\" || " +
+                    "{ echo \"shared deployment helper missing\" >&2; exit 1; }\n" +
+
+                    "test -f \"$COMPOSE_FILE\" || " +
+                    "{ echo \"Compose file missing: $COMPOSE_FILE\" >&2; exit 1; }\n" +
+
                     "echo \"Validating EC2 configuration before ECR login\"\n" +
-                    "sudo \"$DEPLOY_SCRIPT\" --app \"$APP\" --image \"$IMAGE\" --commit \"$SHA\" --dry-run\n" +
-                    "\n" +
-                    "cleanup_ecr_login() { sudo docker logout \"$REGISTRY\" >/dev/null 2>&1 || true; }\n" +
+
+                    "sudo /bin/bash \"$DEPLOY_SCRIPT\" " +
+                    "--app \"$APP\" " +
+                    "--image \"$IMAGE\" " +
+                    "--commit \"$SHA\" " +
+                    "--dry-run\n" +
+
+                    "cleanup_ecr_login() { " +
+                    "sudo docker logout \"$REGISTRY\" >/dev/null 2>&1 || true; " +
+                    "}\n" +
+
                     "trap cleanup_ecr_login EXIT\n" +
+
                     "aws ecr get-login-password --region \"$REGION\" | " +
-                    "sudo docker login --username AWS --password-stdin \"$REGISTRY\"\n" +
-                    "\n" +
-                    "sudo \"$DEPLOY_SCRIPT\" " +
+                    "sudo docker login " +
+                    "--username AWS " +
+                    "--password-stdin \"$REGISTRY\"\n" +
+
+                    "echo \"Starting deployment\"\n" +
+
+                    "sudo /bin/bash \"$DEPLOY_SCRIPT\" " +
                     "--app \"$APP\" " +
                     "--image \"$IMAGE\" " +
                     "--commit \"$SHA\""
@@ -370,11 +383,15 @@ jobs:
             }' > /tmp/ssm-params.json
 
           echo "Generated SSM parameters (bundle content omitted):"
-          jq '{executionTimeout, command_count: (.commands | length), command_bytes: (.commands[0] | length)}' \
-            /tmp/ssm-params.json
+
+          jq '{
+            executionTimeout,
+            command_count: (.commands | length),
+            command_bytes: (.commands[0] | length)
+          }' /tmp/ssm-params.json
 
           ####################################################################
-          # Send command
+          # Send SSM command
           ####################################################################
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
@@ -390,7 +407,7 @@ jobs:
           echo "SSM command: $COMMAND_ID"
 
           ####################################################################
-          # Poll for completion
+          # Poll SSM
           ####################################################################
           for i in $(seq 1 120); do
 
@@ -469,13 +486,7 @@ jobs:
             sleep 10
           done
 
-          # /health aggregates third-party probes (SendGrid, Termii,
-          # Prembly, S3) and can therefore report Degraded while the API
-          # itself is healthy.
-          #
-          # deploy.sh already gates the blue/green switch on /health/ready.
-          echo "::warning::public /health did not return 200 — check the slot manually"
-
+          echo "::warning::public /health did not return 200 — check the active slot manually"
 
       ######################################################################
       # SUMMARY
@@ -494,3 +505,4 @@ jobs:
             echo "| Actor | \`${{ github.actor }}\` |"
             echo "| Result | ${{ job.status }} |"
           } >> "$GITHUB_STEP_SUMMARY"
+
