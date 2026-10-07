@@ -15,6 +15,7 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
@@ -196,6 +197,11 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ICredentialChangeHandler, PasswordChangeHandler>();
             services.AddScoped<ICredentialChangeHandler, PinChangeHandler>();
             services.AddScoped<CredentialChangeService>();
+
+           
+            services.AddScoped<IAdminDashboardManager, AdminDashboardManager>();
+
+            
 
         }
     }

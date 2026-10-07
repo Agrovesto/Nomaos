@@ -5421,6 +5421,36 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("ActivityLogs");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ApplicationUserRole", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<string>("RoleId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<long>("BusinessId")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("RoleId1")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("UserId", "RoleId", "BusinessId");
+
+                    b.HasIndex("BusinessId");
+
+                    b.HasIndex("RoleId");
+
+                    b.HasIndex("RoleId1");
+
+                    b.HasIndex("UserId", "BusinessId", "IsActive");
+
+                    b.ToTable("AspNetUserRoles", (string)null);
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BulkUploadJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5935,6 +5965,33 @@ namespace Agrovesto.Backend.API.Migrations
                     b.ToTable("Payouts");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Permission", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Group")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Permissions");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.RefreshToken", b =>
                 {
                     b.Property<long>("Id")
@@ -5959,6 +6016,9 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
+
+                    b.Property<bool>("IsAdminSession")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("RequiresCredentialChange")
                         .HasColumnType("bit");
@@ -6055,6 +6115,21 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasFilter("[NormalizedName] IS NOT NULL");
 
                     b.ToTable("AspNetRoles", (string)null);
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.RolePermission", b =>
+                {
+                    b.Property<string>("RoleId")
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("PermissionId")
+                        .HasColumnType("int");
+
+                    b.HasKey("RoleId", "PermissionId");
+
+                    b.HasIndex("PermissionId");
+
+                    b.ToTable("RolePermissions");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", b =>
@@ -6908,26 +6983,6 @@ namespace Agrovesto.Backend.API.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("AspNetUserLogins", (string)null);
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
-                {
-                    b.Property<string>("UserId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("RoleId")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("RoleId1")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.HasKey("UserId", "RoleId");
-
-                    b.HasIndex("RoleId");
-
-                    b.HasIndex("RoleId1");
-
-                    b.ToTable("AspNetUserRoles", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserToken<string>", b =>
@@ -8097,6 +8152,37 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("OrganizationConfiguration");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.ApplicationUserRole", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Businesses.Business", "Business")
+                        .WithMany()
+                        .HasForeignKey("BusinessId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", "Role")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", null)
+                        .WithMany("Users")
+                        .HasForeignKey("RoleId1");
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
+                        .WithMany("UserRoles")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Business");
+
+                    b.Navigation("Role");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.BusinessSMSProvider", b =>
                 {
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProvider", "SMSProvider")
@@ -8203,6 +8289,25 @@ namespace Agrovesto.Backend.API.Migrations
                         .HasForeignKey("BusinessId");
 
                     b.Navigation("Business");
+                });
+
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.RolePermission", b =>
+                {
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Permission", "Permission")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", "Role")
+                        .WithMany("RolePermissions")
+                        .HasForeignKey("RoleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Permission");
+
+                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.SMSProviderParameter", b =>
@@ -8348,25 +8453,6 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<string>", b =>
                 {
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserRole<string>", b =>
-                {
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", null)
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.Role", null)
-                        .WithMany("Users")
-                        .HasForeignKey("RoleId1");
-
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -8568,9 +8654,18 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("PaymentProviderParameters");
                 });
 
+            modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Permission", b =>
+                {
+                    b.Navigation("RolePermissions");
+                });
+
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.Role", b =>
                 {
                     b.Navigation("Claims");
+
+                    b.Navigation("RolePermissions");
+
+                    b.Navigation("UserRoles");
 
                     b.Navigation("Users");
                 });
@@ -8597,6 +8692,8 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Navigation("UserBusinesses");
 
                     b.Navigation("UserOrganizations");
+
+                    b.Navigation("UserRoles");
                 });
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.UserWallet", b =>

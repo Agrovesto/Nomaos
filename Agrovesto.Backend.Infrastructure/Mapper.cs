@@ -1471,7 +1471,7 @@ namespace Agrovesto.Backend.Infrastructure
                 //OrganizationCode = model.OrganizationCode,
                 OnboardedById = model.OnboardedById,
                 MemberShipTypeId = model.MemberShipTypeId,
-                TierLevel = model.Tier.ToEnum<Tier>(),
+                //TierLevel = model.Tier.ToEnum<Tier>(),
 
             };
         }

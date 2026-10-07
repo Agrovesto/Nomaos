@@ -5,6 +5,7 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses.MandE;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using DocumentFormat.OpenXml.Bibliography;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -129,7 +130,10 @@ namespace Agrovesto.Backend.Infrastructure.DB
             builder.HasIndex(x => new { x.UserId, x.PurposeKey, x.CreatedAt });
         }
     }
-    public class DataContext :IdentityDbContext<User,Role, string>
+    public class DataContext :IdentityDbContext<User,Role, string,
+
+    IdentityUserClaim<string>, ApplicationUserRole, IdentityUserLogin<string>,
+    IdentityRoleClaim<string>, IdentityUserToken<string>>
     {
         public DataContext(DbContextOptions<DataContext> options): base(options)
         {
@@ -141,6 +145,29 @@ namespace Agrovesto.Backend.Infrastructure.DB
             
             base.OnModelCreating(modelBuilder);
 
+            modelBuilder.Entity<ApplicationUserRole>(b =>
+            {
+                // The default key is (UserId, RoleId). Adding BusinessId lets the same user hold
+                // the same role in more than one business.
+                b.HasKey(ur => new { ur.UserId, ur.RoleId, ur.BusinessId });
+
+                b.HasOne(ur => ur.User).WithMany(u => u.UserRoles)
+                    .HasForeignKey(ur => ur.UserId).IsRequired();
+
+                b.HasOne(ur => ur.Role).WithMany(r => r.UserRoles)
+                    .HasForeignKey(ur => ur.RoleId).IsRequired();
+
+                b.HasOne(ur => ur.Business).WithMany()
+                    .HasForeignKey(ur => ur.BusinessId)
+                    .OnDelete(DeleteBehavior.Restrict).IsRequired();
+
+                // Do NOT use HasDefaultValue(true) here: EF would treat IsActive = false as "not set"
+                // on insert and let the database default (true) win. The default is set in the
+                // migration instead (see the migration file) and in the C# initializer above.
+
+                b.HasIndex(ur => new { ur.UserId, ur.BusinessId, ur.IsActive });
+            });
+
             modelBuilder.ApplyConfiguration(new FarmConfiguration());
             modelBuilder.ApplyConfiguration(new FarmerCooperativeConfiguration());
             modelBuilder.ApplyConfiguration(new MemberShipAgentConfiguration());
@@ -149,8 +176,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
             modelBuilder.ApplyConfiguration(new CredentialResetAttemptConfiguration());
 
             modelBuilder.Entity<BusinessWalletProvider>()
-     .HasIndex(x => new { x.BusinessCode, x.ProviderId })
-     .IsUnique();
+            .HasIndex(x => new { x.BusinessCode, x.ProviderId })
+            .IsUnique();
 
             modelBuilder.Entity<BusinessWalletProvider>()
                 .HasOne(x => x.WalletProvider)
@@ -166,8 +193,8 @@ namespace Agrovesto.Backend.Infrastructure.DB
 
 
             modelBuilder.Entity<BusinessSMSProvider>()
-    .HasIndex(x => new { x.BusinessCode, x.ProviderId })
-    .IsUnique();
+            .HasIndex(x => new { x.BusinessCode, x.ProviderId })
+            .IsUnique();
 
             modelBuilder.Entity<BusinessSMSProvider>()
                 .HasOne(x => x.SMSProvider)
@@ -524,6 +551,19 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 e.Property(x => x.FamilyId).HasMaxLength(32);
                 e.Property(x => x.UserId).HasMaxLength(450);
             });
+
+            modelBuilder.Entity<Permission>(e =>
+            {
+                e.Property(p => p.Name).HasMaxLength(100).IsRequired();
+                e.HasIndex(p => p.Name).IsUnique();
+            });
+
+            modelBuilder.Entity<RolePermission>(e =>
+            {
+                e.HasKey(rp => new { rp.RoleId, rp.PermissionId });
+                e.HasOne(rp => rp.Role).WithMany(r => r.RolePermissions).HasForeignKey(rp => rp.RoleId);
+                e.HasOne(rp => rp.Permission).WithMany(p => p.RolePermissions).HasForeignKey(rp => rp.PermissionId);
+            });
         }
 
         public DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -669,6 +709,9 @@ namespace Agrovesto.Backend.Infrastructure.DB
         public DbSet<RevokedToken> RevokedTokens { get; set; }
         public DbSet<CredentialResetAttempt> CredentialResetAttempts { get; set; }
         public DbSet<UserNotificationPreference> UserNotificationPreferences { get; set; }
+        public DbSet<Permission> Permissions => Set<Permission>();
+        public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+
     }
     public class MarketTransactionConfiguration
     : IEntityTypeConfiguration<MarketTransaction>

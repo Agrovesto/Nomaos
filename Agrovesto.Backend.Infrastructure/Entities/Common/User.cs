@@ -86,6 +86,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsNinVerified { get; set; } = false;
         public bool IsBvnVerified { get; set; } = false;
         public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
+
+        public ICollection<ApplicationUserRole> UserRoles { get; set; } = new List<ApplicationUserRole>();
     }
 
     public class UserOrganization

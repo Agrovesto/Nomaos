@@ -32,6 +32,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public string? RevokedReason { get; set; }
         public bool RequiresCredentialChange { get; set; }
         public string? CreatedByIp { get; set; }
+        public bool IsAdminSession { get; set; }
     }
 
 }
