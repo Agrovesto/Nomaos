@@ -33,7 +33,7 @@ services:
       nomaos_data: {}
     environment:
       # ── Host / runtime ──────────────────────────────────────────────────
-      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Production}"
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Staging}"
       ASPNETCORE_URLS: "http://+:${APP_PORT:-5005}"
       DOTNET_PRINT_TELEMETRY_MESSAGE: "false"
       TZ: "${TZ:-UTC}"
