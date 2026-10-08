@@ -76,13 +76,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public DateTimeOffset? LastLoginDate { get; set; } = DateTimeOffset.Now;
         public string? Name { get; set; }
         public string? BusinessCode { get; set; }
-        public ICollection<UserBusiness> UserBusinesses
-        { get; set; }
-    = new HashSet<UserBusiness>();
+        public ICollection<UserBusiness> UserBusinesses = new HashSet<UserBusiness>();
 
         public string? DateOfBirth { get; set; }
         public string? NIN { get; set; }
         public string? BVN { get; set; }
+        public string? Gender { get; set; }
         public ICollection<UserOrganization> UserOrganizations { get; set; }
      
         public bool IsPhoneVerified { get; set; } = false;

@@ -163,7 +163,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     MiddleName = model.MiddleName,
                     LastName = model.LastName,
                     DateOfBirth = model.DateOfBirth,
-                    SignupMethod=model.SignupMethod
+                    SignupMethod=model.SignupMethod,
+                    Gender=model.Gender
                 }, args);
 
             if (!result.status)
