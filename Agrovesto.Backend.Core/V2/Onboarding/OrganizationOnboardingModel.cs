@@ -41,13 +41,13 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? OrganizationCode { get; set; }
         public string? CompanyEmail { get; set; }
     public long? WardId { get; set; }
-        public string CompanyName { get; set; }
-        public string FirstName { get; set; }
-        public string LastName { get; set; }
+        public string? CompanyName { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
         public string? PhoneNumber { get; set; }
         public string? OrganizationPhone { get; set; }
-        public long StateId { get; set; }
-        public long LgaId { get; set; }
+        public long? StateId { get; set; }
+        public long? LgaId { get; set; }
         public string? CompanyAddress { get; set; }
 
            [Required]
