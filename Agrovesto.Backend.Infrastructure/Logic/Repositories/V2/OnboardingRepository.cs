@@ -762,6 +762,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 DateOfBirth = user.DateOfBirth,
                 IsBvnVerified = user.IsBvnVerified,
                 IsNinVerified = user.IsNinVerified,
+              
                 Roles = additionalRoles.Select(r => new UserRoleDto { RoleName = r }).ToList()
             };
             var allRoleTypes = new List<string> { user.UserType };
@@ -960,6 +961,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     response.Email = !string.IsNullOrWhiteSpace(response.Agent?.Email)
                         ? response.Agent.Email
                         : response.Email;
+                    response.Gender= response.Gender ?? "NA"; // Assuming Agent model doesn't have gender, so we keep existing gender or set to "NA"
                     break;
 
                 case "MemberShip":
@@ -1098,6 +1100,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
         private async Task<MemberShipModel> GetCooperativeProfile(string userId)
         {
              var memberShip = await _context.MemberShips
+                .Include(x=>x.MemberShipType)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(f => f.UserId == userId);
 
@@ -1288,7 +1291,22 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     user.BVN = model.BVN;
                 }
             }
-            user.DateOfBirth ??= model.DateOfBirth;
+            if (user.IsBvnVerified
+                    &&  !string.IsNullOrEmpty(model.DateOfBirth)
+                        && model.DateOfBirth != user.DateOfBirth)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Date of birth cannot be changed after BVN or NIN verification.");
+              
+            }
+            if (user.IsBvnVerified
+                    &&  !string.IsNullOrEmpty(model.Gender)
+                        && model.Gender != user.Gender)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Gender cannot be changed after BVN or NIN verification.Please contact support if you believe this is an error.");
+              
+            }
             user.ModifiedBy = userId;
             if(user.UserType ==  UserType.Farmer.ToString())
             {
@@ -1535,7 +1553,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.PhoneNumber = model.PhoneNumber;
             }
-
+             
             if (!string.IsNullOrWhiteSpace(model.Email)
                 && !string.Equals(model.Email, user.Email, StringComparison.OrdinalIgnoreCase))
             {
@@ -1558,7 +1576,24 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
                 user.Email = model.Email;
             }
-         
+
+            if (user.IsBvnVerified
+                  && !string.IsNullOrEmpty(model.DateOfBirth)
+                      && model.DateOfBirth != user.DateOfBirth)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Date of birth cannot be changed after BVN or NIN verification.");
+
+            }
+            if (user.IsBvnVerified
+                    && !string.IsNullOrEmpty(model.Gender)
+                        && model.Gender != user.Gender)
+            {
+                throw new BaseException(
+                            ExceptionType.BAD_REQUEST, "Gender cannot be changed after BVN or NIN verification.Please contact support if you believe this is an error.");
+
+            }
+
             if (string.IsNullOrWhiteSpace(args.businessCode))
             {
                 throw new BaseException(ExceptionType.ACCESS_DENIED, "Business context is required");
@@ -1952,6 +1987,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             {
                 Id = GenerateUserId(args),
                 DateOfBirth=model.DateOfBirth,
+                Gender=model.Gender,
                 UserName = model.Email ?? model.PhoneNumber,
                 Email = model.Email,
                 PhoneNumber = model.PhoneNumber,

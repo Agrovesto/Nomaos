@@ -6440,6 +6440,9 @@ namespace Agrovesto.Backend.API.Migrations
                     b.Property<string>("FirstName")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Gender")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<bool>("HasDefaultPassword")
                         .HasColumnType("bit");
 
@@ -8420,7 +8423,7 @@ namespace Agrovesto.Backend.API.Migrations
                         .IsRequired();
 
                     b.HasOne("Agrovesto.Backend.Infrastructure.Entities.Common.User", "User")
-                        .WithMany("UserBusinesses")
+                        .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -8772,8 +8775,6 @@ namespace Agrovesto.Backend.API.Migrations
 
             modelBuilder.Entity("Agrovesto.Backend.Infrastructure.Entities.Common.User", b =>
                 {
-                    b.Navigation("UserBusinesses");
-
                     b.Navigation("UserOrganizations");
 
                     b.Navigation("UserRoles");

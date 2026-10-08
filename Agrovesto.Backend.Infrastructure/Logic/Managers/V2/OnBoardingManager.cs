@@ -1992,6 +1992,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                           LastName = model.MembershipLeaderLastName,
                           DateOfBirth = model.DateOfBirth,
                           SignupMethod = model.SignupMethod,
+                          Gender=model.Gender
                       }, args);
 
             if (!result.status)
@@ -2620,12 +2621,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         private static ProfileRequestModel BuildProfileFromFarmerUpdate(FarmerUpdateModel u) => new()
         {
             FullName = u.Name,
+            
             PhoneNumber = u.PhoneNumber,
             Email = u.Email,
             NIN = u.NIN,
             BVN = u.BVN,
             DateOfBirth = u.DateOfBirth,
-            Location = u.Location
+            Location = u.Location,
+            Gender=u.Gender
         };
 
 

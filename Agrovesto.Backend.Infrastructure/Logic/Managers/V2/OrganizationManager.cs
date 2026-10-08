@@ -1483,6 +1483,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 LastName = model.LastName,
                 DateOfBirth=model.DateOfBirth,
                 SignupMethod=model.SignupMethod,
+                Gender=model.Gender
             };
         }
         private async Task<(bool status, AgentModel data)> CreateAgent(
@@ -2266,7 +2267,8 @@ DateTimeOffset dateTime)
                     FirstName = model.MembershipLeaderFirstName,
                     MiddleName = model.MembershipLeaderMiddleName,
                     LastName = model.MembershipLeaderLastName,
-                    SignupMethod=model.SignupMethod
+                    SignupMethod=model.SignupMethod,
+                    Gender=model.Gender
                 }, args);
 
             if (!result.status)

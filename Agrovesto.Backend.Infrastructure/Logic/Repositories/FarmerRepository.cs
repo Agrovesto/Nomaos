@@ -542,25 +542,25 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 if (user.FarmerOnboardingStatus != FarmerOnboardingStatus.Completed)
                     user.FarmerOnboardingStatus = FarmerOnboardingStatus.Completed;
 
-                if (!string.IsNullOrWhiteSpace(user.NIN) || !string.IsNullOrWhiteSpace(user.BVN))
-                {
-                    var sub = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == farmer.UserId);
-                    if (sub == null)
-                    {
-                        _context.SubAccounts.Add(new SubAccount
-                        {
-                            UserId = farmer.UserId,
-                            NIN = user.NIN,
-                            Bvn = user.BVN,
-                            CreatedOn = DateTimeOffset.UtcNow
-                        });
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrWhiteSpace(user.NIN) && sub.NIN != user.NIN) sub.NIN = user.NIN;
-                        if (!string.IsNullOrWhiteSpace(user.BVN) && sub.Bvn != user.BVN) sub.Bvn = user.BVN;
-                    }
-                }
+                //if (!string.IsNullOrWhiteSpace(user.NIN) || !string.IsNullOrWhiteSpace(user.BVN))
+                //{
+                //    var sub = await _context.SubAccounts.FirstOrDefaultAsync(s => s.UserId == farmer.UserId);
+                //    if (sub == null)
+                //    {
+                //        _context.SubAccounts.Add(new SubAccount
+                //        {
+                //            UserId = farmer.UserId,
+                //            NIN = user.NIN,
+                //            Bvn = user.BVN,
+                //            CreatedOn = DateTimeOffset.UtcNow
+                //        });
+                //    }
+                //    else
+                //    {
+                //        if (!string.IsNullOrWhiteSpace(user.NIN) && sub.NIN != user.NIN) sub.NIN = user.NIN;
+                //        if (!string.IsNullOrWhiteSpace(user.BVN) && sub.Bvn != user.BVN) sub.Bvn = user.BVN;
+                //    }
+                //}
             }
 
             await _context.SaveChangesAsync(); // single save; tracked entities need no explicit Update()
