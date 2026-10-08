@@ -1,38 +1,9 @@
 #!/usr/bin/env bash
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Shared helpers for the Nomaos Docker deployment scripts.
-
 # Sourced, never executed directly.
 
 # ─────────────────────────────────────────────────────────────────────────────
-
-# Layout on the EC2 host. Everything mutable lives under NOMAOS_STATE_DIR so the
-
-# checkout stays read-only and disposable.
-
-#
-
-# /opt/nomaos/
-
-# ├── env/                  root:root 0600 — runtime configuration per app
-
-# │     ├── nomaos-api.env
-
-# │     ├── nomaos-api.json             (legacy/fallback format)
-
-# │     └── nomaos-api.extra.env        (optional, non-secret overrides)
-
-# ├── nginx/
-
-# │     ├── upstreams/      rewritten on every flip
-
-# │     └── certs/
-
-# ├── state/                <app>.active-slot
-
-# └── logs/
 
 export NOMAOS_STATE_DIR="${NOMAOS_STATE_DIR:-/opt/nomaos}"
 
@@ -45,56 +16,24 @@ export COMPOSE_DIR
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-if [[ -t 1 ]]; then
-C_RESET=$'\033[0m'
-C_RED=$'\033[31m'
-C_GREEN=$'\033[32m'
-C_YELLOW=$'\033[33m'
-C_BLUE=$'\033[34m'
-C_DIM=$'\033[2m'
-else
-C_RESET=''
-C_RED=''
-C_GREEN=''
-C_YELLOW=''
-C_BLUE=''
-C_DIM=''
-fi
-
 log() {
-printf '%s[%s]%s %s\n' 
-"$C_DIM" 
-"$(date -u +%H:%M:%S)" 
-"$C_RESET" 
-"$*"
+printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"
 }
 
 info() {
-printf '%s==>%s %s\n' 
-"$C_BLUE" 
-"$C_RESET" 
-"$*"
+printf '==> %s\n' "$*"
 }
 
 ok() {
-printf '%s OK %s %s\n' 
-"$C_GREEN" 
-"$C_RESET" 
-"$*"
+printf ' OK  %s\n' "$*"
 }
 
 warn() {
-printf '%s WARN%s %s\n' 
-"$C_YELLOW" 
-"$C_RESET" 
-"$*" >&2
+printf 'WARN  %s\n' "$*" >&2
 }
 
 die() {
-printf '%sFAIL%s %s\n' 
-"$C_RED" 
-"$C_RESET" 
-"$*" >&2
+printf 'FAIL  %s\n' "$*" >&2
 exit 1
 }
 
@@ -104,20 +43,8 @@ exit 1
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# The active slot is stored in a file rather than guessed.
-
-#
-
-# If the file does not exist, "green" is considered live so the first
-
-# containerized deployment targets "blue".
-
-# ─────────────────────────────────────────────────────────────────────────────
-
 active_slot_file() {
-printf '%s/state/%s.active-slot' 
-"$NOMAOS_STATE_DIR" 
-"$1"
+printf '%s/state/%s.active-slot' "$NOMAOS_STATE_DIR" "$1"
 }
 
 get_active_slot() {
@@ -128,12 +55,22 @@ f="$(active_slot_file "$1")"
 if [[ -r "$f" ]]; then
 tr -d '[:space:]' < "$f"
 else
-printf 'green'
+printf 'green\n'
 fi
 }
 
 other_slot() {
-[[ "$1" == "blue" ]] && printf 'green' || printf 'blue'
+case "$1" in
+blue)
+printf 'green\n'
+;;
+green)
+printf 'blue\n'
+;;
+*)
+die "invalid slot '$1'; expected blue or green"
+;;
+esac
 }
 
 set_active_slot() {
@@ -141,10 +78,17 @@ local app="$1"
 local slot="$2"
 local f
 
+case "$slot" in
+blue|green)
+;;
+*)
+die "invalid slot '$slot'; expected blue or green"
+;;
+esac
+
 f="$(active_slot_file "$app")"
 
 mkdir -p "$(dirname "$f")"
-
 printf '%s\n' "$slot" > "$f"
 }
 
@@ -156,39 +100,26 @@ printf '%s\n' "$slot" > "$f"
 
 require_docker() {
 command -v docker >/dev/null 2>&1 || 
-die "docker is not installed. Run deploy/scripts/bootstrap.sh first."
+die "docker is not installed."
 
 docker compose version >/dev/null 2>&1 || 
-die "docker compose v2 plugin missing. Run deploy/scripts/bootstrap.sh first."
+die "docker compose v2 plugin is missing."
 
 docker info >/dev/null 2>&1 || 
-die "cannot talk to the Docker daemon (permission or daemon down)."
+die "cannot communicate with Docker daemon."
 }
 
 container_state() {
 docker inspect 
 -f '{{.State.Status}}' 
-"$1" 2>/dev/null || printf 'absent'
+"$1" 2>/dev/null || printf 'absent\n'
 }
 
 container_health() {
-
-# "none" when the image declares no HEALTHCHECK.
-
 docker inspect 
 -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' 
-"$1" 2>/dev/null || printf 'absent'
+"$1" 2>/dev/null || printf 'absent\n'
 }
-
-# Wait until a container reports healthy.
-
-#
-
-# wait_for_health <container> <timeout_seconds>
-
-#
-
-# Fails fast if the container exits or disappears.
 
 wait_for_health() {
 local name="$1"
@@ -210,7 +141,7 @@ case "$state" in
         return 0
         ;;
       none)
-        ok "$name is running (no healthcheck declared)"
+        ok "$name is running with no healthcheck"
         return 0
         ;;
     esac
@@ -231,7 +162,7 @@ sleep 3
 waited=$((waited + 3))
 
 if (( waited % 15 == 0 )); then
-  log "   waiting on $name ... ${waited}s (state=$state health=$health)"
+  log "waiting on $name ... ${waited}s (state=$state health=$health)"
 fi
 ```
 
@@ -247,34 +178,6 @@ return 1
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-#
-
-# JSON files must be a flat object whose top-level keys are valid shell
-
-# environment-variable names.
-
-#
-
-# Example:
-
-#
-
-# {
-
-# "ASPNETCORE_ENVIRONMENT": "Staging",
-
-# "VAULT_ADDR": "http://vault:8200"
-
-# }
-
-#
-
-# Values may be strings, numbers, booleans, or null.
-
-# Nested objects/arrays are rejected.
-
-# ─────────────────────────────────────────────────────────────────────────────
-
 load_app_json_env() {
 local file="$1"
 local pairs
@@ -285,7 +188,7 @@ command -v python3 >/dev/null 2>&1 ||
 die "python3 is required to read JSON environment files."
 
 pairs="$(mktemp)" || 
-die "could not create a temporary file to read JSON environment."
+die "could not create temporary environment file."
 
 chmod 600 "$pairs"
 
@@ -319,7 +222,7 @@ r"[A-Za-z_][A-Za-z0-9_]*",
 key
 ):
 print(
-"JSON environment contains an invalid environment-variable name.",
+f"invalid environment variable name: {key}",
 file=sys.stderr
 )
 sys.exit(1)
@@ -333,8 +236,7 @@ elif isinstance(value, (str, int, float)):
     text = str(value)
 else:
     print(
-        f"JSON environment value for {key} must be a scalar, "
-        "not an object or array.",
+        f"JSON environment value for {key} must be scalar.",
         file=sys.stderr
     )
     sys.exit(1)
@@ -357,18 +259,14 @@ sys.stdout.buffer.write(
 PY
 then
 rm -f "$pairs"
-die "invalid JSON environment file $file; use a flat object of environment-variable values."
+die "invalid JSON environment file: $file"
 fi
 
 while IFS= read -r -d '' key &&
 IFS= read -r -d '' value; do
 
 ```
-if ! printf -v "$key" '%s' "$value"; then
-  rm -f "$pairs"
-  die "could not load JSON environment variable $key."
-fi
-
+printf -v "$key" '%s' "$value"
 export "$key"
 ```
 
@@ -379,184 +277,54 @@ rm -f "$pairs"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Application environment loader
+# .env loader
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-#
-
-# Preferred order:
-
-#
-
-# 1. <app>.env
-
-# 2. <app>.json
-
-#
-
-# The .env file is authoritative because it is the current deployment format.
-
-#
-
-# This is deliberately NOT implemented with `source`.
-
-#
-
-# SQL Server connection strings commonly contain spaces, semicolons and other
-
-# characters that can cause shell interpretation problems when sourced.
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-load_app_env() {
-local app="$1"
-local dotenv_file="$NOMAOS_STATE_DIR/env/$app.env"
-local json_file="$NOMAOS_STATE_DIR/env/$app.json"
-
-local f
-local format
-
-# ───────────────────────────────────────────────────────────────────────────
-
-# Prefer .env when present.
-
-#
-
-# JSON remains supported as a fallback for migration/legacy installations.
-
-# ───────────────────────────────────────────────────────────────────────────
-
-if [[ -f "$dotenv_file" ]]; then
-
-```
-f="$dotenv_file"
-format=dotenv
-
-if [[ -f "$json_file" ]]; then
-  warn "both $dotenv_file and $json_file exist; using $dotenv_file"
-fi
-```
-
-elif [[ -f "$json_file" ]]; then
-
-```
-f="$json_file"
-format=json
-
-warn "using legacy JSON environment file: $json_file"
-```
-
-else
-
-```
-die "missing environment config; expected $dotenv_file or $json_file."
-```
-
-fi
-
-[[ -r "$f" ]] || 
-die "environment config is not readable: $f"
-
-# ───────────────────────────────────────────────────────────────────────────
-
-# Permissions
-
-# ───────────────────────────────────────────────────────────────────────────
-
-local perms
-
-perms="$(
-stat -c '%a' "$f" 2>/dev/null ||
-stat -f '%A' "$f" 2>/dev/null ||
-echo ''
-)"
-
-if [[ -n "$perms" &&
-"$perms" != "600" &&
-"$perms" != "400" ]]; then
-
-```
-warn "$f is mode $perms — it holds Vault credentials, tighten it: sudo chmod 600 $f"
-```
-
-fi
-
-# ───────────────────────────────────────────────────────────────────────────
-
-# JSON format
-
-# ───────────────────────────────────────────────────────────────────────────
-
-if [[ "$format" == "json" ]]; then
-load_app_json_env "$f"
-return 0
-fi
-
-# ───────────────────────────────────────────────────────────────────────────
-
-# .env format
-
-#
-
-# Parse line-by-line and preserve everything after the first "=" as a literal
-
-# value.
-
-# ───────────────────────────────────────────────────────────────────────────
-
+load_app_dotenv() {
+local file="$1"
 local line
 local key
 local val
 local lineno=0
 
 while IFS= read -r line || [[ -n "$line" ]]; do
-
-```
 lineno=$((lineno + 1))
 
+```
 # Skip blank lines.
 [[ -z "${line//[[:space:]]/}" ]] && continue
 
 # Skip comments after leading whitespace.
 [[ "${line#"${line%%[![:space:]]*}"}" == \#* ]] && continue
 
-# Tolerate:
-#
-#   export FOO=bar
-#
-line="${line#export }"
+# Tolerate "export KEY=value".
+if [[ "$line" == export\ * ]]; then
+  line="${line#export }"
+fi
 
 if [[ "$line" != *=* ]]; then
-  warn "$f:$lineno — ignoring malformed line (no '=')"
+  warn "$file:$lineno — ignoring malformed line"
   continue
 fi
 
-# Everything after the FIRST "=" is the value.
+# Preserve everything after the first "=".
 key="${line%%=*}"
 val="${line#*=}"
 
-# Remove whitespace from the key only.
+# Remove whitespace from key only.
 key="${key//[[:space:]]/}"
 
-# Validate environment variable name.
 if [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-
-  if [[ "$key" == data_data_* || "$key" == *:* ]]; then
-    die "$f:$lineno has invalid env key '$key'; this looks like flattened Vault/appsettings JSON, not the deploy env file."
-  fi
-
-  warn "$f:$lineno — ignoring invalid variable name '$key'"
-  continue
-
+  die "$file:$lineno has invalid environment variable name: $key"
 fi
 
-# Strip ONE matching pair of surrounding double quotes.
-if [[ ${#val} -ge 2 && "$val" == \"*\" ]]; then
+# Strip one matching pair of surrounding double quotes.
+if [[ ${#val} -ge 2 && "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then
   val="${val:1:${#val}-2}"
 
-# Strip ONE matching pair of surrounding single quotes.
-elif [[ ${#val} -ge 2 && "$val" == \'*\' ]]; then
+# Strip one matching pair of surrounding single quotes.
+elif [[ ${#val} -ge 2 && "${val:0:1}" == "'" && "${val: -1}" == "'" ]]; then
   val="${val:1:${#val}-2}"
 fi
 
@@ -564,18 +332,82 @@ printf -v "$key" '%s' "$val"
 export "$key"
 ```
 
-done < "$f"
+done < "$file"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Application environment loader
+
+#
+
+# .env is authoritative.
+
+# .json remains supported as a legacy fallback.
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+load_app_env() {
+local app="$1"
+local dotenv_file="$NOMAOS_STATE_DIR/env/$app.env"
+local json_file="$NOMAOS_STATE_DIR/env/$app.json"
+local file
+local perms
+
+# Prefer .env.
+
+if [[ -f "$dotenv_file" ]]; then
+file="$dotenv_file"
+
+```
+if [[ -f "$json_file" ]]; then
+  warn "both $dotenv_file and $json_file exist; using $dotenv_file"
+fi
+
+[[ -r "$file" ]] || \
+  die "environment config is not readable: $file"
+
+perms="$(
+  stat -c '%a' "$file" 2>/dev/null ||
+  stat -f '%A' "$file" 2>/dev/null ||
+  printf ''
+)"
+
+if [[ -n "$perms" &&
+      "$perms" != "600" &&
+      "$perms" != "400" ]]; then
+  warn "$file is mode $perms; recommended mode is 600"
+fi
+
+load_app_dotenv "$file"
+return 0
+```
+
+fi
+
+# Fall back to JSON.
+
+if [[ -f "$json_file" ]]; then
+file="$json_file"
+
+```
+warn "using legacy JSON environment file: $file"
+
+[[ -r "$file" ]] || \
+  die "environment config is not readable: $file"
+
+load_app_json_env "$file"
+return 0
+```
+
+fi
+
+die "missing environment config; expected $dotenv_file or $json_file"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Validate required application runtime variables
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-#
-
-# Call this after load_app_env.
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -618,21 +450,15 @@ fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Environment summary
-
-# ─────────────────────────────────────────────────────────────────────────────
-
-#
-
-# Safe diagnostic output. Never prints secret values.
+# Safe runtime summary
 
 # ─────────────────────────────────────────────────────────────────────────────
 
 show_app_runtime_summary() {
 echo ""
-echo "───────────────────────────────────────────────────────────────"
+echo "---------------------------------------------------------------"
 echo " Application runtime configuration"
-echo "───────────────────────────────────────────────────────────────"
+echo "---------------------------------------------------------------"
 
 printf ' ASPNETCORE_ENVIRONMENT : %s\n' 
 "${ASPNETCORE_ENVIRONMENT:-<MISSING>}"
@@ -667,6 +493,6 @@ fi
 printf ' REDIS_CONNECTION       : %s\n' 
 "${REDIS_CONNECTION_STRING:-redis:6379}"
 
-echo "───────────────────────────────────────────────────────────────"
+echo "---------------------------------------------------------------"
 echo ""
 }
