@@ -77,17 +77,19 @@ if (!builder.Environment.IsDevelopment())
     var vaultUrl = Environment.GetEnvironmentVariable("VAULT_ADDR");
     var roleId = Environment.GetEnvironmentVariable("VAULT_ROLE_ID");
     var secretId = Environment.GetEnvironmentVariable("VAULT_SECRET_ID");
+    var vaultMount = Environment.GetEnvironmentVariable("VAULT_KV_MOUNT") ?? "kv";
+    var vaultSecretPath = Environment.GetEnvironmentVariable("VAULT_SECRET_PATH");
 
-    if (!string.IsNullOrEmpty(roleId) &&
-        !string.IsNullOrEmpty(secretId) &&
-        !string.IsNullOrEmpty(vaultUrl))
+
+    if (string.IsNullOrWhiteSpace(vaultUrl))
+        throw new InvalidOperationException("VAULT_ADDR is not configured.");
+    if (string.IsNullOrWhiteSpace(roleId))
+        throw new InvalidOperationException("VAULT_ROLE_ID is not configured.");
+    if (string.IsNullOrWhiteSpace(secretId))
+        throw new InvalidOperationException("VAULT_SECRET_ID is not configured.");
+    if (string.IsNullOrWhiteSpace(vaultSecretPath))
+        throw new InvalidOperationException("VAULT_SECRET_PATH is not configured.");
     {
-        // Path is env-driven so dev and prod can share one image:
-        //   kv/nomaos/dev/appsettings  |  kv/nomaos/prod/appsettings
-        // Defaults reproduce the pre-container behaviour exactly.
-        var vaultMount = Environment.GetEnvironmentVariable("VAULT_KV_MOUNT") ?? "kv";
-        var vaultSecretPath = Environment.GetEnvironmentVariable("VAULT_SECRET_PATH")
-                              ?? "nomaos/prod/appsettings";
 
         ((IConfigurationBuilder)builder.Configuration).AddVaultConfiguration(
             () => new VaultOptions(

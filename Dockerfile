@@ -84,10 +84,21 @@ RUN apt-get update \
 WORKDIR /app
 
 ########################################
+
+    # APPLICATION RUNTIME
+    # Environment-specific values such as:
+    # ASPNETCORE_ENVIRONMENT
+    # VAULT_ADDR
+    # VAULT_ROLE_ID
+    # VAULT_SECRET_ID
+    # VAULT_SECRET_PATH
+    # are injected at deployment/runtime.
+########################################
+
+########################################
 # APPLICATION CONFIGURATION
 ########################################
 ENV ASPNETCORE_URLS=http://+:5000 \
-    ASPNETCORE_ENVIRONMENT=Staging \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_PRINT_TELEMETRY_MESSAGE=false \
@@ -111,9 +122,9 @@ RUN mkdir -p /app/logs \
 # HEALTHCHECK
 ########################################
 HEALTHCHECK \
-    --interval=30s \
+    --interval=10s \
     --timeout=5s \
-    --start-period=45s \
+    --start-period=15s \
     --retries=3 \
     CMD curl -fsS --max-time 4 \
         http://127.0.0.1:5000/health/ready || exit 1

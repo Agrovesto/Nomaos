@@ -33,18 +33,21 @@ services:
       nomaos_data: {}
     environment:
       # ── Host / runtime ──────────────────────────────────────────────────
-      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:-Staging}"
-      ASPNETCORE_URLS: "http://+:${APP_PORT:-5005}"
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:?ASPNETCORE_ENVIRONMENT must be set}"      
+      ASPNETCORE_URLS: "http://+:${APP_PORT:-5000}"
       DOTNET_PRINT_TELEMETRY_MESSAGE: "false"
       TZ: "${TZ:-UTC}"
 
       # ── Vault (AppRole) — unchanged from the systemd setup ──────────────
-      # Program.cs reads these three and pulls kv/nomaos/prod/appsettings.
-      # Values come from the slot env file, which is root-owned 0600 on the host.
+      # Program.cs reads these values and loads the environment-specific Vault path.
+      # Example:
+      #   staging -> kv/nomaos/staging/appsettings
+      #   production -> kv/nomaos/prod/appsettings
       VAULT_ADDR: "${VAULT_ADDR:?VAULT_ADDR must be set}"
       VAULT_ROLE_ID: "${VAULT_ROLE_ID:?VAULT_ROLE_ID must be set}"
       VAULT_SECRET_ID: "${VAULT_SECRET_ID:?VAULT_SECRET_ID must be set}"
-
+      VAULT_SECRET_PATH: "${VAULT_SECRET_PATH:?VAULT_SECRET_PATH must be set}"
+      VAULT_KV_MOUNT: "${VAULT_KV_MOUNT:-kv}"
       # ── Data plane ──────────────────────────────────────────────────────
       # localhost:6379 and localhost,1433 no longer exist inside a container.
       # These override the appsettings values via standard .NET config binding
@@ -64,15 +67,15 @@ services:
     volumes:
       - "${NOMAOS_STATE_DIR:-/opt/nomaos}/logs/${APP_NAME}/${SLOT}:/app/logs"
     expose:
-      - "${APP_PORT:-5005}"
+      - "${APP_PORT:-5000}"
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "curl -fsS --max-time 4 http://127.0.0.1:${APP_PORT:-5005}/health/ready || exit 1"
+        - "curl -fsS --max-time 4 http://127.0.0.1:${APP_PORT:-5000}/health/ready || exit 1"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: "${HEALTHCHECK_START_PERIOD:-45s}"
+      start_period: "${HEALTHCHECK_START_PERIOD:-15s}"
     stop_grace_period: "${STOP_GRACE_PERIOD:-30s}"
     deploy:
       resources:

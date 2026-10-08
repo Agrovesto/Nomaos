@@ -315,6 +315,17 @@ jobs:
                     "  exit 1\n" +
                     "fi\n" +
 
+                    if sudo test -r "$APP_ENV_BASE.env"; then
+                      CONFIG_FILE="$APP_ENV_BASE.env"
+                    elif sudo test -r "$APP_ENV_BASE.json"; then
+                      CONFIG_FILE="$APP_ENV_BASE.json"
+                    else
+                      echo "missing required EC2 config for $APP" >&2
+                      exit 1
+                    fi
+                    
+                    echo "Using EC2 runtime configuration: $CONFIG_FILE"
+                    
                     "DEPLOY_ROOT=/opt/nomaos/deploy-tools\n" +
                     "DEPLOY_DIR=\"$DEPLOY_ROOT/$SHA-$RUN_ID-$RUN_ATTEMPT\"\n" +
                     "BUNDLE_FILE=\"$DEPLOY_DIR/deploy-bundle.tar.gz\"\n" +
