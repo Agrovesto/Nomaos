@@ -1,86 +1,46 @@
 #!/usr/bin/env bash
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 # deploy.sh — containerized blue/green deployment for NomaOS on EC2
-
 #
-
 # Usage:
-
-# deploy.sh --app nomaos-api --image <ecr-ref> [options]
-
+#   deploy.sh --app nomaos-api --image <ecr-ref> [options]
 #
-
 # Deployment flow:
-
-# 1. Validate configuration
-
-# 2. Pull immutable image
-
-# 3. Start idle slot alongside live slot
-
-# 4. Docker healthcheck
-
-# 5. Application-local HTTP healthcheck inside candidate container
-
-# 6. Nginx-container -> candidate HTTP healthcheck
-
-# 7. Optional EC2-host -> candidate HTTP healthcheck
-
-# 8. Flip Nginx atomically
-
-# 9. Verify traffic through Nginx
-
-# 10. Stop old slot
-
-# 11. Retain Docker image cache
-
+#   1. Validate configuration
+#   2. Pull immutable image
+#   3. Start idle slot alongside live slot
+#   4. Docker healthcheck
+#   5. Application-local HTTP healthcheck inside candidate container
+#   6. Nginx-container -> candidate HTTP healthcheck
+#   7. Optional EC2-host -> candidate HTTP healthcheck
+#   8. Flip Nginx atomically
+#   9. Verify traffic through Nginx
+#  10. Stop old slot
+#  11. Retain Docker image cache
 #
-
 # IMPORTANT:
-
 # Application health failures are NON-FATAL by default.
-
 #
-
 # Infrastructure failures remain FATAL:
-
-# - invalid arguments/config
-
-# - ECR/image pull failure
-
-# - Docker Compose startup failure
-
-# - nginx configuration failure
-
-# - nginx reload failure
-
+#   - invalid arguments/config
+#   - ECR/image pull failure
+#   - Docker Compose startup failure
+#   - nginx configuration failure
+#   - nginx reload failure
 #
-
 # Exit codes:
-
-# 0 = deployment completed
-
-# 1 = deployment failed / rolled back
-
-# 2 = usage error
-
+#   0 = deployment completed
+#   1 = deployment failed / rolled back
+#   2 = usage error
 # ─────────────────────────────────────────────────────────────────────────────
-
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # shellcheck source=lib.sh
-
 source "$SCRIPT_DIR/lib.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Configuration
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 APP_NAME=""
 IMAGE=""
 COMMIT_SHA=""
@@ -102,127 +62,129 @@ DRAIN_SECONDS="${DRAIN_SECONDS:-2}"
 NGINX_CONTAINER="${NGINX_CONTAINER:-agrovesto-nginx}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Usage
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 usage() {
-cat <<'EOF'
+  cat <<'EOF'
 Usage: deploy.sh --app <name> --image <ref> [options]
+
 Required:
---app <name>
-App key, e.g. nomaos-api
---image <ref>
-Full immutable image reference.
-Examples:
-1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos:abc123
-1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos@sha256:abc123...
+  --app <name>
+      App key, e.g. nomaos-api
+
+  --image <ref>
+      Full immutable image reference.
+
+      Examples:
+        1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos:abc123
+        1234.dkr.ecr.eu-west-1.amazonaws.com/nomaos@sha256:abc123...
+
 Options:
---commit <sha>
-Commit SHA recorded for the deployment.
---timeout <sec>
-Docker health gate timeout.
-Default: 10
---keep-old
-Leave previous slot running after the traffic flip.
---dry-run
-Print deployment plan and exit without changing anything.
--h, --help
-Show this help.
+  --commit <sha>
+      Commit SHA recorded for the deployment.
+
+  --timeout <sec>
+      Docker health gate timeout.
+      Default: 10
+
+  --keep-old
+      Leave previous slot running after the traffic flip.
+
+  --dry-run
+      Print deployment plan and exit without changing anything.
+
+  -h, --help
+      Show this help.
+
 Environment overrides:
-CONTINUE_ON_HEALTH_FAILURE=true|false
-CHECK_DOCKER_HEALTH=true|false
-CHECK_CONTAINER_LOCAL=true|false
-CHECK_NGINX_NETWORK=true|false
-HOST_HEALTH_URL=http://127.0.0.1:<port>/health/ready
-HEALTH_RETRIES=3
-HEALTH_RETRY_INTERVAL=1
-EDGE_RETRIES=2
-EDGE_RETRY_INTERVAL=1
-DRAIN_SECONDS=2
+  CONTINUE_ON_HEALTH_FAILURE=true|false
+  CHECK_DOCKER_HEALTH=true|false
+  CHECK_CONTAINER_LOCAL=true|false
+  CHECK_NGINX_NETWORK=true|false
+  HOST_HEALTH_URL=http://127.0.0.1:<port>/health/ready
+  HEALTH_RETRIES=3
+  HEALTH_RETRY_INTERVAL=1
+  EDGE_RETRIES=2
+  EDGE_RETRY_INTERVAL=1
+  DRAIN_SECONDS=2
 EOF
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Parse arguments
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 while [[ $# -gt 0 ]]; do
-case "$1" in
---app)
-APP_NAME="${2:?Missing value for --app}"
-shift 2
-;;
---image)
-IMAGE="${2:?Missing value for --image}"
-shift 2
-;;
---commit)
-COMMIT_SHA="${2:?Missing value for --commit}"
-shift 2
-;;
---timeout)
-HEALTH_TIMEOUT="${2:?Missing value for --timeout}"
-shift 2
-;;
---keep-old)
-KEEP_OLD=true
-shift
-;;
---dry-run)
-DRY_RUN=true
-shift
-;;
--h|--help)
-usage
-exit 0
-;;
-*)
-usage >&2
-die "unknown argument: $1"
-;;
-esac
+  case "$1" in
+    --app)
+      APP_NAME="${2:?Missing value for --app}"
+      shift 2
+      ;;
+    --image)
+      IMAGE="${2:?Missing value for --image}"
+      shift 2
+      ;;
+    --commit)
+      COMMIT_SHA="${2:?Missing value for --commit}"
+      shift 2
+      ;;
+    --timeout)
+      HEALTH_TIMEOUT="${2:?Missing value for --timeout}"
+      shift 2
+      ;;
+    --keep-old)
+      KEEP_OLD=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      die "unknown argument: $1"
+      ;;
+  esac
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Validate required arguments
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 [[ -n "$APP_NAME" ]] || {
-usage >&2
-exit 2
+  usage >&2
+  exit 2
 }
+
 [[ -n "$IMAGE" ]] || {
-usage >&2
-exit 2
+  usage >&2
+  exit 2
 }
+
 if [[ "$IMAGE" != *:* && "$IMAGE" != *@* ]]; then
-die "--image must contain an explicit tag or digest; :latest is not allowed"
+  die "--image must contain an explicit tag or digest; :latest is not allowed"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Validate dependencies/configuration
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 require_docker
 load_app_env "$APP_NAME"
+
 APP_PORT="${APP_PORT:-5000}"
 VAULT_KV_MOUNT="${VAULT_KV_MOUNT:-kv}"
 UPSTREAM_NAME="${UPSTREAM_NAME:-${APP_NAME//-/_}}"
 UPSTREAM_DIR="$NOMAOS_STATE_DIR/nginx/upstreams"
 UPSTREAM_FILE="$UPSTREAM_DIR/${UPSTREAM_NAME}.conf"
 COMMIT_SHA="${COMMIT_SHA:-unknown}"
+
 require_runtime_env() {
-local name="$1"
-[[ -n "${!name:-}" ]] || die "$name must be set in the application environment"
+  local name="$1"
+  [[ -n "${!name:-}" ]] || die "$name must be set in the application environment"
 }
+
 require_runtime_env "ASPNETCORE_ENVIRONMENT"
 require_runtime_env "VAULT_ADDR"
 require_runtime_env "VAULT_ROLE_ID"
@@ -231,449 +193,435 @@ require_runtime_env "VAULT_SECRET_PATH"
 require_runtime_env "DB_CONNECTION_STRING"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Determine active and target slots
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 ACTIVE="$(get_active_slot "$APP_NAME")"
+
 case "$ACTIVE" in
-blue|green)
-;;
-*)
-die "invalid active slot '$ACTIVE'; expected blue or green"
-;;
+  blue|green)
+    ;;
+  *)
+    die "invalid active slot '$ACTIVE'; expected blue or green"
+    ;;
 esac
+
 TARGET="$(other_slot "$ACTIVE")"
 ACTIVE_CONTAINER="${APP_NAME}-${ACTIVE}"
 TARGET_CONTAINER="${APP_NAME}-${TARGET}"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Create required directories
+# ─────────────────────────────────────────────────────────────────────────────
+mkdir -p "$UPSTREAM_DIR" "$NOMAOS_STATE_DIR/logs/$APP_NAME/$TARGET"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
-mkdir -p 
-"$UPSTREAM_DIR" 
-"$NOMAOS_STATE_DIR/logs/$APP_NAME/$TARGET"
-
-# ─────────────────────────────────────────────────────────────────────────────
-
 # Display deployment plan
-
 # ─────────────────────────────────────────────────────────────────────────────
+cat <<EOF
 
-# cat <<EOF
-
-# NomaOS Blue/Green Deployment
-
-app             : $APP_NAME
-image           : $IMAGE
-commit          : $COMMIT_SHA
-environment     : $ASPNETCORE_ENVIRONMENT
-vault mount     : $VAULT_KV_MOUNT
-vault path      : $VAULT_SECRET_PATH
-live slot       : $ACTIVE
-live container  : $ACTIVE_CONTAINER
-live state       : $(container_state "$ACTIVE_CONTAINER")
-target slot     : $TARGET
-target container: $TARGET_CONTAINER
-app port        : $APP_PORT
-upstream        : $UPSTREAM_FILE
-nginx container : $NGINX_CONTAINER
-docker health   : $CHECK_DOCKER_HEALTH
-local container : $CHECK_CONTAINER_LOCAL
-nginx network   : $CHECK_NGINX_NETWORK
-EC2 host check  : ${HOST_HEALTH_URL:-disabled}
-continue on
-health failure  : $CONTINUE_ON_HEALTH_FAILURE
-=============================================
+===============================================================
+ NomaOS Blue/Green Deployment
+===============================================================
+ app             : $APP_NAME
+ image           : $IMAGE
+ commit          : $COMMIT_SHA
+ environment     : $ASPNETCORE_ENVIRONMENT
+ vault mount     : $VAULT_KV_MOUNT
+ vault path      : $VAULT_SECRET_PATH
+ live slot       : $ACTIVE
+ live container  : $ACTIVE_CONTAINER
+ live state      : $(container_state "$ACTIVE_CONTAINER")
+ target slot     : $TARGET
+ target container: $TARGET_CONTAINER
+ app port        : $APP_PORT
+ upstream        : $UPSTREAM_FILE
+ nginx container : $NGINX_CONTAINER
+ docker health   : $CHECK_DOCKER_HEALTH
+ local container : $CHECK_CONTAINER_LOCAL
+ nginx network   : $CHECK_NGINX_NETWORK
+ EC2 host check  : ${HOST_HEALTH_URL:-disabled}
+ continue health: $CONTINUE_ON_HEALTH_FAILURE
+===============================================================
 
 EOF
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Dry run
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 if [[ "$DRY_RUN" == true ]]; then
-info "dry run — nothing changed"
-exit 0
+  info "dry run — nothing changed"
+  exit 0
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Compose helper
-
 #
-
 # Explicitly passes runtime configuration into docker compose.
-
 # This prevents deployment correctness from depending on whether
-
 # load_app_env exported every variable.
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 compose_slot() {
-local slot="$1"
-shift
-IMAGE="$IMAGE" 
-APP_NAME="$APP_NAME" 
-SLOT="$slot" 
-APP_PORT="$APP_PORT" 
-COMMIT_SHA="$COMMIT_SHA" 
-NOMAOS_STATE_DIR="$NOMAOS_STATE_DIR" 
-ASPNETCORE_ENVIRONMENT="$ASPNETCORE_ENVIRONMENT" 
-VAULT_ADDR="$VAULT_ADDR" 
-VAULT_ROLE_ID="$VAULT_ROLE_ID" 
-VAULT_SECRET_ID="$VAULT_SECRET_ID" 
-VAULT_SECRET_PATH="$VAULT_SECRET_PATH" 
-VAULT_KV_MOUNT="$VAULT_KV_MOUNT" 
-DB_CONNECTION_STRING="$DB_CONNECTION_STRING" 
-REDIS_CONNECTION_STRING="${REDIS_CONNECTION_STRING:-redis:6379}" 
-LOG_FILE_PATH="${LOG_FILE_PATH:-/app/logs/nomaos-.log}" 
-docker compose 
--p "${APP_NAME}-${slot}" 
--f "$COMPOSE_DIR/docker-compose.app.yml" 
-"$@"
+  local slot="$1"
+  shift
+
+  IMAGE="$IMAGE" \
+  APP_NAME="$APP_NAME" \
+  SLOT="$slot" \
+  APP_PORT="$APP_PORT" \
+  COMMIT_SHA="$COMMIT_SHA" \
+  NOMAOS_STATE_DIR="$NOMAOS_STATE_DIR" \
+  ASPNETCORE_ENVIRONMENT="$ASPNETCORE_ENVIRONMENT" \
+  VAULT_ADDR="$VAULT_ADDR" \
+  VAULT_ROLE_ID="$VAULT_ROLE_ID" \
+  VAULT_SECRET_ID="$VAULT_SECRET_ID" \
+  VAULT_SECRET_PATH="$VAULT_SECRET_PATH" \
+  VAULT_KV_MOUNT="$VAULT_KV_MOUNT" \
+  DB_CONNECTION_STRING="$DB_CONNECTION_STRING" \
+  REDIS_CONNECTION_STRING="${REDIS_CONNECTION_STRING:-redis:6379}" \
+  LOG_FILE_PATH="${LOG_FILE_PATH:-/app/logs/nomaos-.log}" \
+  docker compose \
+    -p "${APP_NAME}-${slot}" \
+    -f "$COMPOSE_DIR/docker-compose.app.yml" \
+    "$@"
 }
+
 compose_target() {
-compose_slot "$TARGET" "$@"
+  compose_slot "$TARGET" "$@"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Retry helper
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 retry_command() {
-local label="$1"
-local attempts="$2"
-local interval="$3"
-shift 3
-local attempt
-for attempt in $(seq 1 "$attempts"); do
-if "$@"; then
-return 0
-fi
-log "   $label attempt $attempt/$attempts failed"
-if (( attempt < attempts )); then
-sleep "$interval"
-fi
-done
-return 1
+  local label="$1"
+  local attempts="$2"
+  local interval="$3"
+  shift 3
+
+  local attempt
+
+  for attempt in $(seq 1 "$attempts"); do
+    if "$@"; then
+      return 0
+    fi
+
+    log "   $label attempt $attempt/$attempts failed"
+
+    if (( attempt < attempts )); then
+      sleep "$interval"
+    fi
+  done
+
+  return 1
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # HTTP probe inside a container
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 container_http_probe() {
-local container="$1"
-local url="$2"
-if docker exec "$container" 
-sh -c 'command -v curl >/dev/null 2>&1'; then
-docker exec "$container" 
-curl 
---fail 
---silent 
---show-error 
---max-time 5 
-"$url" 
->/dev/null 2>&1
-return $?
-fi
-if docker exec "$container" 
-sh -c 'command -v wget >/dev/null 2>&1'; then
-docker exec "$container" 
-wget 
--q 
--O /dev/null 
---timeout=5 
-"$url" 
->/dev/null 2>&1
-return $?
-fi
-warn "neither curl nor wget exists inside $container"
-return 2
+  local container="$1"
+  local url="$2"
+
+  if docker exec "$container" sh -c 'command -v curl >/dev/null 2>&1'; then
+    docker exec "$container" \
+      curl \
+      --fail \
+      --silent \
+      --show-error \
+      --max-time 5 \
+      "$url" \
+      >/dev/null 2>&1
+    return $?
+  fi
+
+  if docker exec "$container" sh -c 'command -v wget >/dev/null 2>&1'; then
+    docker exec "$container" \
+      wget \
+      -q \
+      -O /dev/null \
+      --timeout=5 \
+      "$url" \
+      >/dev/null 2>&1
+    return $?
+  fi
+
+  warn "neither curl nor wget exists inside $container"
+  return 2
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # HTTP probe from EC2 host
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 host_http_probe() {
-local url="$1"
-if command -v curl >/dev/null 2>&1; then
-curl 
---fail 
---silent 
---show-error 
---max-time 5 
-"$url" 
->/dev/null 2>&1
-return $?
-fi
-if command -v wget >/dev/null 2>&1; then
-wget 
--q 
--O /dev/null 
---timeout=5 
-"$url" 
->/dev/null 2>&1
-return $?
-fi
-warn "neither curl nor wget exists on EC2 host"
-return 2
+  local url="$1"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl \
+      --fail \
+      --silent \
+      --show-error \
+      --max-time 5 \
+      "$url" \
+      >/dev/null 2>&1
+    return $?
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    wget \
+      -q \
+      -O /dev/null \
+      --timeout=5 \
+      "$url" \
+      >/dev/null 2>&1
+    return $?
+  fi
+
+  warn "neither curl nor wget exists on EC2 host"
+  return 2
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Nginx reload
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 reload_nginx() {
-info "validating nginx configuration"
-if ! docker exec "$NGINX_CONTAINER" 
-nginx -t >/dev/null 2>&1; then
-warn "nginx -t failed:"
-docker exec "$NGINX_CONTAINER" 
-nginx -t 2>&1 |
-sed 's/^/    /' >&2 || true
-return 1
-fi
-info "reloading nginx"
-docker exec "$NGINX_CONTAINER" 
-nginx -s reload
+  info "validating nginx configuration"
+
+  if ! docker exec "$NGINX_CONTAINER" nginx -t >/dev/null 2>&1; then
+    warn "nginx -t failed:"
+    docker exec "$NGINX_CONTAINER" nginx -t 2>&1 |
+      sed 's/^/    /' >&2 || true
+    return 1
+  fi
+
+  info "reloading nginx"
+  docker exec "$NGINX_CONTAINER" nginx -s reload
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Write upstream atomically
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 write_upstream() {
-local slot="$1"
-local tmp
-tmp="$(mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.XXXXXX")"
-cat > "$tmp" <<EOF
+  local slot="$1"
+  local tmp
 
+  tmp="$(mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.XXXXXX")"
+
+  cat > "$tmp" <<EOF
 # Generated by deploy.sh
-
 # generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
 # app=$APP_NAME
-
 # slot=$slot
-
 # commit=$COMMIT_SHA
 
 upstream ${UPSTREAM_NAME} {
-server ${APP_NAME}-${slot}:${APP_PORT} max_fails=2 fail_timeout=5s;
-keepalive 32;
+    server ${APP_NAME}-${slot}:${APP_PORT} max_fails=2 fail_timeout=5s;
+    keepalive 32;
 }
 EOF
-chmod 644 "$tmp"
-mv -f "$tmp" "$UPSTREAM_FILE"
+
+  chmod 644 "$tmp"
+  mv -f "$tmp" "$UPSTREAM_FILE"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Failure cleanup / rollback
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 FLIPPED=false
 UPSTREAM_BACKUP=""
+
 cleanup_on_failure() {
-local rc=$?
-(( rc == 0 )) && return 0
-echo ""
-warn "deployment failed with exit code $rc"
-if [[ "$FLIPPED" == true &&
--n "$UPSTREAM_BACKUP" &&
--r "$UPSTREAM_BACKUP" ]]; then
-warn "restoring previous nginx upstream"
-cp "$UPSTREAM_BACKUP" "$UPSTREAM_FILE"
-if ! reload_nginx; then
-warn "CRITICAL: nginx rollback reload failed"
-warn "CHECK THE EDGE IMMEDIATELY"
-fi
-set_active_slot "$APP_NAME" "$ACTIVE"
-fi
-warn "tearing down candidate slot: $TARGET"
-compose_target down --remove-orphans 
->/dev/null 2>&1 || true
-warn "live slot remains: $ACTIVE"
-exit "$rc"
+  local rc=$?
+
+  (( rc == 0 )) && return 0
+
+  echo ""
+  warn "deployment failed with exit code $rc"
+
+  if [[ "$FLIPPED" == true &&
+        -n "$UPSTREAM_BACKUP" &&
+        -r "$UPSTREAM_BACKUP" ]]; then
+
+    warn "restoring previous nginx upstream"
+
+    cp "$UPSTREAM_BACKUP" "$UPSTREAM_FILE"
+
+    if ! reload_nginx; then
+      warn "CRITICAL: nginx rollback reload failed"
+      warn "CHECK THE EDGE IMMEDIATELY"
+    fi
+
+    set_active_slot "$APP_NAME" "$ACTIVE"
+  fi
+
+  warn "tearing down candidate slot: $TARGET"
+
+  compose_target down --remove-orphans \
+    >/dev/null 2>&1 || true
+
+  warn "live slot remains: $ACTIVE"
+
+  exit "$rc"
 }
+
 trap cleanup_on_failure EXIT
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 1. Pull immutable image
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 info "pulling image"
+
 docker pull --quiet "$IMAGE" >/dev/null || {
-die "could not pull image: $IMAGE"
+  die "could not pull image: $IMAGE"
 }
+
 ok "image present locally"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 2. Start target slot
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 info "starting target slot: $TARGET"
+
 compose_target down --remove-orphans \
+  >/dev/null 2>&1 || true
 
-> /dev/null 2>&1 || true
-> compose_target up -d --no-build
-> ok "$TARGET_CONTAINER started"
+compose_target up -d --no-build
+
+ok "$TARGET_CONTAINER started"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 3. Docker HEALTHCHECK
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 DOCKER_HEALTH_OK=false
+
 if [[ "$CHECK_DOCKER_HEALTH" == true ]]; then
-info "waiting for Docker healthcheck: $TARGET_CONTAINER"
-if wait_for_health "$TARGET_CONTAINER" "$HEALTH_TIMEOUT"; then
-DOCKER_HEALTH_OK=true
-ok "Docker healthcheck passed"
+  info "waiting for Docker healthcheck: $TARGET_CONTAINER"
+
+  if wait_for_health "$TARGET_CONTAINER" "$HEALTH_TIMEOUT"; then
+    DOCKER_HEALTH_OK=true
+    ok "Docker healthcheck passed"
+  else
+    warn "$TARGET_CONTAINER did not become healthy within ${HEALTH_TIMEOUT}s"
+    warn "last 60 log lines from $TARGET_CONTAINER:"
+
+    docker logs \
+      --tail 60 \
+      "$TARGET_CONTAINER" 2>&1 |
+      sed 's/^/    /' >&2 || true
+
+    if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
+      warn "Docker healthcheck failed — CONTINUING deployment"
+    else
+      die "candidate Docker healthcheck failed"
+    fi
+  fi
 else
-warn "$TARGET_CONTAINER did not become healthy within ${HEALTH_TIMEOUT}s"
-warn "last 60 log lines from $TARGET_CONTAINER:"
-docker logs 
---tail 60 
-"$TARGET_CONTAINER" 2>&1 |
-sed 's/^/    /' >&2 || true
-if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
-warn "Docker healthcheck failed — CONTINUING deployment"
-else
-die "candidate Docker healthcheck failed"
-fi
-fi
-else
-warn "Docker healthcheck disabled"
+  warn "Docker healthcheck disabled"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 4. Candidate-container LOCAL healthcheck
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 LOCAL_HEALTH_OK=false
+
 if [[ "$CHECK_CONTAINER_LOCAL" == true ]]; then
-info "checking candidate locally from inside $TARGET_CONTAINER"
-LOCAL_URL="[http://127.0.0.1:${APP_PORT}${CONTAINER_HEALTH_PATH}](http://127.0.0.1:${APP_PORT}${CONTAINER_HEALTH_PATH})"
-if retry_command 
-"local health" 
-"$HEALTH_RETRIES" 
-"$HEALTH_RETRY_INTERVAL" 
-container_http_probe 
-"$TARGET_CONTAINER" 
-"$LOCAL_URL"; then
-LOCAL_HEALTH_OK=true
-ok "candidate local healthcheck passed"
+  info "checking candidate locally from inside $TARGET_CONTAINER"
+
+  LOCAL_URL="http://127.0.0.1:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+
+  if retry_command \
+    "local health" \
+    "$HEALTH_RETRIES" \
+    "$HEALTH_RETRY_INTERVAL" \
+    container_http_probe \
+    "$TARGET_CONTAINER" \
+    "$LOCAL_URL"; then
+
+    LOCAL_HEALTH_OK=true
+    ok "candidate local healthcheck passed"
+  else
+    warn "candidate local healthcheck failed"
+    warn "URL: $LOCAL_URL"
+
+    if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
+      warn "local healthcheck failed — CONTINUING deployment"
+    else
+      die "candidate local healthcheck failed"
+    fi
+  fi
 else
-warn "candidate local healthcheck failed"
-warn "URL: $LOCAL_URL"
-if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
-warn "local healthcheck failed — CONTINUING deployment"
-else
-die "candidate local healthcheck failed"
-fi
-fi
-else
-warn "candidate local healthcheck disabled"
+  warn "candidate local healthcheck disabled"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 5. Candidate reachability from Nginx
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 NGINX_NETWORK_OK=false
+
 if [[ "$CHECK_NGINX_NETWORK" == true ]]; then
-info "checking candidate from nginx container"
-NGINX_TARGET_URL="http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
-if retry_command 
-"nginx network probe" 
-"$HEALTH_RETRIES" 
-"$HEALTH_RETRY_INTERVAL" 
-container_http_probe 
-"$NGINX_CONTAINER" 
-"$NGINX_TARGET_URL"; then
-NGINX_NETWORK_OK=true
-ok "nginx can reach candidate"
+  info "checking candidate from nginx container"
+
+  NGINX_TARGET_URL="http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+
+  if retry_command \
+    "nginx network probe" \
+    "$HEALTH_RETRIES" \
+    "$HEALTH_RETRY_INTERVAL" \
+    container_http_probe \
+    "$NGINX_CONTAINER" \
+    "$NGINX_TARGET_URL"; then
+
+    NGINX_NETWORK_OK=true
+    ok "nginx can reach candidate"
+  else
+    warn "nginx could not reach candidate"
+    warn "URL: $NGINX_TARGET_URL"
+
+    if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
+      warn "nginx network healthcheck failed — CONTINUING deployment"
+    else
+      die "nginx cannot reach candidate"
+    fi
+  fi
 else
-warn "nginx could not reach candidate"
-warn "URL: $NGINX_TARGET_URL"
-if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
-warn "nginx network healthcheck failed — CONTINUING deployment"
-else
-die "nginx cannot reach candidate"
-fi
-fi
-else
-warn "nginx network healthcheck disabled"
+  warn "nginx network healthcheck disabled"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 6. Optional EC2 HOST healthcheck
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 HOST_HEALTH_OK=true
+
 if [[ -n "$HOST_HEALTH_URL" ]]; then
-HOST_HEALTH_OK=false
-info "checking candidate from EC2 host"
-if retry_command 
-"EC2 host health" 
-"$HEALTH_RETRIES" 
-"$HEALTH_RETRY_INTERVAL" 
-host_http_probe 
-"$HOST_HEALTH_URL"; then
-HOST_HEALTH_OK=true
-ok "EC2 host healthcheck passed"
+  HOST_HEALTH_OK=false
+
+  info "checking candidate from EC2 host"
+
+  if retry_command \
+    "EC2 host health" \
+    "$HEALTH_RETRIES" \
+    "$HEALTH_RETRY_INTERVAL" \
+    host_http_probe \
+    "$HOST_HEALTH_URL"; then
+
+    HOST_HEALTH_OK=true
+    ok "EC2 host healthcheck passed"
+  else
+    warn "EC2 host healthcheck failed"
+    warn "URL: $HOST_HEALTH_URL"
+
+    if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
+      warn "EC2 host healthcheck failed — CONTINUING deployment"
+    else
+      die "EC2 host healthcheck failed"
+    fi
+  fi
 else
-warn "EC2 host healthcheck failed"
-warn "URL: $HOST_HEALTH_URL"
-if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
-warn "EC2 host healthcheck failed — CONTINUING deployment"
-else
-die "EC2 host healthcheck failed"
-fi
-fi
-else
-info "EC2 host healthcheck skipped"
+  info "EC2 host healthcheck skipped"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Health summary
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 echo ""
 echo "───────────────────────────────────────────────────────────────"
 echo " Candidate health summary"
@@ -687,143 +635,127 @@ echo "────────────────────────�
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 7. Prepare Nginx flip
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 info "preparing traffic flip to $TARGET"
+
 if [[ -r "$UPSTREAM_FILE" ]]; then
-UPSTREAM_BACKUP="$(
-mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.backup.XXXXXX"
-)"
-cp "$UPSTREAM_FILE" "$UPSTREAM_BACKUP"
+  UPSTREAM_BACKUP="$(mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.backup.XXXXXX")"
+  cp "$UPSTREAM_FILE" "$UPSTREAM_BACKUP"
 else
-warn "no existing upstream file found"
-warn "rollback may not be possible if nginx reload fails"
+  warn "no existing upstream file found"
+  warn "rollback may not be possible if nginx reload fails"
 fi
+
 write_upstream "$TARGET"
 FLIPPED=true
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 8. Nginx validation + reload
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 if ! reload_nginx; then
-die "nginx reload failed — previous upstream will be restored"
+  die "nginx reload failed — previous upstream will be restored"
 fi
+
 set_active_slot "$APP_NAME" "$TARGET"
+
 ok "traffic switched to $TARGET"
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 9. Post-flip edge healthcheck
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 EDGE_OK=false
+
 info "verifying traffic through nginx"
+
 EDGE_URL="http://127.0.0.1${EDGE_HEALTH_PATH}"
+
 for attempt in $(seq 1 "$EDGE_RETRIES"); do
-if docker exec "$NGINX_CONTAINER" 
-wget 
--q 
--O /dev/null 
---timeout=5 
-"$EDGE_URL" 
---header="Host: ${EDGE_HEALTH_HOST:-localhost}" 
-2>/dev/null; then
-EDGE_OK=true
-ok "post-flip edge healthcheck passed"
-break
-fi
-log "   edge health attempt $attempt/$EDGE_RETRIES failed"
-if (( attempt < EDGE_RETRIES )); then
-sleep "$EDGE_RETRY_INTERVAL"
-fi
+  if docker exec "$NGINX_CONTAINER" \
+    wget \
+    -q \
+    -O /dev/null \
+    --timeout=5 \
+    "$EDGE_URL" \
+    --header="Host: ${EDGE_HEALTH_HOST:-localhost}" \
+    2>/dev/null; then
+
+    EDGE_OK=true
+    ok "post-flip edge healthcheck passed"
+    break
+  fi
+
+  log "   edge health attempt $attempt/$EDGE_RETRIES failed"
+
+  if (( attempt < EDGE_RETRIES )); then
+    sleep "$EDGE_RETRY_INTERVAL"
+  fi
 done
+
 if [[ "$EDGE_OK" != true ]]; then
-warn "post-flip edge /health check failed"
-warn "This check is NON-FATAL."
-warn "Direct candidate URL:"
-warn "http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
-warn "Candidate logs:"
-docker logs 
---tail 100 
-"$TARGET_CONTAINER" 2>&1 |
-sed 's/^/    /' >&2 || true
+  warn "post-flip edge /health check failed"
+  warn "This check is NON-FATAL."
+  warn "Direct candidate URL:"
+  warn "http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+  warn "Candidate logs:"
+
+  docker logs \
+    --tail 100 \
+    "$TARGET_CONTAINER" 2>&1 |
+    sed 's/^/    /' >&2 || true
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # Traffic flip succeeded; disable rollback trap.
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 trap - EXIT
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 10. Stop old slot
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 if [[ "$KEEP_OLD" == true ]]; then
-info "--keep-old enabled"
-info "leaving $ACTIVE_CONTAINER running for rollback"
+  info "--keep-old enabled"
+  info "leaving $ACTIVE_CONTAINER running for rollback"
+
 elif [[ "$(container_state "$ACTIVE_CONTAINER")" != "absent" ]]; then
-info "draining old slot: $ACTIVE"
-if (( DRAIN_SECONDS > 0 )); then
-sleep "$DRAIN_SECONDS"
-fi
-compose_slot "$ACTIVE" 
-down --remove-orphans || {
-warn "could not cleanly stop $ACTIVE_CONTAINER"
-warn "the new slot is already live"
-}
-ok "old slot retired"
+  info "draining old slot: $ACTIVE"
+
+  if (( DRAIN_SECONDS > 0 )); then
+    sleep "$DRAIN_SECONDS"
+  fi
+
+  compose_slot "$ACTIVE" down --remove-orphans || {
+    warn "could not cleanly stop $ACTIVE_CONTAINER"
+    warn "the new slot is already live"
+  }
+
+  ok "old slot retired"
 else
-info "old slot already absent"
+  info "old slot already absent"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 11. Preserve Docker layer cache
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 info "retaining Docker image cache for faster future deployments"
 
 # Intentionally do NOT run:
-
 #
-
 # docker image prune -f
-
 #
-
 # Keeping cached image layers allows future ECR pulls to reuse unchanged
-
 # layers and reduces deployment time.
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 12. Remove temporary upstream backup
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 if [[ -n "$UPSTREAM_BACKUP" ]]; then
-rm -f "$UPSTREAM_BACKUP" || true
+  rm -f "$UPSTREAM_BACKUP" || true
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-
 # 13. Final deployment status
-
 # ─────────────────────────────────────────────────────────────────────────────
-
 echo ""
 echo "==============================================================="
 echo " Deployment completed"
@@ -849,13 +781,16 @@ echo "  Health failures     : NON-FATAL"
 echo "  Nginx/config errors : FATAL"
 echo ""
 echo "==============================================================="
+
 if [[ "$DOCKER_HEALTH_OK" != true ||
-"$LOCAL_HEALTH_OK" != true ||
-"$NGINX_NETWORK_OK" != true ||
-"$HOST_HEALTH_OK" != true ||
-"$EDGE_OK" != true ]]; then
-warn "deployment completed with one or more health warnings"
+      "$LOCAL_HEALTH_OK" != true ||
+      "$NGINX_NETWORK_OK" != true ||
+      "$HOST_HEALTH_OK" != true ||
+      "$EDGE_OK" != true ]]; then
+
+  warn "deployment completed with one or more health warnings"
 else
-ok "all health checks passed"
+  ok "all health checks passed"
 fi
+
 exit 0
