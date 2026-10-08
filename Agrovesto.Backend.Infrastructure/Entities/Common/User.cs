@@ -1,4 +1,5 @@
 ﻿
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.V2.Onboarding;
 using Agrovesto.Backend.Infrastructure.Entities.Businesses;
@@ -47,6 +48,14 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
     }
     public class User : IdentityUser
     {
+        public bool IsAdminUser { get; set; } = false;
+        // On User (or an AdminProfile table if you'd rather not widen User)
+        public string? Department { get; set; }
+        public string? AdminCode { get; set; } = default!;   // ADM000124        
+        public AdminUserStatus? Status { get; set; }
+        /// <summary>
+        /// /admin panel
+        /// </summary>
         public string? FirstName { get; set; }
         public string? MiddleName { get; set; }
         public string? LastName { get; set; }
@@ -86,6 +95,8 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public bool IsNinVerified { get; set; } = false;
         public bool IsBvnVerified { get; set; } = false;
         public SignupMethod SignupMethod { get; set; } //= SignupMethod.PhoneNumber; // enum: Email = 1, Phone = 2
+
+        public ICollection<ApplicationUserRole> UserRoles { get; set; } = new List<ApplicationUserRole>();
     }
 
     public class UserOrganization

@@ -7,6 +7,7 @@ using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
@@ -134,7 +135,7 @@ builder.Services.AddHostedService<BulkUploadBgService>();
 builder.Services.AddHostedService<FarmerOrganizationSyncService>();
 builder.Services.AddScoped<BulkOnboardingProcessor>();
 builder.Services.Configure<ReconciliationEmailSettings>(
-    builder.Configuration.GetSection("ReconciliationEmailSettings"));
+builder.Configuration.GetSection("ReconciliationEmailSettings"));
 
 builder.Services.AddIdentity<User, Role>(opt =>
 {
@@ -153,6 +154,15 @@ builder.Services.AddIdentity<User, Role>(opt =>
 //.AddUserManager<UserManager<User>>()
 .AddEntityFrameworkStores<DataContext>()
 .AddDefaultTokenProviders();
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<AdminPanelOptions>()
+    .Bind(builder.Configuration.GetSection("AdminPanel"))
+    .Validate(o => o.BusinessId > 0 && !string.IsNullOrWhiteSpace(o.PortalBaseUrl),
+              "AdminPanel:BusinessId and AdminPanel:PortalBaseUrl must be configured.")
+    .ValidateOnStart();
+
+
 builder.Services.AddAppServices(builder.Configuration);
 
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
@@ -417,6 +427,13 @@ var customHealthResponseWriter = async (HttpContext context, HealthReport report
 
     await context.Response.WriteAsJsonAsync(result);
 };
+
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<DataContext>();
+//    await PermissionSeeder.SeedAsync(db);
+//}
+
 
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {

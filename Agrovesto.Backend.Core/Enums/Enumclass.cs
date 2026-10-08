@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 
 namespace Agrovesto.Backend.Core.Enums
 {
+    public enum AdminUserStatus { Active = 1, Suspended = 2, Deactivated = 3, Pending = 4 }
+
     public enum MembershipParticipantType
     {
         Farmer=1,

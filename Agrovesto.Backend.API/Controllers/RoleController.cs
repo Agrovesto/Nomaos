@@ -9,10 +9,11 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.CoreUtils;
 using Agrovesto.Backend.Core.Exceptions;
+using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers
 {
-    [Route("api/role")]
+    [Route("api")]
     // [ApiController]
     public class RoleController : ControllerBase
     {
@@ -22,7 +23,7 @@ namespace Agrovesto.Backend.API.Controllers
         {
             _roleManager = roleManager;
         }
-        [HttpPost("update-role")]
+        [HttpPost("role/update-role")]
         public async Task<IActionResult> UpdateRole([FromBody] RoleModel roleModel)
         {
             // var isAdmin = User.Claims.ToArray();
@@ -73,7 +74,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
 
-        [HttpPost("create")]
+        [HttpPost("role/create")]
         public async Task<IActionResult> CreateRole([FromBody] RoleModel roleModel)
         {
             // var isAdmin = User.Claims.ToArray();
@@ -123,7 +124,7 @@ namespace Agrovesto.Backend.API.Controllers
             }
         }
 
-        [HttpGet("roles")]
+        [HttpGet("role/roles")]
         public async Task<IActionResult> GetRoles()
         {
             // var isAdmin = User.Claims.ToArray();
@@ -137,8 +138,24 @@ namespace Agrovesto.Backend.API.Controllers
 
             });
         }
+        [HttpGet("v2/roles/admin")]
+        public async Task<IActionResult> GetAdminRolesAsync()
+        {
+            // var isAdmin = User.Claims.ToArray();
+            // if (!isAdmin) throw new BadRequestException("Not Authorized");
+            var data = await _roleManager.GetAdminRolesAsync();
+            return Ok(new PagedListResponse<List<RoleModel>>()
+            {
+                Message = "",
+                Data = data.Data,
+                Count = data.Count,
+                Succeeded=true,
+                Code= ResponseCodes.Success
 
-         [HttpGet("roles/business")]
+            });
+        }
+
+         [HttpGet("role/roles/business")]
         public async Task<IActionResult> GetBusinessRoles()
         {
             // var isAdmin = User.Claims.ToArray();
@@ -154,7 +171,7 @@ namespace Agrovesto.Backend.API.Controllers
         }
 
 
-        [HttpGet("role/{roleId}")]
+        [HttpGet("role/role/{roleId}")]
         public async Task<IActionResult> GetRole(string roleId)
         {
             // var isAdmin = User.Claims.ToArray();
@@ -167,7 +184,7 @@ namespace Agrovesto.Backend.API.Controllers
 
             });
         }
-        [HttpPatch("assignUserToRole/{userId}/{roleId}")]
+        [HttpPatch("role/assignUserToRole/{userId}/{roleId}")]
         public async Task<IActionResult> AssignUserToRole(string userId, string roleId)
         {
             if (!ModelState.IsValid)
@@ -214,7 +231,7 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-            [HttpPatch("removeuser-from-role/{userId}/{roleId}")]
+            [HttpPatch("role/removeuser-from-role/{userId}/{roleId}")]
         public async Task<IActionResult> RemoveUserFromRole(string userId, string roleId)
         {
             if (!ModelState.IsValid)
@@ -261,7 +278,7 @@ namespace Agrovesto.Backend.API.Controllers
                 });
             }
         }
-                [HttpPatch("change-from-role/{userId}/{prevroleId}/{newroleId}")]
+                [HttpPatch("role/change-from-role/{userId}/{prevroleId}/{newroleId}")]
         public async Task<IActionResult> ReAssignUserRole(string userId, string prevroleId, string newroleId)
         {
             if (!ModelState.IsValid)

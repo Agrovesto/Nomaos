@@ -994,6 +994,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories
                 if (data.MemberShipTypeId == 0) data.MemberShipTypeId = DefaultMembershipTypeId;
 
                 entity = data.Map();
+                entity.BelongToBusinessCode = data.BelongToBusinessCode;
                 _context.MemberShips.Add(entity);
             }
             else

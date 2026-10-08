@@ -4,6 +4,7 @@ using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models.Businesses.Wallets.FCMBModels;
 using Agrovesto.Backend.Core.Models.Common;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.BGService;
 using Agrovesto.Backend.Infrastructure.ExternalServices.ImageRecognition;
@@ -15,11 +16,13 @@ using Agrovesto.Backend.Infrastructure.ExternalServices.WalletServices;
 using Agrovesto.Backend.Infrastructure.Logic;
 using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
+using Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.MandEService;
 using Agrovesto.Backend.Infrastructure.Logic.Repositories.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Logic.Services.MandE;
+using Agrovesto.Backend.Infrastructure.Logic.Services.RolePermissionService;
 using Agrovesto.Backend.Infrastructure.Utilities;
 using Agrovesto.Backend.Infrastructure.V2.Internal;
 
@@ -196,6 +199,17 @@ namespace Agrovesto.Backend.API.Extensions
             services.AddScoped<ICredentialChangeHandler, PasswordChangeHandler>();
             services.AddScoped<ICredentialChangeHandler, PinChangeHandler>();
             services.AddScoped<CredentialChangeService>();
+
+           
+            services.AddScoped<IAdminDashboardManager, AdminDashboardManager>();
+                       services.AddScoped<IAdminUserManagementManager, AdminUserManagementManager>();
+
+            services.AddMemoryCache();
+            services.AddScoped<IPermissionService, PermissionService>();
+            services.AddSingleton<IPermissionCacheInvalidator, PermissionCacheInvalidator>();
+
+            services.AddScoped<IRoleAccessManager, RoleAccessManager>();
+
 
         }
     }

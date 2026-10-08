@@ -6,6 +6,7 @@ using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Interfaces.Services;
 using Agrovesto.Backend.Core.Models;
+using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Businesses;
 using Agrovesto.Backend.Core.Models.Businesses.Agrovesto.Application.DTOs.Farms;
 using Agrovesto.Backend.Core.Models.Common;
@@ -108,6 +109,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         Task<ProfileUpdateResult> UpdateProfileAsync(ProfileRole role, OnBoardingArgs args, ProfileRequestModel model = null, FarmerUpdateModel farmerUpdate = null, OrganizationUpdateModel organizationUpdate= null);
         Task<(UserModel model, bool status, string message)> RegisterAdmin(UserModel model, string roleName);
         Task<(bool Status, string Message, TokenModel Response)> RefreshToken(string refreshToken, string? ipAddress = null);
+        Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress);
     }
     public class OnBoardingManager : IOnBoardingManager
     {
@@ -548,58 +550,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
 
 
-        //public async Task<Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto> UpdateFarmerProfile(string userId,FarmerUpdateModel update)
-        //{
-        //    if (string.IsNullOrWhiteSpace(userId) || update == null)
-        //        throw new BaseException(ExceptionType.BAD_REQUEST, "User id and update payload are required.");
-
-        //    if (!string.IsNullOrWhiteSpace(update.NIN))
-        //        ValidateIdentifier(update.NIN, "NIN");
-
-        //    if (!string.IsNullOrWhiteSpace(update.BVN))
-        //        ValidateIdentifier(update.BVN, "BVN");
-
-        //    var updateUser = await _onboardingRepository.UpdateUserProfileAsync(userId, new ProfileRequestModel
-        //    {
-
-        //        PhoneNumber = update.PhoneNumber,
-        //        Email = update.Email,
-        //        NIN = update.NIN,
-        //        DateOfBirth = update.DateOfBirth,
-        //        BVN = update.BVN,
-        //        Location = update.Location,
-        //    });
-        //    var updated = await _farmerRepository.UpdateFarmerProfileAsync(userId, update);
-        //    if (updated == null)
-        //    {
-        //        return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
-        //        {
-        //            Success = false,
-        //            Message = "Farmer not found or update failed."
-        //        };
-        //    }
-
-        //    var updatedFields = new List<string>();
-        //    foreach (var prop in typeof(FarmerUpdateModel).GetProperties())
-        //    {
-        //        var val = prop.GetValue(update);
-        //        if (val != null)
-        //        {
-        //            if (val is string s && string.IsNullOrWhiteSpace(s)) continue;
-        //            updatedFields.Add(prop.Name);
-        //        }
-        //    }
-
-        //    return new Agrovesto.Backend.Core.Models.Businesses.FarmerUpdateResultDto
-        //    {
-        //        Success = true,
-        //        UpdatedFields = updatedFields,
-        //        UpdatedFarmer = updated,
-        //        Message = "Farmer profile updated successfully."
-        //    };
-        //}
-        
-        private static void ValidateLoginModel(LoginModel model)
+         private static void ValidateLoginModel(LoginModel model)
         {
             switch (model.LoginMethod)
             {
@@ -650,6 +601,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return login;
         }
+     
         public async Task<(bool Status, string Message, TokenModel Response)> RefreshToken(
       string refreshToken,
       string? ipAddress = null
@@ -811,6 +763,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     break;
 
                 case UserType.MemberShip:
+                    args.UserId = model.Id;
                     await UpdateCooperativeProfileAsync(model, args);
                     break;
 
@@ -905,57 +858,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
             return updateUser;
         }
-        //public async Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
-        //{
-
-        //    var hasOrg = await _businessRepository.GetOrganizationByCodeAsync(args.organizationCode);
-        //    if (hasOrg != null)
-        //    {
-        //        model.OrganizationId = hasOrg.OrganizaionId;
-        //    }
-        //    var isAssignedagent = false;
-        //    if (args.OnboardedByUserId != null)
-        //    {
-        //        isAssignedagent = true;
-        //    }
-        //    await UpdateUserProfile(model, args);
-
-        //    await _cooperativeRepository.CreateUpdateMembership(new MemberShipModel
-        //    {
-        //        BelongToBusinessCode = args.businessCode,
-        //        IsLeaderAFarmer = model.IsLeaderAFarmer,
-        //        State = model.State,
-        //        Lga = model.Lga,
-        //        ContactPerson = model.FirstName,
-        //        Email = model.Email,
-        //        Location = model.Location,
-        //        MembershipLeaderFirstName = model.FirstName,
-        //        MembershipLeaderGender = model.Gender,
-        //        MembershipLeaderLastName = model.LastName,
-        //        MembershipLeaderMiddleName = model.MiddleName,
-        //        MemberShipTypeId = model.MembershipTypeId.HasValue ? model.MembershipTypeId.Value : 1,
-        //        Tier = Tier.Tier1.ToString(),
-
-
-        //        Name = model.CooperativeName,
-        //        OnBoardedOn = model.CreatedOn,
-        //        PhoneNumber = model.PhoneNumber,
-        //        UserId = model.Id,
-        //        OnboardedById = args.OnboardedByUserId,
-
-        //        IsAssignedToAgentId = args.OnboardedByUserId,
-        //        HasbeenAssignedAgent = isAssignedagent,
-        //        Ward = model.Ward,
-
-        //    });
-
-        //    if (model.IsLeaderAFarmer)
-        //    {
-        //        await CreateFarmerProfileAsync(model, args);
-        //    }
-
-        //}
-
+       
 
         private async Task CreateFarmerProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
         {
@@ -1195,9 +1098,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                     OnboardedByUserId = args.OnboardedByUserId
                 }, args);
 
-                await _onboardingRepository.TrackUserRoleAssignment(
-                    createUser.model.Id,
-                    args.userType);
+                //await _onboardingRepository.TrackUserRoleAssignment(
+                //    createUser.model.Id,
+                //    args.userType);
             }
             catch (Exception ex)
             {
@@ -2019,7 +1922,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 : SignupMethod.PhoneNumber;
                 var business = await GetBusinessOrFail(args.businessCode);
 
-                var user = await RegisterMembershipLeaderOrFail(model, args);
+                var user = await RegisterMembershipLeaderOrFail(model, args, business);
 
                 var membership = await CreateMembershipOrFail(
                     model, args, business, user.model.Id, dateTime);
@@ -2075,7 +1978,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
         }
         private async Task<CreateUserResult> RegisterMembershipLeaderOrFail(
             MemberShipRequestModel model,
-            OnBoardingArgs args)
+            OnBoardingArgs args, BusinessModel business)
         {
             var result = await _onboardingRepository.RegisterUser(
                       new OnboardingRequestModel
@@ -2144,7 +2047,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
             {
                 await EnsureWalletExists(user, business);
                 await CreateFarmerIfLeaderIsFarmer(model, args, user.Id, dateTime);
-                await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
+                //await _onboardingRepository.TrackUserRoleAssignment(user.Id, args.userType);
                 await GenerateAndSendOtp(user, args.businessCode);
             }
             catch (Exception ex)
@@ -2256,7 +2159,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
                 await EnsureWalletExists(registerUser.model, business);
 
-                await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
+                //await _onboardingRepository.TrackUserRoleAssignment(registerUser.model.Id, args.userType);
 
                 return new CreateAgentResponseModel
                 {
@@ -2669,7 +2572,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 CompanyName = model.OrganizationName,
                 FirstName = profileModel.FirstName,
                 LastName = profileModel.LastName,
-                
+                WardId=model.OrganizationWardId,
                 PhoneNumber = model.OrganizationPhone,
                 OrganizationPhone = model.OrganizationPhone,
                 StateId = model.OrganizationStateId,
@@ -2677,6 +2580,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 CompanyAddress = model.OrganizationAddress,
                 CompanyType = Enum.TryParse<CompanyType>(model.OrgaizationType, out var companyType) ? companyType : null,
                 CACNumber = model.CACID,
+                
                // RoleInOrganization = Enum.TryParse<RoleInOrganization>(model.RoleInOrganization, out var roleInOrg) ? roleInOrg : null
             };
             return response;
@@ -2737,6 +2641,17 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
 
         public Task UpdateCooperativeProfileAsync(ProfileRequestModel model, OnBoardingArgs args)
             => UpdateProfileAsync(ProfileRole.MemberShip, args, model);
+
+
+
+
+        public async Task<AdminLoginResult> AdminLogin(AdminLoginModel model, string? businessCode, string? ipAddress)
+        {
+        
+            var login = await _onboardingRepository.AdminLogin(model, businessCode, ipAddress);
+
+            return login;
+        }
     }
 
 }

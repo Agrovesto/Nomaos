@@ -305,7 +305,7 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string? Pin { get; set; }
         public LoginType LoginMethod { get; set; }
     }
-  
+    
     public class UserObject
     {
         public string Id { get; set; }
@@ -321,6 +321,7 @@ namespace Agrovesto.Backend.Core.Models.Common
     }
     public class TokenModel
     {
+        public List<string> Permissions { get; set; } = new();
         public string RefreshToken { get; set; }
         public DateTime RefreshTokenExpiresOn { get; set; }
         public string Token { get; set; }
