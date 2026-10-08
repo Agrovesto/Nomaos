@@ -273,7 +273,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
 
 
         // GET api/admin/users/summary
-        [HttpGet("summary")]
+        [HttpGet("user/summary")]
         [HasPermission(Permissions.Users.View)]
         public async Task<IActionResult> Summary(CancellationToken ct)
         {
@@ -289,7 +289,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         // GET api/admin/users?search=&status=&role=&department=&page=1&pageSize=20
-        [HttpGet("users")]
+        [HttpGet("user")]
         [HasPermission(Permissions.Users.View)]
         public async Task<IActionResult> List([FromQuery] AdminUserListQuery q, CancellationToken ct)
         {
@@ -304,7 +304,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         // GET api/admin/users/export?format=csv|xlsx (accepts the same filters as the list)
-        [HttpGet("export")]
+        [HttpGet("user/export")]
         [HasPermission(Permissions.Users.Export)]
         public async Task<IActionResult> Export([FromQuery] AdminUserListQuery q, [FromQuery] string format = "csv", CancellationToken ct = default)
         {
@@ -332,7 +332,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         }
 
         // POST api/admin/users/invite
-        [HttpPost("users/invite")]
+        [HttpPost("user/invite")]
         [HasPermission(Permissions.Users.Invite)]
         public async Task<IActionResult> Invite([FromBody] InviteAdminUserRequest req, CancellationToken ct)
         {
@@ -353,12 +353,12 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             });
         }
 
-        // POST api/admin/users/{userId}/resend-invite
-        [HttpPost("users/{userId}/resend-invite")]
+        // POST api/admin/user/{adminId}/resend-invite
+        [HttpPost("user/{adminId}/resend-invite")]
         [HasPermission(Permissions.Users.Invite)]
-        public async Task<IActionResult> Resend(string userId, CancellationToken ct)
+        public async Task<IActionResult> Resend(string adminId, CancellationToken ct)
         {
-            var result = await _adminUserManagementManager.ResendAsync(userId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+            var result = await _adminUserManagementManager.ResendAsync(adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
 
             if (result.Data is null)
                 return Failure(result.StatusCode, result.Error);
@@ -400,5 +400,26 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 Succeeded = false,
                 Message = error
             });
+
+
+        // POST api/admin/users/{adminId}/deactivate
+        [HttpPost("user/{adminId}/deactivate")]
+        [HasPermission(Permissions.Users.Manage)]
+        public async Task<IActionResult> Deactivate(string adminId, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.DeactivateUserAsync(
+                adminId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<AdminUserStatusDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = "User deactivated successfully.",
+                Data = result.Data
+            });
+        }
     }
 }

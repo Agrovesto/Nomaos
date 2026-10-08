@@ -34,6 +34,8 @@ namespace Agrovesto.Backend.Core.Models.Admin
         public const string InvalidCredentials = "Incorrect email or password. Please check your details and try again.";
         public const string AccountInactive = "Your account is inactive. Please contact your administrator.";
         public const string NoAdminAccess = "You do not have permission to access the Admin Panel.";
+        public const string Deactivated = "Your account has been deactivated. Please contact your administrator.";
+        public const string Suspended = "Your account has been suspended. Please contact your administrator.";
         public const string ServerError = "Something went wrong. Please try again.";
     }
 
@@ -141,4 +143,6 @@ namespace Agrovesto.Backend.Core.Models.Admin
     }
 
     public record AcceptResult(bool Success, string? Error, int StatusCode);
+
+    public record AdminUserStatusDto(string UserId, string Status);
 }
