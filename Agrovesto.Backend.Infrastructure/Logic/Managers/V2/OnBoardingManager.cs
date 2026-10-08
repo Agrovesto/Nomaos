@@ -2572,7 +2572,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 CompanyName = model.OrganizationName,
                 FirstName = profileModel.FirstName,
                 LastName = profileModel.LastName,
-                
+                WardId=model.OrganizationWardId,
                 PhoneNumber = model.OrganizationPhone,
                 OrganizationPhone = model.OrganizationPhone,
                 StateId = model.OrganizationStateId,
@@ -2580,6 +2580,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 CompanyAddress = model.OrganizationAddress,
                 CompanyType = Enum.TryParse<CompanyType>(model.OrgaizationType, out var companyType) ? companyType : null,
                 CACNumber = model.CACID,
+                
                // RoleInOrganization = Enum.TryParse<RoleInOrganization>(model.RoleInOrganization, out var roleInOrg) ? roleInOrg : null
             };
             return response;

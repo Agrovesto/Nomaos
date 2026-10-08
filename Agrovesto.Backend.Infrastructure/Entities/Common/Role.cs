@@ -21,6 +21,7 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         }
         public string Descriptions { get; set; }
         public bool IsAvailableToBusiness { get; set; }
+        public bool IsAvailableToAdmin { get; set; } = false;
         //add permission
 
         /// <summary>   

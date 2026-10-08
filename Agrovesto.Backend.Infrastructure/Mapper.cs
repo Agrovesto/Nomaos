@@ -1984,6 +1984,7 @@ namespace Agrovesto.Backend.Infrastructure
                 LastName = model.LastName,
                 StateId = (model.StateId == null || model.StateId == 0) ? null : model.StateId,
                 LgaId = (model.LgaId == null || model.LgaId == 0) ? null : model.LgaId,
+                WardId = (model.WardId == null || model.WardId == 0) ? null : model.WardId,
 
                 FullName = $"{model.FirstName} {model.LastName}",
                 OnboardedOn = DateTimeOffset.Now,

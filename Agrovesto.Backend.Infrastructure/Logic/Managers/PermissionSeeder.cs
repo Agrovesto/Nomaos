@@ -34,7 +34,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             Permissions.Organizations.View, Permissions.Organizations.Manage,
             Permissions.Memberships.View, Permissions.Memberships.Manage,
             Permissions.ServiceProviders.View, Permissions.ServiceProviders.Manage,
-            Permissions.Users.View
+            Permissions.Users.View, Permissions.Users.Export, Permissions.Users.Manage, Permissions.Users.Invite//, Permissions.Users.Delete
             ],
             ["Super Admin"] =
             [
@@ -45,7 +45,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             Permissions.Organizations.View, Permissions.Organizations.Manage,
             Permissions.Memberships.View, Permissions.Memberships.Manage,
             Permissions.ServiceProviders.View, Permissions.ServiceProviders.Manage,
-            Permissions.Users.View
+            Permissions.Users.View, Permissions.Users.Export, Permissions.Users.Manage, Permissions.Users.Invite
             ],
             ["Admin"] =
             [
@@ -55,7 +55,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers
             Permissions.Organizations.View, Permissions.Organizations.Manage,
             Permissions.Memberships.View, Permissions.Memberships.Manage,
             Permissions.ServiceProviders.View, Permissions.ServiceProviders.Manage,
-            Permissions.Users.View
+            Permissions.Users.View, Permissions.Users.Export, Permissions.Users.Manage, Permissions.Users.Invite
             ],
             ["Operations"] =
             [

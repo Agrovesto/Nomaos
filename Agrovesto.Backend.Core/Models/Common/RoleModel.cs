@@ -12,5 +12,6 @@ namespace Agrovesto.Backend.Core.Models.Common
         public string RoleName { get; set; }
         public string RoleDescription { get; set; }
         public bool IsAvailableToBusiness { get; set; }
+        public bool IsAvailableToAdmin { get; set; }
     }
 }

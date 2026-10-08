@@ -40,7 +40,7 @@ namespace Agrovesto.Backend.Core.V2.Onboarding
         public string? ContactEmail { get; set; }
         public string? OrganizationCode { get; set; }
         public string? CompanyEmail { get; set; }
-    
+    public long? WardId { get; set; }
         public string CompanyName { get; set; }
         public string FirstName { get; set; }
         public string LastName { get; set; }

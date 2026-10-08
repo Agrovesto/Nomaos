@@ -21,8 +21,12 @@ namespace Agrovesto.Backend.Infrastructure.Entities.Common
         public static class Organizations { public const string View = "Organizations.View"; public const string Manage = "Organizations.Manage"; }
         public static class Memberships { public const string View = "Memberships.View"; public const string Manage = "Memberships.Manage"; }
         public static class ServiceProviders { public const string View = "ServiceProviders.View"; public const string Manage = "ServiceProviders.Manage"; }
-        public static class Users { public const string View = "Users.View"; public const string Manage = "Users.Manage"; }
-        public static class Roles { public const string Manage = "Roles.Manage"; }
+        public static class Users { public const string View = "Users.View"; public const string Manage = "Users.Manage";
+            public const string Export = "Users.Export";   // new
+            public const string Invite = "Users.Invite";   // new
+                                                           }
+            public static class Roles { public const string Manage = "Roles.Manage"; }
+
 
         /// <summary>Every constant above, discovered by reflection so you never maintain a second list.</summary>
         public static IReadOnlyList<string> All { get; } = typeof(Permissions)

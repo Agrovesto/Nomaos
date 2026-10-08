@@ -1,19 +1,26 @@
 using Agrovesto.Backend.Core.CoreUtils;
+using Agrovesto.Backend.Core.Enums;
 using Agrovesto.Backend.Core.Exceptions;
 using Agrovesto.Backend.Core.Interfaces.Managers;
 using Agrovesto.Backend.Core.Interfaces.Repositories;
 using Agrovesto.Backend.Core.Models.Admin;
 using Agrovesto.Backend.Core.Models.Common;
 using Agrovesto.Backend.Core.V2.Onboarding;
+using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2;
 using Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager;
+using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using static Agrovesto.Backend.Core.CoreUtils.Constants;
 
 namespace Agrovesto.Backend.API.Controllers.V2.Internal
@@ -25,17 +32,21 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
     {
         private readonly IOnBoardingManager _onBoardingManager;
         private readonly IAdminDashboardManager _adminDashboardManager;
+
+        public readonly IAdminUserManagementManager _adminUserManagementManager;
         public static string AdminUserType { get; private set; } = UserType.Agrovesto.ToString();
         private const int MaxCustomRangeDays = 366 * 5;
 
         public AdminController(IHttpContextAccessor httpContextAccessor,
           //  IAuthenticationRepository authenticationRepository,
             IOnBoardingManager onBoardingManager,
-            IAdminDashboardManager adminDashboardManager) : base(httpContextAccessor)
+            IAdminDashboardManager adminDashboardManager,
+            IAdminUserManagementManager adminUserManagementManager) : base(httpContextAccessor)
         {
            // _authenticationRepository = authenticationRepository;
             _onBoardingManager = onBoardingManager;
             _adminDashboardManager = adminDashboardManager;
+            _adminUserManagementManager = adminUserManagementManager;
         }
 
         /// <summary>
@@ -88,89 +99,46 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
         }
 
-        /// <summary>
-        /// Allow a SystemAdmin user to create admin users (other admins).
-        /// </summary>
-        [HttpPost("auth/create-admin")]
-        [Authorize]
-        public async Task<IActionResult> CreateAdmin([FromBody] UserModel model, [FromQuery] string? roleName, [FromQuery] string businessCode)
-        {
-            if (!ModelState.IsValid)
-            {
-                return BadRequest(new Response<Dictionary<string, string>>()
-                {
-                    Message = "Validation failed.",
-                    Succeeded = false,
-                    Data = ModelState
-                        .Where(ms => ms.Value!.Errors.Any())
-                        .ToDictionary(
-                            ms => ms.Key,
-                            ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
-                        )
-                });
-            }
-
-            // Only allow SystemAdmin to perform this action
-            if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase))
-                return Unauthorized(new Response<string> { Succeeded = false, Message = ResponseMessages.AccessDenied, Code = ResponseCodes.AccessDenied });
-
-            try
-            {
-                var role =roleName;
-                model.UserType = AdminUserType;
-                model.BusinessCode = businessCode;
-                var createUser = await _onBoardingManager.RegisterAdmin(model, role);
-
-                return Ok(new Response<(UserModel model, bool status, string message)>()
-                {
-                    Code = ResponseCodes.Success,
-                    Succeeded = createUser.status,
-                    Message = createUser.message,
-                    Data = createUser
-                });
-            }
-            catch (BaseException ex)
-            {
-                return StatusCode((int)ex.HttpStatusCode, new Response<string>
-                {
-                    Message = ex.ExceptionMessage,
-                    Succeeded = false,
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new Response<string>
-                {
-                    Message = ex.Message,
-                    Succeeded = false,
-                });
-            }
-        }
-
-        /// <summary>
-        /// Allow a SystemAdmin user to create other users using the onboarding flow.
-        /// </summary>
-        //[HttpPost("auth/create-user")]
+        ///// <summary>
+        ///// Allow a SystemAdmin user to create admin users (other admins).
+        ///// </summary>
+        //[HttpPost("auth/create-admin")]
         //[Authorize]
-        //public async Task<IActionResult> CreateUserBySuperAdmin([FromBody] Agrovesto.Backend.Core.V2.Onboarding.OnboardingRequestModel model,
-        //    [FromQuery] Agrovesto.Backend.Core.V2.Onboarding.OnBoardingArgs args)
+        //public async Task<IActionResult> CreateAdmin([FromBody] UserModel model, [FromQuery] string? roleName, [FromQuery] string businessCode)
         //{
         //    if (!ModelState.IsValid)
-        //        return ValidationProblemResponse();
+        //    {
+        //        return BadRequest(new Response<Dictionary<string, string>>()
+        //        {
+        //            Message = "Validation failed.",
+        //            Succeeded = false,
+        //            Data = ModelState
+        //                .Where(ms => ms.Value!.Errors.Any())
+        //                .ToDictionary(
+        //                    ms => ms.Key,
+        //                    ms => string.Join("; ", ms.Value!.Errors.Select(e => e.ErrorMessage))
+        //                )
+        //        });
+        //    }
 
-        //    if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase))
+        //    // Only allow SystemAdmin to perform this action
+        //    if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase) || !CurrentUserRoles.Contains("Super Admin",StringComparer.OrdinalIgnoreCase))
         //        return Unauthorized(new Response<string> { Succeeded = false, Message = ResponseMessages.AccessDenied, Code = ResponseCodes.AccessDenied });
 
         //    try
         //    {
-        //        args.OnboardedByUserId = CurrentUserId;
-        //        // Preserve organization resolution behavior from other onboarding endpoints
-        //        var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
-        //        if (orgError != null) return orgError;
-        //        args.organizationCode = resolvedOrgCode;
-        //        args.userType = AdminUserType;
-        //        var result = await _onBoardingManager.CreateBusinessUser(model, args);
-        //        return Ok(Success(result, result.Message, ResponseMessages.Successful));
+        //        var role =roleName;
+        //        model.UserType = AdminUserType;
+        //        model.BusinessCode = businessCode;
+        //        var createUser = await _onBoardingManager.RegisterAdmin(model, role);
+
+        //        return Ok(new Response<(UserModel model, bool status, string message)>()
+        //        {
+        //            Code = ResponseCodes.Success,
+        //            Succeeded = createUser.status,
+        //            Message = createUser.message,
+        //            Data = createUser
+        //        });
         //    }
         //    catch (BaseException ex)
         //    {
@@ -189,6 +157,49 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
         //        });
         //    }
         //}
+
+        ///// <summary>
+        ///// Allow a SystemAdmin user to create other users using the onboarding flow.
+        ///// </summary>
+        ////[HttpPost("auth/create-user")]
+        ////[Authorize]
+        ////public async Task<IActionResult> CreateUserBySuperAdmin([FromBody] Agrovesto.Backend.Core.V2.Onboarding.OnboardingRequestModel model,
+        ////    [FromQuery] Agrovesto.Backend.Core.V2.Onboarding.OnBoardingArgs args)
+        ////{
+        ////    if (!ModelState.IsValid)
+        ////        return ValidationProblemResponse();
+
+        ////    if (!CurrentUserRoles.Contains("SystemAdmin", StringComparer.OrdinalIgnoreCase))
+        ////        return Unauthorized(new Response<string> { Succeeded = false, Message = ResponseMessages.AccessDenied, Code = ResponseCodes.AccessDenied });
+
+        ////    try
+        ////    {
+        ////        args.OnboardedByUserId = CurrentUserId;
+        ////        // Preserve organization resolution behavior from other onboarding endpoints
+        ////        var orgError = TryResolveOrganizationCode(args.organizationCode, out var resolvedOrgCode);
+        ////        if (orgError != null) return orgError;
+        ////        args.organizationCode = resolvedOrgCode;
+        ////        args.userType = AdminUserType;
+        ////        var result = await _onBoardingManager.CreateBusinessUser(model, args);
+        ////        return Ok(Success(result, result.Message, ResponseMessages.Successful));
+        ////    }
+        ////    catch (BaseException ex)
+        ////    {
+        ////        return StatusCode((int)ex.HttpStatusCode, new Response<string>
+        ////        {
+        ////            Message = ex.ExceptionMessage,
+        ////            Succeeded = false,
+        ////        });
+        ////    }
+        ////    catch (Exception ex)
+        ////    {
+        ////        return StatusCode(500, new Response<string>
+        ////        {
+        ////            Message = ex.Message,
+        ////            Succeeded = false,
+        ////        });
+        ////    }
+        ////}
 
        
         
@@ -210,7 +221,7 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
                 {
                     var response = new Response<AdminLoginResponseModel>
                     {
-                        Code = result.Status == AdminLoginStatus.Success ? ResponseCodes.Success : ResponseCodes.Failed,
+                        Code = result.Status == AdminLoginStatus.Success ? AdminResponseCodes.Success : AdminResponseCodes.Failed,
                         Succeeded = result.Status == AdminLoginStatus.Success,
                         Message = result.Message,
                         Data = result.Data
@@ -250,10 +261,144 @@ namespace Agrovesto.Backend.API.Controllers.V2.Internal
             }
 
             var result = await _adminDashboardManager.GetAsync(query.Period, query.From, query.To, query.Chart, ct);
-            return Ok(result);
+     
+            return Ok(new Response<DashboardDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = ResponseMessages.Successful,
+                Data = result
+            });
         }
 
-      
 
+        // GET api/admin/users/summary
+        [HttpGet("summary")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> Summary(CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.GetSummaryAsync(ct);
+
+            return Ok(new Response<UserManagementSummaryDto>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = ResponseMessages.Successful,
+                Data = result
+            });
+        }
+
+        // GET api/admin/users?search=&status=&role=&department=&page=1&pageSize=20
+        [HttpGet("users")]
+        [HasPermission(Permissions.Users.View)]
+        public async Task<IActionResult> List([FromQuery] AdminUserListQuery q, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.GetUsersAsync(q, ct);
+            return Ok(new Response<PagedResult<AdminUserListItemDto>>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = ResponseMessages.Successful,
+                Data = result
+            });
+        }
+
+        // GET api/admin/users/export?format=csv|xlsx (accepts the same filters as the list)
+        [HttpGet("export")]
+        [HasPermission(Permissions.Users.Export)]
+        public async Task<IActionResult> Export([FromQuery] AdminUserListQuery q, [FromQuery] string format = "csv", CancellationToken ct = default)
+        {
+            try
+            {
+                var (content, type, name) = await _adminUserManagementManager.ExportAsync(q, format, ct);
+                return File(content, type, name);
+            }
+            catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
+        }
+
+        // GET api/admin/roles
+        [HttpGet("roles")]
+        [HasPermission(Permissions.Users.Invite)]
+        public async Task<IActionResult> Roles(CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.GetAssignableRolesAsync(ct);
+            return Ok(new Response<IReadOnlyList<AdminRoleOptionDto>>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = ResponseMessages.Successful,
+                Data = result
+            }); 
+        }
+
+        // POST api/admin/users/invite
+        [HttpPost("users/invite")]
+        [HasPermission(Permissions.Users.Invite)]
+        public async Task<IActionResult> Invite([FromBody] InviteAdminUserRequest req, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.InviteAsync(req, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<InviteAdminUserResponse>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                // User is created either way. Tell the UI when only the email failed.
+                Message = result.Data.EmailSent
+                    ? ResponseMessages.Successful
+                    : "User created, but the invitation email could not be sent. Use Resend invitation.",
+                Data = result.Data
+            });
+        }
+
+        // POST api/admin/users/{userId}/resend-invite
+        [HttpPost("users/{userId}/resend-invite")]
+        [HasPermission(Permissions.Users.Invite)]
+        public async Task<IActionResult> Resend(string userId, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.ResendAsync(userId, User.FindFirstValue(ClaimTypes.NameIdentifier)!, ct);
+
+            if (result.Data is null)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<InviteAdminUserResponse>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = result.Data.EmailSent
+                    ? ResponseMessages.Successful
+                    : "The invitation email could not be sent. Please try again.",
+                Data = result.Data
+            });
+        }
+
+        // POST api/admin/invitations/accept (public, used by the invitee)
+        [AllowAnonymous]
+        [HttpPost("invitations/accept")]
+        public async Task<IActionResult> Accept([FromBody] AcceptInviteRequest req, CancellationToken ct)
+        {
+            var result = await _adminUserManagementManager.AcceptAsync(req, ct);
+
+            if (!result.Success)
+                return Failure(result.StatusCode, result.Error);
+
+            return Ok(new Response<object>()
+            {
+                Code = AdminResponseCodes.Success,
+                Succeeded = true,
+                Message = ResponseMessages.Successful
+            });
+        }
+
+        // Shared failure response, same Response<T> shape with Succeeded = false
+        private IActionResult Failure(int statusCode, string? error) =>
+            StatusCode(statusCode, new Response<object>()
+            {
+                Code = AdminResponseCodes.Failed,
+                Succeeded = false,
+                Message = error
+            });
     }
 }

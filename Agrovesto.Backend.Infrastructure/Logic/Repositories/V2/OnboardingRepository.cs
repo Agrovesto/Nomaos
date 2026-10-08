@@ -987,6 +987,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var organization = await _context.Organizations
                 .Include(x=>x.State)
                 .Include(x => x.LGA)
+                .Include(x => x.Ward)
                 .AsNoTracking()
                 .FirstOrDefaultAsync(o => o.UserId == userId);
             if (organization == null)
@@ -1001,8 +1002,9 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 State = organization.State?.State,
                 Lga = organization.LGA?.Name,
                 Location = organization.CompanyAddress,
-                OnboardedOn=organization.OnboardedOn
-             
+                OnboardedOn=organization.OnboardedOn,
+                Ward=organization.Ward?.Name,
+
             };
             return profile;
         }
@@ -1206,7 +1208,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!string.IsNullOrEmpty(model.PhoneNumber))
             {
-                if(user.PhoneNumber != model.PhoneNumber)
+                if(!string.IsNullOrEmpty(user.PhoneNumber) && user.PhoneNumber != model.PhoneNumber)
                 {
                     //add to error to be displayed to user
                     throw new BaseException(
@@ -2483,8 +2485,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 user.Name = resolvedName;
 
             // ── Phone: immutable (compared by digits so 0803… == +234803…) ──────
-            if (!string.IsNullOrWhiteSpace(model.PhoneNumber) &&
-                !PhoneNumbersMatch(user.PhoneNumber, model.PhoneNumber))
+            if (!string.IsNullOrEmpty(user.PhoneNumber) && (!string.IsNullOrWhiteSpace(model.PhoneNumber) &&
+                !PhoneNumbersMatch(user.PhoneNumber, model.PhoneNumber)))
             {
                 throw new BaseException(
                     ExceptionType.BAD_REQUEST,

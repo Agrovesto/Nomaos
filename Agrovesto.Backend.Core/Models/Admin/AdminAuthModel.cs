@@ -106,4 +106,39 @@ namespace Agrovesto.Backend.Core.Models.Admin
 
     public record AdminAccess(bool HasAccess, List<string> Roles, List<string> Permissions);
 
+
+    public class InviteAdminUserRequest
+    {
+        [Required(ErrorMessage = "First name is required."), StringLength(100)]
+        public string FirstName { get; set; } = default!;
+
+        [Required(ErrorMessage = "Last name is required."), StringLength(100)]
+        public string LastName { get; set; } = default!;
+
+        [Required(ErrorMessage = "Phone number is required.")]
+        public string PhoneNumber { get; set; } = default!;
+
+        [Required(ErrorMessage = "Email address is required.")]
+        [RegularExpression(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", ErrorMessage = "Please enter a valid email address.")]
+        public string Email { get; set; } = default!;
+
+        [Required(ErrorMessage = "Please select a role.")]
+        public string RoleId { get; set; } = default!;
+    }
+
+    public record InviteAdminUserResponse(string UserId, string AdminCode, string Status, bool EmailSent, DateTimeOffset ExpiresAt);
+    public record AdminRoleOptionDto(string Id, string Name, string? Description);
+    public record InviteResult(InviteAdminUserResponse? Data, string? Error, int StatusCode);
+
+
+    public class AcceptInviteRequest
+    {
+        [Required(ErrorMessage = "Invitation token is required.")]
+        public string Token { get; set; } = default!;
+
+        [Required(ErrorMessage = "Password is required.")]
+        public string Password { get; set; } = default!;
+    }
+
+    public record AcceptResult(bool Success, string? Error, int StatusCode);
 }

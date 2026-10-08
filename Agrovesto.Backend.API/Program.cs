@@ -156,6 +156,13 @@ builder.Services.AddIdentity<User, Role>(opt =>
 .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<AdminPanelOptions>()
+    .Bind(builder.Configuration.GetSection("AdminPanel"))
+    .Validate(o => o.BusinessId > 0 && !string.IsNullOrWhiteSpace(o.PortalBaseUrl),
+              "AdminPanel:BusinessId and AdminPanel:PortalBaseUrl must be configured.")
+    .ValidateOnStart();
+
+
 builder.Services.AddAppServices(builder.Configuration);
 
 builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());

@@ -564,8 +564,14 @@ namespace Agrovesto.Backend.Infrastructure.DB
                 e.HasOne(rp => rp.Role).WithMany(r => r.RolePermissions).HasForeignKey(rp => rp.RoleId);
                 e.HasOne(rp => rp.Permission).WithMany(p => p.RolePermissions).HasForeignKey(rp => rp.PermissionId);
             });
-        }
 
+            // OnModelCreating
+            modelBuilder.Entity<User>().HasIndex(u => u.AdminCode).IsUnique();          // multiple NULLs allowed in MySQL
+            modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.TokenHash).IsUnique();
+            modelBuilder.Entity<AdminInvitation>().HasIndex(i => i.UserId);
+        }
+        public DbSet<AdminInvitation> AdminInvitations { get; set; }
+        public DbSet<AdminCodeSequence> AdminCodeSequences { get; set; }
         public DbSet<RefreshToken> RefreshTokens { get; set; }
         public DbSet<OneTimePassword> OneTimePasswords { get; set; }
         public DbSet<ActivityLog> ActivityLogs { get; set; }
