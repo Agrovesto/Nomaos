@@ -98,7 +98,7 @@ WORKDIR /app
 ########################################
 # APPLICATION CONFIGURATION
 ########################################
-ENV ASPNETCORE_URLS=http://+:5000 \
+ENV ASPNETCORE_URLS=http://+:5007 \
     DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_PRINT_TELEMETRY_MESSAGE=false \
@@ -127,9 +127,9 @@ HEALTHCHECK \
     --start-period=15s \
     --retries=3 \
     CMD curl -fsS --max-time 4 \
-        http://127.0.0.1:5000/health/ready || exit 1
+        http://127.0.0.1:5007/health/ready || exit 1
 
-EXPOSE 5000
+EXPOSE 5007
 
 ########################################
 # NON-ROOT

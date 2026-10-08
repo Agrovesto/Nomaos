@@ -173,7 +173,7 @@ fi
 require_docker
 load_app_env "$APP_NAME"
 
-APP_PORT="${APP_PORT:-5000}"
+APP_PORT="${APP_PORT:-5007}"
 VAULT_KV_MOUNT="${VAULT_KV_MOUNT:-kv}"
 UPSTREAM_NAME="${UPSTREAM_NAME:-${APP_NAME//-/_}}"
 UPSTREAM_DIR="$NOMAOS_STATE_DIR/nginx/upstreams"
@@ -239,7 +239,7 @@ cat <<EOF
  docker health   : $CHECK_DOCKER_HEALTH
  local container : $CHECK_CONTAINER_LOCAL
  nginx network   : $CHECK_NGINX_NETWORK
- EC2 host check  : ${HOST_HEALTH_URL:-disabled}
+ EC2 host check  : ${HOST_HEALTH_URL:-enabled}
  continue health: $CONTINUE_ON_HEALTH_FAILURE
 ===============================================================
 
