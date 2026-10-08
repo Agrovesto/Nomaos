@@ -2559,32 +2559,40 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2
                 Message = change.Created ? "Cooperative profile created successfully." : "Cooperative profile updated successfully."
             };
         }
-        private async Task<OrganizationOnboardingModel> BuildOrganizationModel(OrganizationUpdateModel model, ProfileRequestModel profileModel)
+        private Task<OrganizationOnboardingModel> BuildOrganizationModel(
+      OrganizationUpdateModel? model,
+      ProfileRequestModel? profileModel,
+      OrganizationOnboardingModel? existing = null)
         {
+            CompanyType? companyType = existing?.CompanyType;
+            if (!string.IsNullOrWhiteSpace(model?.OrgaizationType)
+                && Enum.TryParse<CompanyType>(model.OrgaizationType.Trim(), true, out var parsedType)
+                && Enum.IsDefined(typeof(CompanyType), parsedType))
+            {
+                companyType = parsedType;
+            }
 
-            // Implementation for building the organization model goes here
-            // This is a placeholder for the actual logic that would be used to build the organization model
             var response = new OrganizationOnboardingModel
             {
-                ContactEmail = model.OrganizationEmail,
-                OrganizationCode = model.OrganizationCode,
-                CompanyEmail = model.OrganizationEmail,
-                CompanyName = model.OrganizationName,
-                FirstName = profileModel.FirstName,
-                LastName = profileModel.LastName,
-                WardId=model.OrganizationWardId,
-                PhoneNumber = model.OrganizationPhone,
-                OrganizationPhone = model.OrganizationPhone,
-                StateId = model.OrganizationStateId,
-                LgaId = model.OrganizationLgaId,
-                CompanyAddress = model.OrganizationAddress,
-                CompanyType = Enum.TryParse<CompanyType>(model.OrgaizationType, out var companyType) ? companyType : null,
-                CACNumber = model.CACID,
-                
-               // RoleInOrganization = Enum.TryParse<RoleInOrganization>(model.RoleInOrganization, out var roleInOrg) ? roleInOrg : null
+                ContactEmail = model?.OrganizationEmail ?? existing?.ContactEmail,
+                CompanyEmail = model?.OrganizationEmail ?? existing?.CompanyEmail,
+                OrganizationCode = model?.OrganizationCode ?? existing?.OrganizationCode,
+                CompanyName = model?.OrganizationName ?? existing?.CompanyName,
+                FirstName = profileModel?.FirstName ?? existing?.FirstName,
+                LastName = profileModel?.LastName ?? existing?.LastName,
+                WardId = model?.OrganizationWardId ?? existing?.WardId,
+                StateId = model?.OrganizationStateId ?? existing?.StateId,
+                LgaId = model?.OrganizationLgaId ?? existing?.LgaId,
+                PhoneNumber = model?.OrganizationPhone ?? existing?.PhoneNumber,
+                OrganizationPhone = model?.OrganizationPhone ?? existing?.OrganizationPhone,
+                CompanyAddress = model?.OrganizationAddress ?? existing?.CompanyAddress,
+                CACNumber = model?.CACID ?? existing?.CACNumber,
+                CompanyType = companyType
             };
-            return response;
+
+            return Task.FromResult(response);
         }
+
         private async Task<ProfileUpdateResult> UpdateOrganizationAsync(UserModel user, OrganizationUpdateModel organizationUpdate, ProfileRequestModel model,OnBoardingArgs args)
         {
             var assignedByAgent = !string.IsNullOrWhiteSpace(args.OnboardedByUserId);

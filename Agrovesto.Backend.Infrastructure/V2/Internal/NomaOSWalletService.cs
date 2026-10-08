@@ -218,6 +218,15 @@ namespace Agrovesto.Backend.Infrastructure.V2.Internal
                     }
                 }
 
+                if(request.PhoneNumber.IsNullOrEmpty() is false)
+                {
+                    if (userProfile.Phone.IsNullOrEmpty())
+                    {
+                        userProfile.Phone = request.PhoneNumber;
+                        await _onboardingRepository.UpdateUserDetails(new OnboardingRequestModel() { Bvn = request.BVN}, new OnBoardingArgs() { UserId = args.UserId });
+                    }
+                }
+
 
                 var contextType = string.IsNullOrWhiteSpace(args.organizationCode)
                     ? WalletContextType.Personal
