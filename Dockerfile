@@ -9,9 +9,6 @@ WORKDIR /src
 
 ########################################
 # COPY ENTIRE SOURCE TREE
-#
-# This guarantees restore and publish see
-# exactly the same project configuration.
 ########################################
 COPY . .
 
@@ -28,8 +25,6 @@ RUN set -eux; \
 
 ########################################
 # RESTORE
-#
-# NuGet cache survives across builds.
 ########################################
 RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
     set -eux; \
@@ -84,22 +79,18 @@ RUN apt-get update \
 WORKDIR /app
 
 ########################################
-
-    # APPLICATION RUNTIME
-    # Environment-specific values such as:
-    # ASPNETCORE_ENVIRONMENT
-    # VAULT_ADDR
-    # VAULT_ROLE_ID
-    # VAULT_SECRET_ID
-    # VAULT_SECRET_PATH
-    # are injected at deployment/runtime.
+# APPLICATION RUNTIME
+#
+# ASPNETCORE_URLS is intentionally NOT
+# hard-coded here.
+#
+# docker-compose.app.yml injects:
+#
+#   blue  -> http://+:5007
+#   green -> http://+:5008
+#
 ########################################
-
-########################################
-# APPLICATION CONFIGURATION
-########################################
-ENV ASPNETCORE_URLS=http://+:5007 \
-    DOTNET_RUNNING_IN_CONTAINER=true \
+ENV DOTNET_RUNNING_IN_CONTAINER=true \
     DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false \
     DOTNET_PRINT_TELEMETRY_MESSAGE=false \
     DOTNET_GCConserveMemory=5 \
@@ -119,17 +110,17 @@ RUN mkdir -p /app/logs \
  && chown -R $APP_UID:$APP_UID /app/logs
 
 ########################################
-# HEALTHCHECK
+# PORT
+#
+# No fixed EXPOSE is required because
+# blue and green use different ports.
+#
+# Compose publishes:
+#
+#   blue  -> 127.0.0.1:5007:5007
+#   green -> 127.0.0.1:5008:5008
+#
 ########################################
-HEALTHCHECK \
-    --interval=10s \
-    --timeout=5s \
-    --start-period=15s \
-    --retries=3 \
-    CMD curl -fsS --max-time 4 \
-        http://127.0.0.1:5007/health/ready || exit 1
-
-EXPOSE 5007
 
 ########################################
 # NON-ROOT

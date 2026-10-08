@@ -4,13 +4,17 @@
 # This single file serves BOTH apps and BOTH slots. The compose project name
 # keeps blue and green completely isolated:
 #
-#   docker compose -p nomaos-api-blue  --env-file ... -f docker-compose.app.yml up -d
-#   docker compose -p nomaos-api-green --env-file ... -f docker-compose.app.yml up -d
+#   docker compose -p nomaos-api-blue  -f docker-compose.app.yml up -d
+#   docker compose -p nomaos-api-green -f docker-compose.app.yml up -d
 #
-# The container never publishes a host port — nginx reaches it by container
-# name over nomaos_edge. That is exactly how an ECS service talks to its
-# target group, so the move to ECS later is a copy of this env block into a
-# task definition.
+# Host port allocation is deterministic:
+#
+#   blue  -> 127.0.0.1:5007 -> container:5007
+#   green -> 127.0.0.1:5008 -> container:5008
+#
+# Both containers also remain connected to nomaos_edge and nomaos_data.
+# Nginx reaches the application over nomaos_edge using the container name,
+# while the EC2 host can reach each slot through its dedicated localhost port.
 # ─────────────────────────────────────────────────────────────────────────────
 
 networks:
@@ -33,62 +37,86 @@ services:
       nomaos_data: {}
     environment:
       # ── Host / runtime ──────────────────────────────────────────────────
-      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:?ASPNETCORE_ENVIRONMENT must be set}"      
-      ASPNETCORE_URLS: "http://+:${APP_PORT:-5007}"
+      ASPNETCORE_ENVIRONMENT: "${ASPNETCORE_ENVIRONMENT:?ASPNETCORE_ENVIRONMENT must be set}"
+      ASPNETCORE_URLS: "http://+:${APP_PORT:?APP_PORT must be set}"
       DOTNET_PRINT_TELEMETRY_MESSAGE: "false"
       TZ: "${TZ:-UTC}"
 
-      # ── Vault (AppRole) — unchanged from the systemd setup ──────────────
-      # Program.cs reads these values and loads the environment-specific Vault path.
+      # ── Vault (AppRole) ─────────────────────────────────────────────────
+      # Program.cs reads these values and loads the environment-specific
+      # Vault path.
+      #
       # Example:
-      #   staging -> kv/nomaos/staging/appsettings
+      #   staging    -> kv/nomaos/staging/appsettings
       #   production -> kv/nomaos/prod/appsettings
       VAULT_ADDR: "${VAULT_ADDR:?VAULT_ADDR must be set}"
       VAULT_ROLE_ID: "${VAULT_ROLE_ID:?VAULT_ROLE_ID must be set}"
       VAULT_SECRET_ID: "${VAULT_SECRET_ID:?VAULT_SECRET_ID must be set}"
       VAULT_SECRET_PATH: "${VAULT_SECRET_PATH:?VAULT_SECRET_PATH must be set}"
       VAULT_KV_MOUNT: "${VAULT_KV_MOUNT:-kv}"
+
       # ── Data plane ──────────────────────────────────────────────────────
-      # localhost:6379 and localhost,1433 no longer exist inside a container.
-      # These override the appsettings values via standard .NET config binding
-      # (__ is the nesting separator), so Vault-sourced keys still win when set.
+      # localhost:6379 and localhost:1433 no longer exist inside a container.
+      #
+      # These override the appsettings values through standard .NET
+      # configuration binding. "__" is the .NET nesting separator.
       ConnectionStrings__DefaultConnection: "${DB_CONNECTION_STRING:?DB_CONNECTION_STRING must be set}"
       Redis__ConnectionString: "${REDIS_CONNECTION_STRING:-redis:6379}"
 
       # ── Observability ───────────────────────────────────────────────────
-      # Serilog's file sink only activates when LOG_FILE_PATH is set (Program.cs).
+      # Serilog's file sink only activates when LOG_FILE_PATH is set.
       LOG_FILE_PATH: "${LOG_FILE_PATH:-/app/logs/nomaos-.log}"
+
       SLOT: "${SLOT}"
       COMMIT_SHA: "${COMMIT_SHA:-unknown}"
+
     env_file:
-      # Optional per-app overrides that are NOT secrets. Missing file is fine.
+      # Optional per-app overrides that are NOT secrets.
+      # Missing file is allowed.
       - path: "${NOMAOS_STATE_DIR:-/opt/nomaos}/env/${APP_NAME}.extra.env"
         required: false
+
     volumes:
       - "${NOMAOS_STATE_DIR:-/opt/nomaos}/logs/${APP_NAME}/${SLOT}:/app/logs"
-    expose:
-      - "${APP_PORT:-5007}"
+
+    # ── Host port mapping ─────────────────────────────────────────────────
+    #
+    # blue:
+    #   127.0.0.1:5007 -> container:5007
+    #
+    # green:
+    #   127.0.0.1:5008 -> container:5008
+    #
+    # APP_PORT is supplied by deploy.sh based on SLOT.
+    ports:
+      - "127.0.0.1:${APP_PORT}:${APP_PORT}"
+
+    # ── Application healthcheck ───────────────────────────────────────────
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "curl -fsS --max-time 4 http://127.0.0.1:${APP_PORT:-5007}/health/ready || exit 1"
+        - "curl -fsS --max-time 4 http://127.0.0.1:${APP_PORT}/health/ready || exit 1"
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: "${HEALTHCHECK_START_PERIOD:-15s}"
+
     stop_grace_period: "${STOP_GRACE_PERIOD:-30s}"
+
     deploy:
       resources:
         limits:
           memory: "${APP_MEM_LIMIT:-1500m}"
         reservations:
           memory: "${APP_MEM_RESERVATION:-512m}"
+
     logging:
       driver: json-file
       options:
         max-size: "20m"
         max-file: "5"
         labels: "com.nomaos.app,com.nomaos.slot"
+
     labels:
       com.nomaos.app: "${APP_NAME}"
       com.nomaos.slot: "${SLOT}"

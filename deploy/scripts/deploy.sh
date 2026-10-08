@@ -5,6 +5,10 @@
 # Usage:
 #   deploy.sh --app nomaos-api --image <ecr-ref> [options]
 #
+# Port allocation:
+#   blue  -> 5007
+#   green -> 5008
+#
 # Deployment flow:
 #   1. Validate configuration
 #   2. Pull immutable image
@@ -12,7 +16,7 @@
 #   4. Docker healthcheck
 #   5. Application-local HTTP healthcheck inside candidate container
 #   6. Nginx-container -> candidate HTTP healthcheck
-#   7. Optional EC2-host -> candidate HTTP healthcheck
+#   7. EC2-host -> candidate HTTP healthcheck
 #   8. Flip Nginx atomically
 #   9. Verify traffic through Nginx
 #  10. Stop old slot
@@ -34,7 +38,9 @@
 #   2 = usage error
 # ─────────────────────────────────────────────────────────────────────────────
 set -Eeuo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
 
@@ -107,7 +113,28 @@ Environment overrides:
   EDGE_RETRIES=2
   EDGE_RETRY_INTERVAL=1
   DRAIN_SECONDS=2
+
+Port allocation:
+  blue  -> 5007
+  green -> 5008
 EOF
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Slot -> port mapping
+# ─────────────────────────────────────────────────────────────────────────────
+slot_port() {
+  case "$1" in
+    blue)
+      echo 5007
+      ;;
+    green)
+      echo 5008
+      ;;
+    *)
+      die "invalid slot '$1'; expected blue or green"
+      ;;
+  esac
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +200,6 @@ fi
 require_docker
 load_app_env "$APP_NAME"
 
-APP_PORT="${APP_PORT:-5007}"
 VAULT_KV_MOUNT="${VAULT_KV_MOUNT:-kv}"
 UPSTREAM_NAME="${UPSTREAM_NAME:-${APP_NAME//-/_}}"
 UPSTREAM_DIR="$NOMAOS_STATE_DIR/nginx/upstreams"
@@ -206,8 +232,22 @@ case "$ACTIVE" in
 esac
 
 TARGET="$(other_slot "$ACTIVE")"
+
 ACTIVE_CONTAINER="${APP_NAME}-${ACTIVE}"
 TARGET_CONTAINER="${APP_NAME}-${TARGET}"
+
+ACTIVE_PORT="$(slot_port "$ACTIVE")"
+TARGET_PORT="$(slot_port "$TARGET")"
+
+# APP_PORT is the candidate/target port.
+APP_PORT="$TARGET_PORT"
+export APP_PORT
+
+# If the caller did not explicitly provide HOST_HEALTH_URL,
+# automatically test the target slot's published localhost port.
+if [[ -z "$HOST_HEALTH_URL" ]]; then
+  HOST_HEALTH_URL="http://127.0.0.1:${TARGET_PORT}${CONTAINER_HEALTH_PATH}"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Create required directories
@@ -228,19 +268,25 @@ cat <<EOF
  environment     : $ASPNETCORE_ENVIRONMENT
  vault mount     : $VAULT_KV_MOUNT
  vault path      : $VAULT_SECRET_PATH
+
  live slot       : $ACTIVE
  live container  : $ACTIVE_CONTAINER
+ live port       : $ACTIVE_PORT
  live state      : $(container_state "$ACTIVE_CONTAINER")
+
  target slot     : $TARGET
  target container: $TARGET_CONTAINER
- app port        : $APP_PORT
+ target port     : $TARGET_PORT
+
  upstream        : $UPSTREAM_FILE
  nginx container : $NGINX_CONTAINER
+
  docker health   : $CHECK_DOCKER_HEALTH
  local container : $CHECK_CONTAINER_LOCAL
  nginx network   : $CHECK_NGINX_NETWORK
- EC2 host check  : ${HOST_HEALTH_URL:-enabled}
- continue health: $CONTINUE_ON_HEALTH_FAILURE
+ EC2 host check  : $HOST_HEALTH_URL
+
+ continue health : $CONTINUE_ON_HEALTH_FAILURE
 ===============================================================
 
 EOF
@@ -256,18 +302,25 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # Compose helper
 #
-# Explicitly passes runtime configuration into docker compose.
-# This prevents deployment correctness from depending on whether
-# load_app_env exported every variable.
+# Each slot gets its own deterministic port:
+#
+#   blue  -> 5007
+#   green -> 5008
+#
+# This function deliberately calculates the port from the slot passed to it.
 # ─────────────────────────────────────────────────────────────────────────────
 compose_slot() {
   local slot="$1"
+  local slot_port_value
+
   shift
+
+  slot_port_value="$(slot_port "$slot")"
 
   IMAGE="$IMAGE" \
   APP_NAME="$APP_NAME" \
   SLOT="$slot" \
-  APP_PORT="$APP_PORT" \
+  APP_PORT="$slot_port_value" \
   COMMIT_SHA="$COMMIT_SHA" \
   NOMAOS_STATE_DIR="$NOMAOS_STATE_DIR" \
   ASPNETCORE_ENVIRONMENT="$ASPNETCORE_ENVIRONMENT" \
@@ -402,7 +455,10 @@ reload_nginx() {
 # ─────────────────────────────────────────────────────────────────────────────
 write_upstream() {
   local slot="$1"
+  local port
   local tmp
+
+  port="$(slot_port "$slot")"
 
   tmp="$(mktemp "$UPSTREAM_DIR/.${UPSTREAM_NAME}.XXXXXX")"
 
@@ -411,10 +467,11 @@ write_upstream() {
 # generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # app=$APP_NAME
 # slot=$slot
+# port=$port
 # commit=$COMMIT_SHA
 
 upstream ${UPSTREAM_NAME} {
-    server ${APP_NAME}-${slot}:${APP_PORT} max_fails=2 fail_timeout=5s;
+    server ${APP_NAME}-${slot}:${port} max_fails=2 fail_timeout=5s;
     keepalive 32;
 }
 EOF
@@ -526,7 +583,7 @@ LOCAL_HEALTH_OK=false
 if [[ "$CHECK_CONTAINER_LOCAL" == true ]]; then
   info "checking candidate locally from inside $TARGET_CONTAINER"
 
-  LOCAL_URL="http://127.0.0.1:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+  LOCAL_URL="http://127.0.0.1:${TARGET_PORT}${CONTAINER_HEALTH_PATH}"
 
   if retry_command \
     "local health" \
@@ -560,7 +617,7 @@ NGINX_NETWORK_OK=false
 if [[ "$CHECK_NGINX_NETWORK" == true ]]; then
   info "checking candidate from nginx container"
 
-  NGINX_TARGET_URL="http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+  NGINX_TARGET_URL="http://${TARGET_CONTAINER}:${TARGET_PORT}${CONTAINER_HEALTH_PATH}"
 
   if retry_command \
     "nginx network probe" \
@@ -587,36 +644,30 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. Optional EC2 HOST healthcheck
+# 6. EC2 HOST healthcheck
 # ─────────────────────────────────────────────────────────────────────────────
-HOST_HEALTH_OK=true
+HOST_HEALTH_OK=false
 
-if [[ -n "$HOST_HEALTH_URL" ]]; then
-  HOST_HEALTH_OK=false
+info "checking candidate from EC2 host"
 
-  info "checking candidate from EC2 host"
+if retry_command \
+  "EC2 host health" \
+  "$HEALTH_RETRIES" \
+  "$HEALTH_RETRY_INTERVAL" \
+  host_http_probe \
+  "$HOST_HEALTH_URL"; then
 
-  if retry_command \
-    "EC2 host health" \
-    "$HEALTH_RETRIES" \
-    "$HEALTH_RETRY_INTERVAL" \
-    host_http_probe \
-    "$HOST_HEALTH_URL"; then
-
-    HOST_HEALTH_OK=true
-    ok "EC2 host healthcheck passed"
-  else
-    warn "EC2 host healthcheck failed"
-    warn "URL: $HOST_HEALTH_URL"
-
-    if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
-      warn "EC2 host healthcheck failed — CONTINUING deployment"
-    else
-      die "EC2 host healthcheck failed"
-    fi
-  fi
+  HOST_HEALTH_OK=true
+  ok "EC2 host healthcheck passed"
 else
-  info "EC2 host healthcheck skipped"
+  warn "EC2 host healthcheck failed"
+  warn "URL: $HOST_HEALTH_URL"
+
+  if [[ "$CONTINUE_ON_HEALTH_FAILURE" == true ]]; then
+    warn "EC2 host healthcheck failed — CONTINUING deployment"
+  else
+    die "EC2 host healthcheck failed"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -626,10 +677,12 @@ echo ""
 echo "───────────────────────────────────────────────────────────────"
 echo " Candidate health summary"
 echo "───────────────────────────────────────────────────────────────"
+echo " Target slot         : $TARGET"
+echo " Target port         : $TARGET_PORT"
 echo " Docker health       : $([ "$DOCKER_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo " Container-local     : $([ "$LOCAL_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo " Nginx network       : $([ "$NGINX_NETWORK_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
-echo " EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING/SKIPPED")"
+echo " EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo " Continue on failure: $CONTINUE_ON_HEALTH_FAILURE"
 echo "───────────────────────────────────────────────────────────────"
 echo ""
@@ -696,7 +749,9 @@ if [[ "$EDGE_OK" != true ]]; then
   warn "post-flip edge /health check failed"
   warn "This check is NON-FATAL."
   warn "Direct candidate URL:"
-  warn "http://${TARGET_CONTAINER}:${APP_PORT}${CONTAINER_HEALTH_PATH}"
+  warn "http://${TARGET_CONTAINER}:${TARGET_PORT}${CONTAINER_HEALTH_PATH}"
+  warn "Candidate host URL:"
+  warn "$HOST_HEALTH_URL"
   warn "Candidate logs:"
 
   docker logs \
@@ -766,7 +821,9 @@ echo "  Environment         : $ASPNETCORE_ENVIRONMENT"
 echo "  Vault mount         : $VAULT_KV_MOUNT"
 echo "  Vault path          : $VAULT_SECRET_PATH"
 echo "  Previous slot       : $ACTIVE"
+echo "  Previous port       : $ACTIVE_PORT"
 echo "  Active slot         : $TARGET"
+echo "  Active port         : $TARGET_PORT"
 echo "  Active container    : $TARGET_CONTAINER"
 echo "  Image               : $IMAGE"
 echo "  Commit              : $COMMIT_SHA"
@@ -774,7 +831,7 @@ echo ""
 echo "  Docker health       : $([ "$DOCKER_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo "  Container local     : $([ "$LOCAL_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo "  Nginx network       : $([ "$NGINX_NETWORK_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
-echo "  EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING/SKIPPED")"
+echo "  EC2 host            : $([ "$HOST_HEALTH_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo "  Edge /health        : $([ "$EDGE_OK" = true ] && echo "PASS" || echo "FAIL/WARNING")"
 echo ""
 echo "  Health failures     : NON-FATAL"
