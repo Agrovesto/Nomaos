@@ -6,6 +6,8 @@ using Agrovesto.Backend.Core.Models.Businesses.Input;
 using Agrovesto.Backend.Infrastructure.DB;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Services.RolePermissionService;
+using Amazon.Runtime.Internal.Util;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -32,16 +34,19 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         Task<InviteResult> InviteAsync(InviteAdminUserRequest req, string invitedByUserId, CancellationToken ct);
         Task<InviteResult> ResendAsync(string userId, string invitedByUserId, CancellationToken ct);
         Task<AcceptResult> AcceptAsync(AcceptInviteRequest req, CancellationToken ct);   // new
+        Task<AccessResult<AdminUserStatusDto>> DeactivateUserAsync(string userId, string actingUserId, CancellationToken ct);
     }
     public class AdminUserManagementManager : IAdminUserManagementManager
     {
-       private readonly IConfiguration _configuration;
+        private readonly IPermissionCacheInvalidator _cache;
+        private readonly IConfiguration _configuration;
         private readonly DataContext _db;
         private readonly UserManager<User> _users;
         private readonly IAWSService _email;              // your existing email abstraction
         private readonly AdminPanelOptions _opts;
         private readonly ILogger<AdminUserManagementManager> _log;
-        public AdminUserManagementManager(IConfiguration configuration, 
+        public AdminUserManagementManager(IConfiguration configuration,
+            IPermissionCacheInvalidator cache,
             DataContext db, UserManager<User> users, 
             IAWSService email, IOptions<AdminPanelOptions> opts, 
             ILogger<AdminUserManagementManager> log)
@@ -52,6 +57,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
             _email = email;
             _opts = opts.Value;
             _log = log;
+            _cache = cache;
         }
 
         public async Task<UserManagementSummaryDto> GetSummaryAsync(CancellationToken ct)
@@ -63,7 +69,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
                 .GroupBy(_ => 1)
              .Select(g => new
              {
-                 Total = g.Count(u => u.Status != AdminUserStatus.Pending),   // "registered" = accepted
+                 Total = g.Count(),   // "registered" = accepted
                  Active = g.Count(u => u.Status == AdminUserStatus.Active),
                  Suspended = g.Count(u => u.Status == AdminUserStatus.Suspended),
                  Pending = g.Count(u => u.Status == AdminUserStatus.Pending)
@@ -109,7 +115,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
         public async Task<Core.Models.Admin.PagedResult<AdminUserListItemDto>> GetUsersAsync(AdminUserListQuery q, CancellationToken ct)
         {
-            var page = Math.Max(1, q.Page);
+            var page = Math.Max(1, q.pageNumber);
             var size = Math.Clamp(q.PageSize, 1, 100);
             var query = BuildQuery(q);
 
@@ -348,14 +354,14 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
 
             return new(new InviteAdminUserResponse(user!.Id, user.AdminCode!, "Pending", sent, expires), null, 201);
         }
-        public async Task<InviteResult> ResendAsync(string userId, string invitedByUserId, CancellationToken ct)
+        public async Task<InviteResult> ResendAsync(string adminId, string invitedByUserId, CancellationToken ct)
         {
             var user = await _db.Users.FirstOrDefaultAsync(u =>
-                u.Id == userId && u.IsAdminUser && u.Status == AdminUserStatus.Pending, ct);
+                u.AdminCode == adminId && u.IsAdminUser && u.Status == AdminUserStatus.Pending, ct);
             if (user is null) return Fail(404, "No pending invitation found for this user.");
 
             var invite = await _db.AdminInvitations
-                .Where(i => i.UserId == userId && i.AcceptedAt == null && i.RevokedAt == null)
+                .Where(i => i.UserId == user.Id && i.AcceptedAt == null && i.RevokedAt == null)
                 .OrderByDescending(i => i.SentAt).FirstOrDefaultAsync(ct);
             if (invite is null) return Fail(404, "No pending invitation found for this user.");
 
@@ -418,36 +424,102 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Managers.V2.AdminManager
         {
             const string invalid = "This invitation link is invalid or has expired.";
             var hash = Hash(req.Token);
-            var now = DateTimeOffset.UtcNow;
 
-            await using var tx = await _db.Database.BeginTransactionAsync(ct);
+            var strategy = _db.Database.CreateExecutionStrategy();
 
-            var invite = await _db.AdminInvitations.FirstOrDefaultAsync(i =>
-                i.TokenHash == hash && i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now, ct);
-            if (invite is null) return new(false, invalid, 400);
+            return await strategy.ExecuteAsync<AcceptResult>(async () =>
+            {
+                _db.ChangeTracker.Clear();
+                var now = DateTimeOffset.UtcNow;
 
-            var user = await _users.FindByIdAsync(invite.UserId);
-            if (user is null || !user.IsAdminUser || user.Status != AdminUserStatus.Pending)
-                return new(false, invalid, 400);       // user was removed, suspended or deactivated after the invite
+                await using var tx = await _db.Database.BeginTransactionAsync(ct);
 
-            // Enforces your Identity password policy. Fails if a password already exists,
-            // which also blocks two simultaneous accepts of the same link.
-            var pw = await _users.AddPasswordAsync(user, req.Password);
-            if (!pw.Succeeded)
-                return new(false, string.Join(" ", pw.Errors.Select(e => e.Description)), 400);
+                var invite = await _db.AdminInvitations.FirstOrDefaultAsync(i =>
+                    i.TokenHash == hash && i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now, ct);
+                if (invite is null) return new AcceptResult(false, invalid, 400);
 
-            user.Status = AdminUserStatus.Active;
-            user.IsActive = true;
-            user.EmailConfirmed = true;
-            user.IsEmailVerified = true;
-            user.DateModified = now;
-            user.ModifiedBy = user.Id;
-            invite.AcceptedAt = now;
+                var user = await _users.FindByIdAsync(invite.UserId);
+                if (user is null || !user.IsAdminUser || user.Status != AdminUserStatus.Pending)
+                    return new AcceptResult(false, invalid, 400);
 
+                var pw = await _users.AddPasswordAsync(user, req.Password);
+                if (!pw.Succeeded)
+                    return new AcceptResult(false, string.Join(" ", pw.Errors.Select(e => e.Description)), 400);
+
+                user.Status = AdminUserStatus.Active;
+                user.IsActive = true;
+                user.EmailConfirmed = true;
+                user.IsEmailVerified = true;
+                user.DateModified = now;
+                user.ModifiedBy = user.Id;
+                invite.AcceptedAt = now;
+
+                await _db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+
+                return new AcceptResult(true, null, 200);
+            });
+        }
+
+        public async Task<AccessResult<AdminUserStatusDto>> DeactivateUserAsync(string adminId, string actingUserId, CancellationToken ct)
+        {
+
+
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.AdminCode == adminId && u.IsAdminUser, ct);
+            if (user is null)
+                return AccessResult.Fail<AdminUserStatusDto>(404, "User not found.");
+
+
+            if (user.Id == actingUserId) // change actinguserid to activeuser admincode 
+                return AccessResult.Fail<AdminUserStatusDto>(400, "You cannot deactivate your own account.");
+
+            if (user.Status == AdminUserStatus.Deactivated)
+                return AccessResult.Fail<AdminUserStatusDto>(409, "This user is already deactivated.");
+
+            if (user.Status == AdminUserStatus.Pending)
+                return AccessResult.Fail<AdminUserStatusDto>(409,
+                    "This user has not accepted their invitation yet. Revoke the invitation instead.");
+
+            // Never leave the platform without an active Super Admin
+            var isSuperAdmin = await _db.UserRoles.AnyAsync(ur =>
+                ur.UserId == user.Id && ur.IsActive && ur.Role.Name == PermissionSeeder.SuperAdminRole, ct);
+
+            if (isSuperAdmin)
+            {
+                var otherActiveSuperAdmins = await _db.UserRoles.CountAsync(ur =>
+                    ur.UserId != user.Id && ur.IsActive &&
+                    ur.Role.Name == PermissionSeeder.SuperAdminRole &&
+                    ur.User.IsActive && ur.User.Status == AdminUserStatus.Active, ct);
+
+                if (otherActiveSuperAdmins == 0)
+                    return AccessResult.Fail<AdminUserStatusDto>(409,
+                        "You cannot deactivate the last active Super Admin.");
+            }
+
+            user.Status = AdminUserStatus.Deactivated;
+            user.IsActive = false;                          // keep in sync; the admin login checks this
+            user.DateModified = DateTimeOffset.UtcNow;
+            user.ModifiedBy = actingUserId;
             await _db.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);               // password and activation succeed or fail together
 
-            return new(true, null, 200);
+            await _users.UpdateSecurityStampAsync(user);    // invalidates anything keyed on the security stamp
+            _cache.InvalidateAll();                         // permission checks stop working immediately
+
+            // Kill refresh tokens so the user cannot mint new access tokens.
+            // Best effort: IsActive is already false, so a failure here is not fatal.
+            try
+            {
+                await _db.RefreshTokens.Where(t => t.UserId == user.Id).ExecuteDeleteAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Failed to revoke refresh tokens for deactivated user {adminId}", adminId);
+            }
+
+            _log.LogInformation("Admin user {adminId} deactivated by {ActingUserId}", adminId, actingUserId);
+
+            return AccessResult.Ok(new AdminUserStatusDto(user.Id, user.Status!.Value.ToString()));
         }
     }
 

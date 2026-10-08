@@ -10,8 +10,10 @@ using Agrovesto.Backend.Infrastructure.Entities.Businesses;
 using Agrovesto.Backend.Infrastructure.Entities.Common;
 using Agrovesto.Backend.Infrastructure.ExternalServices;
 using Agrovesto.Backend.Infrastructure.ExternalServices.NotificationService;
+using Agrovesto.Backend.Infrastructure.Logic.Managers;
 using Agrovesto.Backend.Infrastructure.Logic.Services;
 using Agrovesto.Backend.Infrastructure.Utilities;
+using Amazon.Runtime.Internal.Util;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -237,6 +239,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
 
             if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
                 claims.Add(new Claim(ClaimTypes.MobilePhone, user.PhoneNumber));
+
+           
             claims.Add(new Claim(
                 "DisplayName",
                 user.Name ??
@@ -561,6 +565,8 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                 CreatedByIp = ipAddress,
                 IsAdminSession = adminAccess != null                            // ADMIN: remember the session type
             });
+
+            user.LastLoginDate = DateTimeOffset.UtcNow;
             await _context.SaveChangesAsync();
 
             return new TokenModel
@@ -1291,23 +1297,43 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
                     user.BVN = model.BVN;
                 }
             }
-            if (user.IsBvnVerified
-                    &&  !string.IsNullOrEmpty(model.DateOfBirth)
-                        && model.DateOfBirth != user.DateOfBirth)
+            bool identityLocked = user.IsBvnVerified; // add || user.IsNinVerified if you have that flag
+
+            if (!string.IsNullOrWhiteSpace(model.DateOfBirth))
             {
-                throw new BaseException(
-                            ExceptionType.BAD_REQUEST, "Date of birth cannot be changed after BVN or NIN verification.");
-              
+                var incoming = model.DateOfBirth.Trim();
+
+                if (identityLocked
+                    && !string.IsNullOrWhiteSpace(user.DateOfBirth)
+                    && !SameDate(incoming, user.DateOfBirth))
+                {
+                    throw new BaseException(ExceptionType.BAD_REQUEST,
+                        "Date of birth cannot be changed after BVN or NIN verification. Please contact support if you believe this is an error.");
+                }
+
+                if (!identityLocked || string.IsNullOrWhiteSpace(user.DateOfBirth))
+                    user.DateOfBirth = incoming;
             }
-            if (user.IsBvnVerified
-                    &&  !string.IsNullOrEmpty(model.Gender)
-                        && model.Gender != user.Gender)
+
+            if (!string.IsNullOrWhiteSpace(model.Gender))
             {
-                throw new BaseException(
-                            ExceptionType.BAD_REQUEST, "Gender cannot be changed after BVN or NIN verification.Please contact support if you believe this is an error.");
-              
+                var incoming = model.Gender.Trim();
+
+                if (identityLocked
+                    && !string.IsNullOrWhiteSpace(user.Gender)
+                    && !string.Equals(incoming, user.Gender, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new BaseException(ExceptionType.BAD_REQUEST,
+                        "Gender cannot be changed after BVN or NIN verification. Please contact support if you believe this is an error.");
+                }
+
+                if (!identityLocked || string.IsNullOrWhiteSpace(user.Gender))
+                    user.Gender = incoming;
             }
-            user.ModifiedBy = userId;
+
+
+
+        user.ModifiedBy = userId;
             if(user.UserType ==  UserType.Farmer.ToString())
             {
                 var farmer = await _context.Farmers.FirstOrDefaultAsync(f => f.UserId == userId);
@@ -1349,7 +1375,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             }
            
         }
-        
+        private static bool SameDate(string a, string b) =>
+    DateTime.TryParse(a, out var da) && DateTime.TryParse(b, out var db)
+        ? da.Date == db.Date
+        : string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+
         public async Task<CreateUserResult> RegisterUser(
         OnboardingRequestModel model, OnBoardingArgs args)
         {
@@ -2688,6 +2719,12 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             if (!user.IsActive) // ASSUMPTION: property name for "account is active"
                 return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.AccountInactive);
 
+            if(user.Status == AdminUserStatus.Deactivated)
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.Deactivated);
+
+            if(user.Status == AdminUserStatus.Suspended)
+                return AdminLoginResult.Fail(AdminLoginStatus.AccountInactive, AdminMessages.Suspended);
+
             var userBusinesses = await _context.UserBusinesses
                 .Include(x => x.Business)
                 .Where(x => x.UserId == user.Id && x.IsActive)
@@ -2784,6 +2821,7 @@ namespace Agrovesto.Backend.Infrastructure.Logic.Repositories.V2
             var hasAccess = permissions.Contains(Permissions.AdminPanel.Access, StringComparer.OrdinalIgnoreCase);
             return new AdminAccess(hasAccess, roles, permissions);
         }
+
 
         #endregion admin
 
